@@ -134,9 +134,9 @@ public:
 			sendFill(down);
 		}
 	}
-	/// Each tick, after the driver advanced: the Recipe keeps each part's take as it lands, so the next start, a save
-	/// or a Compose has it (spec §6.6, §15).
-	void recordTakes(const Generator& playing);
+	/// Each tick, after the driver advanced: the Recipe keeps each part's take and octave shift as they land, so the
+	/// next start, a save or a Compose has them (spec §6.6, §7.3, §15).
+	void recordLanded(const Generator& playing);
 
 	// ---- The transport's presses (spec §13.2) ----
 
@@ -185,6 +185,31 @@ public:
 	int32_t stepTake(uint8_t part, const TakeRow& row, int32_t direction, PressOutcome* outcome);
 	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
 	[[nodiscard]] int32_t take(int32_t part) const;
+
+	// ---- Octave shifts (spec §7.3, §13.4, §13.6) ----
+
+	/// OCTAVES ▸ or SHIFT + Y: `part`'s octave shift `shift` from the next bar line; the shift playing pressed again
+	/// cancels the one waiting. Stopped, the shift is the Recipe's at once, and the next start plays it. Nothing to do
+	/// for a part with no Register (Drums, FX), a part past the roster, or a shift past the part's octave range.
+	[[gnu::noinline]] PressOutcome pressOctave(uint8_t part, int32_t shift);
+	/// A SHIFT + Y turn or an OCTAVES ▸ turn: the shift one down or up (`direction`) from octaveAhead(), pressed as
+	/// pressOctave() does. `outcome` is what the press did.
+	/// @return the shift pressed, or kNoOctaveWaiting if none was: the part's octave range ends that way (the caller's
+	/// LOWEST or HIGHEST popup, octaveAtEdge()), or nothing to do.
+	[[gnu::noinline]] int32_t stepOctave(uint8_t part, int32_t direction, PressOutcome* outcome);
+	/// `part`'s octave shift as it goes on: its newest press still in the steering queue, else the shift waiting in
+	/// the core, else the one playing (the Recipe's while stopped). 0 for Drums and FX.
+	[[nodiscard, gnu::noinline]] int32_t octaveAhead(int32_t part) const;
+	/// The octave shift `part` plays: the playing piece's, or the Recipe's while stopped.
+	[[nodiscard]] int32_t octave(int32_t part) const;
+	/// Whether `part` of the roster has a Register, so it takes an octave shift.
+	[[nodiscard]] bool takesOctave(int32_t part) const;
+	/// The shifts `part` of the roster takes: those that keep every note of it a MIDI note (spec §7.3). Only 0 for a
+	/// part that takes none.
+	[[nodiscard]] OctaveRange octavesOf(int32_t part) const;
+	/// Whether a turn `direction` from octaveAhead() would leave `part`'s octave range: the turn is refused, and the
+	/// player is told the shift is the lowest or highest the part takes.
+	[[nodiscard]] bool octaveAtEdge(int32_t part, int32_t direction) const;
 
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
@@ -247,6 +272,8 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
+	/// Octave shift presses, and BACK taps (which may cancel one), from any control, modulo 256.
+	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
 
 private:
 	[[nodiscard]] Adapter& adapter() { return static_cast<Adapter&>(*this); }
@@ -302,6 +329,9 @@ private:
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 	GlideLength glide_ = kDefaultGlide;
+	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
+	/// step pins (PerformAdapter::incomingStarts()).
+	uint8_t octavePresses_ = 0;
 };
 
 // ---- Definitions ----
@@ -384,9 +414,10 @@ void PerformSteering<Adapter>::sendFill(bool down) {
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::recordTakes(const Generator& playing) {
+void PerformSteering<Adapter>::recordLanded(const Generator& playing) {
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		recordTake(p, playing.take(p));
+		adapter().recipe().octave[p] = static_cast<int8_t>(playing.octave(p));
 	}
 }
 
@@ -446,8 +477,9 @@ PressOutcome PerformSteering<Adapter>::forceSection(SectionKind kind) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
-	// It may cancel a waiting key change or take: menus showing one read it again.
+	// It may cancel a waiting key change, take or octave shift: menus showing one read it again.
 	keyPresses_++;
+	octavePresses_++;
 	for (uint32_t& presses : takePresses_) {
 		presses++;
 	}
@@ -527,6 +559,77 @@ int32_t PerformSteering<Adapter>::take(int32_t part) const {
 template <typename Adapter>
 int32_t PerformSteering<Adapter>::newestTake(int32_t part) const {
 	return std::max<int32_t>(newestTake_[part], take(part));
+}
+
+// ---- Octave shifts ----
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::takesOctave(int32_t part) const {
+	const Genre* genre = rosterGenre();
+	return entered_ && genre != nullptr && part >= 0 && part < partCount(*genre)
+	       && hasRegister(genre->parts[part].role);
+}
+
+template <typename Adapter>
+OctaveRange PerformSteering<Adapter>::octavesOf(int32_t part) const {
+	return takesOctave(part) ? octaveRange(rosterGenre()->parts[part]) : OctaveRange{};
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::octaveAtEdge(int32_t part, int32_t direction) const {
+	return !leaving_ && direction != 0 && takesOctave(part)
+	       && !octavesOf(part).contains(octaveAhead(part) + (direction > 0 ? 1 : -1));
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressOctave(uint8_t part, int32_t shift) {
+	if (leaving_ || !takesOctave(part) || !octavesOf(part).contains(shift)) {
+		return PressOutcome::NothingToDo;
+	}
+	octavePresses_++;
+	if (playing() != nullptr) {
+		return queued(queue_.push({CommandKind::SetOctave, part, shift}));
+	}
+	// Stopped: no line to wait for. The shift is the Recipe's, which the next start plays.
+	adapter().recipe().octave[part] = static_cast<int8_t>(shift);
+	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::stepOctave(uint8_t part, int32_t direction, PressOutcome* outcome) {
+	*outcome = PressOutcome::NothingToDo;
+	if (direction == 0 || !takesOctave(part)) {
+		return kNoOctaveWaiting;
+	}
+	const int32_t shift = octaveAhead(part) + (direction > 0 ? 1 : -1);
+	if (!octavesOf(part).contains(shift)) {
+		return kNoOctaveWaiting; // the part's octave range ends that way
+	}
+	*outcome = pressOctave(part, shift);
+	return refused(*outcome) || *outcome == PressOutcome::NothingToDo ? kNoOctaveWaiting : shift;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
+	if (!takesOctave(part)) {
+		return 0;
+	}
+	const Generator* piece = playing();
+	if (piece == nullptr) {
+		return adapter().recipe().octave[part];
+	}
+	// A press the core hasn't drained yet goes on as pushed: a shift waits, and the one playing cancels the wait.
+	if (const Command* queued = queue_.newest(CommandKind::SetOctave, static_cast<uint8_t>(part))) {
+		return queued->value;
+	}
+	const int32_t waiting = piece->octaveWaiting(part);
+	return waiting != kNoOctaveWaiting ? waiting : piece->octave(part);
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::octave(int32_t part) const {
+	const Generator* piece = playing();
+	return piece != nullptr ? piece->octave(part) : adapter().recipe().octave[part];
 }
 
 // ---- Tempo and swing ----

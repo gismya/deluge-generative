@@ -124,6 +124,9 @@ struct Recipe {
 	int8_t swing = 0;          ///< Song swing amount, -kMaxSwing..kMaxSwing.
 	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
+	/// Each pitched part's octave shift, -kMaxOctaveShift..kMaxOctaveShift, by roster index: its Register moves by
+	/// 12 semitones an octave (spec §3.1, §7.3). 0 for Drums and FX, which have no Register.
+	int8_t octave[kMaxParts] = {};
 
 	constexpr bool operator==(const Recipe&) const = default;
 };

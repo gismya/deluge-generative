@@ -272,12 +272,12 @@ bool Generator::linePitch(int32_t partIndex, const Pattern& pattern, int32_t pat
 	return true;
 }
 
-uint8_t Generator::resolvePitch(const PartSpec& spec, int32_t steps) const {
+uint8_t Generator::resolvePitch(int32_t partIndex, int32_t steps) const {
 	// Flavour step and Answers → snap → Register fold → absolute note (spec §7.5). In a narrow Register an octave
 	// Answer moves only the notes whose pitch class fits twice: the fold takes the rest back to where they were.
 	const int32_t root = chordRoot();
-	steps = snap(root + steps, spec.degreeSet, recipe_.scale, root);
-	return noteFor(steps, key(), spec.registerOrDefault());
+	steps = snap(root + steps, genre_->parts[partIndex].degreeSet, recipe_.scale, root);
+	return noteFor(steps, key(), partRegister(partIndex));
 }
 
 GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
@@ -303,7 +303,7 @@ GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	VelocityLevel level = pitch.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = pitch.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
 	part.loopOn = express(partIndex, spec.expression, state, patternStep,
-	                      {Lane::None, resolvePitch(spec, pitch.steps), level, length, part.slid}, step);
+	                      {Lane::None, resolvePitch(partIndex, pitch.steps), level, length, part.slid}, step);
 	part.slid = pitch.slide;
 }
 
@@ -316,7 +316,7 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	PartState::Sustain& state = part.sustain;
-	const Register reg = spec.registerOrDefault();
+	const Register reg = partRegister(partIndex);
 	const Voicing voicing = spec.sustain.pedal
 	                            ? pedalVoicing(key(), reg)
 	                            : leadVoicing(chord(), key(), reg, part.voicing.notes(), spec.sustain.doubleRoot);
@@ -405,8 +405,7 @@ GEN_STEP_CODE void Generator::decideStab(int32_t partIndex, const Step& step) {
 	// The voicing changes only on bar lines, where chords change, voice-led from the whole voicing before, whether
 	// or not an onset plays: so Density thinning never moves the next chord, and every stab of a chord is the same.
 	if (arc_.stepInBar() == 0 || part.voicing.size == 0) {
-		part.voicing =
-		    leadVoicing(chord(), key(), spec.registerOrDefault(), part.voicing.notes(), /*doubleRoot=*/false);
+		part.voicing = leadVoicing(chord(), key(), partRegister(partIndex), part.voicing.notes(), /*doubleRoot=*/false);
 	}
 	const int32_t patternStep = playingStep(partIndex, step).step;
 	if (patternStep < 0) {
@@ -469,7 +468,7 @@ GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
 		break;
 	}
 	}
-	const uint8_t pitch = arpNote(current, index, key(), spec.registerOrDefault(), spec.degreeSet);
+	const uint8_t pitch = arpNote(current, index, key(), partRegister(partIndex), spec.degreeSet);
 	express(partIndex, spec.expression, state, patternStep,
 	        {Lane::None, pitch, pattern.level[patternStep],
 	         onsetLength(pattern, patternStep, spec.arp.gateTicks, spec.expression), false},
@@ -491,7 +490,7 @@ GEN_STEP_CODE void Generator::decideMotif(int32_t partIndex, const Step& step) {
 	const Pattern& pattern = spec.pool[part.lanes[0].entry];
 	// The slot stores a chord position, so it plays that position on whatever chord plays now.
 	const LineStep& slot = part.line[patternStep];
-	const uint8_t pitch = motifNote(chord(), slot.degree, slot.octave, key(), spec.registerOrDefault(), spec.degreeSet);
+	const uint8_t pitch = motifNote(chord(), slot.degree, slot.octave, key(), partRegister(partIndex), spec.degreeSet);
 	const VelocityLevel level = slot.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	express(partIndex, spec.expression, part.lanes[0], patternStep,
 	        {Lane::None, pitch, level, onsetLength(pattern, patternStep, spec.motif.gateTicks, spec.expression), false},

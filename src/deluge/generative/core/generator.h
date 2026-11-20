@@ -344,6 +344,13 @@ public:
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
 	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
+	/// A part's octave shift on the last decided step (spec §7.3): 0 for Drums and FX.
+	[[nodiscard]] int32_t octave(int32_t part) const { return recipe_.octave[part]; }
+	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
+	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
+		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : kNoOctaveWaiting;
+	}
 	/// The token of a part's new sound waiting for its phrase line, or -1 (spec §10.7).
 	[[nodiscard]] int32_t soundWaiting(int32_t part) const { return waitingValue(CommandKind::SetSound, part); }
 	/// The token of the last sound that landed on a part in this piece, or -1. Its Sound event plays on the line.
@@ -786,7 +793,11 @@ private:
 	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
 	[[nodiscard]] int32_t stepsToChordLine() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
-	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
+	[[nodiscard]] uint8_t resolvePitch(int32_t partIndex, int32_t steps) const;
+	/// The part's Register, moved by its octave shift (spec §7.3).
+	[[nodiscard]] Register partRegister(int32_t partIndex) const {
+		return shiftedRegister(genre_->parts[partIndex].registerOrDefault(), recipe_.octave[partIndex]);
+	}
 
 	/// One hit of a note, for noteOn() to start.
 	struct Note {
@@ -903,9 +914,9 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 3 + 4 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo and a sound per "
-              "part at once");
+static_assert(PendingList::kCapacity >= 3 + 5 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo, a sound and an "
+              "octave shift per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

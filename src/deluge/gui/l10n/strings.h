@@ -185,6 +185,9 @@ enum class String : size_t {
 	STRING_FOR_BUILD,
 	STRING_FOR_SOUNDS,
 	STRING_FOR_NEW_SEED,
+	STRING_FOR_OCTAVES,
+	STRING_FOR_OCTAVE_LOWEST,
+	STRING_FOR_OCTAVE_HIGHEST,
 
 	// gui/context_menu/audio_input_selector.cpp
 	STRING_FOR_LEFT_INPUT,

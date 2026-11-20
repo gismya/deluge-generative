@@ -45,6 +45,12 @@ constexpr bool validTake(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && command.value >= 0 && command.value < kMaxTakes;
 }
 
+/// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
+constexpr bool validOctave(const Command& command, const Genre& genre) {
+	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
+	       && octaveRange(genre.parts[command.target]).contains(command.value);
+}
+
 /// Whether a Section kind can be forced: Groove, Break or Build (spec §9.6, §13.5). The Outro comes with End.
 constexpr bool forceable(SectionKind kind) {
 	return kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
@@ -132,6 +138,21 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		PartState& part = parts_[command.target];
 		part.newTake = takes_.take[command.target] != command.value;
 		takes_.take[command.target] = static_cast<uint8_t>(command.value);
+		return true;
+	}
+	case CommandKind::SetOctave: {
+		// The part's Register moves (spec §7.3). The voicing it leads from moves with it, so a Sustain or Stab part
+		// voice-leads on as if it had always played there: its whole voicing re-strikes on this line, and every note
+		// from here is the unshifted one moved by the same octaves.
+		if (!validOctave(command, *genre_)) {
+			return false;
+		}
+		const int32_t semitones = 12 * (command.value - recipe_.octave[command.target]);
+		HeldVoicing& voicing = parts_[command.target].voicing;
+		for (int32_t i = 0; i < voicing.size; i++) {
+			voicing.pitch[i] = static_cast<uint8_t>(voicing.pitch[i] + semitones);
+		}
+		recipe_.octave[command.target] = static_cast<int8_t>(command.value);
 		return true;
 	}
 	case CommandKind::ForceSection: {
@@ -304,6 +325,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 		}
 		break;
 	}
+	case CommandKind::SetOctave: {
+		if (!validOctave(command, *genre_)) {
+			return true;
+		}
+		// Choosing the shift that plays cancels the one waiting, as a take does (spec §13.5).
+		if (recipe_.octave[command.target] == command.value) {
+			pending_.cancel(command);
+			return true;
+		}
+		break;
+	}
 	case CommandKind::SetSound:
 		if (command.target < partCount(*genre_) && command.value == kNoSound) {
 			pending_.cancel(command); // the driver frees the sound it preloaded
@@ -392,7 +424,8 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 		return arc_.stepsToStart(static_cast<SectionKind>(command.target), command.value);
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
-		return arc_.stepsToBarLine(); // spec §13.4
+	case CommandKind::SetOctave:
+		return arc_.stepsToBarLine(); // spec §13.4, §7.3
 	case CommandKind::Transition:
 		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
