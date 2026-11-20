@@ -727,8 +727,14 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("fits its Drop decay in its shortest Groove at Motion 50", _ {
+	it("fits its Drop decay in its shortest Groove at Motion 50, but for Psytrance's named exception", _ {
 		for (const Genre* genre : allGenres()) {
+			// Spec §9.3's named exception (#349): Psytrance's 2-phrase decay keeps its Lead (gate 30) in for a Drop's
+			// whole first phrase. In a Groove shorter than the decay the lift stops at the next Section
+			// (psytrance_spec shows it).
+			if (genre == &genres::psytrance) {
+				continue;
+			}
 			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less
 			// the bars a Build shorter than a phrase takes from it after Groove → Build (spec §9.3).
 			int64_t multiple = motionMultiple(curves::grooveLength, kMacroFull);
