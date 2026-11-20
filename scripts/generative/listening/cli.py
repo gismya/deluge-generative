@@ -119,11 +119,13 @@ def cmd_variants(a):
             print(f"{name}: {n} lines")
         return 0
     extra = [w for arg in a.extra for w in arg.split()]
-    for line in variants.prove(
+    lines = variants.prove(
         wt, a.session, a.names, a.genre, range(1, a.seeds + 1), a.bars, extra, a.scratch
-    ):
+    )
+    for line in lines:
         print(line)
-    return 0
+    # a variant that didn't build: the others are proved, and the exit says not all were
+    return 1 if any("doesn't build" in line for line in lines) else 0
 
 
 def page_module_variants(path):

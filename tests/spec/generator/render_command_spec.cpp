@@ -368,6 +368,16 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("DRUMS.Kick\t-\n")).not_().to_equal(std::string::npos);
 		expect(harness::render::soundPicks(request, &rolledAll)).to_equal(listing); // the same Recipe, the same picks
 
+		// The kit's machine, from the entropy alone: named though pack/ holds no drum sample
+		const size_t kit = listing.find("DRUMS.kit\t");
+		expect(kit).not_().to_equal(std::string::npos);
+		const std::string machine = listing.substr(kit + 10, listing.find('\t', kit + 10) - kit - 10);
+		bool known = false;
+		for (const MachineWeight& each : dub.palette->kits.machines) {
+			known = known || machine == each.machine->name;
+		}
+		expect(known).to_be_true();
+
 		// Another entropy rolls other sounds
 		request.overrides.entropy = 13;
 		expect(harness::render::soundPicks(request, &rolledAll) == listing).to_be_false();

@@ -548,6 +548,15 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
 	return true;
 }
 
+RolledKit rolledKit(const Palette& palette, const PartSpec& part, int32_t p, uint32_t entropy) {
+	const KitRoll kit = rollKit(palette.kits, part, p, entropy, -1);
+	RolledKit out{.machine = kit.machine};
+	for (int32_t s = 0; kit.machine != nullptr && s < kMaxKitSwaps; s++) {
+		out.swaps |= kit.swapped[s] ? 1U << s : 0U;
+	}
+	return out;
+}
+
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister) {
 	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts) {

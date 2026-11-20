@@ -665,6 +665,63 @@ class Parents(unittest.TestCase):
             ],
         )
 
+    def test_prove_reports_a_variant_that_doesnt_build_and_proves_the_rest(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            renders = {
+                "base": fake_render(scratch, "base", "'base'"),
+                "s1": fake_render(scratch, "s1", "'s1'"),
+                "s4": fake_render(scratch, "s4", "'s4'"),
+            }
+            failed = {"s2": "/x/s2.log"}
+            lines = variants.compare(
+                renders,
+                ["s1", "s2", "s3", "s4"],
+                {"s3": "s2"},
+                "dub",
+                range(1, 3),
+                4,
+                [],
+                scratch,
+                failed,
+            )
+        self.assertEqual(
+            lines,
+            [
+                "s1: changes the notes at 2/2 seeds",
+                "s2: doesn't build (/x/s2.log)",
+                "s3: not proved: its parent s2 doesn't build",
+                "s4: changes the notes at 2/2 seeds",
+            ],
+        )
+
+    def test_build_renders_goes_on_past_a_failed_build(self):
+        built = []
+
+        def build(wt, dest):
+            if dest.endswith("s2"):
+                raise subprocess.CalledProcessError(1, ["cmake"], stderr=b"error: nope")
+            built.append(os.path.basename(dest))
+            return dest
+
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+            tempfile.TemporaryDirectory() as bin_dir,
+        ):
+            git_repo(repo)
+            with (
+                mock.patch.object(variants, "build_render", build),
+                mock.patch.object(variants, "apply", lambda *a: None),
+                mock.patch.object(variants, "render_stamp", lambda *a: {}),
+            ):
+                renders, failed = variants.build_renders(
+                    repo, session, ["s1", "s2", "s3"], bin_dir
+                )
+            self.assertEqual(built, ["base", "s1", "s3"])
+            self.assertEqual(sorted(renders), ["base", "s1", "s3"])
+            with open(failed["s2"]) as fh:
+                self.assertIn("error: nope", fh.read())
+
     def test_prove_builds_the_parents_render_too(self):
         self.assertEqual(
             variants.render_names(["s3", "s4"], {"s3": "s1", "s4": "s1"}),

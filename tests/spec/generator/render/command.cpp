@@ -408,6 +408,18 @@ std::string soundPicks(const Request& request, bool* rolledAll) {
 		if (part.lanes.empty()) {
 			out += std::string(part.name) + "\t" + path(sounds.part[p]) + "\n";
 		}
+		if (const RolledKit kit = rolledKit(*genre.palette, part, static_cast<int32_t>(p), request.overrides.entropy);
+		    kit.machine != nullptr) {
+			std::string swaps;
+			for (size_t w = 0; w < genre.palette->kits.swaps.size() && w < kMaxKitSwaps; w++) {
+				if ((kit.swaps >> w) & 1U) {
+					const KitSwap& swap = genre.palette->kits.swaps[w];
+					swaps += (swaps.empty() ? "" : ",") + std::string(kLaneNames[static_cast<int32_t>(swap.lane)]) + "="
+					         + swap.tag;
+				}
+			}
+			out += std::string(part.name) + ".kit\t" + kit.machine->name + "\t" + (swaps.empty() ? "-" : swaps) + "\n";
+		}
 		for (const LaneSpec& lane : part.lanes) {
 			const auto l = static_cast<int32_t>(lane.lane);
 			out += std::string(part.name) + "." + kLaneNames[l] + "\t" + path(sounds.lane[l]) + "\n";

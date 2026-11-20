@@ -196,20 +196,35 @@ def build_render(worktree, dest):
 
 
 def build_renders(worktree, session, names, bin_dir):
-    """bin_dir/<name> for `base` and each variant: generator_render built with it applied. Reverts after. Raises
-    ValueError, changing nothing, if `worktree` has uncommitted work under src/ or pack/."""
+    """({name: bin_dir/<name>}, {name: its build log}) for `base` and each variant: generator_render built with it
+    applied. A variant that doesn't apply or build is logged to bin_dir/<name>.log and the rest go on; the base's
+    failure raises. Reverts after. Raises ValueError, changing nothing, if `worktree` has uncommitted work under src/
+    or pack/."""
     require_clean(worktree)
-    out = {}
+    out, failed = {}, {}
     try:
         for name in ["base", *[n for n in names if n != "base"]]:
             revert(worktree)
-            apply(worktree, session, name)
-            out[name] = build_render(worktree, os.path.join(bin_dir, name))
+            try:
+                apply(worktree, session, name)
+                out[name] = build_render(worktree, os.path.join(bin_dir, name))
+            except subprocess.CalledProcessError as e:
+                if name == "base":
+                    raise
+                os.makedirs(bin_dir, exist_ok=True)
+                failed[name] = os.path.join(bin_dir, name + ".log")
+                text = e.stderr or e.output or b""
+                with open(failed[name], "wb") as fh:
+                    fh.write(
+                        f"{' '.join(map(str, e.cmd))}: exit {e.returncode}\n".encode()
+                    )
+                    fh.write(text if isinstance(text, bytes) else text.encode())
+                continue
             with open(out[name] + ".json", "w") as fh:
                 json.dump(render_stamp(worktree, session, name), fh)
     finally:
         revert(worktree)
-    return out
+    return out, failed
 
 
 def render_stamp(worktree, session, name):
@@ -285,14 +300,23 @@ def render_names(names, parent_of):
     return out
 
 
-def compare(renders, names, parent_of, genre, seeds, bars, extra, scratch):
-    """Lines: per variant, the seeds where it changes nothing against its parent (`parent_of`, the base by default)."""
+def compare(renders, names, parent_of, genre, seeds, bars, extra, scratch, failed=None):
+    """Lines: per variant, the seeds where it changes nothing against its parent (`parent_of`, the base by default).
+    `failed`: {variant: its build log or None} for the ones that didn't build: reported, and their children not
+    proved."""
     seeds = list(seeds)
+    failed = failed or {}
     lines = []
     for name in names:
         if name == "base":
             continue
         parent = parent_of.get(name, "base")
+        if name in failed:
+            lines.append(f"{name}: doesn't build ({failed[name]})")
+            continue
+        if parent in failed:
+            lines.append(f"{name}: not proved: its parent {parent} doesn't build")
+            continue
         same = unchanged_seeds(
             renders, name, genre, seeds, bars, extra, scratch, against=parent
         )
@@ -308,7 +332,9 @@ def prove(worktree, session, names, genre, seeds, bars, extra, scratch):
     """Lines: per variant, the seeds where it changes nothing against its parent (diffs/parents.json). Keeps each
     variant's generator_render in <scratch>/bin/<name> for its offline clips."""
     parent_of = parents(session)
-    renders = build_renders(
+    renders, failed = build_renders(
         worktree, session, render_names(names, parent_of), os.path.join(scratch, "bin")
     )
-    return compare(renders, names, parent_of, genre, seeds, bars, extra, scratch)
+    return compare(
+        renders, names, parent_of, genre, seeds, bars, extra, scratch, failed
+    )

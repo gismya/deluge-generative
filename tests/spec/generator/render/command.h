@@ -60,7 +60,9 @@ std::string pitchedPalettePresets();
 std::string riserLanes();
 
 /// The request's Recipe's sound picks, as render() rolls them for the WAV: "PART<TAB>path\n" for each part without
-/// lanes, then "PART.LANE<TAB>path\n" for each lane of a Drums or FX part, in roster order; "-" for no pick. The
+/// lanes; for a part with a drum kit, "PART.kit<TAB>machine<TAB>LANE=tag,...\n" (the swaps in, "-" for none: from the
+/// entropy alone, whatever the library holds); then "PART.LANE<TAB>path\n" for each lane of a Drums or FX part, in
+/// roster order; "-" for no pick. The
 /// render lists folders in name order, the card in FAT order, so a capture can pick other files from the same entropy.
 /// `rolledAll`: false if a sound folder couldn't be listed.
 std::string soundPicks(const Request& request, bool* rolledAll = nullptr);
