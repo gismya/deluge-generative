@@ -22,6 +22,14 @@ int main(int argc, char** argv) {
 		std::fputs(harness::render::riserLanes().c_str(), stdout);
 		return 0;
 	}
+	if (parsed.listSounds) {
+		bool rolledAll = true;
+		std::fputs(harness::render::soundPicks(parsed.request, &rolledAll).c_str(), stdout);
+		if (!rolledAll) {
+			std::fputs("warning: a sound folder couldn't be listed: some parts and lanes have no sound pick\n", stderr);
+		}
+		return 0;
+	}
 	harness::render::Rendered rendered = harness::render::render(parsed.request);
 	for (const std::string& warning : rendered.warnings) {
 		std::fprintf(stderr, "warning: %s\n", warning.c_str());

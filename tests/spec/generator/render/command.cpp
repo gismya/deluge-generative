@@ -27,6 +27,7 @@ const char* const kUsage =
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only] [--mute PART]...\n"
+    "       generator_render --list-sounds [--genre NAME] [--entropy N] [Recipe flags] [--pack DIR] [--card DIR]\n"
     "       generator_render --list-palettes\n"
     "       generator_render --list-risers\n"
     "\n"
@@ -45,6 +46,10 @@ const char* const kUsage =
     "THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n"
+    "--list-sounds prints the sounds the render's WAV plays, rolled from --entropy over --pack and --card: one\n"
+    "\"PART<TAB>path\" a line per part, \"PART.LANE<TAB>path\" per lane of a Drums or FX part (- for none). The "
+    "card's\n"
+    "file order can differ from the render's, so a capture can pick another file from the same entropy.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
     "line, for scripts/generative/osc_octaves.py.\n"
     "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
@@ -194,6 +199,10 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		}
 		if (flag == "--midi-only") {
 			r.midiOnly = true;
+			continue;
+		}
+		if (flag == "--list-sounds") {
+			parsed.listSounds = true;
 			continue;
 		}
 		if (flag == "--list-palettes") {
@@ -375,7 +384,37 @@ Rendering withMutes(const Rendering& rendering, uint32_t mutedParts) {
 	return muted;
 }
 
+/// The Recipe's sound picks from the overrides' entropy, the entropy a capture build rolls from, over the library.
+SoundPicks rolledSounds(const Genre& genre, const Request& request, bool* rolledAll) {
+	SoundPicks sounds{};
+	RootsLister lister(request.library);
+	*rolledAll = rollSounds(genre, *genre.palette, sounds, request.overrides.entropy, lister);
+	return sounds;
+}
+
 } // namespace
+
+std::string soundPicks(const Request& request, bool* rolledAll) {
+	const Genre& genre = *rollWithOverrides(*allGenres()[0], request.overrides).recipe.genre;
+	bool all = false;
+	const SoundPicks sounds = rolledSounds(genre, request, &all);
+	if (rolledAll != nullptr) {
+		*rolledAll = all;
+	}
+	auto path = [](const SoundPath& pick) { return pick.empty() ? std::string("-") : std::string(pick.c_str()); };
+	std::string out;
+	for (size_t p = 0; p < genre.parts.size(); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.lanes.empty()) {
+			out += std::string(part.name) + "\t" + path(sounds.part[p]) + "\n";
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			const auto l = static_cast<int32_t>(lane.lane);
+			out += std::string(part.name) + "." + kLaneNames[l] + "\t" + path(sounds.lane[l]) + "\n";
+		}
+	}
+	return out;
+}
 
 Rendering playRequest(const Request& request, uint32_t* droppedEvents, bool* endArmed) {
 	return playRolled(request, rollWithOverrides(*allGenres()[0], request.overrides), droppedEvents, endArmed);
@@ -408,9 +447,8 @@ Rendered render(const Request& request) {
 		// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the
 		// card folder. File order differs from the card's (RootsLister), so a lane can pick another file than a
 		// capture does.
-		const Genre& genre = *rendering.recipe.genre;
-		RootsLister lister(request.library);
-		const bool rolledAll = rollSounds(genre, *genre.palette, rendering.sounds, request.overrides.entropy, lister);
+		bool rolledAll = false;
+		rendering.sounds = rolledSounds(*rendering.recipe.genre, request, &rolledAll);
 		audio = renderAudio(withMutes(rendering, request.mutedParts), request.library);
 		roll = pianoRoll(rendering);
 		rendered.warnings.insert(rendered.warnings.end(), audio.warnings.begin(), audio.warnings.end());
