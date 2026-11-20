@@ -213,9 +213,9 @@ class Run:
             self._active -= 1
 
     def worktree(self, index):
-        """Runner index's worktree, at the repo's HEAD."""
+        """Runner index's worktree, at the HEAD this run started from (the one its stamps record)."""
         return _variants.scratch_worktree(
-            self.repo, os.path.join(self.scratch, "wt", f"r{index}")
+            self.repo, os.path.join(self.scratch, "wt", f"r{index}"), self.head
         )
 
     def capture(self, index, wt, capture):

@@ -65,10 +65,13 @@ def revert(worktree):
     git(worktree, "clean", "-fdq", "--", *trees(worktree))
 
 
-def scratch_worktree(repo, path):
+def scratch_worktree(repo, path, rev=None):
     """A detached worktree of `repo` at `path` (in the scratch folder, so the toolkit owns it), made if missing, its
-    src/ and pack/ reverted and moved to `repo`'s HEAD, so it builds what the repo has now."""
-    head = git(repo, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    src/ and pack/ reverted and moved to `rev` (default: `repo`'s HEAD now), so it builds what the caller stamps."""
+    head = (
+        rev
+        or git(repo, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    )
     if not os.path.exists(path):
         git(repo, "worktree", "add", "--detach", "-q", path, head)
         return path
