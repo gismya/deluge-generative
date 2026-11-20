@@ -323,13 +323,14 @@ describe perform_steering("The Perform driver's steering", $ {
 			pending.seed = 11;
 			pending.takes.take[2] = 3;
 			// A genre change or Regenerate keeps the live macros
-			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			piece.steering.handOver(pending);
 			expect(piece.currentRecipe.tempo).to_equal(13400);
 			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
 			expect(piece.currentSeed).to_equal(11U);
 			expect(static_cast<int32_t>(piece.currentTakes.take[2])).to_equal(3);
 			// A LOAD keeps the file's
-			piece.steering.handOver(pending, perform::HandoverMacros::Pending);
+			pending.macros = perform::HandoverMacros::Pending;
+			piece.steering.handOver(pending);
 			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(10));
 		});
 
@@ -341,7 +342,7 @@ describe perform_steering("The Perform driver's steering", $ {
 			perform::PendingRecipe pending;
 			pending.recipe = acidRecipe();
 			pending.takes.take[0] = 1;
-			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			piece.steering.handOver(pending);
 			expect(piece.steering.takeRow(0).newest).to_equal(1); // the pending Recipe's take, none made yet
 		});
 	});

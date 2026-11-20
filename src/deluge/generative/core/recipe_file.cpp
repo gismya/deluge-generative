@@ -154,6 +154,7 @@ private:
 		recipe.swingInterval = static_cast<uint8_t>(interval);
 		recipe.keyRoot = static_cast<uint8_t>(key);
 		out_.seed = static_cast<uint32_t>(seed);
+		out_.genreVersion = static_cast<uint16_t>(version);
 		if (xml::attribute(tag, "scale", value)) {
 			int32_t scale = 0;
 			while (scale < kNumScales && value != kScaleNames[scale]) {

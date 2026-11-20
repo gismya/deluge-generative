@@ -109,7 +109,7 @@ public:
 		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
 		pendingRecipe.recipe =
 		    newRecipe(*genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
-		pendingRecipe.genreChange = change;
+		pendingRecipe.stagedPalette = change;
 		pendingRecipe.seed = freshEntropy();
 		pendingRecipe.takes = Takes{};
 		pendingRecipe.sounds = currentRecipe.sounds;
@@ -313,6 +313,10 @@ Generator& Transitions::startIncoming(TransitionStyle style) {
 	return incoming;
 }
 
+perform::HandoverMacros Transitions::incomingMacros() const {
+	return pendingRecipe.macros;
+}
+
 void Transitions::releaseIncoming() {
 	retirements.retireRoster(incoming_, Retirements::When::Now, Retirements::Owner::Transition, Retirements::kNoCap);
 }
@@ -323,7 +327,7 @@ void Transitions::showQueueFull() {
 
 template <typename HandOver>
 void Transitions::commitPending(HandOver handOver) {
-	if (pendingRecipe.genreChange) {
+	if (pendingRecipe.stagedPalette) {
 		currentRecipe.adoptStagedPalette(*pendingRecipe.recipe.genre); // its palette came with it
 	}
 	handOver();

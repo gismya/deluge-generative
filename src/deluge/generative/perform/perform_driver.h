@@ -137,8 +137,10 @@ public:
 	/// The incoming instance, started with Generator::startIncoming(), waits for the playing one's transition command
 	/// (queued by the caller) to land and play its Build or Outro, or to reach the cut line. From the start step it
 	/// decides, with the live macros, and the playing one only drains. Tempo glides to the incoming Recipe's across the
-	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step.
-	void queueIncoming(Generator& incoming, int32_t cutGlideTicks);
+	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step. With
+	/// `keepsMacros` (a LOAD, spec §12.9) the incoming instance plays its own Recipe's macros from the start step, not
+	/// the live ones.
+	void queueIncoming(Generator& incoming, int32_t cutGlideTicks, bool keepsMacros = false);
 	/// The transition was cancelled before its command landed. A cut's glide that had started goes back to the
 	/// playing Recipe's tempo over the same length.
 	void cancelIncoming(NoteSink& sink);
@@ -220,6 +222,8 @@ private:
 	int32_t outgoingBase_ = 0;
 	/// A hard cut's glide length (the Perform Glide setting), at least 1 tick so an Instant one jumps on the line.
 	int32_t cutGlideTicks_ = 1;
+	/// The incoming instance keeps its own macros at the start step: a LOAD's file's (spec §12.9).
+	bool incomingKeepsMacros_ = false;
 	/// The step the playing instance's transition landed on, once it has, or -1.
 	int32_t transitionFrom_ = -1;
 	/// The transition's tempo glide into the incoming Recipe's tempo (spec §9.7).

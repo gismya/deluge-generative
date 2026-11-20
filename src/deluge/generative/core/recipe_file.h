@@ -64,6 +64,8 @@ struct RecipeFile {
 	SoundPicks sounds;
 	uint32_t seed = 0;
 	Takes takes;
+	/// The genre version the file names (spec §16.2): read, never written (a save writes the genre's own).
+	uint16_t genreVersion = 0;
 };
 
 /// The root tag, and the text a whole file ends with (the firmware's write check).

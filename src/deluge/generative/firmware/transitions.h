@@ -96,6 +96,7 @@ private:
 	void dropWaitingSounds();
 	void adoptIncoming();
 	Generator& startIncoming(TransitionStyle style);
+	[[nodiscard]] perform::HandoverMacros incomingMacros() const;
 	void releaseIncoming();
 	void showQueueFull();
 	void rosterStarts(TransitionStyle style);

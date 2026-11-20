@@ -49,6 +49,13 @@ constexpr LaneSpec kHatLanes[] = {{.lane = Lane::ClosedHat}, {.lane = Lane::Open
 constexpr PartSpec kHatParts[] = {{.role = Role::Drums, .name = "DRUMS", .lanes = kHatLanes}};
 constexpr Genre kHatGenre{.name = "hats", .parts = kHatParts, .palette = &kHatPalette};
 
+constexpr PartSpec kMixedParts[] = {
+    {.role = Role::Bass, .flavour = Flavour::Loop, .name = "ACID"},
+    {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes},
+};
+constexpr Palette kMixedPalette{.parts = kPartSounds, .roles = kRoleSounds, .lanes = kDrumSounds};
+constexpr Genre kMixedGenre{.name = "mixed", .parts = kMixedParts, .palette = &kMixedPalette};
+
 FakeCard drumCard() {
 	FakeCard card;
 	card.add("SAMPLES/DRUMS/Kick", {"909 Kick.wav", "909 KICK dry.wav", "909 Kick distorted.txt", "808 Kick.wav",
@@ -57,6 +64,13 @@ FakeCard drumCard() {
 	card.add("SAMPLES/DRUMS/TomL", {"808 Tom low.wav", "808 Tom low.wav.reapeaks"});
 	card.add("SAMPLES/DRUMS/TomM", {"808 Tom medium.aif"});
 	card.add("SAMPLES/DRUMS/TomH", {"909 Tom high.AIFF"});
+	return card;
+}
+
+/// drumCard() with the synth presets the palettes list.
+FakeCard mixedCard() {
+	FakeCard card = drumCard();
+	card.add("SYNTHS", {"A.XML", "B.XML", "C.XML", "D.XML", "E.XML"});
 	return card;
 }
 
@@ -280,6 +294,55 @@ describe sound_picks("Rolling sound picks", $ {
 			expect(std::string(sounds.part[0].c_str())).to_equal(std::string("SYNTHS/B.XML"));
 			expect(std::string(sounds.part[1].c_str())).not_().to_equal(std::string("SYNTHS/C.XML"));
 		}
+	});
+
+	it("re-rolls each pick whose file is gone from the card's palette, and counts them (spec §16.6)", _ {
+		const auto kick = static_cast<int32_t>(Lane::Kick);
+		for (uint32_t entropy = 0; entropy < 50; entropy++) {
+			FakeCard card = mixedCard();
+			const SoundPicks rolledPicks = rolled(kMixedGenre, entropy, card).sounds;
+			SoundPicks sounds = rolledPicks;
+			sounds.part[0].set("SYNTHS/GONE.XML");
+			sounds.lane[kick].set("SAMPLES/DRUMS/Kick/Gone Kick.wav");
+			expect(replaceMissingSounds(kMixedGenre, kMixedPalette, sounds, entropy + 1000, card, card)).to_equal(2);
+			expect(card.has(sounds.part[0].c_str())).to_be_true();
+			expect(card.has(sounds.lane[kick].c_str())).to_be_true();
+			for (int32_t lane = 0; lane < kNumLanes; lane++) {
+				if (lane != kick) {
+					expect(std::string(sounds.lane[lane].c_str()))
+					    .to_equal(std::string(rolledPicks.lane[lane].c_str()));
+				}
+			}
+		}
+	});
+
+	it("replaces nothing when every pick is there, and checks no lane its genre doesn't play", _ {
+		FakeCard card = mixedCard();
+		SoundPicks sounds = rolled(kMixedGenre, 3, card).sounds;
+		sounds.lane[static_cast<int32_t>(Lane::Snare)].set("SAMPLES/DRUMS/Snare/Gone Snare.wav");
+		const SoundPicks before = sounds;
+		expect(replaceMissingSounds(kMixedGenre, kMixedPalette, sounds, 4, card, card)).to_equal(0);
+		for (int32_t lane = 0; lane < kNumLanes; lane++) {
+			expect(std::string(sounds.lane[lane].c_str())).to_equal(std::string(before.lane[lane].c_str()));
+		}
+		expect(std::string(sounds.part[0].c_str())).to_equal(std::string(before.part[0].c_str()));
+	});
+
+	it("rolls a synth part that has no pick, but leaves a lane with none (an FX lane loads its presets)", _ {
+		FakeCard card = mixedCard();
+		SoundPicks sounds = rolled(kMixedGenre, 3, card).sounds;
+		sounds.part[0].clear();
+		sounds.lane[static_cast<int32_t>(Lane::Tom)].clear();
+		expect(replaceMissingSounds(kMixedGenre, kMixedPalette, sounds, 4, card, card)).to_equal(1);
+		expect(sounds.part[0].empty()).to_be_false();
+		expect(sounds.lane[static_cast<int32_t>(Lane::Tom)].empty()).to_be_true();
+	});
+
+	it("reports a card error while checking or re-rolling", _ {
+		FakeCard card = mixedCard();
+		SoundPicks sounds = rolled(kMixedGenre, 3, card).sounds;
+		card.cardError = true;
+		expect(replaceMissingSounds(kMixedGenre, kMixedPalette, sounds, 4, card, card)).to_equal(-1);
 	});
 
 	it("reports a card error", _ {

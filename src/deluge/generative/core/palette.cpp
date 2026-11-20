@@ -602,6 +602,45 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 	return rollSounds(incoming, palette, sounds, entropy, lister);
 }
 
+int32_t replaceMissingSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                             FolderLister& lister, FileChecker& files) {
+	int32_t replaced = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.synth()) {
+			const LoadOutcome found =
+			    sounds.part[p].empty() ? LoadOutcome::Missing : files.exists(sounds.part[p].c_str());
+			if (found == LoadOutcome::CardError) {
+				return -1;
+			}
+			if (found == LoadOutcome::Missing) {
+				if (!rollPartSounds(genre, palette, p, sounds, entropy, lister)) {
+					return -1;
+				}
+				replaced++;
+			}
+			continue;
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			SoundPath& pick = sounds.lane[static_cast<int32_t>(lane.lane)];
+			if (pick.empty()) {
+				continue;
+			}
+			const LoadOutcome found = files.exists(pick.c_str());
+			if (found == LoadOutcome::CardError) {
+				return -1;
+			}
+			if (found == LoadOutcome::Missing) {
+				if (!rollLaneSound(genre, palette, lane.lane, sounds, entropy, lister)) {
+					return -1;
+				}
+				replaced++;
+			}
+		}
+	}
+	return replaced;
+}
+
 bool synthPart(const Genre& genre, int32_t part) {
 	return part >= 0 && part < partCount(genre) && genre.parts[part].synth();
 }

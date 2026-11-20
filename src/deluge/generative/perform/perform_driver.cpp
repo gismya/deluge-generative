@@ -357,9 +357,10 @@ void PerformDriver::stop(NoteSink& sink) {
 	transitionTempo_.reset();
 }
 
-void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks) {
+void PerformDriver::queueIncoming(Generator& incoming, int32_t cutGlideTicks, bool keepsMacros) {
 	incoming_ = &incoming;
 	cutGlideTicks_ = cutGlideTicks > 0 ? cutGlideTicks : 1;
+	incomingKeepsMacros_ = keepsMacros;
 	transitionFrom_ = -1;
 	dropReported_ = false;
 	transitionTempo_.reset();
@@ -419,8 +420,9 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	outgoing_ = generator_;
 	outgoingBase_ = startTick;
 	// The new roster plays the macros as they are now (spec §12.9), a turn since the confirm included, and keeps a
-	// hold (spec §9.7).
-	incoming_->carryOver(generator_->recipe().macros, generator_->arc().held());
+	// hold (spec §9.7). A LOAD's plays the file's macros instead.
+	incoming_->carryOver(incomingKeepsMacros_ ? incoming_->recipe().macros : generator_->recipe().macros,
+	                     generator_->arc().held());
 	// A Riser still held here never sounds: before a Drop transition's start step it is shorter than the lookahead,
 	// and a hard cut mid-Build leaves its Drop unplayed (the outgoing roster gets its harmless note-off).
 	dropRiser();

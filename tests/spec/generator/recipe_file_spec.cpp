@@ -213,8 +213,18 @@ describe recipe_file("Recipe files", $ {
 			                                   + "\" tempo=\"12000\" seed=\"5\"");
 			expect(parseRecipeFile(older, *loaded) == RecipeFileRead::OtherVersion).to_be_true();
 			expect(loaded->recipe.genre == &acid).to_be_true();
+			expect(loaded->genreVersion).to_equal(static_cast<uint16_t>(acid.version - 1)); // the notice says OLDER
 			expect(loaded->recipe.tempo).to_equal(12000);
 			expect(loaded->seed).to_equal(5U);
+			// A newer file's version, for the NEWER notice; a file without one is the genre's own.
+			expect(parseRecipeFile(fileWith("genre=\"techno-acid\" genreVersion=\"" + std::to_string(acid.version + 1)
+			                                + "\""),
+			                       *loaded)
+			       == RecipeFileRead::OtherVersion)
+			    .to_be_true();
+			expect(loaded->genreVersion).to_equal(static_cast<uint16_t>(acid.version + 1));
+			expect(parseRecipeFile(fileWith("genre=\"techno-acid\""), *loaded) == RecipeFileRead::Ok).to_be_true();
+			expect(loaded->genreVersion).to_equal(static_cast<uint16_t>(acid.version));
 		});
 
 		it("refuses a genre this firmware doesn't have, and Techno's parent table, with no alias", _ {

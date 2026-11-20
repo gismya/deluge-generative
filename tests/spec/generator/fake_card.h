@@ -22,8 +22,8 @@ inline std::string lower(std::string text) {
 	return text;
 }
 
-/// Lists folders from memory. Folder names match case-insensitively, as FatFs does.
-struct FakeCard final : FolderLister {
+/// Lists folders from memory, and says which files are there. Folder names match case-insensitively, as FatFs does.
+struct FakeCard final : FolderLister, FileChecker {
 	std::map<std::string, std::vector<std::string>> folders; ///< Keyed by lower-case path.
 	bool cardError = false;
 	int32_t listings = 0;
@@ -70,6 +70,13 @@ struct FakeCard final : FolderLister {
 		std::string name = lower(path.substr(slash + 1));
 		return std::any_of(found->second.begin(), found->second.end(),
 		                   [&](const std::string& file) { return lower(file) == name; });
+	}
+
+	LoadOutcome exists(const char* path) override {
+		if (cardError) {
+			return LoadOutcome::CardError;
+		}
+		return has(path) ? LoadOutcome::Loaded : LoadOutcome::Missing;
 	}
 
 	bool list(const char* folder, FileVisitor& visitor) override {

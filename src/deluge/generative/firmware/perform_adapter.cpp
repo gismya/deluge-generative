@@ -292,7 +292,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
 }
 
@@ -303,11 +303,11 @@ void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRec
 	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
 	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the
 	// interval: nothing is rescheduled, which the tick must not do.
-	steering_.takeOverStopped(pending, perform::HandoverMacros::Live);
+	steering_.takeOverStopped(pending);
 }
 
 void PerformAdapter::pendingCommitsOnLeave(const perform::PendingRecipe& pending) {
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 }
 
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
