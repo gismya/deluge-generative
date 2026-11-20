@@ -349,9 +349,14 @@ struct SustainSpec {
 	bool anchorExtension = false;
 	/// When set, a Section line the part plays on both sides of holds the notes whose pitch stays, at the velocity
 	/// they started with, even on a chord change, and only a changed pitch ends and strikes there: no re-strike on
-	/// the Drop's step (Ambient's Pad and Drone, spec §5.2). Every other cut still re-strikes it. Sustain only
-	/// (sustainValid()).
+	/// the Drop's step (Ambient's Pad and Drone, spec §5.2). The one exception is the first Groove's first line, where
+	/// the whole voicing strikes once, so a piece begun in an Intro plays at the Groove's level, not the Intro's.
+	/// Every other cut still re-strikes it. Sustain only (sustainValid()).
 	bool holdsAcrossSections = false;
+	/// When set, a chord change holds the notes whose pitch the new voicing keeps, at the velocity they started with,
+	/// and only the changed pitches end and strike (Ambient's Pad, spec §5.2). A Section line follows
+	/// holdsAcrossSections. Sustain only (sustainValid()).
+	bool holdsCommonTones = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -733,7 +738,7 @@ constexpr int16_t kSameAsFillChance = -1;
 struct DropOutEntry {
 	/// Whole Bass, Chords, Pad or Lead parts, and Drums lanes. Never an FX lane: section rules own them.
 	PartsAndLanes mask;
-	/// Its length, 1, 2 or 4 bars, from a bar line.
+	/// Its length, 1, 2, 4 or 8 bars, from a bar line.
 	uint8_t bars = 1;
 	uint8_t weight = 1;
 	/// The part or lane in the mask whose last hits before it spike Space, held while it lasts (spec §11.4), or none.
@@ -1478,9 +1483,9 @@ constexpr bool sirensValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2 or 4 bars long and no longer than the phrase,
-/// so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts and
-/// Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
+/// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
+/// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
 /// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
 /// per-mille.
 constexpr bool dropOutsValid(const Genre& genre) {
@@ -1490,7 +1495,8 @@ constexpr bool dropOutsValid(const Genre& genre) {
 	for (const DropOutEntry& entry : genre.dropOuts) {
 		const PartsAndLanes mask = entry.mask;
 		const PartsAndLanes target = entry.throwTarget;
-		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4) || entry.bars > genre.phraseBars || mask.empty()) {
+		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4 && entry.bars != 8) || entry.bars > genre.phraseBars
+		    || mask.empty()) {
 			return false;
 		}
 		if (!target.without(mask).empty() || std::popcount(target.parts) + std::popcount(target.lanes) > 1) {
@@ -1524,12 +1530,12 @@ constexpr bool dropOutsValid(const Genre& genre) {
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
 /// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()). Only a Sustain
-/// holds across Section lines: cutSectionLine() leaves the flagged part's notes uncut, and only decideSustain() ends
-/// or extends them.
+/// holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes uncut, and only
+/// decideSustain() ends or extends them.
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
-			if (part.sustain.holdsAcrossSections) {
+			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones) {
 				return false;
 			}
 			continue;

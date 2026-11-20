@@ -355,8 +355,13 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 		                   : arc_.barInPhrase() == 0 && arc_.phraseInSection() % (retrigger / phraseBars) == 0);
 	}
 	// A part that holds across Section lines keeps, on a Section line, the pitches its new voicing shares with the
-	// old one: only the changed ones end and strike there (spec §5.2).
-	const bool holdsHere = spec.sustain.holdsAcrossSections && step.sectionStart;
+	// old one, and one that holds common tones keeps them on any other line: only the changed ones end and strike
+	// there. The first Groove's first line re-strikes a holding part once, so a piece begun in an Intro plays at the
+	// Groove's level from there on (spec §5.2).
+	const bool firstGrooveLine = step.sectionStart && arc_.section() == SectionKind::Groove && arc_.occurrence() == 0;
+	const bool holdsHere =
+	    step.sectionStart ? spec.sustain.holdsAcrossSections && !firstGrooveLine : spec.sustain.holdsCommonTones;
+	restrike = restrike || (spec.sustain.holdsAcrossSections && firstGrooveLine);
 	restrike = restrike || (!holdsHere && !voicing.sameNotes(part.voicing));
 	part.voicing = voicing;
 	state.openPlaces = open;

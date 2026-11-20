@@ -128,15 +128,15 @@ A **Phrase accent** follows a fill whenever any fill, automatic or held, covered
 
 ### 8.8 Drop-out
 
-A **Drop-out** is whole parts or Drums lanes falling silent for 1–4 bars in a Groove, usually with the last hit thrown into an echo. It is the main motion of a roots dub mix. It isn't a fill: it is longer, sits on bar lines, and lets its notes ring instead of cutting them.
+A **Drop-out** is whole parts or Drums lanes falling silent for 1–8 bars in a Groove, usually with the last hit thrown into an echo. It is the main motion of a roots dub mix. It isn't a fill: it is longer, sits on bar lines, and lets its notes ring instead of cutting them.
 
 **Entries.** The mechanism is Generator-wide. A genre lists **drop-out entries** (slot 6). Each entry gives:
 - a mask of whole parts (Bass, Chords, Pad, Lead) and Drums lanes. FX lanes are never in it, because section rules own them,
-- a length of 1, 2 or 4 bars,
+- a length of 1, 2, 4 or 8 bars,
 - a weight,
 - a **throw target**: one part or lane in the mask that gets a Throw ([§11.4](11-sound-controls.md#114-gestures)), or none.
 
-An entry may not silence every audible part, because that would be a Gap: `genreValid()` refuses an entry whose mask covers every pitched part and every Drums lane that has a pool. It also refuses an entry whose length isn't 1, 2 or 4 bars or is longer than the phrase, whose mask is empty or holds an FX lane or a whole Kit, or whose throw target is outside the mask or more than one part or lane, and a genre whose gap is under a bar or whose chance is outside 0 to 1000 per-mille. Only Dub carries entries in v1 (*tuning*). Other genres may add some during tuning.
+An entry may not silence every audible part, because that would be a Gap: `genreValid()` refuses an entry whose mask covers every pitched part and every Drums lane that has a pool. It also refuses an entry whose length isn't 1, 2, 4 or 8 bars or is longer than the phrase, whose mask is empty or holds an FX lane or a whole Kit, or whose throw target is outside the mask or more than one part or lane, and a genre whose gap is under a bar or whose chance is outside 0 to 1000 per-mille. Dub and Ambient carry entries in v1 (*tuning*): Ambient's rest its Bass and bells for 4 or 8 bars. Other genres may add some during tuning.
 
 **When.**
 - Drop-outs play only in **Groove** phrases, which include the phrases a Drop decays over. Never in the Intro, a Break, a Build or the Outro.

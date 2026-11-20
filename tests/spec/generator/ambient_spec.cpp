@@ -126,9 +126,8 @@ describe ambient("Ambient", $ {
 		}
 	});
 
-	it("has no fills, no drop-outs, no accent lane, no roll, no Gap and no Build cut, and enters by FADE THROUGH (spec §9.5)", _ {
+	it("has no fills, no accent lane, no roll, no Gap and no Build cut, and enters by FADE THROUGH (spec §9.5)", _ {
 		expect(ambientGenre.fills.empty()).to_be_true();
-		expect(ambientGenre.dropOuts.empty()).to_be_true();
 		expect(ambientGenre.arc.accentLane == Lane::None).to_be_true();
 		expect(ambientGenre.arc.roll.lane == Lane::None).to_be_true();
 		expect(ambientGenre.arc.gap == GapLength::None).to_be_true();
@@ -136,15 +135,48 @@ describe ambient("Ambient", $ {
 		expect(ambientGenre.arc.transitionEntry == TransitionEntry::Intro).to_be_true();
 	});
 
-	it("takes its Arc from the brief: Groove 6–12, Break 1–2, a 16-bar Build, Intro and Outro 2, Drop decay 2", _ {
+	it("rests the Bass and the bells for 4 or 8 bars now and then in a Groove, never the Pad or the Drone (spec §8.8)", _ {
+		expect(ambientGenre.dropOuts.empty()).to_be_false();
+		for (const DropOutEntry& entry : ambientGenre.dropOuts) {
+			expect(entry.mask.lanes).to_equal(0U);
+			expect((entry.mask.parts & ~(partBit(kBassPart) | partBit(kLeadPart))) == 0).to_be_true();
+			expect(entry.bars == 4 || entry.bars == 8).to_be_true();
+			expect(entry.throwTarget.empty()).to_be_true();
+		}
+		expect(ambientGenre.dropOutChance).to_equal(150);
+		expect(ambientGenre.dropOutGapBars).to_equal(4);
+		std::map<int32_t, int32_t> restingBars; // part → Groove bars it rests
+		for (uint32_t seed = 1; seed <= 6; seed++) {
+			const Walked walked = walk(ambientRecipe(Scale::Major, 0, seed), seed, 96 * kStepsPerBar, {}, true);
+			for (int32_t part : {kBassPart, kPadPart, kDronePart, kLeadPart}) {
+				for (size_t bar = 0; bar * kStepsPerBar < walked.steps.size(); bar++) {
+					if (walked.steps[bar * kStepsPerBar].section != SectionKind::Groove) {
+						continue;
+					}
+					const int32_t start = static_cast<int32_t>(bar) * kTicksPerBar;
+					bool sounds = false;
+					for (const Held& note : heldNotes(walked.notes, part)) {
+						sounds = sounds || (note.on < start + kTicksPerBar && note.off > start);
+					}
+					restingBars[part] += sounds ? 0 : 1;
+				}
+			}
+		}
+		expect(restingBars[kBassPart]).to_be_greater_than(7);
+		expect(restingBars[kLeadPart]).to_be_greater_than(7);
+		expect(restingBars[kPadPart]).to_equal(0);
+		expect(restingBars[kDronePart]).to_equal(0);
+	});
+
+	it("takes its Arc from rules round 1: Groove 4–8, Break 2–4, a 16-bar Build, Intro and Outro 2, Drop decay 2", _ {
 		const ArcSpec& arc = ambientGenre.arc;
-		expect(arc.groovePhrases.low).to_equal(6);
-		expect(arc.groovePhrases.high).to_equal(12);
-		expect(arc.breakPhrases.low).to_equal(1);
-		expect(arc.breakPhrases.high).to_equal(2);
+		expect(arc.groovePhrases.low).to_equal(4);
+		expect(arc.groovePhrases.high).to_equal(8);
+		expect(arc.breakPhrases.low).to_equal(2);
+		expect(arc.breakPhrases.high).to_equal(4);
 		expect(arc.buildBars.size()).to_equal(size_t{1});
 		expect(arc.buildBars[0].bars).to_equal(16);
-		expect(arc.grooveToBuild).to_equal(300);
+		expect(arc.grooveToBuild).to_equal(150);
 		expect(arc.introPhrases).to_equal(2);
 		expect(arc.outroPhrases).to_equal(2);
 		expect(arc.dropDecayPhrases).to_equal(2);
@@ -446,45 +478,61 @@ describe ambient("Ambient", $ {
 			}
 		});
 
-		it("plays sparse bells on its Lead: a Motif gated at 10, tier 0 on the 1 and the & of 3, Fresh spread 10", _ {
+		it("plays sparse bells on its Lead: a Motif gated at 10, two-bar figures with empty bars, about 10 notes a minute", _ {
 			const PartSpec& lead = ambientGenre.parts[kLeadPart];
 			expect(lead.densityGate).to_equal(macroPoints(10));
 			expect(lead.expression.spread).to_equal(10);
 			expect(lead.expression.spreadMode == SpreadMode::Fresh).to_be_true();
+			expect(lead.motif.reroll).to_equal(350);
+			expect(ambientGenre.repickChance).to_equal(400);
+			// Every figure is two bars, with no anchor, so the default Density leaves a bar of it empty now and then.
 			for (const Pattern& pattern : lead.pool) {
-				if (pattern.tier != 0) {
-					continue;
-				}
+				expect(pattern.length).to_equal(2 * kStepsPerBar);
 				for (int32_t i = 0; i < pattern.length; i++) {
-					const int32_t inBar = i % kStepsPerBar;
-					expect(pattern.importance[i] == 0 || inBar == 0 || inBar == 10).to_be_true();
+					expect(pattern.importance[i] != kAnchor).to_be_true();
 				}
 			}
+			// About 10 notes a minute in the Groove at the default Recipe (owner, rules round 1's S1-amount).
 			int32_t notes = 0;
-			for (uint32_t seed = 1; seed <= 3; seed++) {
-				const Walked walked = walk(ambientRecipe(Scale::Major, 0, seed), seed, 32 * kStepsPerBar, {}, true);
-				for (const Event& e : walked.noteOns) {
-					notes += e.part == kLeadPart ? 1 : 0;
+			int32_t emptyBars = 0;
+			int32_t grooveBars = 0;
+			const Recipe recipe = ambientRecipe(Scale::Major, 0, 0);
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				const Walked walked = walk(recipe, seed, 64 * kStepsPerBar, {}, true);
+				for (size_t bar = 0; bar * kStepsPerBar < walked.steps.size(); bar++) {
+					if (walked.steps[bar * kStepsPerBar].section != SectionKind::Groove) {
+						continue;
+					}
+					grooveBars++;
+					int32_t inBar = 0;
+					for (const Event& e : walked.noteOns) {
+						const int32_t eventBar = e.tick / kTicksPerBar;
+						inBar += e.part == kLeadPart && eventBar == static_cast<int32_t>(bar) ? 1 : 0;
+					}
+					notes += inBar;
+					emptyBars += inBar == 0 ? 1 : 0;
 				}
 			}
-			expect(notes).to_be_greater_than(30);
+			// Notes a minute: notes ÷ (bars × 4 beats ÷ BPM), the tempo in hundredths of a BPM.
+			const int64_t perMinuteTimes400 = int64_t{notes} * recipe.tempo / grooveBars;
+			expect(perMinuteTimes400).to_be_greater_than(6 * 400);
+			expect(perMinuteTimes400).to_be_less_than(14 * 400);
+			expect(emptyBars).to_be_greater_than(0);
 		});
 
 		// §5.2's exception: a Sustain kept on both sides of a Section line holds the pitches that stay, so the Drop's
 		// step re-strikes nothing that sounds on (spec §9.5's no heard Drop).
-		it("holds its Pad and Drone across every Section line, the Drop's included: only a changed pitch strikes", _ {
+		it("holds its Pad and Drone across every Section line and chord change, the Drop's included: only a changed pitch "
+		   "strikes", _ {
 			expect(ambientGenre.parts[kPadPart].sustain.holdsAcrossSections).to_be_true();
+			expect(ambientGenre.parts[kPadPart].sustain.holdsCommonTones).to_be_true();
 			expect(ambientGenre.parts[kDronePart].sustain.holdsAcrossSections).to_be_true();
 			int32_t drops = 0;
 			int32_t heldOverDrop = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				const Walked walked = walk(harness::movingRecipe(ambientGenre, Scale::Major, seed), seed, 160 * kStepsPerBar, {}, true);
-				std::set<int32_t> lines;
 				std::set<int32_t> dropTicks;
 				for (int32_t n = 0; n < static_cast<int32_t>(walked.steps.size()); n++) {
-					if (walked.steps[n].sectionStart && n > 0) {
-						lines.insert(n * kTicksPerStep);
-					}
 					if (walked.steps[n].drop) {
 						dropTicks.insert(n * kTicksPerStep);
 					}
@@ -494,8 +542,9 @@ describe ambient("Ambient", $ {
 					const std::vector<Held> notes = heldNotes(walked.notes, p);
 					for (const Held& a : notes) {
 						for (const Held& b : notes) {
-							// A note ending on a line and the same pitch starting there: a re-strike.
-							expect(a.pitch == b.pitch && a.off == b.on && lines.count(b.on) == 1).to_be_false();
+							// A note ending on a line or a chord change and the same pitch starting there: a re-strike. The
+							// walk starts in the Groove, so the first Groove's one re-strike is on its first step.
+							expect(a.pitch == b.pitch && a.off == b.on).to_be_false();
 						}
 						for (int32_t tick : dropTicks) {
 							heldOverDrop += a.on < tick && a.off > tick ? 1 : 0;
@@ -537,15 +586,21 @@ describe ambient("Ambient", $ {
 			}
 		});
 
-		it("gates every soft-percussion lane and both FX lanes at 35, with no Ornaments and no Impact lane", _ {
+		it("staggers the soft percussion's gates from 28 to 47, mallets first and the kick last, the FX lanes at 35, with "
+		   "no Ornaments and no Impact lane", _ {
 			std::vector<Lane> lanes;
+			std::vector<int16_t> gates;
 			for (const LaneSpec& lane : ambientGenre.parts[0].lanes) {
 				lanes.push_back(lane.lane);
-				expect(lane.densityGate).to_equal(macroPoints(35));
+				gates.push_back(lane.densityGate);
 				expect(lane.pool.empty()).to_be_false();
 				expect(lane.expression.ornaments.rateCeiling == 0 && lane.expression.ornaments.rateFloor == 0).to_be_true();
 			}
 			expect(lanes == std::vector<Lane>{Lane::Kick, Lane::Snare, Lane::Rim, Lane::ClosedHat, Lane::Perc1, Lane::Perc2})
+			    .to_be_true();
+			expect(gates
+			       == std::vector<int16_t>{macroPoints(47), macroPoints(44), macroPoints(40), macroPoints(36),
+			                               macroPoints(28), macroPoints(32)})
 			    .to_be_true();
 			std::vector<Lane> fx;
 			for (const LaneSpec& lane : ambientGenre.parts[kFxPart].lanes) {

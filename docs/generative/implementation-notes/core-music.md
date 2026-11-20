@@ -96,6 +96,12 @@ otherwise.
   uncut (a cut note never extends), and `decideSustain()` skips the chord-change restrike on a Section line, so
   `extend()` holds each pitch the new voicing keeps. Every other cut (key, sound, Gap, Build cut) still marks them.
   `sustainValid()` rejects the flag on any other flavour: only `decideSustain()` ends or extends the uncut notes.
+  The first Groove's first line (`arc_.occurrence() == 0`) re-strikes a holding part once (#341), so its level
+  doesn't depend on how the piece began. A walk or run with `skipIntro` starts there, so its step 0 is that line and
+  a spec of the re-strike needs an Intro. `SustainSpec::holdsCommonTones` is the same hold on every other bar line,
+  so a chord change strikes only the changed pitches; `cutSectionLine()` doesn't read it (no cut on those lines).
+- Trap: a spec that counts a held Pad's note-ons per chord line, or reads "a note ending where the same pitch
+  starts" as a re-strike, must allow the first Groove line's re-strike; a walk that starts in the Intro has one.
 - The Stab flavour (spec §5.2) is `Generator::decideStab()`: the pick and Density thinning are the Loop's
   (`updatePick()`, `planned()`), and the voicing is the Sustain's `leadVoicing()` without a doubled root, held in
   `PartState::voicing` (a `HeldVoicing`, shared with the Sustain: a part plays one flavour) and worked out on every
