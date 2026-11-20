@@ -92,6 +92,78 @@ GEN_STEP_CODE Voicing leadVoicing(const Chord& chord, const Key& key, const Regi
 	return out;
 }
 
+GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Register& reg,
+                                  std::span<const uint8_t> previous) {
+	const int32_t tonic = tonicNote(reg, key.root);
+	const int32_t low = tonic + reg.spanLow;
+	const int32_t high = tonic + reg.spanHigh;
+	const int32_t notes = chord.size;
+	Voicing out;
+	out.size = chord.size;
+	int32_t note[kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		note[i] = tonic + semitonesOf(chord.steps[i], key.scale);
+		out.place[i] = voicePlace(chord, i);
+	}
+	// Where the first voicing puts each note: the root and the 5th near the tonic, the rest an octave up.
+	int32_t spot[kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		const bool under = out.place[i] == VoicePlace::Root || out.place[i] == VoicePlace::Fifth;
+		const int32_t near[1] = {under ? tonic : tonic + 12};
+		spot[i] = nearestInstance(note[i], low, high, near);
+	}
+	if (previous.empty()) {
+		for (int32_t i = 0; i < notes; i++) {
+			out.pitch[i] = clampMidi(spot[i]);
+		}
+		return out;
+	}
+	// Each note's instance nearest each voice, and how far the voice moves to it.
+	const int32_t voices = std::min<int32_t>(static_cast<int32_t>(previous.size()), kMaxChordNotes);
+	int32_t to[kMaxChordNotes][kMaxChordNotes] = {};
+	int32_t moves[kMaxChordNotes][kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		for (int32_t v = 0; v < voices; v++) {
+			const int32_t near[1] = {previous[v]};
+			to[i][v] = nearestInstance(note[i], low, high, near);
+			moves[i][v] = to[i][v] > previous[v] ? to[i][v] - previous[v] : previous[v] - to[i][v];
+		}
+	}
+	// Every pairing of notes with slots, a slot past the voices leaving its note over: at most 4^4 codes, the
+	// repeats skipped.
+	const int32_t slots = std::max(notes, voices);
+	int32_t codes = 1;
+	for (int32_t i = 0; i < slots; i++) {
+		codes *= slots;
+	}
+	int32_t least = INT32_MAX;
+	for (int32_t code = 0; code < codes; code++) {
+		int32_t slot[kMaxChordNotes] = {};
+		int32_t used = 0;
+		bool repeats = false;
+		for (int32_t i = 0, rest = code; i < slots; i++, rest /= slots) {
+			slot[i] = rest % slots;
+			repeats |= (used & 1 << slot[i]) != 0;
+			used |= 1 << slot[i];
+		}
+		if (repeats) {
+			continue;
+		}
+		// A note left over moves no voice: it goes to its first-voicing spot.
+		int32_t moved = 0;
+		for (int32_t i = 0; i < notes; i++) {
+			moved += slot[i] < voices ? moves[i][slot[i]] : 0;
+		}
+		if (moved < least) {
+			least = moved;
+			for (int32_t i = 0; i < notes; i++) {
+				out.pitch[i] = clampMidi(slot[i] < voices ? to[i][slot[i]] : spot[i]);
+			}
+		}
+	}
+	return out;
+}
+
 GEN_STEP_CODE Voicing pedalVoicing(const Key& key, const Register& reg) {
 	Voicing out;
 	out.pitch[0] = noteFor(0, key, reg);

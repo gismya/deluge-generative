@@ -242,6 +242,26 @@ describe ambient("Ambient", $ {
 			expect(ambientGenre.harmony.extensionCeiling).to_equal(2);
 		});
 
+		it("tries add9 and sus4 before the 7th, so V carries no leading tone against the Drone at level 2 (S8)", _ {
+			const ExtensionOrder& order = ambientGenre.harmony.extensionOrder;
+			for (int32_t i = 0; i < 4; i++) {
+				expect(order.tries[i] == kNinthFirst.tries[i]).to_be_true();
+			}
+			for (uint32_t seed = 1; seed <= 3; seed++) {
+				Recipe recipe = harness::movingRecipe(ambientGenre, Scale::Major, seed, 40);
+				recipe.macros.set(Macro::Complexity, macroPoints(80));
+				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
+				for (const Event& e : walked.noteOns) {
+					const Walked::Step& step = walked.steps[e.tick / kTicksPerStep];
+					if (e.part != kPadPart || step.chord != kV) {
+						continue;
+					}
+					// V's 3rd is the key's leading tone, 11 semitones over the tonic: the sus4 takes its place.
+					expect(pitchClass(e.pitch - recipe.keyRoot)).not_().to_equal(11);
+				}
+			}
+		});
+
 		it("changes chord only on phrase lines, and holds a chord over two phrases or more now and then", _ {
 			int32_t held = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
@@ -380,9 +400,10 @@ describe ambient("Ambient", $ {
 			const PartSpec& pad = ambientGenre.parts[kPadPart];
 			expect(pad.sustain.pedal || pad.sustain.doubleRoot).to_be_false();
 			expect(pad.sustain.retriggerBars).to_equal(0);
+			expect(pad.sustain.openVoicing).to_be_true();
 			expect(pad.reg.anchor).to_equal(64);
 			expect(pad.reg.spanLow).to_equal(-4);
-			expect(pad.reg.spanHigh).to_equal(12);
+			expect(pad.reg.spanHigh).to_equal(19);
 			expect(pad.drift.sweepBars).to_equal(16);
 			expect(pad.densityGate).to_equal(0);
 			int32_t notes = 0;
@@ -394,7 +415,8 @@ describe ambient("Ambient", $ {
 				for (const Held& note : heldNotes(walked.notes, kPadPart)) {
 					notes++;
 					const int32_t step = note.on / kTicksPerStep;
-					const std::set<int32_t> chord = classesOf(voiceChord(recipe.scale, walked.steps[step].chord, level), recipe);
+					const std::set<int32_t> chord = classesOf(
+					    voiceChord(recipe.scale, walked.steps[step].chord, level, {}, kNinthFirst), recipe);
 					expect(chord.count(pitchClass(note.pitch))).to_equal(size_t{1});
 					for (int32_t tick = note.on; tick < std::min(note.off, kBarTicks * 96); tick += kTicksPerStep) {
 						expect(++sounding[tick]).to_be_less_than(5);
@@ -402,6 +424,36 @@ describe ambient("Ambient", $ {
 				}
 			}
 			expect(notes).to_be_greater_than(50);
+		});
+
+		// S9: the root and the 5th near the tonic, the 3rd and the Extensions an octave up, each voice then moving the
+		// least, so the voicing stays open over a whole piece rather than closing to a cluster within an octave.
+		it("keeps its Pad open: a four-note voicing spans more than an octave, in nearly every chord of every piece", _ {
+			int32_t voicings = 0;
+			int32_t open = 0;
+			for (uint32_t seed = 1; seed <= 8; seed++) {
+				for (Scale scale : {Scale::Major, Scale::Lydian, Scale::Dorian}) {
+					const Recipe recipe = harness::movingRecipe(ambientGenre, scale, seed, 40);
+					constexpr int32_t kBars = 128;
+					const Walked walked = walk(recipe, seed, kBars * kStepsPerBar);
+					std::map<int32_t, std::set<int32_t>> byBar;
+					for (const Held& note : heldNotes(walked.notes, kPadPart)) {
+						// A note still sounding at the end runs to INT32_MAX.
+						for (int32_t bar = note.on / kBarTicks; bar < kBars && bar * kBarTicks < note.off; bar++) {
+							byBar[bar].insert(note.pitch);
+						}
+					}
+					for (const auto& [bar, pitches] : byBar) {
+						if (pitches.size() != 4) {
+							continue;
+						}
+						voicings++;
+						open += *pitches.rbegin() - *pitches.begin() > 12 ? 1 : 0;
+					}
+				}
+			}
+			expect(voicings).to_be_greater_than(1000);
+			expect(open * 100).to_be_greater_than(voicings * 90);
 		});
 
 		it("keeps the Pad over the Drone in every key: no shared pitch, no overlap", _ {

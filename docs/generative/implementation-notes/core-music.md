@@ -92,6 +92,15 @@ otherwise.
   `cutSectionLine()` and `updateGates()` never hold them back and `lateEntries()` never sees them: the flavour does
   its own late entry. The harness driver drops muted note-ons as Perform does: a spec of mute reads silence, not
   flagged events.
+- `SustainSpec::openVoicing` (Ambient's Pad) swaps `leadVoicing()` for `openVoicing()` (`core/voicing.h`) in
+  `decideSustain()`. The voices are the previous voicing's pitches, `PartState::voicing`, so it needs no state of its
+  own: the trap is that `leadVoicing()`'s nearest-any rule is per pitch class, not per voice, so a wide first voicing
+  collapses into a cluster within a few chords (the rules review's sketch kept 67 % open). `openVoicing()` pairs notes
+  with voices by the least total move (at most 4^4 codes, repeats skipped: no `std::next_permutation`, whose
+  out-of-line copy would land outside the step section). `leadVoicing()` itself is untouched, so no other genre moves.
+- The Extension order is `HarmonySpec::extensionOrder` (`ExtensionOrder`, `core/pitch.h`), passed to `voiceChord()` by
+  `voiceChordAt()` only: specs that call `voiceChord()` to check a genre's chords must pass the genre's order
+  (`ambient_spec` passes `kNinthFirst`). `harmonyValid()` checks it with `extensionOrderValid()`.
 - `SustainSpec::holdsAcrossSections` takes two places: `cutSectionLine()` leaves the part's notes ending on the line
   uncut (a cut note never extends), and `decideSustain()` skips the chord-change restrike on a Section line, so
   `extend()` holds each pitch the new voicing keeps. Every other cut (key, sound, Gap, Build cut) still marks them.
