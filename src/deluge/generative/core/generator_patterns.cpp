@@ -291,7 +291,11 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
+#ifdef GENERATOR_TEST_SEAMS
+		part.gates.crossBar(genre_->parts[p], gateDensity(p, step.density)); // PROTOTYPE #414
+#else
 		part.gates.crossBar(genre_->parts[p], step.density);
+#endif
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -342,8 +346,13 @@ GEN_STEP_CODE void Generator::lateEntries(const Step& step, uint8_t avoidedParts
 			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
 			// A shorter remainder is skipped.
 			if (note.onTick < step.tick && note.offTick >= barEnd) {
-				noteOn(p, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, step.energy),
-				           step.tick, note.offTick});
+#ifdef GENERATOR_TEST_SEAMS
+				const int32_t energy = biasedStep(p, step).energy; // PROTOTYPE #414
+#else
+				const int32_t energy = step.energy;
+#endif
+				noteOn(p, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, energy), step.tick,
+				           note.offTick});
 			}
 		});
 	}

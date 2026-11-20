@@ -84,3 +84,12 @@ set_target_properties(generator_render_cli PROPERTIES
   CXX_STANDARD_REQUIRED YES
 )
 target_link_libraries(generator_render_cli PRIVATE generator_render)
+
+# PROTOTYPE (#414, throwaway): the Part bias curve sweep, run by scripts/generative/prototype_part_bias.py.
+add_executable(part_bias_prototype ${CMAKE_CURRENT_LIST_DIR}/prototype/part_bias_main.cpp)
+set_target_properties(part_bias_prototype PROPERTIES
+  CXX_STANDARD 23
+  CXX_STANDARD_REQUIRED YES
+)
+target_compile_definitions(part_bias_prototype PRIVATE GENERATOR_RENDER_REPO_ROOT="${generator_render_repo_root}")
+target_link_libraries(part_bias_prototype PRIVATE generator_render)

@@ -34,6 +34,9 @@
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
+#ifdef GENERATOR_TEST_SEAMS
+#include "generative/core/part_bias_prototype.h" // PROTOTYPE #414
+#endif
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
@@ -370,6 +373,12 @@ public:
 	[[nodiscard]] bool testTargetPlanned(const RuleTarget& target, int32_t step, int32_t density) const {
 		return targetPlanned(target, step, 0, density);
 	}
+	/// PROTOTYPE (#414, throwaway): one part's Part bias, applied after effectiveOn() to the Step that part decides
+	/// on, its Density gates and its late entries. Not to ornament rate, interplay strength, the Arc plan or the sound
+	/// controls, which #303 adds.
+	static inline prototype::PartBias testBias_{};
+	/// PROTOTYPE (#414): `macro`'s value `part` plays at on the last decided step, after its bias.
+	[[nodiscard]] int32_t testBiasedMacro(int32_t part, Macro macro) const;
 #endif
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
@@ -598,6 +607,11 @@ private:
 	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
 	/// notes sounding into it.
 	bool decidePart(int32_t partIndex, const Step& step);
+#ifdef GENERATOR_TEST_SEAMS
+	/// PROTOTYPE (#414): `step` as part `partIndex` decides it, under testBias_. The same step for every other part.
+	[[nodiscard]] Step biasedStep(int32_t partIndex, const Step& step) const;
+	[[nodiscard]] int32_t gateDensity(int32_t partIndex, int32_t density) const;
+#endif
 	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
 	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
 	bool endAvoided(int32_t partIndex, const Step& step);

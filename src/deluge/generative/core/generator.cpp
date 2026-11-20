@@ -281,7 +281,11 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	uint8_t avoidedParts = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+#ifdef GENERATOR_TEST_SEAMS
+		avoidedParts |= decidePart(p, biasedStep(p, step)) ? partBit(p) : 0; // PROTOTYPE #414
+#else
 		avoidedParts |= decidePart(p, step) ? partBit(p) : 0;
+#endif
 	}
 	if (arc_.stepInBar() == 0) {
 		lateEntries(step, avoidedParts);
@@ -336,6 +340,41 @@ void Generator::skipTo(int32_t step) {
 		nextStep_++;
 	}
 }
+
+#ifdef GENERATOR_TEST_SEAMS
+// PROTOTYPE (#414, throwaway): Part bias after effectiveOn(), on one part.
+GEN_STEP_CODE Generator::Step Generator::biasedStep(int32_t partIndex, const Step& step) const {
+	const prototype::PartBias& bias = testBias_;
+	if (bias.part != partIndex) {
+		return step;
+	}
+	Step out = step;
+	out.energy = prototype::biased(bias.model, step.energy, bias.units[static_cast<int32_t>(Macro::Energy)]);
+	out.density = prototype::biased(bias.model, step.density, bias.units[static_cast<int32_t>(Macro::Density)]);
+	out.complexity =
+	    prototype::biased(bias.model, step.complexity, bias.units[static_cast<int32_t>(Macro::Complexity)]);
+	out.motion = prototype::biased(bias.model, step.motion, bias.units[static_cast<int32_t>(Macro::Motion)]);
+	return out;
+}
+
+GEN_STEP_CODE int32_t Generator::gateDensity(int32_t partIndex, int32_t density) const {
+	const prototype::PartBias& bias = testBias_;
+	if (bias.part != partIndex) {
+		return density;
+	}
+	return prototype::biasedGate(bias.model, density, bias.units[static_cast<int32_t>(Macro::Density)]);
+}
+
+int32_t Generator::testBiasedMacro(int32_t part, Macro macro) const {
+	const int32_t shared =
+	    macro == Macro::Energy || macro == Macro::Density ? effectiveMacro(macro) : recipe_.macros[macro];
+	const prototype::PartBias& bias = testBias_;
+	if (bias.part != part) {
+		return shared;
+	}
+	return prototype::biased(bias.model, shared, bias.units[static_cast<int32_t>(macro)]);
+}
+#endif
 
 GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
