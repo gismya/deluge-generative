@@ -21,6 +21,9 @@ struct Request {
 	bool endAfterDrop = false;
 	/// Writes only <out>.mid: no WAV or piano roll, and no sound picks.
 	bool midiOnly = false;
+	/// --mute: bit p leaves part p (sidebar row p + 1, the genre's part order) out of the WAV from step 0, as a Perform
+	/// mute does. The Generator plays as without it, and the MIDI file and piano roll keep every part.
+	uint32_t mutedParts = 0;
 	SoundLibrary library;
 	/// Path prefix: writes <out>.wav, <out>.mid and <out>.txt, making its folder if needed.
 	std::string out;
