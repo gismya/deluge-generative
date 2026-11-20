@@ -20,6 +20,7 @@
 // occasional variation. Every entry is starting data, tuned by ear later (spec §21.5).
 
 #include "generative/core/genre.h"
+#include "generative/core/genres/drum_machines.h"
 
 #include <algorithm>
 #include <array>
@@ -72,8 +73,11 @@ constexpr RoleSounds kAcidRoles[] = {
 
 // ---- Drums lanes ----
 
-constexpr TagWeight kKickTags[] = {
-    {"909 Kick", 3}, {"Deep Sky Kick HQ", 1}, {"Deep Sky Kick distorted", 1}, {"808 Kick distorted", 1}};
+/// The plain 909 kick by its path: a "909 Kick" tag also matched its distorted and dry kicks (#375).
+constexpr TagWeight kKickTags[] = {{"SAMPLES/DRUMS/Kick/909 Kick.wav", 3},
+                                   {"Deep Sky Kick HQ", 1},
+                                   {"Deep Sky Kick distorted", 1},
+                                   {"808 Kick distorted", 1}};
 constexpr TagWeight kSnareTags[] = {{"909", 3}, {"XV5080 Snare dry", 1}, {"DDD1 Snare dry", 1}};
 constexpr TagWeight kClapTags[] = {{"909", 3}, {"GEN Clap", 2}, {"808", 1}};
 constexpr TagWeight kRimTags[] = {{"909", 2}, {"808", 1}, {"DDD1", 1}};
@@ -86,6 +90,21 @@ constexpr TagWeight kTomTags[] = {{"909", 2}, {"808", 1}};
 constexpr const char* const kPerc1Folders[] = {"SAMPLES/DRUMS/Claves", "SAMPLES/DRUMS/Cowbell", "SAMPLES/DRUMS/Other"};
 constexpr TagWeight kPerc1Tags[] = {{"808", 2}, {"Metal", 1}, {"Click", 1}};
 constexpr const char* const kPerc2Folders[] = {"SAMPLES/DRUMS/Shaker", "SAMPLES/DRUMS/Tambourine"};
+
+// ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
+
+/// Each piece plays the 909 or, less often, the 808, on every lane they have a file for: the 808 has no ride, the 909
+/// no percussion, so those lanes roll their own lists. Never the DDD1 (owner): it stays in the lane lists and swaps.
+constexpr MachineWeight kMachines[] = {{&machines::k909, 3}, {&machines::k808Distorted, 1}};
+/// Acid runs its 909 kick hot, and takes the 808's shorter, woodier rim.
+constexpr KitSwap kAcidSwaps[] = {{Lane::Kick, "909 Kick distorted"}, {Lane::Rim, "808 Rim"}};
+/// Melodic's kick is long, deep and processed, not a raw machine; the XV5080's crash is a smoother wash.
+constexpr KitSwap kMelodicSwaps[] = {{Lane::Kick, "Deep Sky Kick HQ9094"}, {Lane::Crash, "XV5080 Crash"}};
+/// Dub techno's soft 808 rim and duller 808 hats under the stab's echoes, and the 808's maraca for the shaker. The
+/// hats swap by the bare machine tag, so the Open hat's pair rule (spec §10.3) takes the 808 open hat with them.
+constexpr KitSwap kDubSwaps[] = {{Lane::Rim, "808 Rim"}, {Lane::ClosedHat, "808"}, {Lane::Perc2, "808 Maraca"}};
+/// Detroit came out of electro: the plain 808 kick under the 909's hats.
+constexpr KitSwap kDetroitSwaps[] = {{Lane::Kick, "SAMPLES/DRUMS/Kick/808 Kick.wav"}};
 
 // ---- FX lanes (spec §10.5) ----
 
@@ -254,14 +273,22 @@ constexpr RoleSounds kDetroitRoles[] = {
 
 } // namespace
 
-const Palette technoPalette{.lanes = kLanes};
+const Palette technoPalette{.lanes = kLanes, .kits = {.machines = kMachines}};
 /// The acid line and the Drone over Techno's drum and FX lanes.
-const Palette technoAcidPalette{.parts = kAcidParts, .roles = kAcidRoles, .lanes = kLanes};
+const Palette technoAcidPalette{
+    .parts = kAcidParts, .roles = kAcidRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kAcidSwaps}};
 /// Its own bass, Pad and Arp over Techno's drum and FX lanes.
-const Palette technoMelodicPalette{.parts = kMelodicParts, .roles = kMelodicRoles, .lanes = kLanes};
+const Palette technoMelodicPalette{.parts = kMelodicParts,
+                                   .roles = kMelodicRoles,
+                                   .lanes = kLanes,
+                                   .kits = {.machines = kMachines, .swaps = kMelodicSwaps}};
 /// Its sub, Stab and Pad over Techno's drum and FX lanes, a shaker alone on Perc 2.
-const Palette technoDubPalette{.parts = kDubParts, .roles = kDubRoles, .lanes = kDubLanes};
+const Palette technoDubPalette{
+    .parts = kDubParts, .roles = kDubRoles, .lanes = kDubLanes, .kits = {.machines = kMachines, .swaps = kDubSwaps}};
 /// Its bass, Strings, Stab and Motif over Techno's drum and FX lanes.
-const Palette technoDetroitPalette{.parts = kDetroitParts, .roles = kDetroitRoles, .lanes = kLanes};
+const Palette technoDetroitPalette{.parts = kDetroitParts,
+                                   .roles = kDetroitRoles,
+                                   .lanes = kLanes,
+                                   .kits = {.machines = kMachines, .swaps = kDetroitSwaps}};
 
 } // namespace deluge::generative::genres

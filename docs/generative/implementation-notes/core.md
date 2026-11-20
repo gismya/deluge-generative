@@ -186,6 +186,12 @@ otherwise.
   Impact tag "909", over the Crash and Kick folders, rolled a 909 kick 6 times in 7, and "909 Kick" took the
   distorted and dry kicks too. Name a single file by its path (`SAMPLES/DRUMS/Crash/909 Crash.wav`), and check a new
   palette's tags against `tests/spec/generator/fixtures/factory_card.txt`.
+- Drum kits (spec §10.2): `DrumKits` on the `Palette`, machines in `core/genres/drum_machines.h`, rolled in
+  `rollPart()` (`palette.cpp`) from the part's own kit stream (`kKitSlot`), so the lanes' draws don't move. A kit tag
+  is rolled as a one-tag copy of the lane (`rollKitTag()`), so it matches the lane's folders whatever its list says:
+  a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
+  the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
+  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
 - A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
   usually meant the mark had slid one step off the hit it was for.
 - Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the

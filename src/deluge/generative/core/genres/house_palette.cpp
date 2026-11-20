@@ -21,6 +21,7 @@
 // starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/genre.h"
+#include "generative/core/genres/drum_machines.h"
 
 namespace deluge::generative::genres {
 
@@ -87,6 +88,15 @@ constexpr const char* const kPerc2Folders[] = {"SAMPLES/DRUMS/ConL", "SAMPLES/DR
                                                "SAMPLES/DRUMS/Cowbell"};
 constexpr TagWeight kPerc2Tags[] = {{"808", 2}, {"Linndrum", 1}};
 
+// ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
+
+/// Each piece plays the 909, the 808 or the Linndrum, most often the 909, on every lane they have a file for.
+constexpr MachineWeight kMachines[] = {{&machines::k909, 3}, {&machines::k808, 2}, {&machines::kLinndrum, 1}};
+/// Chicago and New York house ran a 909 and took the rim and congas from an 808 beside it, and a sampled drum
+/// machine's tambourine for the 16ths.
+constexpr KitSwap kSwaps[] = {
+    {Lane::Rim, "808 Rim"}, {Lane::Perc2, "808 Conga low"}, {Lane::Perc1, "Linndrum Tambourine"}};
+
 // ---- FX lanes (spec §10.5) ----
 
 /// Riser: the pack's 6 s and 4 s risers from the default SAMPLES/FX/Riser. Not the 8 s one: it overshoots a 4-bar
@@ -121,6 +131,7 @@ constexpr LaneSounds kLanes[] = {
 } // namespace
 
 /// Its Bass, Stab, Strings and Lead over the house drums and the Riser, Fall and Impact.
-const Palette housePalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+const Palette housePalette{
+    .parts = kParts, .roles = kRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 
 } // namespace deluge::generative::genres
