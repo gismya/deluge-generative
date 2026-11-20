@@ -123,7 +123,8 @@ GEN_STEP_CODE Chord Generator::chord() const {
 GEN_STEP_CODE void Generator::voiceChordAt(int32_t root) {
 	voiced_ = voiceChord(recipe_.scale, root,
 	                     extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
-	                                    genre_->harmony.extensionCeiling));
+	                                    genre_->harmony.extensionCeiling),
+	                     {}, genre_->harmony.extensionOrder);
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {

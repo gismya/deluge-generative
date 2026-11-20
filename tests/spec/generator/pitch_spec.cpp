@@ -156,6 +156,20 @@ describe pitch("Pitch", $ {
 		expect(voiceChord(Scale::Minor, 0, 2, tens).size).to_equal(4);
 	});
 
+	it("tries a genre's own Extension order: 9 and sus4 before the 7 (Ambient's, spec §7.4)", _ {
+		// Major I: add9 at level 1, R 4 5 9 at level 2, with no 7th in either.
+		expect(spelling(voiceChord(Scale::Major, 0, 1, {}, kNinthFirst), Scale::Major) == Notes{0, 4, 7, 14}).to_be_true();
+		expect(spelling(voiceChord(Scale::Major, 0, 2, {}, kNinthFirst), Scale::Major) == Notes{0, 5, 7, 14}).to_be_true();
+		// Major V: the 9 is the key's 6th, and sus4 puts the tonic in the leading tone's place.
+		expect(spelling(voiceChord(Scale::Major, 4, 2, {}, kNinthFirst), Scale::Major) == Notes{0, 5, 7, 14}).to_be_true();
+		// Major iii: its ♭9 is guarded, so sus4 comes in at level 1 and the 7 at level 2.
+		expect(spelling(voiceChord(Scale::Major, 2, 1, {}, kNinthFirst), Scale::Major) == Notes{0, 5, 7}).to_be_true();
+		expect(spelling(voiceChord(Scale::Major, 2, 2, {}, kNinthFirst), Scale::Major) == Notes{0, 5, 7, 10}).to_be_true();
+		// The Generator-wide order is the default.
+		expect(spelling(voiceChord(Scale::Major, 0, 1, {}, ExtensionOrder{}), Scale::Major) == Notes{0, 4, 7, 11})
+		    .to_be_true();
+	});
+
 	it("builds a chord on any degree, in steps from the tonic", _ {
 		Chord iv = voiceChord(Scale::Minor, 3, 0);
 		expect(iv.size).to_equal(3);

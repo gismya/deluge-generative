@@ -210,6 +210,15 @@ protected:
 /// whose path doesn't fit a SoundPath are never picked. Returns false on a card error.
 bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy, FolderLister& lister);
 
+/// Part `p`'s drum kit as rollSounds() rolls it from `entropy` (spec §10.2): its machine (nullptr: the part has no
+/// Drums lanes or the palette no machines) and, bit s, whether `palette.kits.swaps[s]` is in. For tools: which kit a
+/// piece plays, whatever the card holds.
+struct RolledKit {
+	const DrumMachine* machine = nullptr;
+	uint32_t swaps = 0;
+};
+RolledKit rolledKit(const Palette& palette, const PartSpec& part, int32_t p, uint32_t entropy);
+
 /// A sound re-roll (spec §10.7, §13.4): rolls `part`'s picks again from `palette` and fresh entropy, as rollSounds()
 /// rolls them, but each pick moves away from the one in `sounds` where the palette offers another, so NEW SOUND is
 /// heard as new. A Kit part re-rolls every lane it plays, its drum kit on another machine (spec §10.2). Every other

@@ -25,7 +25,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 - **Build placement.** A Build of a phrase or longer starts on a phrase line. A shorter one takes the last bars of the phrase before the Drop, so it shortens the Section before it: a 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break.
 - **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50. **Named exception:** Psytrance's 2-phrase decay, so its Lead (gate 30) plays a Drop's whole first phrase (#349); its shortest Groove at Motion 50 is 1 phrase, where the lift stops at the next Section as above. A Psytrance spec shows that cut-off.
 - **Intro and Outro lengths** are fixed genre values in phrases, 1 by default.
-- Example Groove ranges (*tuning*): Techno 4–8, Psytrance 3–6, Ambient 6–12 phrases.
+- Example Groove ranges (*tuning*): Techno 4–8, Psytrance 3–6, Ambient 4–8 phrases.
 - Example Build and length values (*tuning*). Build keeps is the same as Break keeps in every genre:
 
 | Genre | Build lengths (bars ×weight) | Build cut | Roll top stage | Drop decay (phrases) | Intro / Outro (phrases) |

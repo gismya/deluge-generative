@@ -64,6 +64,12 @@ VoicePlace voicePlace(const Chord& chord, int32_t i);
 Voicing leadVoicing(const Chord& chord, const Key& key, const Register& reg, std::span<const uint8_t> previous,
                     bool doubleRoot);
 
+/// Voices `chord` open in `key` inside `reg` (spec §5.2): a Sustain's SustainSpec::openVoicing. With `previous` empty,
+/// the root and the 5th go to the instance nearest the tonic and the 3rd (or the sus4) and the Extensions to the one
+/// nearest the tonic an octave up. After that each note of `previous` is a voice: each chord note takes one, at the
+/// instance nearest it, by the pairing that moves the voices least in all, the first found on a tie. A voice left
+/// over drops; a note left over (a chord grown by a note) goes where the first voicing would put it. No doubled root.
+Voicing openVoicing(const Chord& chord, const Key& key, const Register& reg, std::span<const uint8_t> previous);
 /// A pedal: the key's root and the 5th above it, at their places in the Register (spec §5.2). No Extensions and no
 /// voice leading: it never moves with the chord.
 Voicing pedalVoicing(const Key& key, const Register& reg);
