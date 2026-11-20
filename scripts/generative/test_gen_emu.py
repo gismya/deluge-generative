@@ -5,6 +5,7 @@ The emulator runs themselves are checked by running gen_emu.py smoke against a r
     python3 scripts/generative/test_gen_emu.py
 """
 
+import argparse
 import math
 import os
 import struct
@@ -696,6 +697,43 @@ class WavCheck(unittest.TestCase):
         self.assertEqual(
             verdict.checked, 40
         )  # steps 0-39 start a 16th or more before 1.25 s
+
+    def test_silence_in_a_bar_the_job_expects_quiet_passes(self):
+        # An FX-alone capture: the riser starts from silence on the Build's first beat (#422).
+        pcm = bars_pcm([0.3, 0, 0, 0.3])
+        steps = steps_of(0, 1, 2, 3)
+        self.assertEqual(
+            gen_emu.wav_failures(pcm, 2.0, steps, STEP_S, quiet_bars={1, 2}).failures,
+            [],
+        )
+        self.assertEqual(
+            gen_emu.wav_failures(pcm, 2.0, steps, STEP_S, quiet_bars={1}).failures,
+            [
+                "silent in 1 bar(s) where the harness has notes (bar 0 at PLAY): 2 at 1 s"
+            ],
+        )
+
+    def test_quiet_bars_are_bars_and_ranges(self):
+        self.assertEqual(gen_emu.bar_set("47"), frozenset({47}))
+        self.assertEqual(gen_emu.bar_set("3,40-42"), frozenset({3, 40, 41, 42}))
+        for bad in ("x", "5-3", "-1", ""):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                gen_emu.bar_set(bad)
+
+    def test_capture_and_check_take_quiet_bars(self):
+        p = argparse.ArgumentParser()
+        gen_emu.add_recipe_args(p)
+        self.assertEqual(
+            p.parse_args(["--quiet-bars", "47", "--quiet-bars", "50-51"]).quiet_bars,
+            [frozenset({47}), frozenset({50, 51})],
+        )
+        self.assertEqual(gen_emu.quiet_bars(p.parse_args([])), frozenset())
+        self.assertEqual(
+            gen_emu.quiet_bars(
+                p.parse_args(["--quiet-bars", "1", "--quiet-bars", "3"])
+            ),
+            frozenset({1, 3}),
+        )
 
     def test_a_dropout_in_the_last_beat_fails(self):
         pcm = bars_pcm([0.3] * 3)[: int(1.125 * RATE) * 8] + bars_pcm([0], 0.125)

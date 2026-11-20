@@ -1,11 +1,14 @@
 """Table variants: make their diffs, apply and revert them in a worktree, and prove them in the harness.
 
 A variant is a diff against the session's base commit, kept as <session>/diffs/<name>.diff (variants.md quotes it).
-A session's content file defines how each diff is made: `Variant(patches, edits, why)`, patch files to `git apply`
-and exact (file, old, new) string edits, each of whose `old` must occur once.
+A session's content file defines how each diff is made: `Variant(patches, edits, why, parent)`, patch files to `git
+apply` and exact (file, old, new) string edits, each of whose `old` must occur once. A variant stacked on another
+(its patches include the other's) names it as `parent`; its diff is still against the base commit, so it applies
+alone. `make` records the parents in <session>/diffs/parents.json.
 
-Proving renders the variant's harness MIDI and the base's over N seeds and reports the seeds where the variant
-changes nothing: an option that changes nothing there can't be heard there (psytrance round 1 found three).
+Proving renders the variant's harness MIDI and its parent's (the base's when it names none) over N seeds and reports
+the seeds where the variant changes nothing: an option that changes nothing there can't be heard there (psytrance
+round 1 found three).
 """
 
 import filecmp
@@ -25,6 +28,9 @@ class Variant:
     patches: list = field(default_factory=list)
     edits: list = field(default_factory=list)  # (path relative to the repo, old, new)
     why: str = ""
+    parent: str = (
+        "base"  # the variant this one is stacked on: prove compares against it (#422)
+    )
 
 
 def git(worktree, *args, **kw):
@@ -105,11 +111,40 @@ def build_tree(worktree, variant):
             fh.write(text.replace(old, new))
 
 
+def parents_path(session):
+    return os.path.join(session, "diffs", "parents.json")
+
+
+def parents(session):
+    """{variant: its parent} for the variants `make` wrote that name one other than the base."""
+    try:
+        with open(parents_path(session)) as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return {}
+
+
 def make(worktree, session, variants):
-    """Writes each variant's diff to <session>/diffs/. Raises ValueError, changing nothing, if `worktree` has
-    uncommitted work under src/ or pack/."""
+    """Writes each variant's diff to <session>/diffs/, and their parents to diffs/parents.json. Raises ValueError,
+    changing nothing, if `worktree` has uncommitted work under src/ or pack/ or a variant names an unknown parent."""
     require_clean(worktree)
+    known = parents(session)
+    for name, v in variants.items():
+        if (
+            v.parent != "base"
+            and v.parent not in variants
+            and not os.path.exists(diff_path(session, v.parent))
+        ):
+            raise ValueError(f"{name}: its parent {v.parent} is no variant")
+        if v.parent == name:
+            raise ValueError(f"{name}: its own parent")
     os.makedirs(os.path.join(session, "diffs"), exist_ok=True)
+    for name, v in variants.items():
+        known.pop(name, None)
+        if v.parent != "base":
+            known[name] = v.parent
+    with open(parents_path(session), "w") as fh:
+        json.dump(known, fh, indent=1, sort_keys=True)
     out = {}
     try:
         for name, v in variants.items():
@@ -161,20 +196,35 @@ def build_render(worktree, dest):
 
 
 def build_renders(worktree, session, names, bin_dir):
-    """bin_dir/<name> for `base` and each variant: generator_render built with it applied. Reverts after. Raises
-    ValueError, changing nothing, if `worktree` has uncommitted work under src/ or pack/."""
+    """({name: bin_dir/<name>}, {name: its build log}) for `base` and each variant: generator_render built with it
+    applied. A variant that doesn't apply or build is logged to bin_dir/<name>.log and the rest go on; the base's
+    failure raises. Reverts after. Raises ValueError, changing nothing, if `worktree` has uncommitted work under src/
+    or pack/."""
     require_clean(worktree)
-    out = {}
+    out, failed = {}, {}
     try:
         for name in ["base", *[n for n in names if n != "base"]]:
             revert(worktree)
-            apply(worktree, session, name)
-            out[name] = build_render(worktree, os.path.join(bin_dir, name))
+            try:
+                apply(worktree, session, name)
+                out[name] = build_render(worktree, os.path.join(bin_dir, name))
+            except subprocess.CalledProcessError as e:
+                if name == "base":
+                    raise
+                os.makedirs(bin_dir, exist_ok=True)
+                failed[name] = os.path.join(bin_dir, name + ".log")
+                text = e.stderr or e.output or b""
+                with open(failed[name], "wb") as fh:
+                    fh.write(
+                        f"{' '.join(map(str, e.cmd))}: exit {e.returncode}\n".encode()
+                    )
+                    fh.write(text if isinstance(text, bytes) else text.encode())
+                continue
             with open(out[name] + ".json", "w") as fh:
                 json.dump(render_stamp(worktree, session, name), fh)
     finally:
         revert(worktree)
-    return out
+    return out, failed
 
 
 def render_stamp(worktree, session, name):
@@ -213,19 +263,19 @@ def render_midi(render, genre, seed, bars, extra, out_prefix):
     return out_prefix + ".mid"
 
 
-def unchanged_seeds(renders, name, genre, seeds, bars, extra, scratch):
-    """The seeds (entropy = seed) where variant `name`'s harness MIDI equals the base's."""
+def unchanged_seeds(renders, name, genre, seeds, bars, extra, scratch, against="base"):
+    """The seeds (entropy = seed) where variant `name`'s harness MIDI equals variant `against`'s."""
     folder = os.path.join(scratch, "prove")
     os.makedirs(folder, exist_ok=True)
     same = []
     for seed in seeds:
         a = render_midi(
-            renders["base"],
+            renders[against],
             genre,
             seed,
             bars,
             extra,
-            os.path.join(folder, f"base-{seed}"),
+            os.path.join(folder, f"{against}-{seed}"),
         )
         b = render_midi(
             renders[name],
@@ -240,17 +290,51 @@ def unchanged_seeds(renders, name, genre, seeds, bars, extra, scratch):
     return same
 
 
-def prove(worktree, session, names, genre, seeds, bars, extra, scratch):
-    """Lines: per variant, the seeds where it changes nothing. Keeps each variant's generator_render in
-    <scratch>/bin/<name> for its offline clips."""
-    renders = build_renders(worktree, session, names, os.path.join(scratch, "bin"))
+def render_names(names, parent_of):
+    """The renders proving `names` needs: the base, each name, and each name's parent, once each, in that order."""
+    out = ["base"]
+    for name in names:
+        for n in (name, parent_of.get(name, "base")):
+            if n not in out:
+                out.append(n)
+    return out
+
+
+def compare(renders, names, parent_of, genre, seeds, bars, extra, scratch, failed=None):
+    """Lines: per variant, the seeds where it changes nothing against its parent (`parent_of`, the base by default).
+    `failed`: {variant: its build log or None} for the ones that didn't build: reported, and their children not
+    proved."""
+    seeds = list(seeds)
+    failed = failed or {}
     lines = []
     for name in names:
         if name == "base":
             continue
-        same = unchanged_seeds(renders, name, genre, seeds, bars, extra, scratch)
+        parent = parent_of.get(name, "base")
+        if name in failed:
+            lines.append(f"{name}: doesn't build ({failed[name]})")
+            continue
+        if parent in failed:
+            lines.append(f"{name}: not proved: its parent {parent} doesn't build")
+            continue
+        same = unchanged_seeds(
+            renders, name, genre, seeds, bars, extra, scratch, against=parent
+        )
         lines.append(
             f"{name}: changes the notes at {len(seeds) - len(same)}/{len(seeds)} seeds"
+            + (f" against {parent}" if parent != "base" else "")
             + (f"; nothing at seeds {', '.join(map(str, same))}" if same else "")
         )
     return lines
+
+
+def prove(worktree, session, names, genre, seeds, bars, extra, scratch):
+    """Lines: per variant, the seeds where it changes nothing against its parent (diffs/parents.json). Keeps each
+    variant's generator_render in <scratch>/bin/<name> for its offline clips."""
+    parent_of = parents(session)
+    renders, failed = build_renders(
+        worktree, session, render_names(names, parent_of), os.path.join(scratch, "bin")
+    )
+    return compare(
+        renders, names, parent_of, genre, seeds, bars, extra, scratch, failed
+    )

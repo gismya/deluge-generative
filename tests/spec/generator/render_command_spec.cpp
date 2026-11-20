@@ -3,6 +3,7 @@
 // write the MIDI file alone.
 
 #include "render/command.h"
+#include "render/names.h"
 #include "temp_path.h"
 
 #include "generative/core/genre.h"
@@ -339,6 +340,47 @@ describe render_command("Rough render command", $ {
 		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
 		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
 		expect(listing.find("psytrance\t26301\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+	});
+
+	it("lists a Recipe's sound picks with --list-sounds: a line per part and per lane of a Drums or FX part", _ {
+		harness::render::Parsed parsed = parse({"--list-sounds", "--genre", "dub", "--entropy", "12", "--seed", "3"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listSounds).to_be_true();
+		harness::render::Request request = parsed.request;
+		request.library.roots = {GENERATOR_REPO_DIR "/pack"};
+
+		bool rolledAll = false;
+		const std::string listing = harness::render::soundPicks(request, &rolledAll);
+		expect(rolledAll).to_be_true();
+		const Genre& dub = *findGenre("dub");
+		for (const PartSpec& part : dub.parts) {
+			if (part.lanes.empty()) {
+				expect(listing.find(std::string(part.name) + "\t")).not_().to_equal(std::string::npos);
+			}
+			for (const LaneSpec& lane : part.lanes) {
+				const std::string row = std::string(part.name) + "."
+				                        + harness::render::kLaneNames[static_cast<int32_t>(lane.lane)] + "\t";
+				expect(listing.find(row)).not_().to_equal(std::string::npos);
+			}
+		}
+		// The pack's own short riser, as the render's WAV plays it; no kit on pack/ alone, so no drum sample
+		expect(listing.find("FX.Riser\tSAMPLES/FX/Riser/Short/")).not_().to_equal(std::string::npos);
+		expect(listing.find("DRUMS.Kick\t-\n")).not_().to_equal(std::string::npos);
+		expect(harness::render::soundPicks(request, &rolledAll)).to_equal(listing); // the same Recipe, the same picks
+
+		// The kit's machine, from the entropy alone: named though pack/ holds no drum sample
+		const size_t kit = listing.find("DRUMS.kit\t");
+		expect(kit).not_().to_equal(std::string::npos);
+		const std::string machine = listing.substr(kit + 10, listing.find('\t', kit + 10) - kit - 10);
+		bool known = false;
+		for (const MachineWeight& each : dub.palette->kits.machines) {
+			known = known || machine == each.machine->name;
+		}
+		expect(known).to_be_true();
+
+		// Another entropy rolls other sounds
+		request.overrides.entropy = 13;
+		expect(harness::render::soundPicks(request, &rolledAll) == listing).to_be_false();
 	});
 });
 

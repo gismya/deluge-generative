@@ -83,3 +83,11 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
 - The runner applies a variant once per claimed group and reverts after; ninja goes by mtime, so a revert followed by
   the same apply still relinks. Merged captures are hard links in `raw/`: the cutter reads `raw/<name>.json` for the
   tempo, so write one for any WAV you put there by hand.
+- A gen_emu flag that only steers the check (`--quiet-bars`) stays out of `Job.capture_flags()`: that list is the
+  stamp's `args`, so putting it there would make every WAV captured before stale. The runner adds it to the command
+  line itself (`Run.command`), and the `.failed` marker records it (`Run.failed_stamp`), so naming quiet bars after a
+  failure retries.
+- A runner holding two chunks of one variant (`base#1`, `base#2`) skips the revert and apply between them: it would
+  relink for nothing (ninja goes by mtime).
+- The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
+  `pack/` alone prints `-` for every drum lane.

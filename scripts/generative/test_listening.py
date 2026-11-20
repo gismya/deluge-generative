@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 import theory_review
 from listening import cli, cutter, jobs, page, plan, recipe, runner, variants
@@ -427,6 +428,428 @@ class PaletteCard(unittest.TestCase):
             )
         with fat_image.FatImage(stock) as card:
             self.assertEqual(card.listdir(), [])
+
+
+class QuietBars(unittest.TestCase):
+    """#422: an FX-alone job names the bars where silence is expected, for gen_emu's check."""
+
+    def test_a_job_names_its_quiet_bars_and_still_shares_a_capture(self):
+        text = (
+            "fx   | base | pack | 54 | --seed 24 --mute 1 --quiet-bars 47\n"
+            "fx_s | base | pack | 20 | --seed 24 --mute 1 --quiet-bars 3-4\n"
+        )
+        js = jobs.parse_jobs(text, genre="dub")
+        self.assertEqual(js[0].quiet, (47,))
+        (capture,) = jobs.merge(js)
+        self.assertEqual(capture.quiet, (3, 4, 47))
+        # Not part of the audio: a WAV captured before the job named them stays current
+        self.assertEqual(
+            capture.job.capture_flags(),
+            ["--genre", "dub", "--seed", "24", "--entropy", "0", "--mute", "1"],
+        )
+
+    def test_the_runner_passes_them_to_the_capture(self):
+        js = jobs.parse_jobs(
+            "fx | base | pack | 8 | --mute 1 --quiet-bars 3,5", genre="dub"
+        )
+        r = runner.Run("dub", "/s", "/x", js, 1)
+        cmd = r.command(1, "/wt", r.captures[0], "/out.wav", 17.0)
+        self.assertEqual(cmd[cmd.index("--quiet-bars") + 1], "3,5")
+        plain = runner.Run(
+            "dub", "/s", "/x", jobs.parse_jobs("a | base | pack | 8 |", "dub"), 1
+        )
+        self.assertNotIn(
+            "--quiet-bars", plain.command(1, "/wt", plain.captures[0], "/o.wav", 17.0)
+        )
+
+
+class Retry(unittest.TestCase):
+    """#422: a capture whose check fails twice with the same bytes is the audio itself: kept, with the failure noted."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.scratch = tmp.name
+        js = jobs.parse_jobs("fx | base | pack | 8 | --mute 1", genre="dub")
+        self.run_ = runner.Run("dub", self.scratch, self.scratch, js, 1)
+        self.run_.tempos = {"fx": 120.0}
+        self.run_.head = "abc"
+        os.makedirs(self.run_.raw)
+        self.attempt = 0
+
+    def capture_with(self, outputs):
+        def fake(cmd, **kw):
+            out = cmd[cmd.index("--out") + 1]
+            with open(out, "wb") as fh:
+                fh.write(outputs[self.attempt])
+            self.attempt += 1
+            kw["stdout"].write("FAIL silent in 1 bar(s)\n")
+            return subprocess.CompletedProcess(cmd, 1)
+
+        with (
+            mock.patch.object(runner.subprocess, "run", fake),
+            mock.patch.object(runner, "RETRY_WAIT_S", 0),
+            mock.patch.object(runner.Run, "wait_turn", lambda self: None),
+            contextlib.redirect_stdout(io.StringIO()) as said,
+        ):
+            ok = self.run_.capture(1, "/wt", self.run_.captures[0])
+        return ok, said.getvalue()
+
+    def test_a_byte_identical_retry_is_kept_with_its_failure_noted(self):
+        ok, said = self.capture_with([b"same", b"same"])
+        self.assertTrue(ok)
+        self.assertIn("byte-identical", said)
+        with open(os.path.join(self.run_.raw, "fx.wav"), "rb") as fh:
+            self.assertEqual(fh.read(), b"same")
+        info = runner.read_info(self.run_.raw, "fx")
+        self.assertIn("silent", info["check"])
+        self.assertTrue(self.run_.done(self.run_.captures[0]))
+
+    def test_the_page_warns_about_a_clip_whose_capture_was_kept_with_a_failed_check(
+        self,
+    ):
+        clip = {"stem": "fx-a", "src": "fx", "bars": [0, 8]}
+        info = {"tempo": 120.0, "seconds": 17.0}
+        self.assertEqual(page.clip_warnings("I5", clip, info), [])
+        (warning,) = page.clip_warnings(
+            "I5", clip, dict(info, check="failed: FAIL silent in 1 bar(s)")
+        )
+        self.assertIn(
+            "I5 clip fx-a: fx was kept with its check failed: FAIL silent", warning
+        )
+
+    def test_a_retry_that_differs_fails(self):
+        ok, _ = self.capture_with([b"one", b"two"])
+        self.assertFalse(ok)
+        self.assertFalse(os.path.exists(os.path.join(self.run_.raw, "fx.wav")))
+        self.assertTrue(self.run_.failed(self.run_.captures[0]))
+
+
+def many(n, variant="base", start=0):
+    return "".join(
+        f"{variant}{i} | {variant} | pack | 8 | --seed {i + 1}\n"
+        for i in range(start, start + n)
+    )
+
+
+class Splitting(unittest.TestCase):
+    """#422: a variant holding most of the work is split across runners, each chunk its own claim."""
+
+    def test_a_variant_with_most_of_the_captures_runs_on_every_runner(self):
+        captures = jobs.merge(jobs.parse_jobs(many(22) + many(2, "s1"), "psytrance"))
+        p = plan.plan(captures, runners=2, tempo_of=lambda c: 120.0)
+        self.assertEqual(
+            [any(c.variant == "base" for c in r.captures) for r in p.runners],
+            [True, True],
+        )
+        self.assertEqual(sum(len(r.captures) for r in p.runners), 24)
+        units = [
+            u for u, _ in plan.groups(captures, {c.name: 17.0 for c in captures}, 2)
+        ]
+        self.assertEqual(sorted(units), ["base#1", "base#2", "s1"])
+        # Each chunk keeps its own captures in Recipe order, and together they hold every base capture once
+        chunks = dict(plan.groups(captures, {c.name: 17.0 for c in captures}, 2))
+        self.assertEqual(
+            sorted(c.name for c in chunks["base#1"] + chunks["base#2"]),
+            sorted(f"base{i}" for i in range(22)),
+        )
+
+    def test_a_split_that_costs_more_links_than_it_saves_is_not_made(self):
+        captures = jobs.merge(jobs.parse_jobs(ORDER_JOBS, genre="psytrance"))
+        units = [
+            u for u, _ in plan.groups(captures, {c.name: 17.0 for c in captures}, 2)
+        ]
+        self.assertEqual(sorted(units), ["base", "s1"])
+
+    def test_one_runner_never_splits(self):
+        captures = jobs.merge(jobs.parse_jobs(many(22), "psytrance"))
+        units = [
+            u for u, _ in plan.groups(captures, {c.name: 17.0 for c in captures}, 1)
+        ]
+        self.assertEqual(units, ["base"])
+
+    def test_the_split_counts_only_what_is_left_to_capture(self):
+        # A rerun where every s1 capture is current: base is all that's left, so it runs on both runners.
+        with tempfile.TemporaryDirectory() as scratch:
+            js = jobs.parse_jobs(many(6) + many(30, "s1"), "psytrance")
+            r = runner.Run("psytrance", scratch, scratch, js, 2)
+            r.tempos = {j.name: 120.0 for j in js}
+            r.head = "abc"
+            with mock.patch.object(
+                runner.Run, "done", lambda self, c: c.variant == "s1"
+            ):
+                self.assertEqual(len(r.pending()), 6)
+                p = r.plan()
+            self.assertEqual([len(x.captures) for x in p.runners], [3, 3])
+
+    def test_a_runner_holding_one_chunk_skips_another_runners_chunk(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            js = jobs.parse_jobs(many(22), "psytrance")
+            r = runner.Run("psytrance", scratch, scratch, js, 2)
+            os.makedirs(r.raw)
+            self.assertTrue(r.claim("base#1"))
+            self.assertFalse(r.claim("base#1"))
+            self.assertTrue(r.claim("base#2"))
+
+
+def fake_render(folder, name, notes):
+    """An executable that writes `notes` (a function of the seed) as its MIDI file, like generator_render --midi-only."""
+    path = os.path.join(folder, name)
+    with open(path, "w") as fh:
+        fh.write(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "a = sys.argv\n"
+            "seed = int(a[a.index('--seed') + 1])\n"
+            f"notes = {notes!r}\n"
+            "open(a[a.index('--out') + 1] + '.mid', 'w').write(str(eval(notes)))\n"
+        )
+    os.chmod(path, 0o755)
+    return path
+
+
+class Parents(unittest.TestCase):
+    """#422: a variant stacked on another names it, and prove compares it against that one."""
+
+    def test_make_records_each_variants_parent(self):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            variants.make(
+                repo,
+                session,
+                {
+                    "s1": variants.Variant(edits=[("src/a.txt", "one", "two")]),
+                    "s3": variants.Variant(
+                        edits=[("src/a.txt", "one", "three")], parent="s1"
+                    ),
+                },
+            )
+            self.assertEqual(variants.parents(session), {"s3": "s1"})
+
+    def test_make_refuses_an_unknown_parent(self):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            with self.assertRaisesRegex(ValueError, "s9"):
+                variants.make(
+                    repo,
+                    session,
+                    {
+                        "s3": variants.Variant(
+                            edits=[("src/a.txt", "one", "3")], parent="s9"
+                        )
+                    },
+                )
+
+    def test_prove_compares_a_variant_with_its_parent(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            renders = {
+                "base": fake_render(scratch, "base", "'base'"),
+                # s1 changes every seed; s3 changes s1 at even seeds only
+                "s1": fake_render(scratch, "s1", "'s1'"),
+                "s3": fake_render(scratch, "s3", "'s3' if seed % 2 == 0 else 's1'"),
+            }
+            lines = variants.compare(
+                renders, ["s1", "s3"], {"s3": "s1"}, "dub", range(1, 5), 4, [], scratch
+            )
+        self.assertEqual(
+            lines,
+            [
+                "s1: changes the notes at 4/4 seeds",
+                "s3: changes the notes at 2/4 seeds against s1; nothing at seeds 1, 3",
+            ],
+        )
+
+    def test_prove_reports_a_variant_that_doesnt_build_and_proves_the_rest(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            renders = {
+                "base": fake_render(scratch, "base", "'base'"),
+                "s1": fake_render(scratch, "s1", "'s1'"),
+                "s4": fake_render(scratch, "s4", "'s4'"),
+            }
+            failed = {"s2": "/x/s2.log"}
+            lines = variants.compare(
+                renders,
+                ["s1", "s2", "s3", "s4"],
+                {"s3": "s2"},
+                "dub",
+                range(1, 3),
+                4,
+                [],
+                scratch,
+                failed,
+            )
+        self.assertEqual(
+            lines,
+            [
+                "s1: changes the notes at 2/2 seeds",
+                "s2: doesn't build (/x/s2.log)",
+                "s3: not proved: its parent s2 doesn't build",
+                "s4: changes the notes at 2/2 seeds",
+            ],
+        )
+
+    def test_build_renders_goes_on_past_a_failed_build(self):
+        built = []
+
+        def build(wt, dest):
+            if dest.endswith("s2"):
+                raise subprocess.CalledProcessError(1, ["cmake"], stderr=b"error: nope")
+            built.append(os.path.basename(dest))
+            return dest
+
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+            tempfile.TemporaryDirectory() as bin_dir,
+        ):
+            git_repo(repo)
+            with (
+                mock.patch.object(variants, "build_render", build),
+                mock.patch.object(variants, "apply", lambda *a: None),
+                mock.patch.object(variants, "render_stamp", lambda *a: {}),
+            ):
+                renders, failed = variants.build_renders(
+                    repo, session, ["s1", "s2", "s3"], bin_dir
+                )
+            self.assertEqual(built, ["base", "s1", "s3"])
+            self.assertEqual(sorted(renders), ["base", "s1", "s3"])
+            with open(failed["s2"]) as fh:
+                self.assertIn("error: nope", fh.read())
+
+    def test_prove_builds_the_parents_render_too(self):
+        self.assertEqual(
+            variants.render_names(["s3", "s4"], {"s3": "s1", "s4": "s1"}),
+            ["base", "s3", "s1", "s4"],
+        )
+
+
+class VariantCard(unittest.TestCase):
+    """#422: a card takes a variant's pack/ (pack-edit variants), and extra overlay folders."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(os.path.join(self.repo, "pack", "SYNTHS"))
+        with open(os.path.join(self.repo, "pack", "SYNTHS", "SIREN.XML"), "w") as fh:
+            fh.write("<rate>slow</rate>\n")
+        git_repo(self.repo)
+        self.stock = os.path.join(self.tmp, "stock.img")
+        make_fat32(self.stock)
+        self.scratch = os.path.join(self.tmp, "scratch")
+        self.session = os.path.join(self.tmp, "session")
+        with mock.patch.object(runner, "REPO", self.repo):
+            variants.make(
+                variants.scratch_worktree(
+                    self.repo, os.path.join(self.scratch, "wt", "make")
+                ),
+                self.session,
+                {
+                    "fast": variants.Variant(
+                        edits=[("pack/SYNTHS/SIREN.XML", "slow", "fast")]
+                    )
+                },
+            )
+
+    def card(self, *args):
+        with (
+            mock.patch.object(runner, "REPO", self.repo),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            cli.main(["card", "--scratch", self.scratch, "--stock", self.stock, *args])
+
+    def read(self, name, path):
+        import fat_image
+
+        with fat_image.FatImage(os.path.join(self.scratch, f"card_{name}.img")) as card:
+            return card.read_file(path)
+
+    def test_a_variant_card_carries_the_variants_pack(self):
+        self.card("--variant", "fast", "--session", self.session, "fast")
+        self.assertEqual(self.read("fast", "SYNTHS/SIREN.XML"), b"<rate>fast</rate>\n")
+        self.card("plain")
+        self.assertEqual(self.read("plain", "SYNTHS/SIREN.XML"), b"<rate>slow</rate>\n")
+
+    def test_a_variant_card_needs_the_session(self):
+        with (
+            self.assertRaises(SystemExit),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.card("--variant", "fast", "fast")
+
+    def test_an_overlay_folder_goes_over_the_pack(self):
+        extra = os.path.join(self.tmp, "extra", "SYNTHS")
+        os.makedirs(extra)
+        with open(os.path.join(extra, "SIREN.XML"), "w") as fh:
+            fh.write("<rate>deep</rate>\n")
+        self.card("--overlay", os.path.dirname(extra), "deep")
+        self.assertEqual(self.read("deep", "SYNTHS/SIREN.XML"), b"<rate>deep</rate>\n")
+
+
+class DelugemuPin(unittest.TestCase):
+    """#422: a run warns once when the installed delugemu isn't the pinned one, as gen_emu.py smoke does."""
+
+    def test_the_warnings_are_gen_emus(self):
+        pin = {"bundle": "1", "checkout": "a"}
+        with (
+            mock.patch.object(jobs.gen_emu, "read_pin", lambda: pin),
+            mock.patch.object(
+                jobs.gen_emu,
+                "installed_versions",
+                lambda qemu, delugemu: {"bundle": "2", "checkout": "a"},
+            ),
+        ):
+            self.assertEqual(
+                runner.delugemu_warnings(),
+                jobs.gen_emu.pin_warnings(pin, {"bundle": "2", "checkout": "a"}),
+            )
+
+    def test_run_prints_them_once(self):
+        class FakeRun:
+            captures = ()
+
+            def __init__(self, *a):
+                pass
+
+            def pending(self):
+                return []
+
+            def check(self):
+                pass
+
+            def plan(self):
+                return types.SimpleNamespace(text=lambda: "plan")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jf = os.path.join(tmp, "jobs.txt")
+            with open(jf, "w") as fh:
+                fh.write("a | base | pack | 8 |\n")
+            with (
+                mock.patch.object(cli.runner, "Run", FakeRun),
+                mock.patch.object(cli.runner, "delugemu_warnings", lambda: ["old"]),
+                contextlib.redirect_stdout(io.StringIO()) as out,
+            ):
+                cli.main(
+                    [
+                        "run",
+                        "--genre",
+                        "dub",
+                        "--session",
+                        tmp,
+                        "--scratch",
+                        tmp,
+                        "--dry-run",
+                        jf,
+                    ]
+                )
+        self.assertEqual(out.getvalue().count("WARNING old"), 1)
 
 
 if __name__ == "__main__":

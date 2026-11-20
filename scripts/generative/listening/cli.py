@@ -1,7 +1,8 @@
 """python3 scripts/generative/listen.py COMMAND: the listening-session toolkit's commands.
 
-  card     make <scratch>/card_<name>.img: the stock card with pack/ copied over it (--no-pack: stock only), and
-           --palette files as palette overrides
+  card     make <scratch>/card_<name>.img: the stock card with pack/ copied over it (--no-pack: stock only; --variant:
+           that variant's pack/, for a pack-edit variant), then each --overlay folder, and --palette files as palette
+           overrides
   variants make the session's diffs from its content file's VARIANTS (make), or prove them in the harness (prove)
   run      check every job's Recipe, then capture in delugemu on N runners (--dry-run: print the build plan only)
   clips    rough-render jobs offline with each variant's generator_render
@@ -60,9 +61,24 @@ def palette_dest(path, names):
 def cmd_card(a):
     from fat_image import FatImage, copy_tree
 
-    names = oled_names()
+    names = oled_names() if a.palette else set()
     dests = [(palette_dest(p, names), p) for p in a.palette]
+    for folder in a.overlay:
+        if not os.path.isdir(folder):
+            raise ValueError(f"--overlay {folder}: no such folder")
     os.makedirs(a.scratch, exist_ok=True)
+    wt = None
+    if a.variant and not a.no_pack:
+        # The variant's pack/: its diff applied in a scratch worktree of the repo's HEAD, reverted after.
+        if a.variant != "base" and not os.path.exists(
+            variants.diff_path(a.session, a.variant)
+        ):
+            raise ValueError(
+                f"--variant {a.variant}: no {variants.diff_path(a.session, a.variant)}"
+            )
+        wt = variants.scratch_worktree(
+            runner.REPO, os.path.join(a.scratch, "wt", "card")
+        )
     path = os.path.join(a.scratch, f"card_{a.name}.img")
     if sys.platform == "darwin":
         subprocess.run(
@@ -70,12 +86,20 @@ def cmd_card(a):
         )  # an APFS clone: instant
     else:
         shutil.copyfile(a.stock, path)
-    with FatImage(path) as card:
-        if not a.no_pack:
-            copy_tree(card, os.path.join(runner.REPO, "pack"))
-        for dest, src in dests:
-            with open(src, "rb") as fh:
-                card.write_file(dest, fh.read())
+    try:
+        if wt:
+            variants.apply(wt, a.session, a.variant)
+        with FatImage(path) as card:
+            if not a.no_pack:
+                copy_tree(card, os.path.join(wt or runner.REPO, "pack"))
+            for folder in a.overlay:
+                copy_tree(card, folder)
+            for dest, src in dests:
+                with open(src, "rb") as fh:
+                    card.write_file(dest, fh.read())
+    finally:
+        if wt:
+            variants.revert(wt)
     print(path)
     return 0
 
@@ -95,11 +119,13 @@ def cmd_variants(a):
             print(f"{name}: {n} lines")
         return 0
     extra = [w for arg in a.extra for w in arg.split()]
-    for line in variants.prove(
+    lines = variants.prove(
         wt, a.session, a.names, a.genre, range(1, a.seeds + 1), a.bars, extra, a.scratch
-    ):
+    )
+    for line in lines:
         print(line)
-    return 0
+    # a variant that didn't build: the others are proved, and the exit says not all were
+    return 1 if any("doesn't build" in line for line in lines) else 0
 
 
 def page_module_variants(path):
@@ -121,7 +147,14 @@ def cmd_run(a):
         a.cap,
         a.render,
     )
+    for warning in runner.delugemu_warnings():
+        print("WARNING " + warning)
     r.check()
+    left = len(r.pending())
+    if left < len(r.captures):
+        print(
+            f"{len(r.captures) - left} of {len(r.captures)} captures are current or failed already"
+        )
     print(r.plan().text())
     if a.dry_run:
         return 0
@@ -173,6 +206,17 @@ def parser():
         action="append",
         default=[],
         help="a palette override file named <GENRE NAME>.XML (spec 10.1), written to GENERATIVE/PALETTES/; repeatable",
+    )
+    c.add_argument(
+        "--variant",
+        help="copy this variant's pack/ (its diff from --session applied to the repo's HEAD) instead of the repo's",
+    )
+    c.add_argument("--session", help="--variant: the session folder (its diffs/)")
+    c.add_argument(
+        "--overlay",
+        action="append",
+        default=[],
+        help="a card-shaped folder copied over the pack, as the card root; repeatable, in order",
     )
     c.add_argument("name")
 
@@ -257,11 +301,14 @@ def main(argv=None):
         missing = [f"--{n}" for n in need if not getattr(a, n)]
         if missing:
             sys.exit(f"variants {a.action} needs {', '.join(missing)}")
+    if a.command == "card" and a.variant and not a.session:
+        sys.exit("card --variant needs --session")
     for name in ("scratch", "session", "content", "worktree", "render"):
         if getattr(a, name, None):
             setattr(a, name, os.path.abspath(os.path.expanduser(getattr(a, name))))
     if a.command == "card":
         a.palette = [os.path.abspath(os.path.expanduser(p)) for p in a.palette]
+        a.overlay = [os.path.abspath(os.path.expanduser(p)) for p in a.overlay]
     try:
         return {
             "card": cmd_card,

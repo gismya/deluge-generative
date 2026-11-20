@@ -2,8 +2,11 @@
 
 Each runner has its own worktree and build dir. Applying or reverting a variant changes the source, so the runner's
 next capture relinks the firmware (about 55 s under LTO). A Recipe change builds nothing: gen_emu patches the Recipe
-into a copy of the built ELF (#401); nor do mutes and length. So a variant's Captures all go to one runner, and the
+into a copy of the built ELF (#401); nor do mutes and length. So a variant's Captures go to one runner, and the
 runner applies the variant once for them. They still run in Recipe order, so the plan reads in that order.
+
+A variant costing more than a runner's share of the work (the base, as a rule) is split into chunks, `base#1`, `base#2` ..., each claimed
+like a variant, when the extra links cost less than the wall time the split saves (#422).
 """
 
 import math
@@ -90,8 +93,9 @@ class Plan:
                     f"  {c.name}: {c.variant}, {r.seconds[c.name]:g} s{serves}"
                 )
         lines.append(
-            "(an estimate: the runners claim whole variants, costliest first, as each frees up, so the split can "
-            "differ; the links and seconds per variant don't. A link per variant: a new Recipe builds nothing)"
+            "(an estimate: the runners claim whole variants, or chunks of a large one (base#1, base#2), costliest "
+            "first, as each frees up, so the split can differ; the links and seconds per unit don't. A link per unit: "
+            "a new Recipe builds nothing)"
         )
         total = sum(r.audio_seconds for r in self.runners)
         lines.append(
@@ -102,26 +106,69 @@ class Plan:
         return "\n".join(lines)
 
 
-def groups(captures, secs):
-    """[(variant, its Captures in order)], the costliest first. `secs` maps a capture's name to its seconds."""
+def cost(cs, secs):
+    """A runner's seconds for Captures `cs` in this order: their links, captures and audio."""
+    return links(cs) * LINK_S + sum(CAPTURE_S + secs[c.name] * PER_AUDIO_S for c in cs)
+
+
+def chunks(cs, k, secs):
+    """`cs` cut into `k` runs in their order, of about equal capture cost."""
+    each = [CAPTURE_S + secs[c.name] * PER_AUDIO_S for c in cs]
+    total, out, done = sum(each), [[] for _ in range(k)], 0.0
+    for c, e in zip(cs, each):
+        # the chunk this capture's middle falls in, and never past the last
+        out[min(k - 1, int((done + e / 2) * k / total))].append(c)
+        done += e
+    return [chunk for chunk in out if chunk]
+
+
+def wall(costs, runners):
+    """The longest runner's seconds when the units of `costs` go, costliest first, to the least loaded runner."""
+    loads = [0.0] * runners
+    for c in sorted(costs, reverse=True):
+        loads[loads.index(min(loads))] += c
+    return max(loads)
+
+
+def groups(captures, secs, runners=1):
+    """[(unit, its Captures in order)], the costliest first. A unit is a variant's name, or `<variant>#<n>` for a chunk
+    of a variant split across runners: a variant costing more than a runner's share of the work is split, costliest
+    first, into the number of chunks (up to `runners`) that gives the shortest wall time, so a split is only made when the time it saves passes its extra links. `secs`
+    maps a capture's name to its seconds."""
     by_variant = {}
     for c in order(captures):
         by_variant.setdefault(c.variant, []).append(c)
+    split = dict.fromkeys(by_variant, 1)
 
-    def cost(cs):
-        return links(cs) * LINK_S + sum(
-            CAPTURE_S + secs[c.name] * PER_AUDIO_S for c in cs
-        )
+    def units(split):
+        out = []
+        for v, cs in by_variant.items():
+            parts = chunks(cs, split[v], secs) if split[v] > 1 else [cs]
+            out += [
+                (v if len(parts) == 1 else f"{v}#{i}", part)
+                for i, part in enumerate(parts, 1)
+            ]
+        return out
 
-    return sorted(by_variant.items(), key=lambda kv: (-cost(kv[1]), kv[0]))
+    share = sum(cost(cs, secs) for cs in by_variant.values()) / runners
+    for v in sorted(by_variant, key=lambda v: (-cost(by_variant[v], secs), v)):
+        if cost(by_variant[v], secs) <= share:
+            continue  # less than a runner's share: a split would only trade links for a few captures
+        best = None
+        for k in range(1, min(runners, len(by_variant[v])) + 1):
+            w = wall([cost(cs, secs) for _, cs in units({**split, v: k})], runners)
+            if best is None or w < best[0] - 1e-6:
+                best = (w, k)
+        split[v] = best[1]
+    return sorted(units(split), key=lambda kv: (-cost(kv[1], secs), kv[0]))
 
 
 def plan(captures, runners, tempo_of):
-    """Each variant's Captures to one runner, the costliest variant first to the least loaded runner, as the runners
-    claim them. `tempo_of(c)` is the harness render's tempo for Capture c."""
+    """Each unit's Captures (a variant's, or a chunk of one: groups()) to one runner, the costliest first to the least
+    loaded runner, as the runners claim them. `tempo_of(c)` is the harness render's tempo for Capture c."""
     secs = {c.name: seconds(c.bars, tempo_of(c)) for c in captures}
     out = [RunnerPlan(i + 1) for i in range(runners)]
-    for _, cs in groups(captures, secs):
+    for _, cs in groups(captures, secs, runners):
         r = min(out, key=lambda r: (r.estimate_s, r.index))
         r.captures += cs
         r.seconds.update({c.name: secs[c.name] for c in cs})
