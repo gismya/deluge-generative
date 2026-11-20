@@ -131,9 +131,8 @@ def _recipe_parser():
         # allow_abbrev=False: argparse would read --sec as --seconds and --rend as --render, which the runner drops
         p = argparse.ArgumentParser(prog="job args", add_help=False, allow_abbrev=False)
         gen_emu.add_recipe_args(p)
-        p.set_defaults(
-            genre=None
-        )  # a job's genre is its own --genre, else the command's (parse_args)
+        # A job's genre is its own --genre, else the command's (parse_args).
+        p.set_defaults(genre=None)
         _PARSER = p
     return _PARSER
 

@@ -46,9 +46,8 @@ from . import jobs as _jobs
 HERE = os.path.dirname(os.path.abspath(__file__))
 CARD_FIELDS = ("id", "ticket", "title", "section", "now", "listen", "setup", "clips")
 MAX_WORDS = 60
-VERDICTS = {
-    "verdict": ["keep", "unsure", "drop"]
-}  # a picks card's answers per clip, unless it names its own
+# A picks card's answers per clip, unless it names its own.
+VERDICTS = {"verdict": ["keep", "unsure", "drop"]}
 
 
 def load(path):
@@ -190,8 +189,9 @@ def sources(scratch):
 
 
 def render_midi(card, scratch, out_dir, genre):
-    """The card's MIDI files, each in its genre: the entry's own --genre, else the card's `genre`, else `genre` (the
-    session's)."""
+    """The card's MIDI files, each in its genre: the entry's own --genre, else the card's `genre`, else its variant's
+    recorded genre (diffs/genres.json in the session folder `out_dir`), else `genre` (the session's)."""
+    variant_genres = variants.genres(out_dir)
     files = []
     for m in card.get("midi", []):
         slug = re.sub(r"[^a-z0-9]+", "-", m["label"].lower()).strip("-")
@@ -200,7 +200,11 @@ def render_midi(card, scratch, out_dir, genre):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         args = shlex.split(m["args"])
         if not any(a == "--genre" or a.startswith("--genre=") for a in args):
-            args = ["--genre", card.get("genre") or genre, *args]
+            args = [
+                "--genre",
+                card.get("genre") or variant_genres.get(m.get("variant")) or genre,
+                *args,
+            ]
         subprocess.run(
             [
                 os.path.join(scratch, "bin", m.get("variant") or "base"),
