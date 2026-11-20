@@ -90,9 +90,9 @@ describe sound_settings("Load-time sound settings", $ {
 		}
 	});
 
-	it("starts Dub techno's Stab at its preset's volume, its Pad at 40 percent and every other part (each kit row) at 80 (#322)", _ {
+	it("starts Dub techno's Stab at its preset's volume, its Pad at 38 percent and every other part (each kit row) at 76 (#322)", _ {
 		for (const PartSpec& p : genres::technoDub.parts) {
-			const uint8_t expected = p.role == Role::Chords ? 100 : p.role == Role::Pad ? 40 : 80;
+			const uint8_t expected = p.role == Role::Chords ? 100 : p.role == Role::Pad ? 38 : 76;
 			expect(partSoundSettings(p).volume).to_equal(expected);
 			for (const LaneSpec& lane : p.lanes) {
 				expect(laneSoundSettings(p, lane.lane).volume).to_equal(expected);

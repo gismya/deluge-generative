@@ -519,11 +519,11 @@ constexpr LaneSpec kDubDrumLanes[] = {
     {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .expression = {.lean = {0, 2, 0, 2}, .spread = 14}},
 };
 
-/// Every part but the Stab plays at 80 percent of its preset's volume knob (each row's, on the Drums and FX), about
+/// Every part but the Stab plays at 76 percent of its preset's volume knob (each row's, on the Drums and FX), about
 /// 3.9 dB down (tuning, #322): the Stab's dry presets can't play louder (037's knob is at its top), so the rest comes
 /// down to keep the Stab where it sat with its presets' own echo (delugemu captures, the Stab alone and the rest,
 /// entropy 2, seed 1).
-constexpr uint8_t kDubRest = 80;
+constexpr uint8_t kDubRest = 76;
 
 constexpr PartSpec kDubDrums = [] {
 	PartSpec drums = kTechnoDrums;
@@ -597,7 +597,7 @@ constexpr PartSpec kDubParts[] = {
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
         // Half the preset's knob position (tuning), about -12 dB as played: at the preset's level the held root and
-        // fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1). Then 80 percent of that,
+        // fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1). Then 76 percent of that,
         // as every part but the Stab (kDubRest).
         .volume = 50 * kDubRest / 100,
     },

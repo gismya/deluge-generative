@@ -65,11 +65,11 @@ expect event gen_confirm techno-dub style=2 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
 # The Stab's setup as it loads; feedback stays the preset's
 expect event /^gen_sound_delay STAB - sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
-# Every part but the Stab at 80 percent of its preset's volume knob, the Pad at 40, each Drums row too (#322)
-expect event gen_sound_level SUB volume=80 lower since=mark
+# Every part but the Stab at 76 percent of its preset's volume knob, the Pad at 38, each Drums row too (#322)
+expect event gen_sound_level SUB volume=76 lower since=mark
 expect event gen_sound_level STAB volume=100 same since=mark
-expect event gen_sound_level PAD volume=40 lower since=mark
-expect event /^gen_row_level DRUMS KICK volume=80 played=-?\d+$/ since=mark
+expect event gen_sound_level PAD volume=38 lower since=mark
+expect event /^gen_row_level DRUMS KICK volume=76 played=-?\d+$/ since=mark
 expect event gen_transition start style=2 within=40
 mark now
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ since=mark within=40
