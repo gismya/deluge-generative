@@ -9,6 +9,7 @@ A **Recipe** holds no notes. It is:
 - a **genre**, by stable name ([§4.4](04-genres.md#44-names-and-versions));
 - the **musical facts** ([§3.2](#32-musical-facts));
 - the four **macros** ([§3.3](#33-macros));
+- each pitched part's **octave shift**, −2 to +2 octaves as far as its notes stay MIDI notes, 0 in a new Recipe: it moves the part's Register ([§7.3](07-pitch.md#73-register)). Drums and FX have none;
 - the **sound picks**: one card path per synth part, and one sample path per lane of the Drums and FX parts ([§10](10-sounds.md#10-sounds)).
 
 The **seed** and each part's **take** sit beside the Recipe, not in it ([§6](06-randomness.md#6-randomness-and-seeding)). Generative mode works on one **Current Recipe** with its seed and takes, kept in RAM until power-off ([§14.2](14-entry-and-compose-screen.md#142-the-current-recipe)).
@@ -49,6 +50,7 @@ In Perform every Recipe value can be steered live. Each kind of value takes effe
 
 - Macros: note-level effects from the next undecided step ([§12.2](12-runtime.md#122-when-steps-are-decided)), pattern-level effects from the next bar, harmonic effects from the next chord.
 - Tempo and swing **glide** to the new value over the Perform glide setting ([§13.3](13-perform.md#133-perform-settings)). The OLED shows the target at once.
+- A part's octave shift lands at the next bar line, as a mute does ([§13.4](13-perform.md#134-live-actions)). A shift past the part's octave range is refused ([§7.3](07-pitch.md#73-register)).
 - Key and scale are queued to the next phrase line ([§9.7](09-arc.md#97-transitions)). A genre change, Regenerate or Recipe LOAD plays a transition ([§9.7](09-arc.md#97-transitions)), where tempo glides across the Build or Outro and swing switches where the new genre starts.
 
 Compose v1 renders one Recipe that is fixed up front ([§14.4](14-entry-and-compose-screen.md#144-the-compose-screen)).

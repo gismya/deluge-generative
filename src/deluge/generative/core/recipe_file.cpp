@@ -188,10 +188,16 @@ private:
 			for (int32_t p = 0; p < partCount(genre); p++) {
 				if (equalsIgnoringCase(name, genre.parts[p].name)) {
 					int64_t take = out_.takes.take[p];
-					if (!number(tag, "take", 0, kMaxTakes - 1, take)) {
+					int64_t octave = 0;
+					if (!number(tag, "take", 0, kMaxTakes - 1, take)
+					    || !number(tag, "octave", -kMaxOctaveShift, kMaxOctaveShift, octave)) {
 						return false;
 					}
 					out_.takes.take[p] = static_cast<uint8_t>(take);
+					// A shift this part can't take (another genre version's Register, a hand edit) is clamped to the
+					// ones it can, so no note leaves MIDI's range (spec §7.3).
+					out_.recipe.octave[p] =
+					    static_cast<int8_t>(octaveRange(genre.parts[p]).clamp(static_cast<int32_t>(octave)));
 					sound(tag, out_.sounds.part[p]);
 				}
 			}
@@ -263,6 +269,7 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file) {
 		writer.openTag("part");
 		writer.attribute("name", genre.parts[p].name);
 		writeNumber(writer, "take", file.takes.take[p]);
+		writeNumber(writer, "octave", recipe.octave[p]);
 		if (!file.sounds.part[p].empty()) {
 			writer.attribute("sound", Encoded(file.sounds.part[p].c_str()).text);
 		}

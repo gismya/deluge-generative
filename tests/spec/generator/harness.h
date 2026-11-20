@@ -208,7 +208,7 @@ private:
 		}
 		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
 		if (steering_ != nullptr && playing != nullptr) {
-			steering_->recordTakes(driver_.playing() != nullptr ? *driver_.playing() : *playing);
+			steering_->recordLanded(driver_.playing() != nullptr ? *driver_.playing() : *playing);
 		}
 	}
 

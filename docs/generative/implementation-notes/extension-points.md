@@ -100,4 +100,7 @@ otherwise.
   stem of its own (`RecipeName::set(name)`); its next save offers `<name>A`. Its browser can follow `SaveRecipeUI`
   (`gui/ui/save/save_recipe_ui.*`) for Perform's frame and sidebar under it.
   BUILD already asks DISCARD SONG? (`DiscardSong::setCompose()`).
-
+- **Recipe files' octave shifts (#397, waits on #138's format):** write and read `Recipe::octave` per pitched part,
+  by part name as the takes are, in `core/recipe_file.cpp`; a file without it loads 0, out of range clamps to
+  ±`kMaxOctaveShift`, Drums and FX are skipped. Spec §16.1 lists it already; add a round-trip case to
+  `recipe_file_spec`.

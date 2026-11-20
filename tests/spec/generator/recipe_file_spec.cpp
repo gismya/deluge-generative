@@ -87,6 +87,9 @@ std::unique_ptr<RecipeFile> rolledFile(const Genre& genre, uint32_t entropy, Fak
 	file->seed = 0xF00D0000U + entropy * 7919U;
 	for (int32_t p = 0; p < partCount(genre); p++) {
 		file->takes.take[p] = static_cast<uint8_t>((entropy + p * 5) % kMaxTakes);
+		// A shift the part takes, so the reload's clamp keeps it: -1, 0 or +1, where its range allows.
+		file->recipe.octave[p] =
+		    static_cast<int8_t>(octaveRange(genre.parts[p]).clamp(static_cast<int32_t>((entropy + p) % 3) - 1));
 	}
 	file->recipe.macros.set(Macro::Energy, 17 * 25 + entropy);
 	file->recipe.macros.set(Macro::Motion, kMacroFull);
@@ -242,7 +245,8 @@ describe recipe_file("Recipe files", $ {
 			const std::string text = fileWith(
 			    "genre=\"techno-acid\" genreVersion=\"" + versionOf(acid)
 			        + "\" tempo=\"999999\" swing=\"-80\" swingInterval=\"9\" key=\"30\" mood=\"happy\"",
-			    "<part name=\"ACID\" take=\"40\" sound=\"SYNTHS/X.XML\" />\n"
+			    "<part name=\"ACID\" take=\"40\" octave=\"9\" sound=\"SYNTHS/X.XML\" />\n"
+			    "<part name=\"drums\" take=\"1\" octave=\"-1\" />\n"
 			    "<part name=\"tuba\" take=\"1\" />\n<lane name=\"cowbell\" sound=\"A.wav\" />\n<extra />\n");
 			expect(parseRecipeFile(text, *loaded) == RecipeFileRead::Ok).to_be_true();
 			expect(loaded->recipe.tempo).to_equal(kMaxTempo);
@@ -259,6 +263,14 @@ describe recipe_file("Recipe files", $ {
 			expect(acidPart).to_be_greater_than(-1);
 			expect(static_cast<int32_t>(loaded->takes.take[acidPart])).to_equal(kMaxTakes - 1);
 			expect(std::string(loaded->sounds.part[acidPart].c_str())).to_equal(std::string("SYNTHS/X.XML"));
+			// An octave shift past what the part takes is clamped to its range; a part with no Register takes none.
+			expect(static_cast<int32_t>(loaded->recipe.octave[acidPart]))
+			    .to_equal(octaveRange(acid.parts[acidPart]).highest);
+			for (int32_t p = 0; p < partCount(acid); p++) {
+				if (!hasRegister(acid.parts[p].role)) {
+					expect(static_cast<int32_t>(loaded->recipe.octave[p])).to_equal(0);
+				}
+			}
 		});
 	});
 
