@@ -23,6 +23,9 @@
 #include "generative/firmware/card_text.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/runner.h"
+#include "generative/perform/text.h"
+#include "gui/l10n/l10n.h"
+#include "hid/display/display.h"
 #include "io/midi/test_port.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
@@ -77,8 +80,12 @@ bool recipePath(std::string_view name, char (&out)[perform::kMaxRecipeNameChars 
 
 } // namespace
 
+bool recipeCardAccessAllowed(bool inCardRoutine) {
+	return !inCardRoutine && !currentlyAccessingCard && !runner.busy();
+}
+
 bool recipeSaveAllowed(bool inCardRoutine) {
-	return !inCardRoutine && !currentlyAccessingCard && !runner.busy() && currentRecipe.exists;
+	return recipeCardAccessAllowed(inCardRoutine) && currentRecipe.exists;
 }
 
 bool suggestRecipeName(perform::RecipeName& out, Error& error) {
@@ -167,6 +174,33 @@ RecipeFileRead readRecipeFile(const char* path, RecipeFile& out, Error& error) {
 	} parse{out};
 	const CardText read = readCardText(path, kMaxRecipeFileBytes, parse, error);
 	return read == CardText::Read ? parse.result : RecipeFileRead::Unreadable;
+}
+
+void showVersionNotice(const RecipeFile& file) {
+	const Genre& genre = *file.recipe.genre;
+	if (file.genreVersion == genre.version) {
+		return;
+	}
+	const bool older = file.genreVersion < genre.version;
+	char text[48];
+	perform::Text(text)
+	    .add(l10n::get(older ? l10n::String::STRING_FOR_OLDER_GENRE : l10n::String::STRING_FOR_NEWER_GENRE))
+	    .add(" ")
+	    .add(genre.oledName);
+	display->displayPopup(text);
+	TEST_EVENT("gen_recipe_load version %s file=%d genre=%d", older ? "older" : "newer",
+	           static_cast<int>(file.genreVersion), static_cast<int>(genre.version));
+}
+
+void showSoundsReplaced(int32_t count) {
+	if (count <= 0) {
+		return;
+	}
+	char text[40];
+	perform::Text(text).add(count).add(" ").add(
+	    l10n::get(count == 1 ? l10n::String::STRING_FOR_SOUND_REPLACED : l10n::String::STRING_FOR_SOUNDS_REPLACED));
+	display->displayPopup(text);
+	TEST_EVENT("gen_recipe_load replaced sounds=%ld", static_cast<long>(count));
 }
 
 } // namespace deluge::generative::firmware

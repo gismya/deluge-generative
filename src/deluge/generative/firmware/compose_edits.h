@@ -22,7 +22,9 @@
 #pragma once
 
 #include "generative/core/genre.h"
+#include "generative/core/recipe_file.h"
 #include "generative/core/types.h"
+#include "generative/perform/recipe_name.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
 
@@ -39,6 +41,9 @@ using RecipeRollEnded = void (*)(JobOutcome outcome);
 bool beginGenreRoll(const Genre& genre, RecipeRollEnded ended);
 /// REGENERATE (spec §9.7): the genre's facts, every sound, the seed and the takes rolled again.
 bool beginRegenerate(RecipeRollEnded ended);
+/// LOAD on the Compose screen (spec §16.5): `file` replaces the Current Recipe, which remembers `name`, with its
+/// missing sounds re-rolled and the sounds replaced popup (spec §16.6). Both are copied. Needs no Current Recipe.
+bool beginRecipeLoad(const RecipeFile& file, const perform::RecipeName& name, RecipeRollEnded ended);
 /// `part`'s sound picks re-rolled (a Kit part: every lane it plays). False for a part the genre doesn't have.
 bool beginPartRoll(int32_t part, RecipeRollEnded ended);
 /// One Drums or FX lane's pick re-rolled.

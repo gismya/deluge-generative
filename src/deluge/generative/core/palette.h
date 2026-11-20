@@ -264,6 +264,25 @@ enum class LoadOutcome : uint8_t {
 	CardError, ///< The card failed: stop, and cancel the load like BACK would (spec §10.7).
 };
 
+/// Says whether card files are there, for a Recipe file's load (spec §16.6).
+class FileChecker {
+public:
+	/// Loaded if `path` is on the card, Missing if it isn't, CardError if the card failed.
+	virtual LoadOutcome exists(const char* path) = 0;
+
+protected:
+	~FileChecker() = default;
+};
+
+/// A loaded Recipe file's missing sounds (spec §16.6): each pick whose file `files` can't find is re-rolled from
+/// `palette` (this card's) and `entropy`, a synth part's as rollPartSounds() rolls it and a lane's as rollLaneSound()
+/// does, so it moves away from the missing path where the palette offers another. A synth part with no pick is rolled
+/// too; a lane with none stays empty (an FX lane falls back to its presets). Lanes the genre doesn't play aren't
+/// checked. Every other pick stays.
+/// @return the picks replaced, or -1 on a card error, with the picks partly replaced: work on a copy.
+int32_t replaceMissingSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                             FolderLister& lister, FileChecker& files);
+
 /// Loads card sounds for the core's fallback chain. The firmware's loader keeps what it loaded.
 class SoundLoader {
 public:

@@ -34,7 +34,10 @@ constexpr const char* kRecipeFolder = "RECIPES";
 /// The longest Recipe file the firmware reads: every part and lane with the longest path, entity-encoded, fits.
 constexpr int32_t kMaxRecipeFileBytes = 16384;
 
-/// Whether a SAVE can run now: not while the runner is busy or a card access is under way (spec §12.10).
+/// Whether the button handler may read or write a Recipe file now: not while the runner is busy or a card access is
+/// under way (spec §12.10). LOAD's browser asks this.
+[[nodiscard]] bool recipeCardAccessAllowed(bool inCardRoutine);
+/// Whether a SAVE can run now: recipeCardAccessAllowed(), with a Current Recipe to save.
 [[nodiscard]] bool recipeSaveAllowed(bool inCardRoutine);
 
 /// The name SAVE suggests for the Current Recipe (spec §16.3), from what RECIPES/ holds: its remembered name's next
@@ -54,8 +57,14 @@ Error saveCurrentRecipe(const char* path, std::string_view name, const perform::
 enum class QuickSave : uint8_t { Saved, NoFreeName, Failed };
 QuickSave quickSaveRecipe(perform::RecipeName& saved, Error& error);
 
-/// Reads the Recipe file at `path` into `out` (Recipe LOAD, #139, and the test port's check). A missing or oversized
-/// file, or a card error (then `error` is set), reads as Unreadable.
+/// Reads the Recipe file at `path` into `out` (Recipe LOAD and the test port's check). A missing or oversized file, or
+/// a card error (then `error` is set), reads as Unreadable.
 RecipeFileRead readRecipeFile(const char* path, RecipeFile& out, Error& error);
+
+/// A LOAD's notice for a file of another genre version (spec §16.2): `Older ACID TECHNO`, or Newer for a file from a
+/// later firmware. Nothing for the genre's own version.
+void showVersionNotice(const RecipeFile& file);
+/// A LOAD's warning for its missing sounds, re-rolled (spec §16.6): `2 sounds replaced`. Nothing for none.
+void showSoundsReplaced(int32_t count);
 
 } // namespace deluge::generative::firmware

@@ -706,6 +706,23 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(currentIs(t, next)).to_be_true();
 		});
 
+		it("takes a LOAD's macros from the file, at the start step and at a stop's commit", _ {
+			for (const bool stop : {false, true}) {
+				TransitionPiece t;
+				Start next = distinctPending(t);
+				t.lifecycle.pendingRecipe.macros = perform::HandoverMacros::Pending;
+				next.recipe.macros = t.lifecycle.pendingRecipe.recipe.macros;
+				t.confirmAt(3, stop ? TransitionStyle::BuildIntoDrop : TransitionStyle::Cut);
+				if (stop) {
+					t.stop();
+				}
+				else {
+					t.hook.runUntil([&] { return t.sink.starts == 1; });
+				}
+				expect(currentIs(t, next)).to_be_true();
+			}
+		});
+
 		it("writes the new Recipe's tempo, swing, swing interval and key to the song once each at a stop's commit", _ {
 			TransitionPiece t;
 			distinctPending(t);

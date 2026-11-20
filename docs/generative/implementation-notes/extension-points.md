@@ -3,20 +3,13 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
-  `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) take the file's Recipe, seed and takes instead of rolling them. The lifecycle
-  never reads the pending Recipe. The handover is the steering's (`PerformSteering::handOver()`, `takeOverStopped()`),
-  and the handover's macro rule lives there: each caller passes `HandoverMacros::Live` today
-  (`PerformAdapter::incomingStarts()`, `incomingCommits()`, `pendingCommitsOnLeave()` and the harness's
-  `TransitionAdapter`); a LOAD passes `Pending`, the file's. `Pending` isn't the whole of a LOAD's macro rule: at the
-  start step the incoming instance's `carryOver()` (`PerformDriver::switchToIncoming()`) copies the live macros into
-  it, which a LOAD has to skip, and the steering's `macroSteering_` has to restart from the file's macros
-  (`MacroSteering::startFrom()`, as `PerformSteering::pieceStarts()` does), or it steers from the live ones. The confirm
-  (`gui/context_menu/generative.cpp`, `TransitionConfirm::setupAndCheckAvailability()`) starts on
-  `perform::confirmStyle(genre)` (`perform/genre_menu.h`), the incoming genre's `ArcSpec::transitionEntry` (Drop or
-  Intro, #125); a LOAD passes the file's genre. Incoming Outputs don't get unique names yet (§9.7):
-  Perform's song is never saved.
+- **LOAD as a transition (#139, built):** `Transitions::load()` beside `change()`; the preload type is
+  `Transitions::Incoming` (a genre, or a file and its name, copied into the job's own `LoadSlot`). The macro rule is
+  `PendingRecipe::macros` (`HandoverMacros::Pending` for a LOAD): `handOver()` reads it and restarts `macroSteering_`
+  from the file's macros, and the lifecycle passes it to `PerformDriver::queueIncoming(keepsMacros)` through the
+  adapter's `incomingMacros()`, so `carryOver()` skips the live macros at the start step. A new kind of transition
+  sets those two fields in its preload. Incoming Outputs don't get unique names yet (§9.7): Perform's song is never
+  saved.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
   walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
@@ -92,15 +85,9 @@ otherwise.
   a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
   (`endsHere()`), and its muted notes are already dropped there.
 - The Compose screen (#137, `gui/menu_item/generative/compose_screen.*`): #140's COMPOSE opens it with
-  `openComposeScreen()` (and COMPOSE FROM's CURRENT RECIPE does the same); #139's FILE... is a row to add to `fromMenu`;
-  SAVE on the screen is the sound editor's SAVE branch (F19, `composeScreenShowing()`); LOAD can go beside it.
-- **Recipe LOAD (#139):** `firmware::readRecipeFile(path, RecipeFile&, Error&)` reads and parses a file
-  (`RecipeFileRead::OtherVersion` is the `OLDER <GENRE>` notice, `UnknownGenre` the refusal). After it replaces the
-  Current Recipe it calls `currentRecipe.replaced()` and then `currentRecipe.name.set(<file name>)`. A loaded name is a
-  stem of its own (`RecipeName::set(name)`); its next save offers `<name>A`. Its browser can follow `SaveRecipeUI`
-  (`gui/ui/save/save_recipe_ui.*`) for Perform's frame and sidebar under it.
-  BUILD already asks DISCARD SONG? (`DiscardSong::setCompose()`).
-- **Recipe files' octave shifts (#397, waits on #138's format):** write and read `Recipe::octave` per pitched part,
-  by part name as the takes are, in `core/recipe_file.cpp`; a file without it loads 0, out of range clamps to
-  ±`kMaxOctaveShift`, Drums and FX are skipped. Spec §16.1 lists it already; add a round-trip case to
-  `recipe_file_spec`.
+  `openComposeScreen()` (and COMPOSE FROM's CURRENT RECIPE does the same). SAVE and LOAD on the screen are the sound
+  editor's SAVE and LOAD branches (F19, `composeScreenShowing()`).
+- **FILE... (#140):** the load browser is `LoadRecipeUI` (`gui/ui/load/load_recipe_ui.*`); what a chosen file does
+  is `loadChosen()` there, by root UI. FILE... outside Perform and the Compose screen needs its own branch: read the
+  file with `firmware::readRecipeFile()`, then `CurrentRecipe::load()` (in a runner job, as
+  `firmware::beginRecipeLoad()` runs it) before entering Perform or opening the screen.

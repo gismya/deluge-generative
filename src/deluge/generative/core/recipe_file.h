@@ -64,6 +64,8 @@ struct RecipeFile {
 	SoundPicks sounds;
 	uint32_t seed = 0;
 	Takes takes;
+	/// The genre version the file names (spec §16.2): read, never written (a save writes the genre's own).
+	uint16_t genreVersion = 0;
 };
 
 /// The root tag, and the text a whole file ends with (the firmware's write check).
@@ -93,7 +95,7 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file);
 
 enum class RecipeFileRead : uint8_t {
 	Ok,
-	/// The file names another version of its genre (spec §16.2): it loaded, and the OLED says so (`OLDER ACID
+	/// The file names another version of its genre (spec §16.2): it loaded, and the OLED says so (`Older ACID
 	/// TECHNO`).
 	OtherVersion,
 	/// The file names a genre this firmware doesn't have (spec §16.2): nothing loaded.

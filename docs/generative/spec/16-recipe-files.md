@@ -19,8 +19,8 @@ No drum-kit tag is stored: a Kit part's lane picks are card paths, so they alrea
 
 ### 16.2 Genre versions
 
-- On a version mismatch the file still loads and the OLED shows a short notice (`OLDER ACID TECHNO`). Saving again writes the current version. Old genre tables are not kept.
-- A file naming a genre this firmware doesn't have is refused with `UNKNOWN GENRE`.
+- On a version mismatch the file still loads and the OLED shows a short notice (`OLDER ACID TECHNO`, or `NEWER ACID TECHNO` for a file from a later firmware) when the file is chosen. Saving again writes the current version. Old genre tables are not kept.
+- A file naming a genre this firmware doesn't have is refused with `UNKNOWN GENRE`, and the load browser stays open to choose another. An unreadable file is refused the same way, with the stock error popup.
   - Acid techno is `techno-acid`. `techno` is Techno's parent table, which no Recipe can name (§4.4), so a file that names `techno` is refused with `UNKNOWN GENRE`; no alias maps it to Acid techno. `psytrance` is likewise Psytrance's parent table, and Classic psytrance is `psytrance-classic` (#319). Palette override files go by the OLED name (§10.1): Acid techno's is `GENERATIVE/PALETTES/ACID TECHNO.XML`. Nothing else the firmware writes names a genre yet.
 - A file fails to load only if it is unreadable or its genre is unknown.
 
@@ -46,15 +46,17 @@ No drum-kit tag is stored: a Kit part's lane picks are card paths, so they alrea
 
 ### 16.5 LOAD
 
-- LOAD opens a stock-style load browser on `RECIPES/`, the same as FILE... in the source lists. The QWERTY appears on entry and hides once the player scrolls, and the root UI's pads show again. BACK leaves with nothing changed.
-- **In Perform while playing**, the music keeps playing in the browser. Choosing a file is queued like a genre change ([§9.7](09-arc.md#97-transitions)), with the same confirm: BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE, the file genre's transition entry highlighted. The file starts at a Drop, at its Intro or on the cut line, on fresh Outputs, as a new piece, and the change is cancellable until its Build or Outro starts. It uses the file's seed, takes, facts and macros. To hear it from the top, the player stops and starts again.
-- **In Perform while stopped**, it rebuilds directly, like entering Perform.
-- **On the Compose screen**, it replaces the Current Recipe, ready for BUILD.
+- LOAD opens a stock-style load browser on `RECIPES/`, the same as FILE... in the source lists, on the file the Current Recipe came from or was last saved as. The QWERTY appears on entry and hides once the player scrolls, and the root UI's pads show again; a main pad press brings it back and types nothing, as in stock's song browser. SELECT or LOAD chooses the file. BACK in `RECIPES/` leaves with nothing changed. Over Perform, Perform plays on and its sidebar stays its own, as under the preset browser ([§13.5](13-perform.md#135-control-layout)). LOAD needs no Current Recipe.
+- The chosen file is read from the button handler, as SAVE writes one ([§16.4](#164-save)). LOAD, and a choice in the browser, are refused with BUSY while the runner is busy or a card access is under way.
+- **In Perform while playing**, the music keeps playing in the browser. Choosing a file is queued like a genre change ([§9.7](09-arc.md#97-transitions)), with the same confirm, titled with the file's name and a question mark (`NIGHT DRIVE?`): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE, the file genre's transition entry highlighted. The file starts at a Drop, at its Intro or on the cut line, on fresh Outputs, as a new piece, and the change is cancellable until its Build or Outro starts. It uses the file's seed, takes, facts and macros. To hear it from the top, the player stops and starts again.
+- **In Perform while stopped**, it rebuilds directly, like entering Perform: no style is asked, and the file's roster preloads under the working animation and takes over when loaded, as a genre change confirmed while stopped does ([§12.9](12-runtime.md#129-instances-and-the-transition)).
+- **On the Compose screen**, it replaces the Current Recipe, ready for BUILD, as a genre pick does: under the working animation, and BACK cancels it with the Recipe as it was.
+- The Current Recipe takes the file's name, as its own stem: the next save offers `<name>A` ([§16.3](#163-format-folder-and-names)).
 - No unsaved-changes prompt anywhere. Loading a file, picking a genre and Regenerate replace the Current Recipe without asking.
 
 ### 16.6 Missing sounds and sharing
 
-- On load each sound pick's path is checked. A missing one is re-rolled from this card's palette for that part or lane, from fresh entropy, and the OLED shows `2 SOUNDS REPLACED`. The Current Recipe keeps the replacements. The notes don't change, because the seed doesn't cover sounds.
+- On load each sound pick's path is checked: every synth part's, and the lanes the genre plays. A missing one is re-rolled from this card's palette for that part or lane (the genre's built-in palette with this card's override over it), from fresh entropy, moving away from the missing path, and the OLED shows `2 SOUNDS REPLACED` once the load is done. A synth part with no pick is rolled too; a lane with none stays empty, as an FX lane with no sample does. The Current Recipe keeps the replacements. The notes don't change, because the seed doesn't cover sounds.
 - A path that still exists but points at a different sample isn't detected. That's accepted.
 - A file isn't self-contained. It plays the same for another player with the same firmware, factory card and Generative pack.
 

@@ -20,6 +20,7 @@
 #include "generative/compose/song_size.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/ui.h"
@@ -33,7 +34,7 @@ namespace deluge::generative::firmware {
 namespace {
 
 /// What a card-reading edit does.
-enum class RecipeRoll : uint8_t { Genre, Regenerate, Part, Lane };
+enum class RecipeRoll : uint8_t { Genre, Regenerate, Part, Lane, Load };
 
 /// The picks before each row's last re-roll (spec §14.4's previous pick), and which rows have one, for the Current
 /// Recipe of `generation`. A Recipe replaced anywhere (a genre pick, REGENERATE, Perform's genre change, `reset
@@ -57,6 +58,13 @@ void forgetStalePrevious() {
 /// The picks a re-roll started from, kept by the job until it is done.
 PLACE_SDRAM_BSS SoundPicks before;
 
+/// A LOAD's file and name, kept by the job until it is done.
+struct Loading {
+	RecipeFile file;
+	perform::RecipeName name;
+};
+PLACE_SDRAM_BSS Loading loading;
+
 constexpr uint32_t bit(int32_t index) {
 	return 1U << static_cast<uint32_t>(index);
 }
@@ -69,6 +77,8 @@ const char* rollName(RecipeRoll roll) {
 		return "regenerate";
 	case RecipeRoll::Part:
 		return "part";
+	case RecipeRoll::Load:
+		return "load";
 	default:
 		return "lane";
 	}
@@ -85,9 +95,20 @@ public:
 		lane_ = lane;
 		ended_ = ended;
 		error_ = Error::NONE;
+		replaced_ = 0;
 	}
 
 	JobOutcome run(Chunks& chunks) override {
+#if ENABLE_SYSEX_TEST
+		if (TestPort::preloadHeld()) {
+			// Test hook ("hold preload"): wait here, yielding, so a script's BACK lands while the edit runs.
+			TEST_EVENT("gen_recipe_roll %s held", rollName(roll_));
+			TestPort::waitWhilePreloadHeld(chunks);
+			if (chunks.cancelled()) {
+				return JobOutcome::Cancelled; // the Current Recipe as it was
+			}
+		}
+#endif
 		before = currentRecipe.sounds;
 		switch (roll_) {
 		case RecipeRoll::Genre:
@@ -101,6 +122,9 @@ public:
 			break;
 		case RecipeRoll::Lane:
 			error_ = currentRecipe.rerollLane(lane_, &chunks);
+			break;
+		case RecipeRoll::Load:
+			error_ = currentRecipe.load(loading.file, loading.name, replaced_, &chunks);
 			break;
 		}
 		if (error_ == Error::ABORTED_BY_USER) {
@@ -124,6 +148,9 @@ public:
 		if (outcome == JobOutcome::Failed) {
 			display->displayError(error_ != Error::NONE ? error_ : Error::UNSPECIFIED);
 		}
+		if (outcome == JobOutcome::Done) {
+			showSoundsReplaced(replaced_);
+		}
 		if (ended_ != nullptr) {
 			ended_(outcome);
 		}
@@ -134,7 +161,7 @@ private:
 	/// row had.
 	void keepPrevious() {
 		forgetStalePrevious();
-		if (roll_ == RecipeRoll::Genre || roll_ == RecipeRoll::Regenerate) {
+		if (roll_ == RecipeRoll::Genre || roll_ == RecipeRoll::Regenerate || roll_ == RecipeRoll::Load) {
 			return;
 		}
 		if (roll_ == RecipeRoll::Lane) {
@@ -159,6 +186,7 @@ private:
 	Lane lane_ = Lane::Kick;
 	RecipeRollEnded ended_ = nullptr;
 	Error error_ = Error::NONE;
+	int32_t replaced_ = 0; ///< A LOAD's missing sounds, re-rolled
 };
 
 RollJob job;
@@ -170,7 +198,7 @@ bool beginRoll(RecipeRoll roll, const Genre* genre, int32_t part, Lane lane, Rec
 	if (performAdapter.active() || rootUIIsGenerativePerform() || runner.busy()) {
 		return false;
 	}
-	if (roll != RecipeRoll::Genre && !currentRecipe.exists) {
+	if (roll != RecipeRoll::Genre && roll != RecipeRoll::Load && !currentRecipe.exists) {
 		return false;
 	}
 	job.prepare(roll, genre, part, lane, ended);
@@ -190,6 +218,15 @@ bool beginGenreRoll(const Genre& genre, RecipeRollEnded ended) {
 
 bool beginRegenerate(RecipeRollEnded ended) {
 	return beginRoll(RecipeRoll::Regenerate, nullptr, 0, Lane::Kick, ended);
+}
+
+bool beginRecipeLoad(const RecipeFile& file, const perform::RecipeName& name, RecipeRollEnded ended) {
+	if (performAdapter.active() || rootUIIsGenerativePerform() || runner.busy()) {
+		return false; // before the copy: a job still running reads `loading`
+	}
+	loading.file = file;
+	loading.name = name;
+	return beginRoll(RecipeRoll::Load, nullptr, 0, Lane::Kick, ended);
 }
 
 bool beginPartRoll(int32_t part, RecipeRollEnded ended) {

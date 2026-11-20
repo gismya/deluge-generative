@@ -53,6 +53,8 @@
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
+//     HandoverMacros incomingMacros() const;  the pending Recipe's `macros`: Pending (a LOAD) keeps the incoming
+//                                     instance's own at the start step
 //     void releaseIncoming();         the incoming roster never played: its Outputs are retired, to be freed (the
 //                                     free job frees them later). Runs in the tick at a stop when the piece ended by
 //                                     itself after the core dropped the command, after driver().cancelIncoming(),
@@ -88,6 +90,7 @@
 
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/perform/pending_recipe.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/press_outcome.h"
 #include "generative/perform/text.h"
@@ -510,7 +513,8 @@ bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 		setPhase(Phase::Idle);
 		return true;
 	}
-	adapter().driver().queueIncoming(incoming, adapter().cutGlideTicks());
+	adapter().driver().queueIncoming(incoming, adapter().cutGlideTicks(),
+	                                 adapter().incomingMacros() == HandoverMacros::Pending);
 	setPhase(Phase::Queued);
 	return true;
 }

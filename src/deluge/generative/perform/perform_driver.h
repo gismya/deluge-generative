@@ -137,8 +137,10 @@ public:
 	/// The incoming instance, started with Generator::startIncoming(), waits for the playing one's transition command
 	/// (queued by the caller) to land and play its Build or Outro, or to reach the cut line. From the start step it
 	/// decides, with the live macros, and the playing one only drains. Tempo glides to the incoming Recipe's across the
-	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step.
-	void queueIncoming(Generator& incoming, int32_t cutGlideTicks);
+	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step. With
+	/// `keepsMacros` (a LOAD, spec §12.9) the incoming instance plays its own Recipe's macros from the start step, not
+	/// the live ones.
+	void queueIncoming(Generator& incoming, int32_t cutGlideTicks, bool keepsMacros = false);
 	/// The transition was cancelled before its command landed. A cut's glide that had started goes back to the
 	/// playing Recipe's tempo over the same length.
 	void cancelIncoming(NoteSink& sink);
@@ -239,6 +241,10 @@ private:
 	TransitionTempo transitionTempo_;
 	bool ended_ = false;
 	bool dropReported_ = false; ///< The sink was told the core dropped the incoming instance's command.
+	/// The incoming instance keeps its own macros at the start step: a LOAD's file's (spec §12.9). Beside the flags
+	/// above, in their padding: the driver's size and later offsets stay as they were (PerformAdapter's
+	/// static_asserts).
+	bool incomingKeepsMacros_ = false;
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.
 	int32_t drainedEndLine_ = -1;

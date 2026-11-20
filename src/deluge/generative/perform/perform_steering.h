@@ -112,17 +112,17 @@ public:
 
 	// ---- A transition's handover (spec §12.9): the firmware's Transitions and the harness's adapter call these ----
 
-	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros `macros` says, then
-	/// newRecipe(). Its sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter
-	/// follows it with its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the
-	/// incoming instance; the song's tempo, swing and key change as that instance plays. Leaving Perform commits with
-	/// this alone.
-	void handOver(const PendingRecipe& pending, HandoverMacros macros);
+	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros its `macros` names
+	/// (a LOAD's file's macros also restart the macro steering, which then starts from them), then newRecipe(). Its
+	/// sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter follows it with
+	/// its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the incoming instance; the
+	/// song's tempo, swing and key change as that instance plays. Leaving Perform commits with this alone.
+	void handOver(const PendingRecipe& pending);
 	/// A stop commits a transition: handOver(), then the song jumps to the new Recipe's tempo and swing (the sink), and
 	/// its swing interval and key (the adapter's swingIntervalChanged() and keyChanged()). Can run in the tick, when
 	/// the piece ended by itself with the transition Queued: the transport has stopped by then, so the adapter's calls
 	/// reschedule nothing.
-	void takeOverStopped(const PendingRecipe& pending, HandoverMacros macros);
+	void takeOverStopped(const PendingRecipe& pending);
 
 	/// Each tick, before the driver advances: FILL's state (the song's fill mode) goes to the core as SetFill when it
 	/// changed (spec §8.7, §2.6). A full queue tries again on the next tick.
@@ -378,12 +378,15 @@ void PerformSteering<Adapter>::newRecipe() {
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::handOver(const PendingRecipe& pending, HandoverMacros macros) {
+void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	Recipe& recipe = adapter().recipe();
 	const Macros live = recipe.macros;
 	recipe = pending.recipe;
-	if (macros == HandoverMacros::Live) {
+	if (pending.macros == HandoverMacros::Live) {
 		recipe.macros = live;
+	}
+	else {
+		macroSteering_.startFrom(recipe.macros); // the incoming instance plays the file's (spec §12.9)
 	}
 	adapter().seed() = pending.seed;
 	adapter().takes() = pending.takes;
@@ -391,8 +394,8 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending, HandoverMa
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::takeOverStopped(const PendingRecipe& pending, HandoverMacros macros) {
-	handOver(pending, macros);
+void PerformSteering<Adapter>::takeOverStopped(const PendingRecipe& pending) {
+	handOver(pending);
 	const Recipe& recipe = adapter().recipe();
 	adapter().sink().setTempo(recipe.tempo);
 	adapter().sink().setSwing(recipe.swing);

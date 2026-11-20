@@ -246,7 +246,8 @@ constexpr Hold kHolds[] = {
     {"stress", [](bool on) { holdingStress = on; }},
     /// Perform's card reads fail as a pulled card's would (see cardErrorHeld())
     {"card_error", [](bool on) { holdingCardError = on; }},
-    /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
+    /// Holds a sound re-roll's or a transition's preload, or a Compose screen card edit (a roll, a LOAD), at its
+    /// start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
     /// Injected presses reach their handlers as inside a card wait (sdRoutineLock set, inCardRoutine true), or as
     /// they come (see cardRoutineHeld())

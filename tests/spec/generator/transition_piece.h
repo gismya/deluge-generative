@@ -109,7 +109,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	// ---- What a spec sets ----
 
 	/// What the incoming instance starts with, and what the handover makes the Current Recipe. Its sound picks and
-	/// genreChange are the firmware's: the harness leaves them alone.
+	/// stagedPalette are the firmware's: the harness leaves them alone. Its `macros` (Pending for a LOAD) is read.
 	perform::PendingRecipe pendingRecipe;
 	int32_t glide = kBarTicks;      ///< The Perform Glide setting, in Generator ticks.
 	bool entered = true;            ///< Perform is entered with a genre.
@@ -223,7 +223,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	void preloadEnded() {
 		endedPreloads++;
 		if (left && rolled) {
-			piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
+			piece_.steering.handOver(pendingRecipe);
 			adoptPending();
 		}
 	}
@@ -237,6 +237,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		idle().startIncoming(pendingRecipe.recipe, pendingRecipe.seed, pendingRecipe.takes, style);
 		return idle();
 	}
+	[[nodiscard]] perform::HandoverMacros incomingMacros() const { return pendingRecipe.macros; }
 	void releaseIncoming() {
 		retire({incomingRoster, false, 0});
 		incomingRoster = 0;
@@ -247,7 +248,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 		current_ = &idle();
 		incomingPlays();
 		// As the firmware's PerformAdapter::incomingStarts(): the handover, then the instance starts as at a start.
-		piece_.steering.handOver(pendingRecipe, perform::HandoverMacros::Live);
+		piece_.steering.handOver(pendingRecipe);
 		adoptPending();
 		piece_.instanceStarts();
 	}
@@ -258,7 +259,7 @@ struct TransitionAdapter : perform::TransitionLifecycle<TransitionAdapter> {
 	void commitStopped(uint32_t cap) {
 		retire({playingRoster, true, cap});
 		incomingPlays();
-		piece_.steering.takeOverStopped(pendingRecipe, perform::HandoverMacros::Live);
+		piece_.steering.takeOverStopped(pendingRecipe);
 		adoptPending();
 	}
 	[[nodiscard]] uint32_t now() const { return static_cast<uint32_t>(piece_.hook.now()); }

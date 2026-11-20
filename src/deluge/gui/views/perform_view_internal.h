@@ -42,6 +42,7 @@
 #include "gui/ui/browser/perform_preset_browser.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
+#include "gui/ui/load/load_recipe_ui.h"
 #include "gui/ui/save/save_recipe_ui.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"

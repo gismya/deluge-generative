@@ -24,6 +24,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette_file.h"
 #include "generative/core/recipe.h"
+#include "generative/core/recipe_file.h"
 #include "generative/perform/recipe_name.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
@@ -75,6 +76,14 @@ struct CurrentRecipe {
 	Error rerollPart(int32_t part, Chunks* chunks = nullptr);
 	Error rerollLane(Lane lane, Chunks* chunks = nullptr);
 
+	/// A Recipe file's load outside Perform (spec §16.5, §16.6): the Compose screen's LOAD (and FILE..., #140). In
+	/// Perform a LOAD is a transition, stopped too (Transitions::load()). `file` becomes the Current Recipe, its macros
+	/// included, with its genre's palette override read as a genre pick reads it and each missing sound re-rolled from
+	/// that palette (`soundsReplaced` counts them). It remembers `fileName`. Errors as rollFromGenre(); on one, the
+	/// Current Recipe stays as it was.
+	Error load(const RecipeFile& file, const perform::RecipeName& fileName, int32_t& soundsReplaced,
+	           Chunks* chunks = nullptr);
+
 	/// The palette the Recipe's sounds come from: the genre's built-in one, with the card's override over it if the
 	/// last genre pick read one.
 	[[nodiscard]] const Palette& palette() const;
@@ -115,5 +124,12 @@ void forgetCurrentRecipe();
 
 /// Fresh entropy from a hardware timer.
 uint32_t freshEntropy();
+
+/// A loaded Recipe file's sound picks checked against the card (spec §16.6): replaceMissingSounds() with fresh
+/// entropy, `soundsReplaced` the picks it re-rolled. With a runner job's `chunks` each check and folder read is a chunk
+/// boundary: a cancel returns ABORTED_BY_USER. A card error returns the card's error. Either way `sounds` may be
+/// partly replaced: work on a copy.
+Error replaceMissingCardSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, int32_t& soundsReplaced,
+                               Chunks* chunks = nullptr);
 
 } // namespace deluge::generative::firmware
