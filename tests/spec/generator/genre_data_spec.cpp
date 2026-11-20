@@ -483,11 +483,31 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "chords", .parts = chords})).to_be_true();
 	});
 
+	it("rejects an open voicing on a part that isn't a Sustain, on a pedal, which voices no chord, or with a doubled root", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pedal[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.pedal = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pedal", .parts = pedal})).to_be_false();
+		const PartSpec doubled[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.doubleRoot = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "doubled", .parts = doubled})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
 	it("rejects a hold across Section lines on a part that isn't a Sustain, which only decideSustain() honours", _ {
 		const PartSpec stab[] = {
 		    {.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsAcrossSections = true}}};
 		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
 		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsAcrossSections = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
+	it("rejects held common tones on a part that isn't a Sustain, which only decideSustain() honours", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsCommonTones = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsCommonTones = true}}};
 		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
 	});
 
@@ -556,6 +576,17 @@ describe genre_data("Every built-in genre", $ {
 		expect(fits(6, 12)).to_be_true();
 		expect(fits(36, 12)).to_be_true();
 		expect(fits(8, 12)).to_be_false();
+	});
+
+	it("rejects an Extension order that doesn't try each Extension once, or tries the 6 before the 7 (spec §7.4)", _ {
+		auto valid = [](ExtensionOrder order) { return harmonyValid(Genre{.harmony = {.extensionOrder = order}}); };
+		using enum Extension;
+		expect(valid(ExtensionOrder{})).to_be_true();
+		expect(valid(kNinthFirst)).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Seventh, Sixth, Sus4}})).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Ninth, Seventh, Sixth}})).to_be_false(); // the sus4 never tried
+		expect(valid(ExtensionOrder{{Sixth, Seventh, Ninth, Sus4}})).to_be_false();  // the 6 before the 7 never plays
+		expect(valid(ExtensionOrder{{Seventh, Ninth, Sus4, static_cast<Extension>(4)}})).to_be_false(); // the 5th
 	});
 
 	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target off them", _ {
@@ -959,13 +990,19 @@ describe genre_data("Every built-in genre", $ {
 			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
 		});
 
-		it("refuses a length but 1, 2 or 4 bars, an empty mask, an FX lane, a whole Kit, a target outside the mask "
-		   "or more than one", _ {
-			for (uint8_t bars : {1, 2, 4}) {
+		it("refuses a length but 1, 2, 4 or 8 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
+		   "target outside the mask or more than one", _ {
+			for (uint8_t bars : {1, 2, 4, 8}) {
 				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
 				expect(dropOutsValid(withEntries(ok))).to_be_true();
 			}
-			for (uint8_t bars : {0, 3, 8}) {
+			{
+				const DropOutEntry eight[] = {{.mask = bass, .bars = 8}};
+				Genre shortPhrases = withEntries(eight);
+				shortPhrases.phraseBars = 4;
+				expect(dropOutsValid(shortPhrases)).to_be_false();
+			}
+			for (uint8_t bars : {0, 3, 6, 16}) {
 				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
 				expect(dropOutsValid(withEntries(wrong))).to_be_false();
 			}
