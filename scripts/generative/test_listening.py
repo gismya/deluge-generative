@@ -568,6 +568,20 @@ class Splitting(unittest.TestCase):
         ]
         self.assertEqual(units, ["base"])
 
+    def test_the_split_counts_only_what_is_left_to_capture(self):
+        # A rerun where every s1 capture is current: base is all that's left, so it runs on both runners.
+        with tempfile.TemporaryDirectory() as scratch:
+            js = jobs.parse_jobs(many(6) + many(30, "s1"), "psytrance")
+            r = runner.Run("psytrance", scratch, scratch, js, 2)
+            r.tempos = {j.name: 120.0 for j in js}
+            r.head = "abc"
+            with mock.patch.object(
+                runner.Run, "done", lambda self, c: c.variant == "s1"
+            ):
+                self.assertEqual(len(r.pending()), 6)
+                p = r.plan()
+            self.assertEqual([len(x.captures) for x in p.runners], [3, 3])
+
     def test_a_runner_holding_one_chunk_skips_another_runners_chunk(self):
         with tempfile.TemporaryDirectory() as scratch:
             js = jobs.parse_jobs(many(22), "psytrance")
@@ -742,8 +756,13 @@ class DelugemuPin(unittest.TestCase):
 
     def test_run_prints_them_once(self):
         class FakeRun:
+            captures = ()
+
             def __init__(self, *a):
                 pass
+
+            def pending(self):
+                return []
 
             def check(self):
                 pass

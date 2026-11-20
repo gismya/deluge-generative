@@ -90,8 +90,13 @@ class Run:
         if cards:
             raise _jobs.JobError("no card image: " + ", ".join(cards))
 
+    def pending(self):
+        """The captures still to take: not current and not failed twice with these arguments."""
+        return [c for c in self.captures if not self.done(c) and not self.failed(c)]
+
     def plan(self):
-        return _plan.plan(self.captures, self.runners, lambda c: self.tempos[c.name])
+        """The plan for what is left to capture: a rerun splits the work left, not the work done."""
+        return _plan.plan(self.pending(), self.runners, lambda c: self.tempos[c.name])
 
     def card_path(self, card):
         return (
@@ -358,10 +363,9 @@ class Run:
         """Runs the captures on self.runners threads. Returns the names of the failed captures."""
         os.makedirs(self.raw, exist_ok=True)
         self.head = self.repo_head()
-        secs = {
-            c.name: _plan.seconds(c.bars, self.tempos[c.name]) for c in self.captures
-        }
-        order = _plan.groups(self.captures, secs, self.runners)
+        pending = self.pending()
+        secs = {c.name: _plan.seconds(c.bars, self.tempos[c.name]) for c in pending}
+        order = _plan.groups(pending, secs, self.runners)
         threads = [
             threading.Thread(target=self.runner, args=(i + 1, order))
             for i in range(self.runners)

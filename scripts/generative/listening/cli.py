@@ -148,6 +148,11 @@ def cmd_run(a):
     for warning in runner.delugemu_warnings():
         print("WARNING " + warning)
     r.check()
+    left = len(r.pending())
+    if left < len(r.captures):
+        print(
+            f"{len(r.captures) - left} of {len(r.captures)} captures are current or failed already"
+        )
     print(r.plan().text())
     if a.dry_run:
         return 0
