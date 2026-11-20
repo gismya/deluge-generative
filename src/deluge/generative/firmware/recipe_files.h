@@ -34,7 +34,10 @@ constexpr const char* kRecipeFolder = "RECIPES";
 /// The longest Recipe file the firmware reads: every part and lane with the longest path, entity-encoded, fits.
 constexpr int32_t kMaxRecipeFileBytes = 16384;
 
-/// Whether a SAVE can run now: not while the runner is busy or a card access is under way (spec §12.10).
+/// Whether the button handler may read or write a Recipe file now: not while the runner is busy or a card access is
+/// under way (spec §12.10). LOAD's browser asks this.
+[[nodiscard]] bool recipeCardAccessAllowed(bool inCardRoutine);
+/// Whether a SAVE can run now: recipeCardAccessAllowed(), with a Current Recipe to save.
 [[nodiscard]] bool recipeSaveAllowed(bool inCardRoutine);
 
 /// The name SAVE suggests for the Current Recipe (spec §16.3), from what RECIPES/ holds: its remembered name's next

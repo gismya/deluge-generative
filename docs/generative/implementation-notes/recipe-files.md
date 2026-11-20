@@ -15,7 +15,8 @@ otherwise.
   a letter is never mistaken for a variation. The firmware lists `RECIPES/` with `CardFolders` into a `NameFamily`.
   Stock's `nextDefaultName()` gives letters only to `SONG<digits>` names (others get ` 2`), so it isn't used.
 - `CurrentRecipe::replaced()` clears the name: every genre pick, Regenerate (Compose's or Perform's, at its start step
-  in the tick) and `reset recipe`. A Recipe file's load (#139) calls `replaced()` and then sets the file's name.
+  in the tick) and `reset recipe`. A Recipe file's load calls `replaced()` and then sets the file's name: the
+  Compose screen's in `CurrentRecipe::load()`, Perform's in `Transitions::adoptPending()` from `pendingName`.
 - A save copies the Current Recipe into `snapshot` (SDRAM) before its first card access: the tick runs in every card
   wait, so a transition's start step or a steering press could otherwise land between the attributes. It adopts the
   saved name only if `CurrentRecipe::generation` hasn't moved meanwhile.
@@ -34,3 +35,17 @@ otherwise.
   handle the release too: stock's `Browser::mainButtonAction()` sets `UI_MODE_HOLDING_BUTTON_POTENTIAL_LONG_PRESS` and
   the UI_SPECIFIC timer on a press made outside the wait, and only its release clears them. A release swallowed inside
   the wait left the mode set: the list wouldn't scroll and the next press did nothing (#416 R2).
+- LOAD (#139): the browser is `gui/ui/load/load_recipe_ui.*` (`LoadRecipeUI`). Its `renderMainPads()` returns
+  `qwertyVisible`, so once a scroll hides the QWERTY the UIs below draw the pads; `arrivedInNewFolder()` hides it
+  too, so `opened()` sets it again after. It reads the chosen file from the button handler into a file-scope
+  `Chosen`, which the transition confirm points at; `Transitions::submitPreload()` copies it into the job's own
+  `LoadSlot`, so a refused request, or a later choice, can't change what a running or waiting job reads. LOAD needs
+  no Current Recipe: it asks `recipeCardAccessAllowed()`, not `recipeSaveAllowed()` (which needs one; the first
+  delugemu run of compose_recipe_load.txt hit BUSY on an empty Compose screen).
+- Missing sounds: `replaceMissingSounds()` (`core/palette.*`) behind the `FileChecker` seam; the firmware's is
+  `CardFiles` (`firmware/card_sounds.*`, `FatFS::stat`, a chunk boundary per check), the harness's `FakeCard`.
+  `replaceMissingCardSounds()` (`current_recipe.*`) is the one call both LOAD paths make.
+- Adding a member to `PerformDriver` moves `PerformAdapter::sink_` and trips the start step's mod-8 `static_assert`
+  in `incomingStarts()`: `incomingKeepsMacros_` sits in the padding after `dropReported_`.
+- Scripts: `perform_recipe_load.txt`, `compose_recipe_load.txt`, on the card `scripts/generative/fixtures/recipe_load`
+  (its RECIPES/ files are hand-written; lanes left out have no pick, so nothing is replaced for them).

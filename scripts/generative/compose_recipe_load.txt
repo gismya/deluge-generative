@@ -1,0 +1,71 @@
+# Recipe LOAD on the Compose screen (#139, spec §14.4, §16.5, §16.6) over the sysex test port, on the card
+# fixtures/recipe_load. LOAD opens the browser on RECIPES/ even before a Current Recipe exists; a chosen file replaces
+# the Current Recipe as a modal job, ready for BUILD, and the screen is back on top. LOAD MISSING's two missing sounds
+# are re-rolled (2 SOUNDS REPLACED); LOAD OK matches its file, macros included.
+# gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|replaced sounds=; gen_recipe_roll load done;
+# gen_compose_recipe loaded ...; gen_recipe_check name= read= error= match= recipe= seed= takes= sounds=.
+# needs: card fixtures/recipe_load (its own card; test_port_emu.py builds it)
+# covers: src/deluge/gui/ui/load/load_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/compose_edits.*
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/recipe_file.* src/deluge/gui/menu_item/generative/compose_screen.*
+# covers: src/deluge/gui/ui/sound_editor.cpp src/deluge/io/midi/test_port.cpp
+# covers: scripts/generative/fixtures/recipe_load/card.txt
+start_state
+expect playing=false
+
+compose screen
+expect event gen_compose_screen opened
+
+# ---- No Current Recipe yet: LOAD MISSING loads, its two missing sounds re-rolled ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD BROKEN.XML within=10
+expect ui=generative_load_recipe
+encoder 3 1
+expect event gen_recipe_load at=LOAD MISSING.XML qwerty=0 within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect event gen_recipe_roll load done error=0 within=30
+expect event gen_recipe_load replaced sounds=2
+expect event gen_compose_recipe loaded genre=techno-acid tempo=12345 swing=0 key=2 scale=1 macros=10,40,20,30
+expect ui=sound_editor
+check recipe *
+expect event gen_recipe_check name=LOAD MISSING read=ok error=0 match=0 recipe=1 seed=1 takes=1 sounds=0 within=10
+
+# ---- LOAD OK replaces it, and matches its file ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD MISSING.XML within=10
+encoder 3 1
+expect event gen_recipe_load at=LOAD OK.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll load done error=0 within=30
+expect ui=sound_editor
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
+
+# ---- An unknown genre is refused and the Recipe stays; BACK leaves ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD OK.XML within=10
+encoder 3 2
+expect event gen_recipe_load at=LOAD TECHNO.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load refused why=unknown_genre file=LOAD TECHNO.XML within=5
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_load closed
+expect ui=sound_editor
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10

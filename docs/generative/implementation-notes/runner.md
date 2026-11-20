@@ -36,9 +36,10 @@ otherwise.
   run goes in the steering, with a spec in `transition_lifecycle_spec.cpp`; one hook per firmware step on the
   lifecycle's adapter was rejected (#260): it widens that contract and splits the start step's timed window.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
-  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether this is a
-  genre change and records it beside the pending Recipe (`PendingRecipe::genreChange`); `commitPending()` adopts the
-  staged palette by that flag, not by comparing genres. Two preloads never run at once (one cancels and unwinds
+  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether it staged a
+  palette and records it beside the pending Recipe (`PendingRecipe::stagedPalette`); `commitPending()` adopts the
+  staged palette by that flag, not by comparing genres. A LOAD always stages its file genre's palette, so a LOAD of
+  the playing genre reads its override again; its missing sounds are re-rolled from that staged palette. Two preloads never run at once (one cancels and unwinds
   before the next starts), so one spare is enough. `Transitions::phraseLength()` reads the Current Recipe's genre,
   so the lifecycle reads it for the outgoing roster's cap before the pending Recipe replaces it: at the start step
   (kept until the drain) and at a stop's commit. No shipped genre has another phrase length yet: the harness's
@@ -52,7 +53,8 @@ otherwise.
   press against `SoundSwapLifecycle::retirementsOwed()`, a transition request against `Transitions::retirementRoom()`
   (the share less pending, less a roster for a `TransitionJob` still active, which `preloaded()` retires if it ends for
   an older request). The lifecycle asks for one roster's room, two when it replaces a Queued one. `gen_retire_overflow`
-  never fires; if a new path retires Outputs (M3's LOAD, Capture), give it a share or count it in an owner's check. The
+  never fires; if a new path retires Outputs (Capture), give it a share or count it in an owner's check. A LOAD is a
+  transition and uses the transitions' share. The
   harness models it (`TransitionAdapter::jobs`, `retirementRoom()`): the newest preload ends last, so its `load()`
   leaves the runner idle.
 - A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into

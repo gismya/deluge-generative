@@ -29,6 +29,7 @@
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/ui.h"
+#include "gui/ui_timer_manager.h"
 #include "gui/views/perform_view.h"
 #include "hid/button.h"
 #include "hid/display/display.h"
@@ -97,7 +98,7 @@ void loadChosen() {
 } // namespace
 
 bool LoadRecipeUI::open(bool inCardRoutine) {
-	if (!gen::firmware::recipeSaveAllowed(inCardRoutine)) {
+	if (!gen::firmware::recipeCardAccessAllowed(inCardRoutine)) {
 		refusedBusy();
 		return false;
 	}
@@ -161,8 +162,14 @@ ActionResult LoadRecipeUI::buttonAction(deluge::hid::Button b, bool on, bool inC
 	if (b == LOAD || b == SELECT_ENC) {
 		if (inCardRoutine) {
 			// Refused, not deferred: stock's REMIND_ME_OUTSIDE_CARD_ROUTINE would hold every later press back until a
-			// preload's card wait ends (spec §12.10).
+			// preload's card wait ends (spec §12.10). A press made outside the wait set the long-press mode and its
+			// timer (Browser::mainButtonAction()): a release inside it ends them too, as the save UI's does.
 			if (on) {
+				refusedBusy();
+			}
+			else if (currentUIMode == UI_MODE_HOLDING_BUTTON_POTENTIAL_LONG_PRESS) {
+				currentUIMode = UI_MODE_NONE;
+				uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
 				refusedBusy();
 			}
 			return ActionResult::DEALT_WITH;
@@ -251,7 +258,7 @@ void LoadRecipeUI::enterKeyPress() {
 		return;
 	}
 	// A preload that started meanwhile holds the card: the file isn't read under it (spec §12.10).
-	if (!gen::firmware::recipeSaveAllowed(false)) {
+	if (!gen::firmware::recipeCardAccessAllowed(false)) {
 		refusedBusy();
 		return;
 	}

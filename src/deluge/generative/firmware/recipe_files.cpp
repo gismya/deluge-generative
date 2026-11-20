@@ -80,8 +80,12 @@ bool recipePath(std::string_view name, char (&out)[perform::kMaxRecipeNameChars 
 
 } // namespace
 
+bool recipeCardAccessAllowed(bool inCardRoutine) {
+	return !inCardRoutine && !currentlyAccessingCard && !runner.busy();
+}
+
 bool recipeSaveAllowed(bool inCardRoutine) {
-	return !inCardRoutine && !currentlyAccessingCard && !runner.busy() && currentRecipe.exists;
+	return recipeCardAccessAllowed(inCardRoutine) && currentRecipe.exists;
 }
 
 bool suggestRecipeName(perform::RecipeName& out, Error& error) {
