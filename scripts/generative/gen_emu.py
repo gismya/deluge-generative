@@ -507,6 +507,10 @@ def capture_recipe_offset(elf, path):
             end = elf.index(b"\0", strtab + name)
             if elf[strtab + name : end] != CAPTURE_SYMBOL:
                 continue
+            if shndx >= len(
+                sections
+            ):  # SHN_ABS, SHN_COMMON or out of range: not a capture build's
+                break
             home = sections[shndx]
             if home[1] != 1 or sym_size != CAPTURE_LAYOUT.size:  # SHT_PROGBITS
                 break
@@ -1151,6 +1155,8 @@ def check_capture_args(args):
             else f" (no --tempo, so checked at the fastest tempo a Recipe can have, {MAX_TEMPO} BPM)"
         )
         sys.exit(f"capture: {error}{fastest}; --no-check skips the check's render")
+    if getattr(args, "elf", None) and not os.path.isfile(args.elf):
+        sys.exit(f"capture: --elf {args.elf}: no such file")
     if args.ab and not args.mute:
         sys.exit("capture --ab needs a part to leave out: --mute PART")
     if args.ab and is_wav_path(args.out):
@@ -1401,7 +1407,9 @@ def parser():
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
     c.add_argument(
         "--elf",
-        help="capture with this capture firmware (a --build-dir's Release/deluge.elf) and build nothing",
+        help="capture with this capture firmware (a --build-dir's Release/deluge.elf) and build nothing; "
+        "--build-dir is then ignored, and the check renders with the current checkout's harness, which may differ "
+        "from the one the ELF was built from (--no-check skips it)",
     )
     c.add_argument(
         "--out",

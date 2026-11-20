@@ -974,9 +974,22 @@ class CaptureExit(unittest.TestCase):
         )
 
     def test_elf_builds_no_firmware_and_captures_with_that_elf(self):
-        _, one, calls = self.run_capture([], ["--elf", "built.elf"])
+        with mock.patch.object(gen_emu.os.path, "isfile", return_value=True):
+            _, one, calls = self.run_capture([], ["--elf", "built.elf"])
         self.assertEqual(calls, ["render"])
         self.assertEqual(one.call_args.args[1], "built.elf")
+
+    def test_a_missing_elf_stops_before_anything_runs(self):
+        args = gen_emu.parser().parse_args(
+            ["capture", "--no-play", "--elf", "no/such.elf"]
+        )
+        with (
+            mock.patch.object(gen_emu, "warn_pin"),
+            mock.patch.object(gen_emu, "capture_one") as one,
+            self.assertRaises(SystemExit),
+        ):
+            gen_emu.capture(args)
+        one.assert_not_called()
 
     def test_an_unknown_genre_stops_before_the_build(self):
         args = gen_emu.parser().parse_args(["capture", "--no-play", "--genre", "polka"])
