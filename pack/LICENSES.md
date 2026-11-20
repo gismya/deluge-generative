@@ -1,7 +1,8 @@
 # Generative pack: origins and licences
 
 `pack/` is laid out as on the SD card (spec §18.1). Unzip it onto the card root. Its licences don't affect the
-firmware's.
+firmware's. Every file is CC0 1.0 (**Generated files**) except those derived from Synthstrom Audible's factory presets
+(**Derived from the factory presets**), which carry no CC0 claim.
 
 ## Generated files
 
@@ -41,6 +42,20 @@ differs from what it would write, and any file here it doesn't write.
 | `SAMPLES/DRUMS/Block/GEN Wood 2.wav` | Lower, longer wood hit |
 | `SAMPLES/DRUMS/Other/GEN Ping 1.wav` | Inharmonic metal ping: five non-integer partials ringing for about a second |
 | `SAMPLES/DRUMS/Other/GEN Ping 2.wav` | Higher, longer metal ping |
+
+## Derived from the factory presets
+
+Each file below is a copy of a preset from the Deluge's factory card content by Synthstrom Audible, with a few edits.
+They are derived from that factory content and are distributed on its terms, not under CC0. `make_pack.py` writes them
+from the factory file (read from the card's files, checked by its SHA-256) and the edits recorded in its `DERIVED`
+table, never by hand; `make_pack.py --check` fails while a `DERIVED` file has no row here naming its source. To add
+one: a `DERIVED` entry, a row here, then run the script.
+
+| File | Source (factory card) | Edits | What it is for |
+|---|---|---|---|
+| `SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML` | `SYNTHS/037 Echo Chord.XML` | delay feedback 0, volume 50 | Dub techno's Stab, its echo from the part's delay setup alone (#322) |
+| `SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML` | `SYNTHS/082 Short Sharp Delay.XML` | delay feedback 0, volume 34 | Dub techno's Stab (#322) |
+| `SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML` | `SYNTHS/072 Kyoto Phono.XML` | delay feedback 0, volume 28 | Dub techno's Stab (#322) |
 
 Every pack synth preset must respond to velocity (spec §10.1). Check with
 `python3 scripts/generative/check_pack_velocity.py`.

@@ -142,7 +142,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm techno-dub style=2 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
-expect event gen_sound_level PAD volume=50 lower since=mark
+expect event gen_sound_level PAD volume=38 lower since=mark
 expect event gen_sound_level STAB volume=100 same since=mark
 expect event gen_transition start style=2 within=40
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends; total= counts
