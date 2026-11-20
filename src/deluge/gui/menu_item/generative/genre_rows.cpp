@@ -18,6 +18,7 @@
 #include "gui/menu_item/generative/genre_rows.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/perform/genre_menu.h"
+#include "hid/display/display.h"
 
 namespace deluge::gui::menu_item::generative {
 
@@ -71,6 +72,14 @@ std::string_view genreLabel(GenreSlot slot) {
 		return "";
 	}
 	return slot.inGroup ? genre->shortName : genre->oledName;
+}
+
+const Genre* genreOrError(GenreSlot slot) {
+	const Genre* genre = genreAt(slot);
+	if (genre == nullptr) {
+		display->displayError(Error::UNSPECIFIED);
+	}
+	return genre;
 }
 
 const Genre& genreToOpenOn() {

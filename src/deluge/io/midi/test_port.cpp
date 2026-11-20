@@ -957,9 +957,9 @@ void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
 	}
 }
 
-/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, until the Generative menu's COMPOSE
-/// (#140) does. The screen sends gen_compose_screen opened as it opens; gen_compose_screen refused why=perform says it
-/// can't (Perform is the root UI).
+/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, with no Recipe too, which the
+/// Generative menu's COMPOSE FROM never shows (its rows make one first). The screen sends gen_compose_screen opened
+/// as it opens; gen_compose_screen refused why=perform says it can't (Perform is the root UI).
 void openComposeScreenForTest() {
 	if (!deluge::gui::menu_item::generative::openComposeScreen()) {
 		event("gen_compose_screen refused why=perform");

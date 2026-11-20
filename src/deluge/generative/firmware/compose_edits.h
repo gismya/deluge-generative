@@ -55,6 +55,9 @@ bool beginLaneRoll(Lane lane, RecipeRollEnded ended);
 /// them: CurrentRecipe::generation).
 bool previousPartPick(int32_t part);
 bool previousLanePick(Lane lane);
+/// A Perform sound swap gave `part` (of `genre`) a new pick (spec §13.4): its SOUNDS row, and a Kit part's lane rows,
+/// no longer have a previous pick from a re-roll here (spec §14.4).
+void forgetPreviousPick(const Genre& genre, int32_t part);
 
 /// NEW SEED (spec §6.5): a fresh seed, every take at 0.
 void newSeed();

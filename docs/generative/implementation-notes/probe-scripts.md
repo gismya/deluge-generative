@@ -28,8 +28,8 @@ otherwise.
   few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
 - run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
   a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
-  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
-  Recipe, the Current Recipe or not.
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry from GENRE rolls a
+  fresh Recipe, the Current Recipe or not; PERFORM FROM's CURRENT RECIPE doesn't.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
   `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
