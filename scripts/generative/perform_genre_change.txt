@@ -17,6 +17,17 @@
 # later expects no further gen_outputs_freed since the mark: a batch reaching the total with an Output still to come
 # fails. Each genre is picked by name (pick genre).
 # For figures: --events 'gen_confirm|gen_transition|gen_mem|gen_h1|gen_outputs_freed'.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/firmware/retirements.*
+# covers: src/deluge/generative/firmware/pump.* src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/core/ src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/menu_item/generative/genre_rows.* src/deluge/generative/perform/genre_menu.*
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/adapter_timing.*
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -66,7 +77,7 @@ mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event gen_h1 within=20
+expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 5 parts back to 4, asking ACID TECHNO? ----
@@ -102,7 +113,7 @@ mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event gen_h1 within=20
+expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ DUB → HARD CUT AT PHRASE: 4 parts to 5, asking DUB TECHNO? ----
@@ -131,7 +142,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm techno-dub style=2 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
-expect event gen_sound_level PAD volume=50 lower since=mark
+expect event gen_sound_level PAD volume=38 lower since=mark
 expect event gen_sound_level STAB volume=100 same since=mark
 expect event gen_transition start style=2 within=40
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends; total= counts
@@ -141,7 +152,7 @@ mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event gen_h1 within=20
+expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
 # ---- REGENERATE stays inside the subgenre ----
@@ -192,7 +203,7 @@ mark
 expect event gen_mem after_free
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event gen_h1 within=20
+expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
 # ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 6 parts to 4, the largest roster to the smallest ----

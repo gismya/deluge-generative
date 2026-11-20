@@ -267,6 +267,13 @@ describe melodic_techno("Melodic techno", $ {
 		expect(kickNotes).to_be_greater_than(10000);
 	});
 
+	it("puts its Bass's tonic within 6 semitones of C2, the Bass Register's default (spec §4.5, §10.6, #252)", _ {
+		const Register reg = melodic.parts[kBassPart].registerOrDefault();
+		expect(static_cast<int32_t>(reg.anchor)).to_equal(36);
+		expect(static_cast<int32_t>(reg.spanLow)).to_equal(-5);
+		expect(static_cast<int32_t>(reg.spanHigh)).to_equal(12);
+	});
+
 	context("its Arp (spec §4.5, §5.2, §8.1)", _ {
 		it("is a Lead Arp on 16ths, Up or Up-down over one or two octaves, not gated, with a 16-bar Sweep", _ {
 			const PartSpec& arp = melodic.parts[kArpPart];
@@ -431,8 +438,9 @@ describe melodic_techno("Melodic techno", $ {
 					continue;
 				}
 				synthParts++;
+				// At least 3 before the ear check trimmed them (spec §10.1, #120 round 1), never none.
 				auto entries = melodic.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
+				expect(entries.size()).to_be_greater_than(size_t{0});
 				for (const PaletteEntry& entry : entries) {
 					expect(card.has(entry.path)).to_be_true();
 					if (part.role == Role::Lead) {

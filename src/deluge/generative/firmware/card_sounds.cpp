@@ -16,8 +16,13 @@
  */
 
 #include "generative/firmware/card_sounds.h"
+#include "dsp/delay/delay.h"
+#if ENABLE_SYSEX_TEST
+#include "generative/perform/sound_mapping.h"
+#endif
 #include "fatfs/fatfs.hpp"
 #include "io/midi/test_port.h"
+#include "model/song/song.h"
 #include "modulation/params/param.h"
 #include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
@@ -164,7 +169,38 @@ VoicePriority voicePriority(VoicePriorityLevel level) {
 
 } // namespace
 
-void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings) {
+void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song) {
+	if (!setup.on) {
+		return; // the preset's own delay, as saved
+	}
+	// Plain fields, read by the render each block: Compose saves them with the song (spec §10.6).
+	delay.syncLevel = static_cast<SyncLevel>(
+	    delaySyncLevel(setup.note, song.insideWorldTickMagnitude + song.insideWorldTickMagnitudeOffsetFromBPM));
+	switch (setup.feel) {
+	case DelayFeel::Even:
+		delay.syncType = SYNC_TYPE_EVEN;
+		break;
+	case DelayFeel::Dotted:
+		delay.syncType = SYNC_TYPE_DOTTED;
+		break;
+	case DelayFeel::Triplet:
+		delay.syncType = SYNC_TYPE_TRIPLET;
+		break;
+	}
+	delay.pingPong = setup.pingPong;
+	delay.analog = setup.analog;
+}
+
+#if ENABLE_SYSEX_TEST
+void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane) {
+	TEST_EVENT("gen_sound_delay %s %s sync=%d type=%d pingpong=%d analog=%d feedback=%ld", part, lane,
+	           static_cast<int>(delay.syncLevel), static_cast<int>(delay.syncType), delay.pingPong ? 1 : 0,
+	           delay.analog ? 1 : 0, static_cast<long>(perform::menuUnits(feedback)));
+}
+#endif
+
+void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSettings& settings, const Song& song) {
+	applyDelaySetup(sound.delay, settings.delay, song);
 	// Auto keeps what loading set: a sample row's default, or an FX row preset's own mode.
 	if (settings.voiceMode != VoiceMode::Auto) {
 		sound.polyphonic = polyphonyMode(settings.voiceMode);
@@ -173,6 +209,11 @@ void applySoundSettings(Sound& sound, ParamManager& paramManager, const SoundSet
 		sound.maxVoiceCount = settings.maxVoices;
 	}
 	sound.voicePriority = voicePriority(settings.priority);
+	if (settings.zeroTranspose) {
+		// Read at each note-on (Voice::noteOn, calculatePhaseIncrements), never cached: the load's fresh Output has no
+		// voices, so there are no phase increments to recalculate, as the sound editor's transpose does.
+		sound.transpose = 0;
+	}
 
 	if (settings.volume != 100) {
 		AutoParam& volume = postFxVolume(paramManager);

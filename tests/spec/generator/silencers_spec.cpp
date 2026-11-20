@@ -112,7 +112,7 @@ struct Decided {
 		}
 		return n;
 	}
-	[[nodiscard]] bool silenced(uint8_t part) const { return (silent & (1U << part)) != 0; }
+	[[nodiscard]] bool silenced(uint8_t part) const { return (silent & partBit(part)) != 0; }
 	/// Whether every note-on of `part` here is flagged muted (spec §12.5), and there is one.
 	[[nodiscard]] bool allMuted(uint8_t part) const {
 		int32_t muted = 0;
@@ -148,7 +148,7 @@ std::vector<Decided> decide(const Genre& genre, int32_t density, int32_t steps,
 		Decided decided;
 		decided.section = generator.arc().section();
 		for (int32_t p = 0; p < partCount(genre); p++) {
-			decided.silent |= generator.partSilenced(p) ? static_cast<uint8_t>(1U << p) : 0;
+			decided.silent |= generator.partSilenced(p) ? partBit(p) : 0;
 		}
 		Event e;
 		while (generator.popDue(INT32_MAX, &e)) {

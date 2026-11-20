@@ -291,12 +291,7 @@ private:
 
 /// Whether `part` plays `lane`. Lanes it doesn't play keep their silent row and load nothing.
 bool plays(const PartSpec& part, Lane lane) {
-	for (const LaneSpec& spec : part.lanes) {
-		if (spec.lane == lane) {
-			return true;
-		}
-	}
-	return false;
+	return laneIndexOf(part, lane) >= 0;
 }
 
 /// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
@@ -337,19 +332,37 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 			*rangesOut = load.ranges;
 		}
 		// Loading backed up the preset drum's ParamManager already (RowLoader checked it is there).
+#if ENABLE_SYSEX_TEST
+		const int32_t savedTranspose = drum->transpose;
+#endif
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
-		                   laneSoundSettings(lane));
+		                   laneSoundSettings(part, lane), *song);
+		// An FX lane's synth keeps its saved transpose (spec §10.6).
+		TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
+		           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
 	}
 	else {
-		applySoundSettings(*drum, paramManager, laneSoundSettings(lane));
-		song->backUpParamManager(drum, nullptr, &paramManager, true);
 		applySyncDefaults(drum, song); // a sample row was built while another song was current (spec §10.4)
+		applySoundSettings(*drum, paramManager, laneSoundSettings(part, lane), *song); // its delay setup after them
+		song->backUpParamManager(drum, nullptr, &paramManager, true);
 	}
+#if ENABLE_SYSEX_TEST
+	if (part.volume != 100) { // a Kit part's volume scales each row's knob (spec §10.6)
+		TEST_EVENT("gen_row_level %s %s volume=%d played=%ld", part.name, laneName(lane), static_cast<int>(part.volume),
+		           static_cast<long>(drum->paramFinalValues[params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL]));
+	}
+#endif
 	kit->addDrum(drum); // the Kit owns it from here
 	drum->drumName = laneName(lane);
 	if (lane == Lane::Kick) {
 		drum->sideChainSendLevel = INT32_MAX; // as the sample browser does for kicks (spec §10.4)
 	}
+#if ENABLE_SYSEX_TEST
+	if (played && delaySetupOf(part, lane).on) {
+		ParamManager* rowParams = song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr);
+		reportDelay(drum->delay, SoundControls::delayFeedback(*rowParams, false), part.name, laneName(lane));
+	}
+#endif
 	if (played) {
 		TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
 		           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
@@ -371,6 +384,12 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	kit->name.set(part.name);
 	kit->dirPath.set("KITS");
 	applySyncDefaults(kit, song);
+	applyDelaySetup(kit->delay, part.delay, *song); // the kit's own, at kit level (spec §10.6)
+#if ENABLE_SYSEX_TEST
+	if (part.delay.on) {
+		reportDelay(kit->delay, SoundControls::delayFeedback(kitParamManager, true), part.name, "-");
+	}
+#endif
 	song->backUpParamManager(kit, nullptr, &kitParamManager, true);
 
 	const bool fx = part.role == Role::FX;
@@ -473,9 +492,16 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	// told about moves only the knob (#218, #228). gen_sound_level compares it with the preset's.
 	constexpr int32_t kPostFxVolume = params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL;
 	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
+	const int32_t savedTranspose = synth->transpose;
 #endif
-	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part));
+	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part), *song);
 #if ENABLE_SYSEX_TEST
+	if (part.delay.on) {
+		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
+	}
+	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
+	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
+	           static_cast<long>(synth->transpose));
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
 	TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
 	           playedLevel < presetLevel   ? "lower"

@@ -65,6 +65,9 @@ struct LaneSounds {
 	/// Empty: any audio file in the folders can be picked.
 	std::span<const TagWeight> tags;
 	std::span<const PaletteEntry> synths;
+	/// Whether the genre's drum kit plays this lane (spec §10.2). A lane a card override replaces leaves the kit: the
+	/// player's folders and tags alone pick its sound.
+	bool inKit = true;
 };
 
 /// A synth part's entry, keyed by the part's name.
@@ -79,11 +82,59 @@ struct RoleSounds {
 	std::span<const PaletteEntry> entries;
 };
 
+/// One lane of a drum machine whose files its machine tag doesn't name alone: the lane's own tag or exact path.
+struct KitLane {
+	Lane lane = Lane::Kick;
+	const char* tag = nullptr;
+};
+
+/// A drum machine (spec §10.2): the tag that plays it on each Drums lane. A kit tag matches the lane's files whatever
+/// the lane's own list says, as a lane tag does (§10.3).
+struct DrumMachine {
+	const char* name = "";
+	/// The tag for every lane `lanes` doesn't list, such as "909". nullptr: only the lanes it lists.
+	const char* tag = nullptr;
+	std::span<const KitLane> lanes;
+
+	/// The tag that plays this machine on `lane`, or nullptr.
+	[[nodiscard]] constexpr const char* laneTag(Lane lane) const {
+		for (const KitLane& each : lanes) {
+			if (each.lane == lane) {
+				return each.tag;
+			}
+		}
+		return tag;
+	}
+};
+
+struct MachineWeight {
+	const DrumMachine* machine = nullptr;
+	uint8_t weight = 1;
+};
+
+/// An idiomatic swap: one Drums lane plays `tag` (a tag or an exact path) instead of the kit's machine.
+struct KitSwap {
+	Lane lane = Lane::Kick;
+	const char* tag = nullptr;
+};
+
+/// The most swaps one genre lists.
+constexpr int32_t kMaxKitSwaps = 8;
+
+/// A genre's drum kits (spec §10.2): each piece rolls one main machine by weight for every Drums lane, and each swap
+/// in or out at `swapPercent`. No machines: each lane rolls from its own list alone.
+struct DrumKits {
+	std::span<const MachineWeight> machines;
+	std::span<const KitSwap> swaps;
+	uint8_t swapPercent = 50;
+};
+
 /// A genre's built-in palette (spec §10.1). Card override files replace single entries of it.
 struct Palette {
 	std::span<const PartSounds> parts;
 	std::span<const RoleSounds> roles;
 	std::span<const LaneSounds> lanes;
+	DrumKits kits{};
 
 	/// The part's own entry, else its role's, else empty.
 	[[nodiscard]] std::span<const PaletteEntry> partEntries(const PartSpec& part) const;
@@ -159,15 +210,25 @@ protected:
 /// whose path doesn't fit a SoundPath are never picked. Returns false on a card error.
 bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy, FolderLister& lister);
 
+/// Part `p`'s drum kit as rollSounds() rolls it from `entropy` (spec §10.2): its machine (nullptr: the part has no
+/// Drums lanes or the palette no machines) and, bit s, whether `palette.kits.swaps[s]` is in. For tools: which kit a
+/// piece plays, whatever the card holds.
+struct RolledKit {
+	const DrumMachine* machine = nullptr;
+	uint32_t swaps = 0;
+};
+RolledKit rolledKit(const Palette& palette, const PartSpec& part, int32_t p, uint32_t entropy);
+
 /// A sound re-roll (spec §10.7, §13.4): rolls `part`'s picks again from `palette` and fresh entropy, as rollSounds()
 /// rolls them, but each pick moves away from the one in `sounds` where the palette offers another, so NEW SOUND is
-/// heard as new. A Kit part re-rolls every lane it plays. Every other part's and lane's picks stay. Returns false on a
-/// card error, with the part's picks partly rolled: roll into a copy.
+/// heard as new. A Kit part re-rolls every lane it plays, its drum kit on another machine (spec §10.2). Every other
+/// part's and lane's picks stay. Returns false on a card error, with the part's picks partly rolled: roll into a copy.
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
 /// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
-/// keeps the sound it has where its palette offers another. Returns false on a card error, with the picks partly
+/// keeps the sound it has where its palette offers another, but a Kit's drum machine rolls by its weights and may stay
+/// (spec §10.2). Returns false on a card error, with the picks partly
 /// rolled: roll into a copy.
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister);

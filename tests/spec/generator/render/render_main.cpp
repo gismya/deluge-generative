@@ -14,6 +14,22 @@ int main(int argc, char** argv) {
 		std::fprintf(stderr, "generator_render: %s\n\n%s", parsed.error.c_str(), harness::render::kUsage);
 		return 2;
 	}
+	if (parsed.listPalettes) {
+		std::fputs(harness::render::pitchedPalettePresets().c_str(), stdout);
+		return 0;
+	}
+	if (parsed.listRisers) {
+		std::fputs(harness::render::riserLanes().c_str(), stdout);
+		return 0;
+	}
+	if (parsed.listSounds) {
+		bool rolledAll = true;
+		std::fputs(harness::render::soundPicks(parsed.request, &rolledAll).c_str(), stdout);
+		if (!rolledAll) {
+			std::fputs("warning: a sound folder couldn't be listed: some parts and lanes have no sound pick\n", stderr);
+		}
+		return 0;
+	}
 	harness::render::Rendered rendered = harness::render::render(parsed.request);
 	for (const std::string& warning : rendered.warnings) {
 		std::fprintf(stderr, "warning: %s\n", warning.c_str());
@@ -23,6 +39,11 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	const std::string& out = parsed.request.out;
-	std::printf("%s.wav\n%s.mid\n%s.txt\n", out.c_str(), out.c_str(), out.c_str());
+	if (parsed.request.midiOnly) {
+		std::printf("%s.mid\n", out.c_str());
+	}
+	else {
+		std::printf("%s.wav\n%s.mid\n%s.txt\n", out.c_str(), out.c_str(), out.c_str());
+	}
 	return 0;
 }

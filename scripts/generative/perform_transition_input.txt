@@ -8,6 +8,16 @@
 # being due to the buttons task taking it, and the longest gap between a gold-knob turn's edges (160 ms apart when
 # nothing holds them back); ok=yes within 20 ms and 160 + 20 ms. input_late names each press taken late. Late
 # renders and culls: --events 'gen_h2|gen_h16|input_lag|input_late|gen_transition'.
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/pump.*
+# covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/working_animation.* src/deluge/hid/buttons.cpp
+# covers: src/deluge/hid/encoder_input.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/sound_swaps.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

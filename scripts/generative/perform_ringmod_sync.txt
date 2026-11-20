@@ -1,0 +1,74 @@
+# Ringmod oscillator sync keeps to its buffer (#332), in delugemu (test_port_emu.py --card-overlay
+# scripts/generative/fixtures/perform_ringmod_sync). Acid techno's override makes ACID 145 Eerie High Pad (saws at
+# pulse width 0, which Brightness moves off 0 in the Intro) and the DRONE 125 Evolving Pad (a sine oscillator 2 with a
+# pulse width of its own). A pulse width on a table saw or a sine renders through renderOscSync(),
+# whose storage lambdas store 4 samples at a time from wherever a sync lands; ringmod rendered oscillator 2 straight
+# into the last row of spareRenderingBuffer, so up to 3 samples landed past it, in the internal heap's free-space
+# records (emptySpacesMemoryInternal): `gen_mem ... internal=` then read in hundreds of millions or billions, and the
+# next entry's allocation hung the test port. Free internal heap is under 1 MB, so 7 digits is the check.
+# The check rests on three things nothing here asserts: 125's saved pulse width (oscillator 2 sine, 0x31000000 on the
+# factory card), Brightness moving 145's pulse width (ringmod Brightness's PulseWidth target, spec §11.2), and 145's
+# saws pitched high enough to take the table path. A card or mapping change that drops them leaves this script passing
+# without reaching the sync path. No wavetable oscillator plays here: wave_table.cpp is on the covers lines because it
+# calls renderOscSync() too, so a change to it can move the shared lambdas.
+# needs: card fixtures/perform_ringmod_sync (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/dsp/oscillators/ src/deluge/processing/render_wave.h src/deluge/model/voice/voice.cpp
+# covers: src/deluge/storage/wave_table/wave_table.cpp scripts/generative/fixtures/perform_ringmod_sync/
+# covers: src/deluge/generative/firmware/sound_controls.cpp src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/retirements.cpp src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+start_state
+include perform_open.txt
+
+button 4 3 down
+wait 50
+button 4 3 up
+expect event /^gen_mem before_entry internal=\d{1,7} / within=10
+expect event gen_palette_override techno-acid read within=20
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/145 Eerie High Pad.XML within=20
+expect event gen_sound DRONE - pick mode=1 prio=0 arp=0 SYNTHS/125 Evolving Pad.XML within=20
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
+expect playing=false
+
+# The Intro: Energy rises from below the centre, so Brightness moves 145's pulse width off 0. Three of gen_h2's 4-bar
+# windows of it
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+expect event gen_h2 ramps=on moved=yes within=15
+expect event gen_h2 ramps=on moved=yes within=15
+expect event gen_h2 ramps=on moved=yes within=15
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=10
+
+# Leaving frees the piece through the free-space records; a corrupted one shows in the count
+include perform_leave.txt
+expect event /^gen_mem after_leave internal=\d{1,7} / within=10
+
+# A second entry, from the blank song's Song view, allocates from them again: with a corrupted record it hung here
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+include perform_pick_acid.txt
+button 4 3 down
+wait 50
+button 4 3 up
+expect event /^gen_mem before_entry internal=\d{1,7} / within=10
+expect event gen_perform_entered within=20
+expect root_ui=generative_perform within=10
+include perform_leave.txt
+expect event /^gen_mem after_leave internal=\d{1,7} / within=10

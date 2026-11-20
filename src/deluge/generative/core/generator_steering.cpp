@@ -191,7 +191,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		else if (!freeze && partFrozen(command.target)) {
 			thaw(command.target);
 		}
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
 		return true;
 	}
@@ -243,6 +243,9 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (fills.empty() || (command.value != kFillHeldEntry && command.value != kFillFreshPick)) {
 			return false;
 		}
+		// The one place a held Roll's count restarts: every held fill starts with this press, the driver's re-send
+		// after begin() included, so a new piece's held Roll starts its first beat again (spec §8.7).
+		heldSteps_ = 0;
 		if (command.value == kFillHeldEntry) {
 			heldFill_ = static_cast<int8_t>(genre_->heldFill < fills.size() ? genre_->heldFill : 0);
 			return true;
@@ -272,7 +275,7 @@ GEN_STEP_CODE bool Generator::resolvePress(Command& command) {
 		return false;
 	}
 	const uint8_t parts = mutes_.of(command.kind);
-	command.value = command.target < kMaxParts && (parts & (1U << command.target)) != 0 ? 0 : 1;
+	command.value = command.target < kMaxParts && (parts & partBit(command.target)) != 0 ? 0 : 1;
 	return true;
 }
 
@@ -473,8 +476,10 @@ void Generator::planArc(ArcPlan& out) const {
 	for (int32_t p = 0; p < parts; p++) {
 		gates[p] = parts_[p].gates;
 	}
-	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase
-	// (buildEndsInPhrase()), so it leaves them out; the cut never stops the roll lane (rollUncut()).
+	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase or a whole Build
+	// (cutAndGapUnderBuild()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
+	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
+	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
 		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane); });
@@ -500,7 +505,7 @@ void Generator::planArc(ArcPlan& out) const {
 		// The last decided step, as it played: the first of the plan's first phrase.
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= !partSilenced(p) && mutes.audible(p) ? partBit(p) : 0;
 		}
 		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
 	}
@@ -549,7 +554,7 @@ void Generator::planArc(ArcPlan& out) const {
 		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? static_cast<uint8_t>(1U << p) : 0;
+			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).

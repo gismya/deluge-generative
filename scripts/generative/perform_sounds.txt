@@ -3,6 +3,15 @@
 # boot: transport stopped, the current clip a synth or kit clip.
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 #   PolyphonyMode: 0 AUTO, 3 LEGATO, 4 CHOKE. VoicePriority: 0 LOW, 2 HIGH. ArpMode 0 OFF.
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/palette_file.* src/deluge/generative/core/sound_settings.h
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 start_state
 include perform_open.txt
 
@@ -43,8 +52,8 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-expect event gen_h1 within=15
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # PLAY stops; BACK held, then LEAVE, leaves (spec §13.8). It leaves during a held NEW SOUND preload (KIT, DRUMS

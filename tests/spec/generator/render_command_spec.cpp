@@ -1,11 +1,16 @@
 // Rough render (spec §21.2, §21.5 step 1): one local command renders a Recipe and seed to a WAV, a MIDI file and a
-// piano roll, and the same input renders the same bytes.
+// piano roll, and the same input renders the same bytes. For the theory review (§21.5) it can play one Arc cycle and
+// write the MIDI file alone.
 
 #include "render/command.h"
+#include "render/names.h"
 #include "temp_path.h"
+
+#include "generative/core/genre.h"
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -53,6 +58,85 @@ describe render_command("Rough render command", $ {
 		expect(r.overrides.tempo).to_equal(13150);
 		expect(r.overrides.swing).to_equal(int8_t{-10});
 		expect(r.out).to_equal(std::string("/tmp/x"));
+	});
+
+	it("takes --end-after-drop and --midi-only, which need no value", _ {
+		harness::render::Parsed parsed = parse({"--end-after-drop", "--midi-only", "--bars", "8"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.request.endAfterDrop).to_be_true();
+		expect(parsed.request.midiOnly).to_be_true();
+		expect(parsed.request.bars).to_equal(8);
+		expect(parse({}).request.endAfterDrop).to_be_false();
+		expect(parse({}).request.midiOnly).to_be_false();
+	});
+
+	it("records the step that decided each Ornament hit, for the THEORY track", _ {
+		harness::render::Request request = parse({"--genre", "techno-detroit", "--complexity", "50", "--bars", "48"}).request;
+		harness::render::Rendering rendering = harness::render::playRequest(request);
+		int32_t ornaments = 0;
+		for (const Event& e : rendering.events) {
+			if (e.kind != EventKind::NoteOn || !e.ornament) {
+				continue;
+			}
+			ornaments++;
+			const auto decided = std::find_if(rendering.ornamentSteps.begin(), rendering.ornamentSteps.end(),
+			                                  [&](const auto& hit) { return hit.first == e; });
+			expect(decided != rendering.ornamentSteps.end()).to_be_true();
+			// A ratchet's or roll's later hits stay inside their step; a flam's grace leads it by half a 16th at most.
+			const int32_t offset = e.tick - decided->second * kTicksPerStep;
+			expect(offset >= -kMaxLean && offset < kTicksPerStep + kMaxLean).to_be_true();
+		}
+		expect(ornaments).to_be_greater_than(10);
+	});
+
+	it("with --end-after-drop plays one Arc cycle, the Drop's phrase then the Outro, and stops where the piece ends", _ {
+		harness::render::Request request = parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "1000"}).request;
+		harness::render::Rendering rendering = harness::render::playRequest(request);
+		std::vector<Event> sections;
+		for (const Event& e : rendering.events) {
+			if (e.kind == EventKind::Section) {
+				sections.push_back(e);
+			}
+		}
+		expect(sections.size()).to_be_greater_than(size_t{4});
+		expect(sections.back().section == SectionKind::Outro).to_be_true();
+		const Event& drop = sections[sections.size() - 2];
+		expect(drop.section == SectionKind::Groove && drop.occurrence == 1).to_be_true();
+		expect(sections[sections.size() - 3].section == SectionKind::Build).to_be_true();
+		// The Drop plays a phrase (8 bars), the Outro one more, and the piece ends on its last bar line.
+		const int32_t bar = kStepsPerBar * kTicksPerStep;
+		expect(sections.back().tick - drop.tick).to_equal(8 * bar);
+		expect(rendering.bars * bar - sections.back().tick).to_equal(8 * bar);
+		expect(rendering.steps.size()).to_equal(static_cast<size_t>(rendering.bars) * kStepsPerBar);
+	});
+
+	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro, beside the WAV's warnings", _ {
+		harness::render::Request request =
+		    parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "8", "--out", "unused"}).request;
+		request.library.roots = {}; // every sample missing: the WAV warns too
+		request.out = (scratchRoot.path / "no-drop" / "a").string();
+		bool armed = true;
+		harness::render::playRequest(request, nullptr, &armed);
+		expect(armed).to_be_false();
+		const harness::render::Rendered rendered = harness::render::render(request);
+		expect(rendered.error).to_equal(std::string{});
+		expect(std::find(rendered.warnings.begin(), rendered.warnings.end(),
+		                 std::string("--end-after-drop: no Drop in 8 bars, so End was never armed and the piece has no "
+		                             "Outro"))
+		       != rendered.warnings.end())
+		    .to_be_true();
+	});
+
+	it("writes only the MIDI file with --midi-only", _ {
+		fs::path dir = scratchRoot.path / "midi-only";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		harness::render::Request request = parse({"--midi-only", "--bars", "2", "--out", "unused"}).request;
+		request.out = (dir / "a").string();
+		expect(harness::render::render(request).error).to_equal(std::string{});
+		expect(fs::exists(dir / "a.mid")).to_be_true();
+		expect(fs::exists(dir / "a.wav")).to_be_false();
+		expect(fs::exists(dir / "a.txt")).to_be_false();
 	});
 
 	it("refuses what it can't play, saying why", _ {
@@ -118,6 +202,185 @@ describe render_command("Rough render command", $ {
 			expect(a == slurp(dir / (std::string("b") + ext))).to_be_true();
 		}
 		expect(slurp(dir / "a.txt").starts_with("techno-acid seed 42,")).to_be_true();
+	});
+
+	it("takes --mute PART, a sidebar row in the genre's part order, repeatable, as gen_emu.py capture does", _ {
+		harness::render::Parsed parsed = parse({"--mute", "2", "--mute", "4", "--mute", "2"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.request.mutedParts).to_equal(uint32_t{(1U << 1) | (1U << 3)});
+		expect(parse({}).request.mutedParts).to_equal(uint32_t{0});
+	});
+
+	it("refuses a --mute past the genre's parts before it renders", _ {
+		expect(parse({"--mute", "7"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
+		expect(parse({"--mute", "0"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
+		expect(parse({"--mute", "x"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
+		// A genre with fewer parts than the sidebar has rows: its own count, whichever order the flags come in.
+		const Genre* small = nullptr;
+		for (const Genre* genre : allGenres()) {
+			small = genre->parts.size() < kMaxParts ? genre : small;
+		}
+		expect(small != nullptr).to_be_true();
+		if (small != nullptr) {
+			const std::string past = std::to_string(small->parts.size() + 1);
+			const std::string why = std::string(small->name) + " has " + std::to_string(small->parts.size())
+			                        + " parts: --mute takes 1 to " + std::to_string(small->parts.size());
+			expect(parse({"--mute", past.c_str(), "--genre", small->name}).error).to_equal(why);
+		}
+	});
+
+	it("with --mute leaves the muted parts out of the WAV from step 0: silent wherever the one part left rests", _ {
+		fs::path dir = scratchRoot.path / "mute-silent";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		const Genre& acid = *findGenre("techno-acid");
+		constexpr int32_t kKept = 1; // BASS, sidebar row 2
+		std::vector<std::string> rows;
+		for (size_t p = 0; p < acid.parts.size(); p++) {
+			if (static_cast<int32_t>(p) != kKept) {
+				rows.push_back(std::to_string(p + 1));
+			}
+		}
+		std::vector<const char*> args = {"--genre", "techno-acid", "--seed", "3", "--bars", "16", "--energy", "40", "--out", "unused"};
+		for (const std::string& row : rows) {
+			args.push_back("--mute");
+			args.push_back(row.c_str());
+		}
+		harness::render::Request request = parse(args).request;
+		request.library.roots = {};
+		request.out = (dir / "a").string();
+		expect(harness::render::render(request).error).to_equal(std::string{});
+		const std::string wav = slurp(dir / "a.wav");
+
+		// Where the kept part sounds: from each heard note-on to its note-off, plus the stand-in voice's release.
+		const harness::render::Rendering rendering = harness::render::playRequest(request);
+		const int64_t tempo = rendering.recipe.tempo;
+		auto frameAt = [&](int32_t tick) { return int64_t{tick} * harness::render::kSampleRate * 6000 / (tempo * 96); };
+		constexpr int64_t kRelease = 6000; // the voice falls to its cut-off in about 5,100 frames
+		const int64_t frames = static_cast<int64_t>(wav.size() - 44) / 4;
+		std::vector<bool> sounding(static_cast<size_t>(frames), false);
+		std::vector<int64_t> on(128, -1);
+		int32_t notes = 0;
+		for (const Event& e : rendering.events) {
+			if (e.part != kKept || !harness::render::heard(e)) {
+				continue;
+			}
+			if (e.kind == EventKind::NoteOn) {
+				on[e.pitch] = frameAt(e.tick);
+				notes++;
+			}
+			else if (e.kind == EventKind::NoteOff && on[e.pitch] >= 0) {
+				for (int64_t f = on[e.pitch]; f < std::min(frames, frameAt(e.tick) + kRelease); f++) {
+					sounding[static_cast<size_t>(f)] = true;
+				}
+				on[e.pitch] = -1;
+			}
+		}
+		for (int64_t start : on) {
+			for (int64_t f = start; start >= 0 && f < frames; f++) {
+				sounding[static_cast<size_t>(f)] = true;
+			}
+		}
+		expect(notes).to_be_greater_than(8);
+		int64_t loudWhileSounding = 0;
+		int64_t loudAtRest = 0;
+		int64_t rest = 0;
+		for (int64_t f = 0; f < frames; f++) {
+			const size_t at = 44 + static_cast<size_t>(f) * 4;
+			const bool loud = wav[at] != 0 || wav[at + 1] != 0;
+			rest += sounding[static_cast<size_t>(f)] ? 0 : 1;
+			(sounding[static_cast<size_t>(f)] ? loudWhileSounding : loudAtRest) += loud ? 1 : 0;
+		}
+		expect(rest).to_be_greater_than(harness::render::kSampleRate); // the bass rests, so the check checks
+		expect(loudAtRest).to_equal(int64_t{0});
+		expect(loudWhileSounding).to_be_greater_than(int64_t{0});
+	});
+
+	it("with --mute keeps every part in the MIDI file and the piano roll, byte for byte", _ {
+		fs::path dir = scratchRoot.path / "mute-midi";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		harness::render::Request plain = parse({"--seed", "5", "--bars", "4", "--out", "unused"}).request;
+		harness::render::Request muted =
+		    parse({"--seed", "5", "--bars", "4", "--mute", "1", "--mute", "2", "--out", "unused"}).request;
+		plain.library.roots = muted.library.roots = {};
+		plain.out = (dir / "plain").string();
+		muted.out = (dir / "muted").string();
+		expect(harness::render::render(plain).error).to_equal(std::string{});
+		expect(harness::render::render(muted).error).to_equal(std::string{});
+		expect(slurp(dir / "plain.mid") == slurp(dir / "muted.mid")).to_be_true();
+		expect(slurp(dir / "plain.txt") == slurp(dir / "muted.txt")).to_be_true();
+		expect(slurp(dir / "plain.wav") == slurp(dir / "muted.wav")).to_be_false();
+	});
+
+	it("lists each built-in genre's pitched parts' palette presets with --list-palettes, for osc_octaves.py", _ {
+		harness::render::Parsed parsed = parse({"--list-palettes"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listPalettes).to_be_true();
+		expect(parse({"--list-palettes", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
+
+		const std::string listing = harness::render::pitchedPalettePresets();
+		expect(listing.find("techno-dub\tSUB\tSYNTHS/002 Basic Square Bass.XML\n")).not_().to_equal(std::string::npos);
+		expect(listing.find("techno-acid\tDRONE\tSYNTHS/148 Warm 5th Pad.XML\n")).not_().to_equal(std::string::npos);
+		// Not a Kit's lanes: the FX lanes' synths keep their transpose, and Drums play samples
+		expect(listing.find("GEN Impact")).to_equal(std::string::npos);
+		expect(listing.find("\tDRUMS\t")).to_equal(std::string::npos);
+		expect(listing.find("\tFX\t")).to_equal(std::string::npos);
+	});
+
+	it("lists each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
+		harness::render::Parsed parsed = parse({"--list-risers"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listRisers).to_be_true();
+		expect(parse({"--list-risers", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
+
+		const std::string listing = harness::render::riserLanes();
+		// Dub's 1-bar Build at 80 BPM is 3,000 ms; its lane reads the short riser's own folder.
+		expect(listing.find("dub\t3000\tSAMPLES/FX/Riser/Short\t\n")).not_().to_equal(std::string::npos);
+		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
+		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
+		expect(listing.find("psytrance\t26301\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+	});
+
+	it("lists a Recipe's sound picks with --list-sounds: a line per part and per lane of a Drums or FX part", _ {
+		harness::render::Parsed parsed = parse({"--list-sounds", "--genre", "dub", "--entropy", "12", "--seed", "3"});
+		expect(parsed.error).to_equal(std::string{});
+		expect(parsed.listSounds).to_be_true();
+		harness::render::Request request = parsed.request;
+		request.library.roots = {GENERATOR_REPO_DIR "/pack"};
+
+		bool rolledAll = false;
+		const std::string listing = harness::render::soundPicks(request, &rolledAll);
+		expect(rolledAll).to_be_true();
+		const Genre& dub = *findGenre("dub");
+		for (const PartSpec& part : dub.parts) {
+			if (part.lanes.empty()) {
+				expect(listing.find(std::string(part.name) + "\t")).not_().to_equal(std::string::npos);
+			}
+			for (const LaneSpec& lane : part.lanes) {
+				const std::string row = std::string(part.name) + "."
+				                        + harness::render::kLaneNames[static_cast<int32_t>(lane.lane)] + "\t";
+				expect(listing.find(row)).not_().to_equal(std::string::npos);
+			}
+		}
+		// The pack's own short riser, as the render's WAV plays it; no kit on pack/ alone, so no drum sample
+		expect(listing.find("FX.Riser\tSAMPLES/FX/Riser/Short/")).not_().to_equal(std::string::npos);
+		expect(listing.find("DRUMS.Kick\t-\n")).not_().to_equal(std::string::npos);
+		expect(harness::render::soundPicks(request, &rolledAll)).to_equal(listing); // the same Recipe, the same picks
+
+		// The kit's machine, from the entropy alone: named though pack/ holds no drum sample
+		const size_t kit = listing.find("DRUMS.kit\t");
+		expect(kit).not_().to_equal(std::string::npos);
+		const std::string machine = listing.substr(kit + 10, listing.find('\t', kit + 10) - kit - 10);
+		bool known = false;
+		for (const MachineWeight& each : dub.palette->kits.machines) {
+			known = known || machine == each.machine->name;
+		}
+		expect(known).to_be_true();
+
+		// Another entropy rolls other sounds
+		request.overrides.entropy = 13;
+		expect(harness::render::soundPicks(request, &rolledAll) == listing).to_be_false();
 	});
 });
 

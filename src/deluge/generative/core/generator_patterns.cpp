@@ -102,14 +102,17 @@ GEN_STEP_CODE int32_t Generator::jitteredImportance(DrawKey key, int32_t importa
 
 namespace {
 
+/// Where Respond keeps `target`'s count in Generator::busyHalves_: a lane by its bit, a part (a Kit part's lanes read
+/// whole) by its own.
+constexpr PartsAndLanes respondMask(const RuleTarget& target) {
+	return target.lane != Lane::None ? PartsAndLanes{0, laneBit(target.lane)} : PartsAndLanes{partBit(target.part), 0};
+}
+
 /// The step `back` steps before `step`, wrapping inside the pattern pass `step` is in.
 int32_t stepBack(int32_t step, int32_t back, int32_t length) {
 	int32_t inPattern = step % length;
 	return step - inPattern + (inPattern - back + length) % length;
 }
-
-/// Effective strengths run 0 to this: 100% in units fine enough for Complexity's every macro unit.
-constexpr int32_t kFullStrength = 100 * kMacroFull;
 
 } // namespace
 
@@ -152,7 +155,8 @@ GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t s
 	return true;
 }
 
-bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const {
+GEN_STEP_CODE bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t back,
+                                            int32_t density) const {
 	const PartSpec& spec = genre_->parts[target.part];
 	auto plannedBack = [&](int32_t laneIndex) {
 		Source from = source(target.part, laneIndex);
@@ -178,18 +182,81 @@ bool Generator::targetPlanned(const RuleTarget& target, int32_t step, int32_t ba
 	return false;
 }
 
-bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density) const {
+GEN_STEP_CODE bool Generator::against(const InterplayRule& rule, int32_t step, int32_t density) const {
 	switch (rule.kind) {
 	case RuleKind::Lock:
 		// Free where the target plays, or with `off` an 8th after it.
 		return !targetPlanned(rule.target, step, rule.offBeat ? kStepsPerBeat / 2 : 0, density);
+	case RuleKind::Avoid:
+		// Against where the target plays, as planned: a muted, Rested or cut target still leaves its holes.
+		return targetPlanned(rule.target, step, 0, density);
+	case RuleKind::Respond:
+		// Against in the busier half, as counted at its first step (countHalves()).
+		return busyHalves_[halfOf(step)].intersects(respondMask(rule.target));
 	}
 	return false;
 }
 
-int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
-	int32_t moved = rule.sensitivity * (recipe_.macros[Macro::Complexity] - genre_->defaults[Macro::Complexity]);
-	return std::clamp<int32_t>(rule.strength * kMacroFull + moved, 0, kFullStrength);
+GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const Step& step) {
+	if (step.index % kHalfBarSteps != 0) {
+		return;
+	}
+	const int32_t half = halfOf(step.index);
+	const int32_t bar = step.index - step.index % kStepsPerBar;
+	for (const InterplayRule& rule : source(part, laneIndex).rules) {
+		if (rule.kind != RuleKind::Respond) {
+			continue;
+		}
+		// The target's planned onsets in each half of this bar, at the Density now, with its pick of this step.
+		int32_t counts[2] = {};
+		for (int32_t s = 0; s < kStepsPerBar; s++) {
+			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.density) ? 1 : 0;
+		}
+		// A non-zero tie makes the first half against, so the response comes after the call.
+		const int32_t mine = counts[half];
+		const int32_t other = counts[1 - half];
+		const bool busy = mine > other || (half == 0 && mine == other && mine > 0);
+		const PartsAndLanes mask = respondMask(rule.target);
+		busyHalves_[half] = busy ? busyHalves_[half].with(mask) : busyHalves_[half].without(mask);
+	}
+}
+
+GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const {
+	const PartSpec& spec = genre_->parts[partIndex];
+	if (!spec.lanes.empty() || spec.pool.empty()) {
+		return false; // drum hits are one-shots, and a part with no pattern has no onsets for a rule to thin
+	}
+	// Only a rule at full strength counts (spec §5.5): below it the rule only thins, and strength stays the one dial.
+	// There every onset but an anchor is dropped where the target plays, so the part plays nothing here: no second
+	// walk of the target's plan, which planned() would make. Most parts list no Avoid, so the kind check comes first
+	// and they never reach the anchor lookup.
+	bool anchorChecked = false;
+	for (const InterplayRule& rule : spec.rules) {
+		if (rule.kind != RuleKind::Avoid || effectiveStrength(rule) != kFullStrength) {
+			continue;
+		}
+		// The short-cut, before the first rule's walk of its target: an anchor always plays, so a step the source
+		// anchors is never avoided.
+		if (!anchorChecked) {
+			const PatternState& state = parts_[partIndex].lanes[0];
+			if (state.entry >= 0) {
+				const Pattern& pattern = spec.pool[state.entry];
+				if (pattern.importance[step.index % pattern.length] == kAnchor) {
+					return false;
+				}
+			}
+			anchorChecked = true;
+		}
+		if (against(rule, step.index, step.density)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+GEN_STEP_CODE int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
+	return deluge::generative::effectiveStrength(rule, recipe_.macros[Macro::Complexity],
+	                                             genre_->defaults[Macro::Complexity]);
 }
 
 int32_t Generator::energyLayer(int32_t energy) const {
@@ -239,6 +306,9 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 
 void Generator::cutSectionLine(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		// A Sustain that holds across Section lines keeps its notes ending on this line uncut, so decideSustain() can
+		// hold those whose pitch stays (spec §5.2). A Section line falls on a bar line, where every one of them ends.
+		const bool holds = genre_->parts[p].sustain.holdsAcrossSections;
 		// An FX note held back by its gate belongs to the Section that placed it, too.
 		held_.forEach(p, [](SoundingNote& note) {
 			if (isFxLane(note.lane)) {
@@ -246,22 +316,27 @@ void Generator::cutSectionLine(const Step& step) {
 			}
 		});
 		sounding_.forEach(p, [&](SoundingNote& note) {
+			if (holds && note.offTick == step.tick) {
+				return;
+			}
 			// An FX note belongs to the Section that placed it, so it ends here and its tail rings out: a Riser cut
 			// short by a forced Section never comes back in the next one.
 			if (note.offTick > step.tick && !isFxLane(note.lane)) {
 				held_.hold(p, note);
 			}
-			SoundingNotes::cutAt(note, step.tick); // nothing holds on across the line (a Sustain re-strikes)
+			// Nothing holds on across the line (a Sustain re-strikes, unless it holds).
+			SoundingNotes::cutAt(note, step.tick);
 		});
 	}
 }
 
-void Generator::lateEntries(const Step& step) {
+GEN_STEP_CODE void Generator::lateEntries(const Step& step, uint8_t avoidedParts) {
 	const int32_t barEnd = step.tick + kStepsPerBar * kTicksPerStep;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const bool avoidsLine = (avoidedParts & partBit(p)) != 0;
 		held_.forEach(p, [&](SoundingNote& note) {
-			if (!gateOpen(p, note.lane) || keptOut(step, p, note.lane)) {
-				return; // still gated out, or kept out by a section rule or a Rest: it waits
+			if (avoidsLine || !gateOpen(p, note.lane) || keptOut(step, p, note.lane)) {
+				return; // still gated out, kept out by a section rule or a Rest, or avoiding the line: it waits
 			}
 			note.used = false;
 			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
@@ -295,7 +370,8 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	const int32_t lanes = laneCount(spec);
 	LaneNote notes[kMaxLanesPerPart] = {};
-	bool rolls[kMaxLanesPerPart] = {};
+	// The roll each lane plays on this step, the Build roll's or a Roll fill's; RollStep's stage starts at None.
+	RollStep rolls[kMaxLanesPerPart];
 	for (int32_t l = 0; l < lanes; l++) {
 		const LaneSpec& lane = spec.lanes[l];
 		LaneNote& note = notes[l];
@@ -304,6 +380,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			placePick(parts_[partIndex].lanes[l], static_cast<uint8_t>(partIndex), lane.lane, step);
 		}
 		if (!lane.pool.empty()) {
+			countHalves(partIndex, l, step); // its targets, earlier lanes and parts, have picked
 			PatternState& pick = parts_[partIndex].lanes[l];
 			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
 			const Pattern& pattern = lane.pool[pick.entry];
@@ -335,13 +412,21 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		if (int32_t fx = fxNoteTicks(lane, step); fx > 0) {
 			note = {true, VelocityLevel::Normal, fx, 0};
 		}
-		if (step.rollStage != RollStage::None && lane.lane == genre_->arc.roll.lane) {
-			rolls[l] = true;
+		if (buildRollsOn(step, lane.lane)) {
+			rolls[l] = step.buildRoll;
 			note.on = false;
+		}
+		// A Roll fill replaces the lane's own hits too, but plays only where the lane's and the part's gates let the
+		// lane play, as a Swap does (spec §8.7). fillRules() has left the Build roll's lane out of it.
+		else if (step.roll.has(partIndex, lane.lane)) {
+			note.on = false;
+			if (gateOpen(partIndex, lane.lane)) {
+				rolls[l] = step.fillRoll;
+			}
 		}
 		if (silenced(step, partIndex, lane.lane)) {
 			note.on = false;
-			rolls[l] = false;
+			rolls[l] = {};
 		}
 		// A Rest comes after everything else. The roll lane is never in it while it rolls (Build roll > fill).
 		if (step.rest.has(partIndex, lane.lane)) {
@@ -349,20 +434,24 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 		}
 	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
-	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, whatever its gate.
-	// Nothing replaces the roll: the roll lane always plays (spec §9.5).
-	const bool rollHitsHere = rollHits(step.rollStage, step.index) > 0;
+	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, the Build roll's
+	// whatever its gate. Nothing replaces the Build roll: the roll lane always plays (spec §9.5).
 	for (const ReplacePair& pair : genre_->replacePairs) {
 		int32_t replacing = laneIndexOf(spec, pair.replacing);
 		int32_t replaced = laneIndexOf(spec, pair.replaced);
 		if (replacing >= 0 && replaced >= 0
-		    && ((rolls[replacing] && rollHitsHere) || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
+		    && (rollHits(rolls[replacing].stage, step.index) > 0
+		        || (notes[replacing].on && gateOpen(partIndex, pair.replacing)))) {
 			notes[replaced].on = false;
+			// A Roll fill's hits are the lane's own, so they give way as a Swap's do; the Build roll's never do.
+			if (!buildRollsOn(step, pair.replaced)) {
+				rolls[replaced] = {};
+			}
 		}
 	}
 	for (int32_t l = 0; l < lanes; l++) {
-		if (rolls[l]) {
-			playRoll(partIndex, l, step);
+		if (rolls[l].stage != RollStage::None) {
+			playRoll(partIndex, l, step, rolls[l]);
 		}
 		else if (notes[l].on) {
 			playLane(partIndex, l, notes[l], step);
@@ -383,8 +472,8 @@ PatternState Generator::fillPick(const PatternState& lanePick, const LaneSpec& l
 	return pick;
 }
 
-GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick,
-                                      int32_t patternStep, const Decided& decided, const Step& step) {
+GEN_STEP_CODE int32_t Generator::express(int32_t partIndex, const Expression& expression, const PatternState& pick,
+                                         int32_t patternStep, const Decided& decided, const Step& step) {
 	const auto part = static_cast<uint8_t>(partIndex);
 	const uint8_t take = takes_.take[partIndex];
 
@@ -425,13 +514,13 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 		                       .lane = note.lane,
 		                       .pitch = note.pitch,
 		                       .used = true});
-		return;
+		return start;
 	}
 
 	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
 	if (decided.tie && ornament == OrnamentKind::None
 	    && sounding_.extend(partIndex, note.lane, note.pitch, note.onTick, note.offTick)) {
-		return; // a slide onto the same note ties
+		return start; // a slide onto the same note ties
 	}
 	switch (ornament) {
 	case OrnamentKind::None:
@@ -458,7 +547,7 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 			noteOn(partIndex, {decided.lane, decided.pitch, static_cast<int16_t>(hitBase),
 			                   velocity(hitBase, step.energy), on, on + length, i > 0});
 		}
-		return;
+		return start;
 	}
 	case OrnamentKind::Flam: {
 		// A soft grace hit a gap before the main hit, which never moves. The grace hit lands no earlier than -12, or
@@ -479,6 +568,7 @@ GEN_STEP_CODE void Generator::express(int32_t partIndex, const Expression& expre
 	}
 	}
 	noteOn(partIndex, note);
+	return start;
 }
 
 Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,

@@ -243,14 +243,14 @@ constexpr void softBreakDip(Genre& genre) {
 
 constexpr Scale kAcidScales[] = {Scale::Minor, Scale::Phrygian};
 
-/// The default genre (spec §4.5). Its drums, acid line and Arc play as Techno did before the split; the Drone is new
-/// (acid_fingerprint_spec).
+/// The default genre (spec §4.5). Its drums and acid line play as Techno did before the split, with a Drone under them
+/// and a soft Break dip (#120 round 1).
 constexpr Genre kTechnoAcid = [] {
 	Genre genre = subgenreOf(kTechnoParent);
 	genre.name = "techno-acid";
 	genre.oledName = "ACID TECHNO";
 	genre.shortName = "ACID";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kAcidScales;
@@ -258,6 +258,8 @@ constexpr Genre kTechnoAcid = [] {
 	genre.palette = &technoAcidPalette;
 	// The breakdown is the Drone under the parent's kick, rim and closed hat.
 	genre.arc.breakKeeps.parts = partBit(2);
+	// With the parent's dip the Drone lost its 5th and the drums thinned to a few hits (tuning, #120 round 1).
+	softBreakDip(genre);
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoAcid),
@@ -410,7 +412,7 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.name = "techno-melodic";
 	genre.oledName = "MELODIC TECHNO";
 	genre.shortName = "MELODIC";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 122;
 	genre.facts.tempoHighBpm = 128;
 	genre.facts.scales = kMelodicScales;
@@ -471,14 +473,15 @@ constexpr Pattern kSub[] = {
 };
 
 /// The & and the 16th after it, its ghost (spec §4.5): an anchored & every bar, and ghosted repeats on later &s and
-/// a's, as the chord's echo would fall, more of them as Complexity rises.
+/// a's, as the chord's echo would fall, more of them as Complexity rises. Every line has a ghosted repeat of
+/// importance 8 on each bar's last &, so the drop-out's Throw has a hit to spike on (#322, as Dub's skank).
 constexpr Pattern kDubStab[] = {
-    {"......X8......5.", ".......g......g.", 0, 2},
-    {"..X8..........5.", "...g..........g.", 0},
-    {"......X8..6...47", ".......g..g...gg", 1},
-    {"..X8......X8....", "...g.......g....", 1},
-    {"..X8..6...X8..47", "...g..g....g..gg", 2},
-    {"......X8..6.......5.......X8..4.", ".......g..g.......g........g..g.", 2},
+    {"......X8......8.", ".......g......g.", 0, 2},
+    {"..X8..........8.", "...g..........g.", 0},
+    {"......X8..6...87", ".......g..g...gg", 1},
+    {"..X8......X8..8.", "...g.......g..g.", 1},
+    {"..X8..6...X8..87", "...g..g....g..gg", 2},
+    {"......X8..6...8...5.......X8..8.", ".......g..g...g...g........g..g.", 2},
 };
 // clang-format on
 
@@ -516,13 +519,30 @@ constexpr LaneSpec kDubDrumLanes[] = {
     {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .expression = {.lean = {0, 2, 0, 2}, .spread = 14}},
 };
 
+/// Every part but the Stab plays at 76 percent of its preset's volume knob (each row's, on the Drums and FX), about
+/// 3.9 dB down (tuning, #322): the Stab's dry presets can't play louder (037's knob is at its top), so the rest comes
+/// down to keep the Stab where it sat with its presets' own echo (delugemu captures, the Stab alone and the rest,
+/// entropy 2, seed 1).
+constexpr uint8_t kDubRest = 76;
+
 constexpr PartSpec kDubDrums = [] {
 	PartSpec drums = kTechnoDrums;
 	drums.lanes = kDubDrumLanes;
+	drums.volume = kDubRest;
 	return drums;
 }();
 
+constexpr PartSpec kDubFx = [] {
+	PartSpec fx = kTechnoFx;
+	fx.volume = kDubRest;
+	return fx;
+}();
+
 constexpr LineWeight kSubDegrees[] = {{0, 1}};
+
+/// The Stab's echo, as Dub's skank has (spec §10.6): a dotted 8th, analog, ping-pong.
+constexpr DelaySetup kStabEcho{
+    .on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true, .analog = true};
 
 /// The root alone, now and then an octave down, never sliding, each note held for 6 steps (tuning): every kSub note
 /// ends before the next starts, so the sub plays one note at a time (loopNotesValid()).
@@ -545,12 +565,12 @@ constexpr PartSpec kDubParts[] = {
         .name = "SUB",
         .pool = kSub,
         .band = {0, 2},
-        // The tonic within 6 semitones of C4, and room for the octave under it: its presets sound two octaves
-        // down, so the root sounds between F#1 and F2 (a delugemu capture at E2 put it at 24.5 Hz).
-        .reg = {.anchor = 60, .spanLow = -12, .spanHigh = 7},
+        // The tonic within 6 semitones of C2, and room for the octave under it: the root sounds between F#1 and F2.
+        .reg = {.anchor = 36, .spanLow = -12, .spanHigh = 7},
         .loop = kSubLoop,
         .expression = {.spread = 4},
         .gestures = kGestures,
+        .volume = kDubRest,
     },
     {
         .role = Role::Chords,
@@ -561,9 +581,11 @@ constexpr PartSpec kDubParts[] = {
         .expression = {.spread = 8},
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
-        // The preset's volume knob (tuning): soft by itself, its stabs sat about 5 dB under the drums and sub
-        // together (delugemu capture, seed 1).
+        // The preset's volume knob: the pack's dry copies set its level (make_pack.py's DERIVED), and the rest of
+        // the parts come down to it (kDubRest).
         .volume = 100,
+        .delay = kStabEcho, // the Stab drop-out's throw target
+        .throwDelayDepth = 8,
     },
     {
         .role = Role::Pad,
@@ -574,12 +596,17 @@ constexpr PartSpec kDubParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Volume 50 (tuning), the knob at half the preset's position, is about -12 dB as played: at the preset's level
-        // the held root and fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1).
-        .volume = 50,
+        // Half the preset's knob position (tuning), about -12 dB as played: at the preset's level the held root and
+        // fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1). Then 76 percent of that,
+        // as every part but the Stab (kDubRest).
+        .volume = 50 * kDubRest / 100,
     },
-    kTechnoFx,
+    kDubFx,
 };
+
+/// The Stab for 2 bars, thrown, as Dub's skank drop-out (spec §8.8): its last hits echo across the gap.
+constexpr PartsAndLanes kStabOnly{.parts = partBit(2)};
+constexpr DropOutEntry kDubDropOuts[] = {{.mask = kStabOnly, .bars = 2, .weight = 1, .throwTarget = kStabOnly}};
 
 constexpr Scale kDubScales[] = {Scale::Minor, Scale::Dorian};
 
@@ -588,7 +615,7 @@ constexpr Genre kTechnoDub = [] {
 	genre.name = "techno-dub";
 	genre.oledName = "DUB TECHNO";
 	genre.shortName = "DUB";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 115;
 	genre.facts.tempoHighBpm = 125;
 	genre.facts.scales = kDubScales;
@@ -598,6 +625,10 @@ constexpr Genre kTechnoDub = [] {
 	genre.palette = &technoDubPalette;
 	// The breakdown is the Stab and the Pad over the rim.
 	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::Rim)};
+	// Dub's drop-out chance and gap (spec §4.5).
+	genre.dropOuts = kDubDropOuts;
+	genre.dropOutChance = 120;
+	genre.dropOutGapBars = 2;
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoDub),
@@ -624,7 +655,7 @@ constexpr Pattern kDetroitStab[] = {
     {"...X..8...8..7.6", ".............g.g", 1, 2},
     {"..7X..8..6.8..7.", "..g......g....g.", 1},
     {"...X.78..7.8.X.6", ".....g...g.....g", 2},
-    {"...X..8...8..7.....X..8..7..8.6.", ".............g............g..g..", 2},
+    {"...X..8...8..7.....X..8..7..8.6.", ".............g..................", 2},
 };
 
 /// One- and two-bar riffs, each opening on its anchored 1, stored as chord positions so they follow each change.
@@ -634,7 +665,7 @@ constexpr Pattern kDetroitRiffs[] = {
     {"X..8..X.7.8.X.6.", "..........g...g.", 1},
     {"X..8..X..7..X.8.X..8..X...8..7.6", "..............g................g", 1},
     {"X.78..X.7.8.X.68", "..g.......g...g.", 2},
-    {"X..8.7X..7.8X.6.X..8..X.7.8..9.6", ".....g.....g...g...........g...g", 2},
+    {"X..8.7X..7.8X.6.X..8..X.7.8..9.6", ".....g.....g...................g", 2},
 };
 // clang-format on
 
@@ -670,9 +701,7 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "BASS",
         .pool = kRootRhythm,
         .band = {0, 2},
-        // The Bass Register's shape two octaves up: its presets all sound two octaves down, so the tonic sounds
-        // between F#1 and F#2, its octave jumps an octave over it.
-        .reg = {.anchor = 60, .spanLow = -5, .spanHigh = 12},
+        // The Bass Register's default: the tonic sounds between F#1 and F2. Its octave jumps go an octave over it.
         .loop = kRootLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,
@@ -709,8 +738,10 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "MOTIF",
         .pool = kDetroitRiffs,
         .band = {0, 2},
-        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33 (tuning).
-        .densityGate = macroPoints(30),
+        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33. With the gate's
+        // hysteresis (2) it stays open while any lift is left and closes on the bar where the lift has decayed to the
+        // centre: the whole Drop and none of the Groove (tuning, #120 round 1).
+        .densityGate = macroPoints(27),
         .motif = {.positions = kRiffPositions,
                   .draws = {.leap = {2, 4}, .octaveUp = {0, 150}, .accent = 150},
                   .reroll = 100,
@@ -753,7 +784,7 @@ constexpr Genre kTechnoDetroit = [] {
 	genre.name = "techno-detroit";
 	genre.oledName = "DETROIT TECHNO";
 	genre.shortName = "DETROIT";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kDetroitScales;

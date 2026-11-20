@@ -14,8 +14,26 @@
 # gen_browser open part= pick=<the part's pick> at=<the selected file>; gen_browser at=<folder>/<file> on each move;
 # gen_browser chose part= path=; gen_browser closed. gen_press browser|chosen|sound part= previous= result=<0
 # preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload say
-# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|-> ... end=<q|->[+]: the sidebar's state (+: End's pad lit). ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
-# Mono Bass.
+# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|-> ... end=<q|->[+]: the sidebar's state (+: End's pad lit). ACID's palette: 005 Sweet Mono Bass
+# alone.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/ui/browser/perform_preset_browser.cpp
+# covers: src/deluge/generative/perform/press_outcome.h src/deluge/generative/perform/sidebar.*
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/pump.*
+# covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/sound_controls.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/adapter_timing.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/perform/clip_page.*
+# covers: src/deluge/generative/perform/oled_page.* src/deluge/generative/perform/queue_text.*
+# covers: src/deluge/generative/perform/text.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -84,11 +102,11 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_press force BREAK
-expect event force=B within=2
+expect event /^gen_sidebar .*force=B/ within=2
 pad 17 6 down
 wait 50
 pad 17 6 up
-expect event force=- within=2
+expect event /^gen_sidebar .*force=-/ within=2
 # End isn't available under it, as under Perform's other overlays: a hold doesn't arm it
 mark
 pad 17 0 down
@@ -158,7 +176,7 @@ pad 17 0 down
 wait 50
 pad 17 0 up
 expect event gen_end tap since=mark within=5
-expect event end=- within=2
+expect event /^gen_sidebar .*end=-/ within=2
 
 # ---- A preset ACID's palette doesn't list: chosen, preloaded with ACID's load-time settings, swapped on the line ----
 button SYNTH down
@@ -250,12 +268,17 @@ pad 1 6 down
 wait 50
 pad 1 6 up
 expect event gen_press sound part=1 previous=0 result=0
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
 # ---- Cancels of a chosen preset waiting for its line: SYNTH, the NEW SOUND pad, a BACK tap ----
-# Each is chosen just after a phrase starts, so its line is a phrase away when it is cancelled
+# Each is chosen just after a phrase starts, so its line is a phrase away when it is cancelled. Each cancel's "mark now"
+# sits right after its input, before the cancel's own expects: a mark after them would miss a swap that landed while
+# one waited (the hole #314 closed). The phrase line the next choose waits for is then the first after the cancel,
+# 12 to 14 s after it (in delugemu the cancels came 0.7 to 2.4 s into their 15 s phrases), and the cancel's expects
+# end within about a second, at most 11 s when slow (within=1 and within=10): the line can't pass during them, so
+# each choose still comes just after a phrase starts.
 mark now
 expect event gen_phrase bar= since=mark within=40
 include perform_choose_002.txt
@@ -264,24 +287,24 @@ expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
 button SYNTH down
 wait 50
 button SYNTH up
+mark now
 expect event gen_sound_cancel part=1 waiting
 expect event gen_press sound part=1 previous=0 result=1
 expect no_event gen_browser open within=1
 expect event gen_outputs_freed outputs=1 within=10
-expect no_event gen_sound_swap within=20
-mark now
 expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
 pad 1 6 down
 wait 50
 pad 1 6 up
+mark now
 expect event gen_sound_cancel part=1 waiting
 expect event gen_outputs_freed outputs=1 within=10
-expect no_event gen_sound_swap within=20
-mark now
 expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 include perform_choose_002.txt
 expect event gen_sound_preload done part=1 source=chosen within=10
 expect event gen_clip part=1 takes=Pn.............. freeze=0 sound=w
@@ -290,10 +313,12 @@ expect no_event gen_sound_swap since=mark within=0.2
 button BACK down
 wait 50
 button BACK up
+mark now
 expect event gen_back_tap
 expect event gen_sound_cancel part=1 dropped within=5
 expect event gen_outputs_freed outputs=1 within=10
-expect no_event gen_sound_swap within=20
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 
 # ---- Cancels of a chosen preset still preloading ("hold preload" parks it): SYNTH, a BACK tap ----
 hold preload
@@ -306,7 +331,11 @@ button SYNTH up
 expect event gen_sound_cancel part=1 preload
 expect event gen_sound_preload cancelled part=1 source=chosen within=10
 release preload
-expect no_event gen_sound_swap within=20
+# A held preload: the mark goes after "release preload", the first moment it could swap. Blind spot: a phrase line
+# that comes while the preload still loads moves its swap a line later, and within=1 passes (about 0.4 s in 15 s).
+mark now
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 hold preload
 include perform_choose_002.txt
 expect event gen_sound_preload_held part=1 within=10
@@ -316,7 +345,11 @@ button BACK up
 expect event gen_back_tap preload within=10
 expect event gen_sound_preload cancelled part=1 source=chosen within=10
 release preload
-expect no_event gen_sound_swap within=20
+# A held preload: the mark goes after "release preload", the first moment it could swap. Blind spot: a phrase line
+# that comes while the preload still loads moves its swap a line later, and within=1 passes (about 0.4 s in 15 s).
+mark now
+expect event gen_phrase bar= since=mark within=40
+expect no_event gen_sound_swap since=mark within=1
 
 # ---- Refused while the runner is busy (a Kit part's preload): the re-roll's popup, and the browser doesn't open ----
 # On the SONG page, where DRUMS' row is a part row
@@ -357,7 +390,7 @@ wait 50
 button KIT up
 expect event gen_press sound part=1 previous=0 result=0
 expect no_event gen_browser open within=1
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -418,7 +451,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition phase=preloading
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=15
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=15
 expect event gen_transition phase=queued within=15
 # ACID is still locked: the new roster hasn't started
 button SYNTH down

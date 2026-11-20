@@ -6,6 +6,9 @@
 # Outputs are freed. With --events 'gen_transition|gen_key|gen_start' the log says where each landed. Nothing here
 # can fail but the device; it only plays.
 # needs: a Deluge and someone listening
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/core/genres/ src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt

@@ -161,10 +161,43 @@ struct ExtensionGuard {
 	uint16_t rejectedAbove = 1U << 1; ///< The default: a semitone, which catches ♭9 and ♭6 over the 5th.
 };
 
-/// The chord on `root` (steps from the tonic) in `scale`, with up to `extensionLevel` Extensions tried in priority
-/// order 7, 9, sus4, 6 and voiced at 4 notes at most: sus4 replaces the 3rd, an Extension that would make a 5th note
-/// drops the 5th, and the 6 is only tried when the 7 was rejected.
-Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard = {});
+/// The Extensions, each by its interval in scale steps above the chord's root.
+enum class Extension : int8_t { Sus4 = 3, Sixth = 5, Seventh = 6, Ninth = 8 };
+constexpr int32_t kExtensions = 4;
+
+/// The order Extensions are tried in (spec §7.4): the Generator-wide 7, 9, sus4, 6 unless a genre sets its own. Each
+/// Extension once, the 6 after the 7 (harmonyValid()).
+struct ExtensionOrder {
+	Extension tries[kExtensions] = {Extension::Seventh, Extension::Ninth, Extension::Sus4, Extension::Sixth};
+};
+/// 9 and sus4 before the 7 (Ambient's): add9 at level 1, a sus4 add9 at level 2, and a 7th only where the 9 or the
+/// sus4 is guarded.
+constexpr ExtensionOrder kNinthFirst{{Extension::Ninth, Extension::Sus4, Extension::Seventh, Extension::Sixth}};
+
+/// Whether `order` tries each Extension once, the 6 after the 7: a 6 before it would never play.
+constexpr bool extensionOrderValid(const ExtensionOrder& order) {
+	int32_t seen = 0;
+	for (Extension extension : order.tries) {
+		const bool known = extension == Extension::Sus4 || extension == Extension::Sixth
+		                   || extension == Extension::Seventh || extension == Extension::Ninth;
+		if (!known) {
+			return false; // checked before the shift: an unknown value could be negative or past the int's width
+		}
+		const int32_t bit = 1 << static_cast<int32_t>(extension);
+		if ((seen & bit) != 0
+		    || (extension == Extension::Sixth && (seen & 1 << static_cast<int32_t>(Extension::Seventh)) == 0)) {
+			return false;
+		}
+		seen |= bit;
+	}
+	return true;
+}
+
+/// The chord on `root` (steps from the tonic) in `scale`, with up to `extensionLevel` Extensions tried in `order`
+/// (7, 9, sus4, 6 by default) and voiced at 4 notes at most: sus4 replaces the 3rd, an Extension that would make a
+/// 5th note drops the 5th, and the 6 is only tried when the 7 was rejected.
+Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard = {},
+                 ExtensionOrder order = {});
 
 /// How many Extensions a chord gets at `complexity`, by Generator-wide thresholds (tuning), clamped to the genre's
 /// floor and ceiling. Deterministic, with no draw.

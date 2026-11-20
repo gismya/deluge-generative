@@ -29,7 +29,7 @@ class GeneratorSize(unittest.TestCase):
         self.assertEqual(generator_size.limit_from(header), 16384)
 
     def test_reads_the_figure_spec_20_states(self):
-        text = "The POC's core was 1664 B.\n\nThe M1 core is 13,304 B of state per Generator block on ARM (...)\n"
+        text = "The POC's core was 1664 B.\n\nThe core is 13,304 B of state per Generator block on ARM (...)\n"
         self.assertEqual(generator_size.spec_figure(text), 13304)
 
     def test_passes_when_it_fits_and_matches_spec_20(self):

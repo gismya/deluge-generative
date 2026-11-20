@@ -14,7 +14,10 @@ otherwise.
   load-time setting does the same. `gen_sound_level` (test builds) reports the patcher's final volume against the
   preset's, and the probe scripts check a `.volume = 50` part plays `lower`.
 - Perform's song is built while another song is current. Drum, arp and sidechain constructors take sync defaults
-  from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. `preLoadedSong`
+  from `preLoadedSong`, else `currentSong`, so `applySyncDefaults()` (`perform_song.cpp`) resets them. It writes
+  `delay.syncLevel` too, so a delay setup (`applyDelaySetup()`) goes after it, or the setup's note is lost (#320 hit
+  this on sample rows). The stock sync level counts from the song's tick magnitude (Perform's song plays a 16th at 6,
+  not the `SYNC_LEVEL_16TH` 5 its name says): `delaySyncLevel()` turns a note into one. `preLoadedSong`
   is set only at the swap: a pending launch event could otherwise swap in a half-built song.
 - `doSongSwap()` leaves `currentUIMode` and the working animation set. Clear both after it, as `PerformAdapter::swapIn()`
   (`entry_leave.cpp`) and stock Clear song do.
@@ -79,3 +82,26 @@ otherwise.
   routine (once per Kit row), which can cull the part's tail on the way. `freePartOutput()` takes the part's Sounds
   (`soundsOf()`) first and compares them by address after. A piece's start resets the whole record, which covers
   entry and leave.
+- Whole-sound transpose (#311, spec §10.6, ADR 0007): `applySoundSettings()` sets `Sound::transpose` to 0 when
+  `SoundSettings::zeroTranspose` is set, which `partSoundSettings()` sets for Bass, Lead, Chords and Pad; Kit rows
+  and FX lanes' synths (`laneSoundSettings()`) keep theirs. Nothing caches it: `Voice::noteOn()` reads it per note,
+  and a fresh Output has no voices, so unlike the sound editor's transpose there is no
+  `recalculateAllVoicePhaseIncrements()` to run. The default synth (`setupAsDefaultSynth()`) saves −12, so a
+  fallback to it plays at 0 too. An oscillator's own transpose (`Source::transpose`) is left alone, so a preset that
+  puts its octave on every oscillator still sounds off: `osc_octaves.py` flags those in the palettes. Test builds
+  report `gen_sound_transpose PART LANE saved= played=` (LANE `-` for a synth part) apart from `gen_sound`, which is
+  near the 120-byte event line already; `perform_transpose.txt` checks it.
+- Trap (#332): `gen_mem ... internal=` in the hundreds of millions or billions means something wrote into the
+  internal heap's free-space records, not that memory grew, and the next allocation hangs (often a preload's, so the
+  test port stops answering). In the Release and test-port links `emptySpacesMemoryInternal` sits right after
+  `spareRenderingBuffer` (check with `arm-none-eabi-nm -n -S -C`), so an overrun past the voice's scratch rows lands
+  there. #332's was stock DSP: `renderOsc()`'s `renderOscSync()` storage lambdas store 4 samples at a time
+  (`vst1q_s32`) and can run 3 past the window, and ringmod rendered oscillator 2 into the last row unpadded. A pulse
+  width on a basic oscillator other than a square usually renders through sync (the table saws and the sine; a low
+  triangle and the crude low saw have one-sample sync loops), so any ringmod preset with one on oscillator
+  2 (125 Evolving Pad as saved, or a saw or sine whose pulse width a sound control moves off 0) wrote audio into the
+  records. The wavetable path never overran: `WaveTable::render()` stores one sample at a time. Fixed in
+  `Oscillator::renderOsc()` (`takeOscSyncRender()`);
+  `perform_ringmod_sync.txt` covers it. A sound control may move a param where stock presets rarely sit, so it reaches
+  stock paths nothing else exercises: suspect those before Generative code. To find the writer, give the suspect
+  buffer a spare row, zero it, and after each render report (a TEST_EVENT) which call left it non-zero.

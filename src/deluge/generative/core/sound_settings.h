@@ -44,7 +44,23 @@ struct SoundSettings {
 	uint8_t portamento = 0;
 	/// The post-FX volume knob, as a percent of the preset's position. 100 keeps the preset's.
 	uint8_t volume = 100;
+	/// Sets the preset's whole-sound transpose to 0, leaving each oscillator's, so a pitched part's Register is the
+	/// pitch heard whatever the pick (ADR 0007). FX lanes' synths and Kit rows keep theirs.
+	bool zeroTranspose = false;
+	/// The sound's delay setup (spec §10.6): when `on`, its Delay's sync level and type, ping-pong and analog are
+	/// written; feedback stays as the preset saved it.
+	DelaySetup delay;
 };
+
+/// The Delay's sync level for `note` in a song whose ticks run at `magnitude` (its inside-world tick magnitude plus its
+/// BPM offset): the stock levels count from 1, a whole note at the default magnitude 3, and a song at another
+/// magnitude shifts them, as its 16th's 8 - magnitude does (spec §10.6). Held to the stock 1..9.
+constexpr int32_t delaySyncLevel(DelayNote note, int32_t magnitude) {
+	const int32_t level = 4 - magnitude + static_cast<int32_t>(note);
+	// 0 is the stock's "off" and 9 its shortest, so a song far from the default magnitude gets the nearest synced
+	// length rather than no delay.
+	return level < 1 ? 1 : level > 9 ? 9 : level;
+}
 
 /// Scales a knob param's value to `percent` of its knob position, the int32 range read as 0 at INT32_MIN and full at
 /// INT32_MAX, as the knob's 0–50 shows it. 50 halves the knob: a preset at 50 starts at 25, one at 40 at 20.
@@ -68,10 +84,12 @@ constexpr VoicePriorityLevel rolePriority(Role role) {
 	return VoicePriorityLevel::Medium;
 }
 
-/// A synth part's settings: its role's voice mode (spec §5.8), voice priority and portamento.
+/// A synth part's settings: its role's voice mode (spec §5.8), voice priority, portamento and, on a pitched part,
+/// whole-sound transpose 0.
 constexpr SoundSettings partSoundSettings(const PartSpec& part) {
 	SoundSettings settings;
 	settings.priority = rolePriority(part.role);
+	settings.zeroTranspose = part.role != Role::Drums && part.role != Role::FX;
 	switch (part.role) {
 	case Role::Bass:
 		settings.voiceMode = VoiceMode::Legato;
@@ -89,6 +107,7 @@ constexpr SoundSettings partSoundSettings(const PartSpec& part) {
 		break;
 	}
 	settings.volume = part.volume;
+	settings.delay = part.delay;
 	if (part.flavour == Flavour::Loop) {
 		settings.slides = true;
 		settings.portamento = part.role == Role::Bass ? 6 : 8;
@@ -103,6 +122,13 @@ constexpr SoundSettings laneSoundSettings(Lane lane) {
 	if (lane == Lane::ClosedHat || lane == Lane::OpenHat) {
 		settings.voiceMode = VoiceMode::Choke;
 	}
+	return settings;
+}
+/// The same for `part`'s lane, with the delay setup its LaneSpec gives the row and the part's volume (spec §10.6).
+constexpr SoundSettings laneSoundSettings(const PartSpec& part, Lane lane) {
+	SoundSettings settings = laneSoundSettings(lane);
+	settings.volume = part.volume;
+	settings.delay = delaySetupOf(part, lane);
 	return settings;
 }
 

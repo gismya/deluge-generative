@@ -54,6 +54,16 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(partSoundSettings(part(Role::Chords, Flavour::Stab)).slides).to_be_false();
 	});
 
+	it("zeroes the whole-sound transpose of a pitched part's preset, and keeps an FX lane's and a Kit row's", _ {
+		expect(partSoundSettings(part(Role::Bass, Flavour::Loop)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Lead, Flavour::Arp)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Chords, Flavour::Stab)).zeroTranspose).to_be_true();
+		expect(partSoundSettings(part(Role::Pad, Flavour::Sustain)).zeroTranspose).to_be_true();
+		for (int32_t l = 0; l < kNumLanes; l++) {
+			expect(laneSoundSettings(static_cast<Lane>(l)).zeroTranspose).to_be_false();
+		}
+	});
+
 	it("scales the volume knob by its position, so 50 percent halves it", _ {
 		expect(scaleKnob(INT32_MIN, 50)).to_equal(INT32_MIN);
 		expect(scaleKnob(0x12345678, 100)).to_equal(int32_t{0x12345678});
@@ -64,8 +74,8 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(scaleKnob(0x40000000, 50)).to_equal(int32_t{INT32_MIN / 4});
 	});
 
-	it("starts each Techno subgenre's Pad (Acid techno's Drone) at half its preset's volume, every other part at the preset's", _ {
-		for (const Genre* genre : {&genres::technoMelodic, &genres::technoAcid, &genres::technoDub}) {
+	it("starts Melodic and Acid techno's Pad (Acid techno's Drone) at half its preset's volume, every other part at the preset's", _ {
+		for (const Genre* genre : {&genres::technoMelodic, &genres::technoAcid}) {
 			for (const PartSpec& p : genre->parts) {
 				uint8_t expected = p.role == Role::Pad ? 50 : 100;
 				expect(partSoundSettings(p).volume).to_equal(expected);
@@ -78,6 +88,65 @@ describe sound_settings("Load-time sound settings", $ {
 			const uint8_t expected = p.role == Role::Pad ? 60 : p.role == Role::Chords ? 80 : 100;
 			expect(partSoundSettings(p).volume).to_equal(expected);
 		}
+	});
+
+	it("starts Dub techno's Stab at its preset's volume, its Pad at 38 percent and every other part (each kit row) at 76 (#322)", _ {
+		for (const PartSpec& p : genres::technoDub.parts) {
+			const uint8_t expected = p.role == Role::Chords ? 100 : p.role == Role::Pad ? 38 : 76;
+			expect(partSoundSettings(p).volume).to_equal(expected);
+			for (const LaneSpec& lane : p.lanes) {
+				expect(laneSoundSettings(p, lane.lane).volume).to_equal(expected);
+			}
+		}
+	});
+
+	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322)", _ {
+		for (const Genre* genre : allGenres()) {
+			if (genre == &genres::technoDub) {
+				continue;
+			}
+			for (const PartSpec& p : genre->parts) {
+				for (const LaneSpec& lane : p.lanes) {
+					expect(laneSoundSettings(p, lane.lane).volume).to_equal(uint8_t{100});
+				}
+			}
+		}
+	});
+
+	it("gives a Kit part's rows the part's volume, and the preset's when the part keeps it (spec §10.6)", _ {
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick}, {.lane = Lane::Snare}};
+		static constexpr PartSpec kKit{.role = Role::Drums, .lanes = kLanes, .volume = 70};
+		expect(laneSoundSettings(kKit, Lane::Kick).volume).to_equal(uint8_t{70});
+		expect(laneSoundSettings(kKit, Lane::Snare).volume).to_equal(uint8_t{70});
+		static constexpr PartSpec kPlain{.role = Role::Drums, .lanes = kLanes};
+		expect(laneSoundSettings(kPlain, Lane::Kick).volume).to_equal(uint8_t{100});
+		expect(laneSoundSettings(Lane::Kick).volume).to_equal(uint8_t{100});
+	});
+
+	it("carries a synth part's delay setup and each lane's row's, and none where the genre gives none (spec §10.6)", _ {
+		constexpr DelaySetup kDotted{.on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true};
+		constexpr DelaySetup kTriplet{.on = true, .note = DelayNote::Quarter, .feel = DelayFeel::Triplet, .analog = true};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Snare, .delay = kTriplet}, {.lane = Lane::ClosedHat}};
+		static constexpr PartSpec kKit{.role = Role::Drums, .lanes = kLanes, .delay = kDotted};
+		PartSpec bass = part(Role::Bass, Flavour::Loop);
+		expect(partSoundSettings(bass).delay.on).to_be_false();
+		bass.delay = kDotted;
+		expect(partSoundSettings(bass).delay == kDotted).to_be_true();
+		expect(laneSoundSettings(kKit, Lane::Snare).delay == kTriplet).to_be_true();
+		expect(laneSoundSettings(kKit, Lane::ClosedHat).delay.on).to_be_false(); // the kit's is at kit level, not a row's
+		// The rest of a lane's settings are its lane's.
+		expect(laneSoundSettings(kKit, Lane::ClosedHat).voiceMode == VoiceMode::Choke).to_be_true();
+	});
+
+	it("syncs a delay to its note at the song's tick magnitude, as a 16th is 8 - magnitude", _ {
+		expect(delaySyncLevel(DelayNote::Sixteenth, 3)).to_equal(5); // the stock SYNC_LEVEL_16TH at the default
+		expect(delaySyncLevel(DelayNote::Whole, 3)).to_equal(1);
+		for (const int32_t magnitude : {1, 2, 3, 4}) {
+			expect(delaySyncLevel(DelayNote::Sixteenth, magnitude)).to_equal(8 - magnitude);
+			expect(delaySyncLevel(DelayNote::Eighth, magnitude)).to_equal(7 - magnitude);
+		}
+		expect(delaySyncLevel(DelayNote::Whole, 4)).to_equal(1); // held to the stock range
+		expect(delaySyncLevel(DelayNote::ThirtySecond, -2)).to_equal(9);
 	});
 });
 

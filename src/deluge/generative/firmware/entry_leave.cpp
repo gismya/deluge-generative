@@ -35,6 +35,7 @@
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
 #include <new>
+#include <span>
 
 extern void setUIForLoadedSong(Song* song);
 
@@ -248,14 +249,70 @@ EntryJob entry;
 LeaveJob teardown;
 } // namespace
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// Raw SDRAM for delayTestGenre()'s copies, so they cost no internal RAM and need no constructor at boot.
+struct DelayTestTables {
+	alignas(Genre) uint8_t genre[sizeof(Genre)];
+	alignas(PartSpec) uint8_t parts[kMaxParts][sizeof(PartSpec)];
+	alignas(LaneSpec) uint8_t lanes[kMaxLanesPerPart][sizeof(LaneSpec)];
+};
+PLACE_SDRAM_BSS DelayTestTables delayTestTables;
+
+/// The test roster of "hold delay_setups" (TestPort::delaySetupsHeld()): `genre` with a dotted-half ping-pong delay on
+/// its Bass, a dotted-quarter one on its Drums kit at kit level and an analog quarter triplet on the Snare row (spec
+/// §10.6), long notes so a slow tempo reaches the largest buffers (spec §20), and a Break that keeps only its Pad.
+/// Built in place each entry. The Recipe then points at this copy, not at the genre in kGenres, so while it plays a
+/// Regenerate of the same genre, or anything else that compares genre pointers, sees a genre change: a script under the
+/// hold shouldn't rely on those.
+const Genre& delayTestGenre(const Genre& genre) {
+	Genre& copy = *new (delayTestTables.genre) Genre(genre);
+	auto* parts = reinterpret_cast<PartSpec*>(delayTestTables.parts);
+	auto* lanes = reinterpret_cast<LaneSpec*>(delayTestTables.lanes);
+	const int32_t count = partCount(genre);
+	for (int32_t p = 0; p < count; p++) {
+		PartSpec& part = *new (&parts[p]) PartSpec(genre.parts[p]);
+		if (part.role == Role::Bass) {
+			part.delay = {.on = true, .note = DelayNote::Half, .feel = DelayFeel::Dotted, .pingPong = true};
+		}
+		if (part.role == Role::Drums) {
+			part.delay = {.on = true, .note = DelayNote::Quarter, .feel = DelayFeel::Dotted};
+			const int32_t laneTotal = laneCount(part);
+			for (int32_t l = 0; l < laneTotal; l++) {
+				new (&lanes[l]) LaneSpec(part.lanes[l]);
+				if (lanes[l].lane == Lane::Snare) {
+					lanes[l].delay = {
+					    .on = true, .note = DelayNote::Quarter, .feel = DelayFeel::Triplet, .analog = true};
+				}
+			}
+			part.lanes = std::span<const LaneSpec>(lanes, laneTotal);
+		}
+	}
+	copy.parts = std::span<const PartSpec>(parts, count);
+	// The Break keeps only the Pad (Acid's Drone), so the Bass and the kit both throw into it, and their two buffers
+	// are allocated together (spec §20). Builds keep what they kept.
+	copy.arc.buildKeeps = genre.arc.buildKeeps == kSameAsBreakKeeps ? genre.arc.breakKeeps : genre.arc.buildKeeps;
+	PartsAndLanes keeps;
+	for (int32_t p = 0; p < count; p++) {
+		keeps.parts |= genre.parts[p].role == Role::Pad ? partBit(p) : 0;
+	}
+	copy.arc.breakKeeps = keeps;
+	TEST_EVENT("gen_delay_setups genre=%s", genre.name);
+	return copy;
+}
+} // namespace
+#endif
+
 bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
 	if (active() || runner.busy()) {
 		return false;
 	}
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
-#endif
+	entry.prepare(TestPort::delaySetupsHeld() ? delayTestGenre(genre) : genre, ended);
+#else
 	entry.prepare(genre, ended);
+#endif
 	return runner.submit(entry); // only false if entry is already queued, which the busy check rules out
 }
 

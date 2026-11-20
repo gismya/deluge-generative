@@ -20,6 +20,9 @@
 #include "generative/core/generator.h"
 #include "generative/core/motion_curve.h"
 #include <algorithm>
+#ifdef GENERATOR_TEST_SEAMS
+#include <cassert>
+#endif
 
 namespace deluge::generative {
 
@@ -27,6 +30,8 @@ namespace {
 
 /// Fields of an automatic fill's draws: whether one plays, and which entry.
 enum FillField : int32_t { kFillWhether, kFillWhich };
+/// Fields of a drop-out's draw: whether one starts on the next bar line, and which entry.
+enum DropOutField : int32_t { kDropOutWhether, kDropOutWhich };
 
 } // namespace
 
@@ -57,12 +62,11 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 		}
 
 		// Velocity climbs to the Gap (spec §8.3).
-		step.rollStage = rollStageOn(rules, arc_, step.complexity);
-		if (step.rollStage != RollStage::None) {
+		step.buildRoll.stage = rollStageOn(rules, arc_, step.complexity);
+		if (step.buildRoll.stage != RollStage::None) {
 			const int32_t span = arc_.sectionSteps() - gap; // the roll's whole run, to the Gap
 			const int32_t left = toDrop - gap;
-			step.rollVelocity =
-			    static_cast<int16_t>(kRollVelocity[0] + (kRollVelocity[1] - kRollVelocity[0]) * (span - left) / span);
+			step.buildRoll.velocity = climbVelocity(kRollVelocity[0], kRollVelocity[1], span - left, span);
 		}
 	}
 
@@ -79,6 +83,68 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 	}
 }
 
+// ---- Drop-outs (spec §8.8) ----
+
+GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
+	const std::span<const DropOutEntry> entries = genre_->dropOuts;
+	if (entries.empty()) {
+		return;
+	}
+	const int32_t n = step.index;
+	// Any Section line ends a drop-out on it: one playing ends there, and one drawn to start there or after doesn't
+	// play. A part already spiked for it comes home on its next hit, as for any plan that changes.
+	if (dropOut_ >= 0 && n < dropOutTo_ && arc_.sectionStartsHere()) {
+		if (n <= dropOutFrom_) {
+			dropOut_ = -1;
+		}
+		else {
+#ifdef GENERATOR_TEST_SEAMS
+			// A Groove starts only on a phrase line, which no drop-out runs past, so no Groove's Reset ever ends one
+			// early: a Throw it holds always falls (updateThrow()), never snaps home at a downbeat.
+			assert(arc_.section() != SectionKind::Groove);
+#endif
+			dropOutTo_ = n;
+		}
+	}
+	if (dropOut_ >= 0 && n == dropOutTo_) {
+		dropOutAfter_ = n + genre_->dropOutGapBars * kStepsPerBar;
+	}
+	if (dropOut_ >= 0 && n >= dropOutFrom_ && n < dropOutTo_) {
+		step.dropOut = entries[dropOut_].mask;
+		return;
+	}
+
+	// Drawn a bar ahead, on a Groove's bar line with none waiting and the gap passed, so the bar in between can
+	// throw the target's last hit. It ends on or before the phrase line after its start and the next Section start
+	// known now (a Build that takes the phrase's end, a waiting force, End or transition). Keyed on the Groove, the
+	// phrase and the bar, never on a take.
+	const bool waiting = dropOut_ >= 0 && n < dropOutFrom_;
+	const int32_t from = n + kStepsPerBar;
+	if (waiting || arc_.section() != SectionKind::Groove || arc_.stepInBar() != 0 || from < dropOutAfter_) {
+		return;
+	}
+	// Whether one starts first: the chance is keyed, so drawing it before the room changes nothing but the work.
+	const DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::DropOut), arc_.occurrence(),
+	                             static_cast<uint16_t>(arc_.phraseInSection()),
+	                             fieldWord(static_cast<uint32_t>(arc_.barInPhrase()), kDropOutWhether));
+	if (!drawChance(key, scaleChance(genre_->dropOutChance, curves::dropOut, step.motion))) {
+		return;
+	}
+	const int32_t phraseSteps = genre_->phraseSteps();
+	int32_t room = phraseSteps - (arc_.stepInPhrase() + kStepsPerBar) % phraseSteps;
+	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+	if (ahead.start != Arc::kNotAhead) {
+		room = std::min(room, ahead.start - kStepsPerBar);
+	}
+	const int32_t entry = drawWeightedIf(withField(key, kDropOutWhich), entries,
+	                                     [&](const DropOutEntry& e) { return e.bars * kStepsPerBar <= room; });
+	if (entry >= 0) {
+		dropOut_ = static_cast<int8_t>(entry);
+		dropOutFrom_ = from;
+		dropOutTo_ = from + entries[entry].bars * kStepsPerBar;
+	}
+}
+
 // ---- Fills (spec §8.7) ----
 
 GEN_STEP_CODE void Generator::fillRules(Step& step) {
@@ -90,8 +156,12 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	// A held fill overrides the automatic one. No fill covers a phrase's first step: a held one pauses there and
 	// carries on from the next. The Gap silences fills too.
 	int32_t entry = -1;
-	if (heldFill_ >= 0) {
+	const bool held = heldFill_ >= 0;
+	const int32_t heldSteps = heldSteps_;
+	if (held) {
+		// Every step held counts, a phrase's first step and the Gap's included (spec §8.7).
 		entry = inPhrase > 0 ? heldFill_ : -1;
+		heldSteps_ = static_cast<uint8_t>(std::min<int32_t>(heldSteps + 1, kStepsPerBeat));
 	}
 	else if (autoFill_ >= 0 && (arc_.section() == SectionKind::Groove || arc_.section() == SectionKind::Intro)
 	         && inPhrase >= autoFillStart(fills[autoFill_].beats)) {
@@ -102,22 +172,48 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	}
 	step.rest = {};
 	step.swap = {};
+	step.roll = {};
 	if (entry >= 0) {
-		PartsAndLanes mask = fills[entry].mask;
+		const FillEntry& fill = fills[entry];
+		PartsAndLanes mask = fill.mask;
 		// The roll lane keeps rolling under a fill, which changes only the other lanes (Build roll > fill).
-		if (step.rollStage != RollStage::None && genre_->arc.roll.lane != Lane::None) {
+		if (buildRollsOn(step, genre_->arc.roll.lane)) {
 			mask.lanes &= static_cast<uint16_t>(~laneBit(genre_->arc.roll.lane));
 		}
-		(fills[entry].kind == FillKind::Rest ? step.rest : step.swap) = mask;
+		switch (fill.kind) {
+		case FillKind::Rest:
+			step.rest = mask;
+			break;
+		case FillKind::Swap:
+			step.swap = mask;
+			break;
+		case FillKind::Roll:
+			step.roll = mask;
+			if (held) {
+				step.fillRoll = heldRollAt(heldSteps);
+			}
+			else {
+				const int32_t start = autoFillStart(fill.beats);
+				step.fillRoll = autoRollAt(inPhrase - start, genre_->phraseSteps() - start);
+			}
+			break;
+		}
 	}
+	// A drop-out beats a fill on a part or lane they share: it stays silent, and a Swap or a Roll there doesn't play
+	// (spec §8.8). Taking it out of the Rest keeps the Rest from ending a dropped part's sounding notes. Taking it out
+	// of the Swap and the Roll changes no output (silenced() already stops a dropped lane in decideKit()), but keeps
+	// each mask saying what plays.
+	step.rest = step.rest.without(step.dropOut);
+	step.swap = step.swap.without(step.dropOut);
+	step.roll = step.roll.without(step.dropOut);
 
 	// As a Rest starts, the notes still sounding on its pitched parts end, so their release plays: a clean drop. Drum
 	// one-shots play out. A held Rest that pauses on a phrase's first step starts again on the next.
 	uint8_t rested = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		if (genre_->parts[p].lanes.empty() && step.rest.has(p, Lane::None)) {
-			rested |= static_cast<uint8_t>(1U << p);
-			if ((rested_ & (1U << p)) == 0) {
+			rested |= partBit(p);
+			if ((rested_ & partBit(p)) == 0) {
 				sounding_.endPitchedBy(p, step.tick);
 			}
 		}
@@ -126,7 +222,30 @@ GEN_STEP_CODE void Generator::fillRules(Step& step) {
 	filled_ = entry >= 0;
 }
 
-int32_t Generator::autoFillStart(int32_t beats) const {
+namespace {
+
+/// A Roll fill's step `i`, its velocity climbing from normal to accent over `climb` steps and its stage `top` from
+/// then on.
+GEN_STEP_CODE RollStep rollStep(int32_t i, int32_t climb, bool topStage, RollStage top) {
+	constexpr int32_t kNormal = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)];
+	constexpr int32_t kAccent = kLevelVelocity[static_cast<int32_t>(VelocityLevel::Accent)];
+	return {topStage ? top : RollStage::Sixteenth,
+	        climbVelocity(kNormal, kAccent, std::min<int32_t>(i, climb - 1), climb - 1)};
+}
+
+} // namespace
+
+GEN_STEP_CODE RollStep Generator::heldRollAt(int32_t i) const {
+	// 16ths for its first beat, climbing to accent, then the genre's top roll stage.
+	return rollStep(i, kStepsPerBeat, i >= kStepsPerBeat, genre_->arc.roll.top);
+}
+
+GEN_STEP_CODE RollStep Generator::autoRollAt(int32_t i, int32_t steps) const {
+	// 16ths, then the genre's top roll stage for its last quarter; velocity climbs over the whole ramp.
+	return rollStep(i, steps, 4 * i >= 3 * steps, genre_->arc.roll.top);
+}
+
+GEN_STEP_CODE int32_t Generator::autoFillStart(int32_t beats) const {
 	// It ends on the phrase line and never covers the phrase's first step.
 	return std::max<int32_t>(genre_->phraseSteps() - beats * kStepsPerBeat, 1);
 }
@@ -176,7 +295,7 @@ bool Generator::barBeforeAutoFill() const {
 }
 
 GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
-	if (step.gap || step.cut.has(part, lane)) {
+	if (step.gap || step.cut.has(part, lane) || step.dropOut.has(part, lane)) {
 		return true;
 	}
 	return !step.keeps.lets(part, lane);
@@ -185,9 +304,9 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.rollStage,
+		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.buildRoll.stage,
 		                           [&](Lane lane) { return !silenced(step, p, lane); });
-		silent_ |= plays ? 0 : static_cast<uint8_t>(1U << p);
+		silent_ |= plays ? 0 : partBit(p);
 	}
 }
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
@@ -202,16 +321,20 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 		return arc_.section() == SectionKind::Break ? lane.gateTicks : 0;
 	case Lane::Impact:
 		return arc_.dropStartsHere() ? lane.gateTicks : 0;
+	case Lane::Siren:
+		// One held note from a Break's first step or a Drop; a Section line or its gate may end it sooner.
+		return arc_.section() == SectionKind::Break || arc_.dropStartsHere()
+		           ? lane.heldBars * kStepsPerBar * kTicksPerStep
+		           : 0;
 	default:
-		return 0; // the Siren lands with Dub
+		return 0;
 	}
 }
 
-GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step) {
-	// The roll lane always plays in a Build, whatever its Density gate (spec §8.3, §9.5).
+GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
-	// The roll decides its steps, not Density, and plays no Lean, spread or Ornament.
-	const int32_t hits = rollHits(step.rollStage, step.index);
+	// A roll decides its steps, not Density, and plays no Lean, spread or Ornament.
+	const int32_t hits = rollHits(roll.stage, step.index);
 	if (hits == 0) {
 		return;
 	}
@@ -223,8 +346,7 @@ GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, con
 		if (on < floor) {
 			continue;
 		}
-		noteOn(partIndex,
-		       {spec.lane, 0, step.rollVelocity, velocity(step.rollVelocity, step.energy), on, on + length, i > 0});
+		noteOn(partIndex, {spec.lane, 0, roll.velocity, velocity(roll.velocity, step.energy), on, on + length, i > 0});
 	}
 }
 

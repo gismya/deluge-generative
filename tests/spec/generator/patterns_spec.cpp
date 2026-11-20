@@ -8,6 +8,7 @@
 
 #include <map>
 #include <set>
+#include <span>
 #include <vector>
 
 using namespace harness;
@@ -131,6 +132,13 @@ std::set<int32_t> hatChanges(const Result& result, int32_t count) {
 int32_t anchorStep(const std::set<int32_t>& bar) {
 	return bar.size() == 1 ? *bar.begin() : -1;
 }
+
+/// A part or one of its lanes, with the pool it plays and the lane's own Density gate (0 for a part).
+struct PatternSource {
+	Lane lane = Lane::None;
+	std::span<const Pattern> pool;
+	int32_t laneGate = 0;
+};
 
 } // namespace
 
@@ -342,9 +350,20 @@ describe patterns("Patterns", $ {
 
 	it("play exactly the anchors at Density 0, in every genre", _ {
 		for (const Genre* builtIn : allGenres()) {
-			// With no fills: a Rest takes anchors out and a Swap plays a fill pattern's (spec §8.7).
+			// With no fills: a Rest takes anchors out and a Swap plays a fill pattern's (spec §8.7). No drop-outs, which
+			// silence anchors (§8.8): only a genre with drop-outs loses any. A Phrase accent on a lane with no pool
+			// (Dub's Crash) is a hit no step table holds, so only such a genre plays none but the Drop's (§9.5); one on
+			// a lane with a pool stays checked.
 			Genre noFills = *builtIn;
 			noFills.fills = {};
+			noFills.dropOuts = {};
+			for (const PartSpec& part : builtIn->parts) {
+				for (const LaneSpec& lane : part.lanes) {
+					if (lane.lane == builtIn->arc.accentLane && part.role == Role::Drums && lane.pool.empty()) {
+						noFills.arc.accentChance = 0;
+					}
+				}
+			}
 			const Genre* genre = &noFills;
 			// The Intro and the shortest first Groove: the Arc's Build offset would lift Density off 0.
 			int32_t bars = genre->phraseBars * (genre->arc.introPhrases + genre->arc.groovePhrases.low);
@@ -358,22 +377,23 @@ describe patterns("Patterns", $ {
 				// Every part and lane, bar by bar: the steps it hit are exactly one pool entry's anchors.
 				for (int32_t p = 0; p < static_cast<int32_t>(genre->parts.size()); p++) {
 					const PartSpec& part = genre->parts[p];
-					std::vector<std::pair<Lane, std::span<const Pattern>>> sources;
+					std::vector<PatternSource> sources;
 					if (!part.pool.empty()) {
-						sources.emplace_back(Lane::None, part.pool);
+						sources.push_back({Lane::None, part.pool, 0});
 					}
 					for (const LaneSpec& lane : part.lanes) {
-						sources.emplace_back(lane.lane, lane.pool);
+						sources.push_back({lane.lane, lane.pool, lane.densityGate});
 					}
-					for (const auto& [lane, pool] : sources) {
+					for (const auto& [lane, pool, laneGate] : sources) {
 						std::set<int32_t> hits;
 						for (const Event& e : ons) {
 							if (e.part == p && e.lane == lane) {
 								hits.insert(e.tick / kTicksPerStep);
 							}
 						}
-						if (part.densityGate > 0) {
-							expect(hits.empty()).to_be_true(); // gated above Density 0 (spec §5.6): Detroit's Motif
+						if (part.densityGate > 0 || laneGate > 0) {
+							// Gated above Density 0 (spec §5.6): Detroit's Motif, Ambient's Bass, Lead and drum lanes
+							expect(hits.empty()).to_be_true();
 							continue;
 						}
 						if (pool.empty()) {

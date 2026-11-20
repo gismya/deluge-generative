@@ -39,7 +39,9 @@ struct Event {
 	/// NoteOn, NoteOff: absolute MIDI note of a pitched part. KeyScale: the key's root pitch class, 0 = C (keyRoot()).
 	/// Sound: the driver's token for the sound it preloaded (soundToken()).
 	uint8_t pitch = 0;
-	uint8_t velocity = 0;      ///< NoteOn: 1–127.
+	/// NoteOn: 1–127. Control: on Space, the delay Throw's level in percent where the set has a delay setup, else 0
+	/// (throwDelay(), spec §11.4).
+	uint8_t velocity = 0;
 	bool muted : 1 = false;    ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
 	bool ornament : 1 = false; ///< NoteOn: an Ornament hit, dropped first on overflow (spec §2.7).
 	bool snap : 1 = false;     ///< Control: jump to the offset at once, instead of ramping over the step (spec §11.7).
@@ -91,8 +93,9 @@ struct Event {
 	}
 
 	static constexpr Event controlChange(int32_t tick, uint8_t part, Lane lane, SoundControl control, int8_t offset,
-	                                     bool snap) {
+	                                     bool snap, uint8_t throwDelay = 0) {
 		Event e;
+		e.velocity = throwDelay;
 		e.tick = tick;
 		e.kind = EventKind::Control;
 		e.part = part;
@@ -117,6 +120,9 @@ struct Event {
 	[[nodiscard]] constexpr uint8_t keyRoot() const { return pitch; }
 	/// Sound: the driver's token for the sound it preloaded.
 	[[nodiscard]] constexpr uint8_t soundToken() const { return pitch; }
+	/// Control, on Space: how far the delay Throw lifts delay feedback, in percent of its spike (spec §11.4): 100 while
+	/// it holds, falling to 0 over its beat. 0 where no Throw plays, and on a set with no delay setup.
+	[[nodiscard]] constexpr uint8_t throwDelay() const { return velocity; }
 
 	/// A note event's key within its part: its lane, or a pitched part's pitch. A part's notes are all laned or all
 	/// pitched, so within one part the key alone tells two keys apart.

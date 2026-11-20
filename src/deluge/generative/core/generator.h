@@ -106,6 +106,15 @@ struct ControlSet {
 	Lane lane = Lane::None;
 	ControlSetKind kind = ControlSetKind::Part;
 	int8_t sent[kNumSoundControls] = {};
+	/// Who owns `thrown` (spec §8.8, §11.4). Fills the byte of padding before it.
+	enum class ThrowOwner : uint8_t {
+		Plain,   ///< the plain rule: a hit brings it home
+		DropOut, ///< the drop-out's target spiked it in the window before it: it holds over the drop-out
+		/// A line's spike came while the drop-out owned it: the line rules it if the line comes, and the drop-out takes
+		/// it back if the line goes (a cancelled force or transition, a Motion turn).
+		Line,
+	};
+	ThrowOwner owner = ThrowOwner::Plain;
 	/// Throw (spec §11.4): steps since the hit that spiked Space, or -1 while no Throw plays.
 	int16_t thrown = -1;
 	/// Drift's walk (spec §11.5), for the drifting controls in SoundControl order (Brightness, Decay, Space, Wobble):
@@ -114,6 +123,11 @@ struct ControlSet {
 	int8_t walkFrom[kDriftingControls] = {};
 	int8_t walkTo[kDriftingControls] = {};
 	uint16_t walkPoint = kNoWalk;
+	/// Whether the set has a delay setup (spec §10.6) and its part a Throw depth above 0, so its Throw lifts delay
+	/// feedback too (spec §11.4).
+	bool delaySetup = false;
+	/// The delay Throw's level as last sent on Space, in percent (Event::throwDelay()): 0 until a Throw lifts it.
+	uint8_t sentThrowDelay = 0;
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
@@ -125,7 +139,7 @@ struct MuteSolo {
 	/// Whether a part's note-ons sound: while any part is soloed only the soloed ones do, otherwise every part not
 	/// muted (spec §12.5).
 	[[nodiscard]] constexpr bool audible(int32_t part) const {
-		const uint32_t bit = 1U << part;
+		const uint8_t bit = partBit(part);
 		return soloed != 0 ? (soloed & bit) != 0 : (muted & bit) == 0;
 	}
 	/// The mask a SetMute or SetSolo sets: `muted` or `soloed`.
@@ -133,7 +147,7 @@ struct MuteSolo {
 	/// A valid SetMute or SetSolo lands: its part's bit set or cleared (spec §13.4).
 	constexpr void land(const Command& command) {
 		uint8_t& parts = command.kind == CommandKind::SetMute ? muted : soloed;
-		const auto bit = static_cast<uint8_t>(1U << command.target);
+		const uint8_t bit = partBit(command.target);
 		parts = command.value != 0 ? parts | bit : parts & ~bit;
 	}
 };
@@ -159,16 +173,6 @@ constexpr bool anyLane(const PartSpec& spec, Test test) {
 		}
 	}
 	return false;
-}
-
-/// The index of `lane` in a Kit part's lanes, or -1.
-constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
-	for (int32_t l = 0; l < laneCount(part); l++) {
-		if (part.lanes[l].lane == lane) {
-			return l;
-		}
-	}
-	return -1;
 }
 
 /// Whether `spec` holds the Build roll's lane and the roll plays at `stage` (spec §8.3, §9.5): it plays whatever the
@@ -213,6 +217,9 @@ struct PartState {
 	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
+	/// Where the part's last Loop note started, its last segment if it tied: Avoid ends it at its plain gate from
+	/// there (spec §5.5).
+	int32_t loopOn = 0;
 	/// A Sustain or Stab part's voicing as of the last bar line (spec §5.2): the whole voicing before Density
 	/// thinning, which the next chord's voice leading starts from.
 	HeldVoicing voicing;
@@ -318,11 +325,11 @@ public:
 	/// Whether End is waiting for its line (its pad blinks, spec §13.5).
 	[[nodiscard]] bool endQueued() const { return pending_.has(CommandKind::End); }
 	/// A part's mute and solo as landed, and whether a press of its pad waits for the bar line (it blinks).
-	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & (1U << part)) != 0; }
-	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & (1U << part)) != 0; }
+	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
+	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
-	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & (1U << part)) != 0; }
+	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
@@ -342,9 +349,18 @@ public:
 	/// The fill entry FILL plays while held, by its index in the genre's fills, or -1 (spec §8.7).
 	[[nodiscard]] int32_t heldFill() const { return heldFill_; }
 	/// Whether the Arc silences a part on the last decided step: its gate is closed, or section rules (Break keeps,
-	/// the cut, the Gap) stop all its notes, unless the Build roll plays one of its lanes and the cut or the Gap
-	/// doesn't stop it. Its MUTE pad shows dim (spec §13.5).
-	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & (1U << part)) != 0; }
+	/// the cut, the Gap) or a drop-out stop all its notes, unless the Build roll plays one of its lanes and the cut or
+	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
+	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & partBit(part)) != 0; }
+#ifdef GENERATOR_TEST_SEAMS
+	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
+	/// so a spec can read what interplay rules read there through testTargetPlanned().
+	static inline void (*testDecided_)(const Generator& generator, int32_t step, int32_t density) = nullptr;
+	/// Harness only: whether `target` has a planned onset on `step` at `density`, as an interplay rule reads it.
+	[[nodiscard]] bool testTargetPlanned(const RuleTarget& target, int32_t step, int32_t density) const {
+		return targetPlanned(target, step, 0, density);
+	}
+#endif
 
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
 	[[nodiscard]] int32_t queuedCount() const { return pending_.size(); }
@@ -373,6 +389,12 @@ public:
 	[[nodiscard]] uint32_t refusedSteering() const { return refused_; }
 	/// Notes a full sounding-note table has ended early. A harness spec fails on any.
 	[[nodiscard]] uint32_t evictedNotes() const { return evicted_; }
+	/// The events the last decided step buffered that haven't played yet, in the order it decided them: what a step
+	/// decided, which the stream doesn't say (an Ornament hit's step, for the rough render's THEORY track). Read it
+	/// right after the step is decided: once the buffer plays or the next step begins, it holds other events. The
+	/// firmware never asks.
+	[[nodiscard]] int32_t lastStepEventCount() const { return events_.size() - events_.stepStart(); }
+	[[nodiscard]] const Event& lastStepEvent(int32_t i) const { return events_.at(events_.stepStart() + i); }
 
 private:
 	struct Step {
@@ -390,16 +412,19 @@ private:
 		uint16_t phrase = 0;       ///< The phrase within it.
 
 		// Section rules on this step (spec §9.5).
-		Keeps keeps;       ///< What still plays: in a Break or Build its keeps, otherwise everything.
-		PartsAndLanes cut; ///< What the Build cut stops on this step.
-		bool gap = false;  ///< In the Gap: no note starts.
-		RollStage rollStage = RollStage::None; ///< The Build roll's stage on this step, or None.
-		int16_t rollVelocity = 0;              ///< The roll's base velocity, climbing to the Gap.
-		bool accent = false;                   ///< The Phrase accent plays on this step.
+		Keeps keeps;         ///< What still plays: in a Break or Build its keeps, otherwise everything.
+		PartsAndLanes cut;   ///< What the Build cut stops on this step.
+		bool gap = false;    ///< In the Gap: no note starts.
+		RollStep buildRoll;  ///< The Build roll on this step: no stage outside it, its velocity climbing to the Gap.
+		bool accent = false; ///< The Phrase accent plays on this step.
 
 		// Fills on this step (spec §8.7), after the section rules they give way to.
 		PartsAndLanes rest; ///< What a Rest stops.
 		PartsAndLanes swap; ///< Lanes a Swap plays fill patterns on.
+		PartsAndLanes roll; ///< The lane a Roll plays its ramp on, at fillRoll.
+		RollStep fillRoll;  ///< The Roll's stage and base velocity on this step, climbing over its ramp.
+		/// What a drop-out silences on this step (spec §8.8). Worked out before the fills, which give way to it.
+		PartsAndLanes dropOut;
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
@@ -409,6 +434,10 @@ private:
 	/// Works out the fill playing on `step`, after the section rules: a held fill, or the phrase's automatic fill,
 	/// drawn on its first step. A Rest ends the notes sounding on its pitched parts as it starts.
 	void fillRules(Step& step);
+	/// Works out the drop-out on `step`, after the section rules and before the fills (spec §8.8): a Section line ends
+	/// one playing and cancels one waiting, and on a Groove's bar line, with none playing or waiting and the gap
+	/// passed, one may be drawn to start on the next bar line.
+	void dropOutRules(Step& step);
 	/// The automatic fill for the phrase starting on `step`, or -1 (spec §8.7).
 	[[nodiscard]] int32_t drawAutoFill(const Step& step) const;
 	/// Whether this Groove phrase is the Groove's last before a Break or Build: by Motion as it is now, or by a force
@@ -419,7 +448,7 @@ private:
 	[[nodiscard]] bool barBeforeAutoFill() const;
 	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
-	/// Whether section rules keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	/// Whether section rules or a drop-out keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
 	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
@@ -427,8 +456,17 @@ private:
 	}
 	/// The length in ticks of the note an FX section rule plays on `lane` here, or 0 (spec §9.5).
 	[[nodiscard]] int32_t fxNoteTicks(const LaneSpec& lane, const Step& step) const;
-	/// One step of the Build roll on a lane (spec §8.3).
-	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step);
+	/// One step of a roll on a lane, at `roll`'s stage and from its base velocity: the Build roll's (spec §8.3) or a
+	/// Roll fill's (§8.7).
+	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
+	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
+	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
+		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
+	}
+	/// A held Roll fill's stage and base velocity `i` steps after FILL took effect (spec §8.7).
+	[[nodiscard]] RollStep heldRollAt(int32_t i) const;
+	/// An automatic Roll fill's stage and base velocity `i` steps into its ramp, `steps` long.
+	[[nodiscard]] RollStep autoRollAt(int32_t i, int32_t steps) const;
 
 	/// Makes a command take effect on nextStep(), with everything its landing does (a key change's note-offs and
 	/// KeyScale event, a take's re-pick, a forced Section's start). The one path for live steering, pending commands
@@ -459,8 +497,23 @@ private:
 	struct ThrowLine {
 		bool near = false;
 		GestureMoment moment = GestureMoment::ThrowBreak;
+		/// The drop-out's throw target, if one was drawn (spec §8.8): its hits spike in the window before it starts
+		/// (`dropOutNear`), and its Throw holds while it plays (`dropOutLeft` steps left, this one included) and falls
+		/// over its last beat. In the beat from where it ended (`dropOutFalling`), a Throw it held falls, so one a
+		/// Section line ended early falls over a beat from that line.
+		PartsAndLanes dropOutTarget;
+		bool dropOutNear = false;
+		bool dropOutFalling = false;
+		/// A Section starts on the step: a line a Throw was spiked for has come.
+		bool sectionStarts = false;
+		/// The Siren's note ended by the step (spec §9.5): its release Throw, always on (spec §11.4).
+		bool sirenReleased = false;
+		int32_t dropOutLeft = 0;
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
+	/// Whether a Siren note that sounded on the last decided step has ended by `step`, however it ended: its length,
+	/// a Section line, its gate or a new sound. Updates sirenSounding_.
+	[[nodiscard]] bool sirenReleases(const Step& step);
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
 	[[nodiscard]] int32_t closeWashLevel(int32_t step) const;
 	[[nodiscard]] int32_t riseLevel() const;
@@ -473,10 +526,23 @@ private:
 	}
 	/// Whether a gesture acts on `set`: a part's or FX lane's own, or on Drums the kit-wide set or the lane it aims at.
 	[[nodiscard]] bool gestureActsOn(const ControlSet& set, Gesture gesture) const;
+	/// Whether `mask` holds `set`'s notes: a pitched part's set its part, a lane's set its lane, a kit-wide set any
+	/// lane of its kit.
+	[[nodiscard]] bool touches(const ControlSet& set, const PartsAndLanes& mask) const;
 	/// Moves `set`'s Throw on a step with `hits`; true if its Space snaps (a Throw starts, or a hit ends it).
-	bool updateThrow(ControlSet& set, ThrowLine line, const PartsAndLanes& hits);
+	bool updateThrow(ControlSet& set, const ThrowLine& line, const PartsAndLanes& hits);
+	/// Moves a playing Throw one step on, held then falling, and ends it once it is back home.
+	void countThrowOn(ControlSet& set) const;
+	/// A Throw's level on `set`, per-mille: full while it holds, then down over a beat; 0 while none plays.
+	[[nodiscard]] int32_t throwLevel(const ControlSet& set) const;
+	/// The delay Throw's level Space carries on `set` (Event::throwDelay()), in percent: the Throw's level where the
+	/// set has a delay setup, else 0 (spec §11.4).
+	[[nodiscard]] uint8_t throwDelayOf(const ControlSet& set) const;
+	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or, for Space, if the delay
+	/// Throw's level did (throwDelayOf()), keeping both as sent.
+	void sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick, bool snap);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
-	[[nodiscard]] bool silencedAt(const ControlSet& set, ThrowLine line) const;
+	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
 	/// The gesture layer's offset for `set`'s `control` (spec §11.4). `closeWash` and `rise` are Close and Wash's and
 	/// Rise's levels on this step, per-mille.
 	[[nodiscard]] int32_t gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
@@ -519,7 +585,12 @@ private:
 	void endAtStop();
 	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
 	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
-	void decidePart(int32_t partIndex, const Step& step);
+	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
+	/// notes sounding into it.
+	bool decidePart(int32_t partIndex, const Step& step);
+	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
+	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
+	bool endAvoided(int32_t partIndex, const Step& step);
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
@@ -553,9 +624,10 @@ private:
 		bool tie = false;
 	};
 	/// The expression stage, shared by every role (spec §8.2, §8.4, §8.5): Velocity spread, Lean, then an Ornament,
-	/// then the note's hits. `pick` and `patternStep` key its draws.
-	void express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
-	             const Decided& decided, const Step& step);
+	/// then the note's hits. `pick` and `patternStep` key its draws. @return The tick the note starts on, Lean and the
+	/// key's floor applied: where a tie's new segment starts, too.
+	int32_t express(int32_t partIndex, const Expression& expression, const PatternState& pick, int32_t patternStep,
+	                const Decided& decided, const Step& step);
 	enum class OrnamentKind : uint8_t { None, Ratchet2, Ratchet3, Ratchet4, Flam };
 	/// Whether a note gets an Ornament, and which (spec §8.2).
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
@@ -563,7 +635,9 @@ private:
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
-	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there.
+	/// a key change or a mute change; a note that comes in starts on the bar line, and one that leaves ends there. A
+	/// part that holds across Section lines re-strikes nothing on a Section line: there, even on a chord change, each
+	/// pitch the new voicing keeps holds, and only the changed ones end and strike.
 	void decideSustain(int32_t partIndex, const Step& step);
 	/// A Stab part (spec §5.2, §8.1): the voiced chord on each onset of its pattern that Density and the interplay
 	/// rules let through. The voicing changes only on bar lines, voice-led from the one before; a stab lasts its gate,
@@ -638,8 +712,15 @@ private:
 	/// Whether a rule's target has a planned onset `back` steps before `step`, wrapping inside each pattern it reads.
 	[[nodiscard]] bool targetPlanned(const RuleTarget& target, int32_t step, int32_t back, int32_t density) const;
 	[[nodiscard]] bool against(const InterplayRule& rule, int32_t step, int32_t density) const;
-	/// A rule's effective strength, 0 to kFullStrength (100%), in 1/kMacroFull-percent units: its strength moved by
-	/// its sensitivity over the Recipe's Complexity (spec §5.5).
+	/// On a half-bar's first step, counts the halves of the bar for each Respond rule of a source (laneIndex as in
+	/// source()), at `step`'s Density, into busyHalves_ (spec §5.5). Called just before the source decides, after its
+	/// targets (earlier parts and lanes) have, so a phrase line's re-pick is counted.
+	void countHalves(int32_t part, int32_t laneIndex, const Step& step);
+	/// Whether a patterned pitched part plays nothing on `step` because an Avoid rule is against it there (spec §5.5):
+	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
+	/// planned onset.
+	[[nodiscard]] bool avoided(int32_t partIndex, const Step& step) const;
+	/// A rule's effective strength for the Recipe's Complexity: the free effectiveStrength() (genre.h).
 	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
 	/// Energy's velocity layer at `energy`, scaled by the genre's weight (spec §8.4).
 	[[nodiscard]] int32_t energyLayer(int32_t energy) const;
@@ -655,10 +736,13 @@ private:
 	void updateGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
 	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
+	/// A Sustain that holds across Section lines keeps its notes ending on the line uncut, for decideSustain() to hold
+	/// or end (spec §5.2).
 	void cutSectionLine(const Step& step);
 	/// At a bar line, after the parts: each held-back note of a part or lane now sounding starts its remainder on the
-	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key.
-	void lateEntries(const Step& step);
+	/// line with the Energy then, if it lasts to the end of the bar and the step started no note on its key. None
+	/// enters on a part in `avoidedParts` (bit p: decidePart() found part p avoided here).
+	void lateEntries(const Step& step, uint8_t avoidedParts);
 	/// The earliest tick a new hit on `lane` and `pitch` may start: after every hit already started or buffered on
 	/// that key, so steps that lean into each other never cross.
 	[[nodiscard]] int32_t keyFloor(int32_t partIndex, Lane lane, uint8_t pitch) const;
@@ -749,8 +833,19 @@ private:
 	/// step, and the one FILL plays while held. Performance state, lost on stop.
 	int8_t autoFill_ = -1;
 	int8_t heldFill_ = -1;
+	/// Steps the held fill has played since FILL went down, up to a beat: a held Roll's first beat (spec §8.7).
+	uint8_t heldSteps_ = 0;
+	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
+	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
+	int8_t dropOut_ = -1;
+	/// A Siren note sounded on the last decided step: one that has ended since is its release (spec §9.5, §11.4).
+	bool sirenSounding_ = false;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
+	/// half against, as counted at its first step this bar (the second half: the last bar's until step 8 is counted).
+	/// Step state derived from the targets' plans, so takes and freeze replay it as they do the draws it reads.
+	PartsAndLanes busyHalves_[2];
 	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
 	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
 	uint8_t cutParts_ = 0;
@@ -772,12 +867,19 @@ private:
 	/// How many of controls_ the roster lays out, at most kMaxControlSets. A byte, beside the other byte fields.
 	uint8_t controlCount_ = 0;
 	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
+	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
+	bool hasSiren_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
 	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
 	/// moment switches them.
 	int32_t closeWashFrom_ = kNever;
+	/// The drop-out's steps (spec §8.8): it plays from dropOutFrom_ up to dropOutTo_, and the next may start from
+	/// dropOutAfter_, its gap after the last that played.
+	int32_t dropOutFrom_ = 0;
+	int32_t dropOutTo_ = 0;
+	int32_t dropOutAfter_ = 0;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;

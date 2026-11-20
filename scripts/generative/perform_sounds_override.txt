@@ -7,6 +7,21 @@
 # A genre change to Melodic then stages Melodic's override, whose BASS is one preset (spec §13.6), and a
 # re-roll of the BASS after the commit reads it too.
 # needs: card fixtures/perform_sounds_override (its own card, above; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/palette_file.* src/deluge/gui/ui/browser/perform_preset_browser.cpp
+# covers: scripts/generative/fixtures/perform_sounds_override/ tests/spec/generator/fixtures/palette_override/
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/sound_controls.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.h src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/retirements.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 
@@ -48,8 +63,8 @@ expect playing=true
 expect event /gen_controls ranges part=1 lane=-1 BRI=-16\.\.16 DEC=-6\.\.6 DRI=0 SPA=/ within=15
 expect event gen_controls sets=13
 expect event gen_section INTRO 0
-expect event gen_h1 within=15
-expect event gen_h1 within=15
+expect event gen_h1 steps= within=15
+expect event gen_h1 steps= within=15
 expect playing=true
 
 # ---- The preset browser (#299, spec §10.7): a chosen preset the override doesn't list binds with the default ranges;

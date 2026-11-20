@@ -2,7 +2,9 @@
 
 Every file this writes is made here from code: synth presets written field by field, and samples rendered by small
 DSP routines with fixed random seeds, so the same script always writes the same bytes and the licence is ours
-(pack/LICENSES.md). Run it after changing a sound, then commit what changed under pack/:
+(pack/LICENSES.md), except the presets derived from factory ones (DERIVED): a factory file, checked by its hash, with
+recorded edits, read from the factory card's files (--factory). Run it after changing a sound, then commit what
+changed under pack/:
 
     python3 scripts/generative/make_pack.py            # writes into pack/
     python3 scripts/generative/make_pack.py --check    # exits 1 if pack/ differs from what it would write
@@ -16,10 +18,12 @@ Stdlib only.
 """
 
 import argparse
+import hashlib
 import io
 import math
 import os
 import random
+import re
 import struct
 import subprocess
 import sys
@@ -168,10 +172,104 @@ def clap(seconds, seed, centre, spacing):
     return out
 
 
+# Ambient's soft one-shots (spec §18.2). Drums lanes are unpitched and never follow the key, so each is non-tonal:
+# noise, a falling pitch or inharmonic partials, never one steady pitch.
+
+
+def brush(seconds, seed, centre, swell, decay):
+    """A brush on a snare: band-passed noise that swells in over `swell` seconds and dies away, with a faint wire
+    rattle under it."""
+    rng = random.Random(seed)
+    svf = StateVariable(1.2)
+    wires = StateVariable(0.7)
+    n = int(seconds * RATE)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        noise = rng.uniform(-1, 1)
+        _, band, _ = svf.run(noise, centre * (1.0 + 0.3 * math.exp(-t * 8)))
+        _, _, high = wires.run(noise, 5000)
+        shape = min(1.0, t / swell) * math.exp(-max(0.0, t - swell) * decay)
+        out.append((band + 0.25 * high) * shape)
+    return out
+
+
+def mallet(seconds, seed, start, end, drop):
+    """A felt mallet on a drum: a sine whose pitch falls from `start` to `end` Hz (so it has no steady pitch), a soft
+    noise thump at the attack, and a short decay."""
+    rng = random.Random(seed)
+    svf = StateVariable(0.8)
+    n = int(seconds * RATE)
+    out = []
+    phase = 0.0
+    for i in range(n):
+        t = i / RATE
+        phase += 2 * math.pi * (end + (start - end) * math.exp(-t * drop)) / RATE
+        low, _, _ = svf.run(rng.uniform(-1, 1), 900)
+        out.append(math.sin(phase) * math.exp(-t * 9) + 0.6 * low * math.exp(-t * 60))
+    return out
+
+
+def partials(t, phases, omegas, damping, divisors):
+    """The sum at time `t` of sine partials: partial k at angular frequency omegas[k] from phases[k], scaled by
+    damping(k, t) and divided by divisors[k] (wood() and ping())."""
+    s = 0.0
+    for k, omega in enumerate(omegas):
+        s += math.sin(phases[k] + omega * t) * damping(k, t) / divisors[k]
+    return s
+
+
+def wood(seconds, seed, base, ratios):
+    """A wood hit: a click and a few inharmonic modes above `base` Hz, each dying faster the higher it is."""
+    rng = random.Random(seed)
+    phases = [rng.random() * 2 * math.pi for _ in ratios]
+    svf = StateVariable(0.9)
+    omegas = [2 * math.pi * base * ratio for ratio in ratios]
+    divisors = [k + 1 for k in range(len(ratios))]
+    n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (28 + 22 * k))
+
+    out = []
+    for i in range(n):
+        t = i / RATE
+        s = partials(t, phases, omegas, damping, divisors)
+        _, band, _ = svf.run(rng.uniform(-1, 1), 3000)
+        out.append(s + 0.5 * band * math.exp(-t * 400))
+    return out
+
+
+def ping(seconds, seed, base, ratios, decay):
+    """An inharmonic metal ping: partials at non-integer `ratios` of `base` Hz, so no one pitch comes through, ringing
+    out over `decay` seconds with a slow beating."""
+    rng = random.Random(seed)
+    phases = [rng.random() * 2 * math.pi for _ in ratios]
+    omegas = [
+        2 * math.pi * (base * ratio * (1.0 + 0.0015 * (k % 2)))
+        for k, ratio in enumerate(ratios)
+    ]
+    divisors = [1 + 0.5 * k for k in range(len(ratios))]
+    n = int(seconds * RATE)
+
+    def damping(k, t):
+        return math.exp(-t * (1 + 0.6 * k) / decay)
+
+    out = []
+    for i in range(n):
+        t = i / RATE
+        s = partials(t, phases, omegas, damping, divisors)
+        out.append(s * min(1.0, t / 0.002))
+    return out
+
+
 SAMPLES = {
     "SAMPLES/FX/Riser/GEN Riser 1.wav": lambda: riser_noise(8.0, 1),
     "SAMPLES/FX/Riser/GEN Riser 2.wav": lambda: riser_saws(6.0, 2),
     "SAMPLES/FX/Riser/GEN Riser 3.wav": lambda: riser_tremolo(4.0, 3),
+    # Dub's 1-bar Build lasts 3 s at 80 BPM, and about 2.2 s when BUILD INTO A DROP glides it up to Psytrance's
+    # ~142 BPM: this one fits both (spec §10.5's Riser fit).
+    "SAMPLES/FX/Riser/Short/GEN Riser Short.wav": lambda: riser_saws(2.0, 7),
     "SAMPLES/DRUMS/Ride/GEN Ride 1.wav": lambda: ride(1.6, 4, bell=False),
     "SAMPLES/DRUMS/Ride/GEN Ride 2.wav": lambda: ride(2.0, 5, bell=True),
     "SAMPLES/DRUMS/Clap/GEN Clap 1.wav": lambda: clap(
@@ -179,6 +277,36 @@ SAMPLES = {
     ),
     "SAMPLES/DRUMS/Clap/GEN Clap 2.wav": lambda: clap(
         0.7, 7, centre=950, spacing=0.014
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 1.wav": lambda: brush(
+        0.35, 8, centre=2400, swell=0.004, decay=14
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 2.wav": lambda: brush(
+        0.6, 9, centre=1800, swell=0.06, decay=8
+    ),
+    "SAMPLES/DRUMS/Snare/GEN Brush 3.wav": lambda: brush(
+        0.9, 10, centre=3200, swell=0.18, decay=6
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 1.wav": lambda: mallet(
+        0.5, 11, start=210, end=90, drop=30
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 2.wav": lambda: mallet(
+        0.5, 12, start=320, end=150, drop=25
+    ),
+    "SAMPLES/DRUMS/Other/GEN Mallet 3.wav": lambda: mallet(
+        0.6, 13, start=150, end=60, drop=20
+    ),
+    "SAMPLES/DRUMS/Block/GEN Wood 1.wav": lambda: wood(
+        0.25, 14, base=720, ratios=(1.0, 2.57, 4.13, 6.91)
+    ),
+    "SAMPLES/DRUMS/Block/GEN Wood 2.wav": lambda: wood(
+        0.3, 15, base=480, ratios=(1.0, 2.31, 3.89, 5.73)
+    ),
+    "SAMPLES/DRUMS/Other/GEN Ping 1.wav": lambda: ping(
+        1.6, 16, base=1130, ratios=(1.0, 1.59, 2.14, 2.83, 3.71), decay=0.5
+    ),
+    "SAMPLES/DRUMS/Other/GEN Ping 2.wav": lambda: ping(
+        2.0, 17, base=1570, ratios=(1.0, 1.41, 2.29, 3.13, 4.37), decay=0.7
     ),
 }
 
@@ -208,8 +336,24 @@ def preset(
     transpose=0,
     osc2_transpose=0,
     osc2_cents=0,
+    osc2_volume=35,
+    reverb=12,
+    volume=36,
+    lfo1_type=None,
+    lfo1_rate=None,
+    lfo2_type=None,
+    lfo2_rate=None,
+    unison=None,
+    mod_fx=None,
+    lpf_mode="24dB",
+    hpf=None,
+    fold=None,
+    pulse_width=None,
 ):
-    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads."""
+    """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
+    and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults; `lfo2_type` and `lfo2_rate`
+    LFO 2 (per voice) the same way. `unison` is (voices, detune, stereo spread); `mod_fx` is (type, rate knob, depth
+    knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -223,20 +367,56 @@ def preset(
         f"\t\t<cents>{osc2_cents}</cents>",
         "\t</osc2>",
         "\t<polyphonic>auto</polyphonic>",
+    ]
+    if lfo1_type is not None:
+        lines += [
+            "\t<lfo1>",
+            f"\t\t<type>{lfo1_type}</type>",
+            "\t\t<syncLevel>0</syncLevel>",
+            "\t</lfo1>",
+        ]
+    if lfo2_type is not None:
+        lines += ["\t<lfo2>", f"\t\t<type>{lfo2_type}</type>", "\t</lfo2>"]
+    lines += [
         "\t<mode>subtractive</mode>",
         f"\t<transpose>{transpose}</transpose>",
-        "\t<lpfMode>24dB</lpfMode>",
+    ]
+    if unison is not None:
+        voices, detune, spread = unison
+        lines += [
+            "\t<unison>",
+            f"\t\t<num>{voices}</num>",
+            f"\t\t<detune>{detune}</detune>",
+            f"\t\t<spread>{spread}</spread>",
+            "\t</unison>",
+        ]
+    lines.append(f"\t<lpfMode>{lpf_mode}</lpfMode>")
+    if mod_fx is not None:
+        lines.append(f"\t<modFXType>{mod_fx[0]}</modFXType>")
+    lines += [
         "\t<defaultParams>",
         "\t\t<portamento>0x80000000</portamento>",
         "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
-        f"\t\t<oscBVolume>{knob(35)}</oscBVolume>",
+        f"\t\t<oscBVolume>{knob(osc2_volume)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(noise)}</noiseVolume>",
-        f"\t\t<volume>{knob(36)}</volume>",
+        f"\t\t<volume>{knob(volume)}</volume>",
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(lpf)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
-        "\t\t<hpfFrequency>0x80000000</hpfFrequency>",
+        f"\t\t<hpfFrequency>{knob(hpf) if hpf is not None else '0x80000000'}</hpfFrequency>",
     ]
+    if fold is not None:
+        lines.append(f"\t\t<waveFold>{knob(fold)}</waveFold>")
+    if pulse_width is not None:
+        lines.append(f"\t\t<oscAPulseWidth>{knob(pulse_width)}</oscAPulseWidth>")
+        lines.append(f"\t\t<oscBPulseWidth>{knob(pulse_width)}</oscBPulseWidth>")
+    if lfo1_rate is not None:
+        lines.append(f"\t\t<lfo1Rate>{knob(lfo1_rate)}</lfo1Rate>")
+    if lfo2_rate is not None:
+        lines.append(f"\t\t<lfo2Rate>{knob(lfo2_rate)}</lfo2Rate>")
+    if mod_fx is not None:
+        lines.append(f"\t\t<modFXRate>{knob(mod_fx[1])}</modFXRate>")
+        lines.append(f"\t\t<modFXDepth>{knob(mod_fx[2])}</modFXDepth>")
     for name, (attack, decay, sustain, release) in (
         ("envelope1", env1),
         ("envelope2", env2),
@@ -251,7 +431,7 @@ def preset(
         ]
     lines += [
         "\t\t<delayFeedback>0x80000000</delayFeedback>",
-        f"\t\t<reverbAmount>{knob(12)}</reverbAmount>",
+        f"\t\t<reverbAmount>{knob(reverb)}</reverbAmount>",
     ]
     lines.append("\t\t<patchCables>")
     for source, destination, amount in cables:
@@ -317,7 +497,403 @@ PRESETS = {
         transpose=-12,
         osc2_transpose=-12,
     ),
+    # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
+    # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its
+    # first tries (decay 2, filter 14, one saw at the preset volume 36) measured about 23 dB under the mix in delugemu
+    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 20-tick gate at
+    # 138-146 BPM (about 88 ms), so the gate's short release ends each note; the sub square and the full preset volume
+    # carry the level. Velocity moves its volume. No reverb.
+    "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
+        "saw",
+        "square",
+        noise=0,
+        lpf=32,
+        resonance=20,
+        env1=(0, 16, 0, 4),
+        env2=(0, 12, 0, 4),
+        cables=[("velocity", "volume", 30), ("envelope2", "lpfFrequency", 32)],
+        osc2_transpose=-12,
+        osc2_volume=40,
+        reverb=0,
+        volume=50,
+    ),
+    # The dub siren (spec §10.5, §18.2): a square and a saw a fifth apart, a triangle LFO sweeping the pitch up and
+    # down about twice a second, a slow-ish attack and a long release that rings into its release Throw. Velocity
+    # moves its volume.
+    "SYNTHS/GENERATIVE/FX/GEN Siren.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=0,
+        lpf=34,
+        resonance=12,
+        env1=(10, 20, 50, 30),
+        env2=(0, 20, 50, 30),
+        cables=[("velocity", "volume", 25), ("lfo1", "pitch", 22)],
+        osc2_transpose=7,
+        osc2_volume=30,
+        reverb=20,
+        lfo1_type="triangle",
+        lfo1_rate=24,
+    ),
+    # Dub's bass (spec §18.2): a deep sine with a soft attack, a quiet triangle on top so it reads on small speakers,
+    # the filter rounding it off, no reverb. It holds while the note does and lets go quickly, as the line moves on.
+    # Velocity moves its volume.
+    "SYNTHS/GENERATIVE/GEN Dub Sub.XML": lambda: preset(
+        "sine",
+        "triangle",
+        noise=0,
+        lpf=30,
+        resonance=0,
+        env1=(8, 24, 45, 14),
+        env2=(0, 20, 50, 14),
+        cables=[("velocity", "volume", 30)],
+        osc2_volume=18,
+        reverb=0,
+        volume=50,
+    ),
+    # Dub's melodica (spec §18.2): a square reed and a saw a few cents apart, a breath of noise, a soft attack and
+    # full sustain; velocity opens the filter a little as well as the volume.
+    "SYNTHS/GENERATIVE/GEN Melodica.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=4,
+        lpf=26,
+        resonance=8,
+        env1=(12, 22, 44, 16),
+        env2=(4, 22, 40, 16),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 12),
+            ("envelope2", "lpfFrequency", 10),
+        ],
+        osc2_cents=6,
+        osc2_volume=28,
+        reverb=16,
+    ),
+    # House's chord stab (spec §18.2): a plain saw and square at the same pitch (no built-in interval, so a 7th or 9th
+    # voicing stays clean), no portamento, sustain 0: each stab dies on its own over about a quarter of a second, the
+    # Stab's 30-tick gate (~150 ms at 120-126 BPM) cutting it a little short. env2 closes the filter over the note for
+    # the pluck. Velocity moves its volume and opens the filter a little.
+    "SYNTHS/GENERATIVE/GEN House Stab.XML": lambda: preset(
+        "saw",
+        "square",
+        noise=0,
+        lpf=28,
+        resonance=10,
+        env1=(0, 22, 0, 12),
+        env2=(0, 18, 0, 12),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 10),
+            ("envelope2", "lpfFrequency", 18),
+        ],
+        osc2_cents=5,
+        osc2_volume=32,
+        reverb=14,
+    ),
+    # Ambient's soft sub (spec §18.2): one sine, the filter open, no reverb. env1 attacks over about 80 ms (attack 29:
+    # attackRateTable's 2487 a sample over the envelope's 2^23 is 3,373 samples), holds at full sustain and releases
+    # over about 1.5 s (release 27: releaseRateTable's 124, 67,650 samples). Velocity moves its volume.
+    "SYNTHS/GENERATIVE/GEN Sine Sub.XML": lambda: preset(
+        "sine",
+        "sine",
+        noise=0,
+        lpf=50,
+        resonance=0,
+        env1=(29, 20, 50, 27),
+        env2=(0, 20, 50, 27),
+        cables=[("velocity", "volume", 30)],
+        osc2_volume=0,
+        reverb=0,
+    ),
+    # ---- Ambient's Drone and Bass (#313; the owner's picks, sounds round 1) ----
+    # The Drone holds the key's root and fifth (Register anchor C3) under the Pad. Each one: a slow attack and a long
+    # release, the high-pass a little up and no oscillator under the note, so nothing much sounds under ~60 Hz, and
+    # velocity moves the volume. LFO rates are knobs: 25 is about 1.25 Hz, each step about 1.25x.
+    # Drone 1, tape strings: two saws a few cents apart, three unison voices spread wide, a soft 12 dB low-pass, a
+    # breath of noise and a slow wow on the pitch. Static.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML": lambda: preset(
+        "saw",
+        "saw",
+        noise=5,
+        lpf=28,
+        resonance=4,
+        env1=(40, 20, 50, 38),
+        env2=(0, 20, 50, 38),
+        cables=[("velocity", "volume", 25), ("lfo1", "pitch", 3)],
+        osc2_cents=8,
+        osc2_volume=30,
+        reverb=26,
+        volume=44,
+        lfo1_type="triangle",
+        lfo1_rate=22,
+        unison=(3, 10, 30),
+        lpf_mode="12dB",
+        hpf=12,
+    ),
+    # Drone 2, breathing filter: a square and a saw an octave up into a resonant 12 dB low-pass that a slow sine LFO
+    # opens and closes over about half a minute, while a per-voice LFO moves the square's pulse width. Evolving.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=0,
+        lpf=20,
+        resonance=14,
+        env1=(42, 20, 50, 40),
+        env2=(0, 20, 50, 40),
+        cables=[
+            ("velocity", "volume", 25),
+            ("velocity", "lpfFrequency", 8),
+            ("lfo1", "lpfFrequency", 14),
+            ("lfo2", "oscAPhaseWidth", 15),
+        ],
+        osc2_transpose=12,
+        osc2_volume=22,
+        reverb=28,
+        lfo1_type="sine",
+        lfo1_rate=9,
+        lfo2_type="triangle",
+        lfo2_rate=12,
+        unison=(2, 6, 40),
+        lpf_mode="12dB",
+        hpf=10,
+    ),
+    # Drone 3, glass fifth: a sine with a quiet sine an octave and a fifth over it, which a slow LFO fades in and out;
+    # two unison voices spread fully apart, more reverb. Evolving, the purest of the four.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML": lambda: preset(
+        "sine",
+        "sine",
+        noise=0,
+        lpf=40,
+        resonance=0,
+        env1=(40, 20, 50, 40),
+        env2=(0, 20, 50, 40),
+        cables=[("velocity", "volume", 25), ("lfo1", "oscBVolume", -16)],
+        osc2_transpose=19,
+        osc2_volume=26,
+        reverb=30,
+        volume=44,
+        lfo1_type="sine",
+        lfo1_rate=11,
+        unison=(2, 5, 50),
+        hpf=12,
+    ),
+    # The Bass plays the chord root (the key's root F#2-F3, the Drone's octave) held for two bars. Each one: a soft attack, full-ish
+    # sustain, a release under a second, no reverb to speak of, and harmonics over the root so a small speaker plays
+    # it. Velocity moves the volume.
+    # Bass 2, felt pulse: a square with a slightly detuned second square into a 12 dB low-pass, the second envelope
+    # blooming the filter over the first half second and settling; velocity opens the filter too.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML": lambda: preset(
+        "square",
+        "square",
+        noise=2,
+        lpf=24,
+        resonance=6,
+        env1=(31, 30, 46, 27),
+        env2=(24, 34, 18, 28),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 8),
+            ("envelope2", "lpfFrequency", 14),
+        ],
+        osc2_cents=5,
+        osc2_volume=28,
+        reverb=4,
+        volume=48,
+        lpf_mode="12dB",
+    ),
+    # Bass 3, folded sine: a sine with a quiet saw an octave up through a soft low-pass and the wavefolder, which adds
+    # odd harmonics; velocity folds it further, so harder notes read brighter.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML": lambda: preset(
+        "sine",
+        "saw",
+        noise=0,
+        lpf=30,
+        resonance=0,
+        env1=(30, 30, 48, 27),
+        env2=(0, 20, 50, 27),
+        cables=[("velocity", "volume", 30), ("velocity", "waveFold", 10)],
+        osc2_transpose=12,
+        osc2_volume=22,
+        reverb=0,
+        volume=48,
+        lpf_mode="12dB",
+        fold=20,
+    ),
+    # Bass 4, tape bass: a saw and a triangle into a darker 24 dB low-pass with a slow filter bloom, a little noise and
+    # a slow wobble on the pitch.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML": lambda: preset(
+        "saw",
+        "triangle",
+        noise=6,
+        lpf=21,
+        resonance=8,
+        env1=(30, 30, 46, 27),
+        env2=(28, 36, 24, 30),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 6),
+            ("envelope2", "lpfFrequency", 12),
+            ("lfo1", "pitch", 2),
+        ],
+        osc2_volume=40,
+        reverb=4,
+        volume=48,
+        lfo1_type="triangle",
+        lfo1_rate=20,
+        hpf=8,
+    ),
 }
+
+
+# ---- Presets derived from the factory card ----
+#
+# A pack preset close to a factory one is the factory file with a few recorded edits, never a hand-edited copy: the
+# script reads the source from the factory card's files (--factory), checks it is the file the edits were written
+# against (its SHA-256), applies the edits and writes the result. These files are derived from Synthstrom Audible's
+# factory content, so they are not CC0: pack/LICENSES.md lists each under "Derived from the factory presets", and
+# --check fails while one is missing there. To add one: a DERIVED entry (source, its hash, the edits), a row in that
+# section, then run the script.
+
+# The factory card's files, as delugemu's factory image holds them (~/source/delugemu-sd/sdcard, spec §21.3).
+FACTORY = os.environ.get(
+    "DELUGE_FACTORY_CARD",
+    os.path.join(os.path.expanduser("~"), "source", "delugemu-sd", "sdcard"),
+)
+LICENSES = "LICENSES.md"
+DERIVED_HEADING = "## Derived from the factory presets"
+
+
+class Field:
+    """Set the element <tag> (exactly one in the file) to `value`."""
+
+    def __init__(self, tag, value):
+        self.tag, self.value = tag, value
+
+    def apply(self, text):
+        pattern = re.compile(rf"(<{self.tag}>)[^<]*(</{self.tag}>)")
+        return replace_once(pattern, rf"\g<1>{self.value}\g<2>", text, f"<{self.tag}>")
+
+
+class Cable:
+    """Set the amount of the patch cable from `source` to `destination` (exactly one in the file) to a -50..50
+    amount."""
+
+    def __init__(self, source, destination, amount):
+        self.source, self.destination, self.amount = source, destination, amount
+
+    def apply(self, text):
+        pattern = re.compile(
+            rf"(<source>{self.source}</source>\s*<destination>{self.destination}</destination>\s*<amount>)"
+            r"[^<]*(</amount>)"
+        )
+        what = f"the {self.source} -> {self.destination} cable"
+        return replace_once(pattern, rf"\g<1>{cable(self.amount)}\g<2>", text, what)
+
+
+class Transpose:
+    """Set the transpose of `element` (osc1, osc2, modulator1, modulator2: exactly one in the file) to `semitones`."""
+
+    def __init__(self, element, semitones):
+        self.element, self.semitones = element, semitones
+
+    def apply(self, text):
+        pattern = re.compile(
+            rf"(<{self.element}>(?:(?!</{self.element}>).)*?<transpose>)[^<]*(</transpose>)",
+            re.DOTALL,
+        )
+        what = f"the {self.element} transpose"
+        return replace_once(pattern, rf"\g<1>{self.semitones}\g<2>", text, what)
+
+
+def replace_once(pattern, replacement, text, what):
+    new, count = pattern.subn(replacement, text)
+    if count != 1:
+        raise ValueError(f"{what}: {count} matches, expected 1")
+    return new
+
+
+class Derived:
+    """A pack preset made from factory file `source` (relative to the card root, with SHA-256 `sha256`) by `edits`."""
+
+    def __init__(self, source, sha256, *edits):
+        self.source, self.sha256, self.edits = source, sha256, edits
+
+    def make(self, factory):
+        path = os.path.join(factory, self.source)
+        if not os.path.isfile(path):
+            raise ValueError(f"{path}: not on the factory card (--factory)")
+        with open(path, "rb") as f:
+            data = f.read()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != self.sha256:
+            raise ValueError(
+                f"{path}: SHA-256 {digest}, the edits were written against {self.sha256}"
+            )
+        text = data.decode("utf-8")
+        for edit in self.edits:
+            text = edit.apply(text)
+        return text.encode("utf-8")
+
+
+# Dub techno's Stab (#322): the three factory chord presets with their own echo off (delay feedback 0), so the part's
+# delay setup and its Throws alone make the echo (spec §10.6). Their volume knobs set each where its original sat
+# against the rest of Dub techno, which plays at 76 percent of its presets' volume (techno.cpp's kDubRest, about
+# -3.9 dB): 037 at the knob's top is 3.9 dB under the original with its echo, 082 at 34 and 072 at 28 are about as
+# far under theirs (delugemu captures, the Stab alone, entropy 2, seed 1).
+DERIVED = {
+    "SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML": Derived(
+        "SYNTHS/037 Echo Chord.XML",
+        "4fbfc11f1977f933d7c8e3ff9cb02c399390769aa30ccae7569c43401be76143",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(50)),
+    ),
+    "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML": Derived(
+        "SYNTHS/082 Short Sharp Delay.XML",
+        "6500c76753252c52a497d04139bf4dff9dbb01adf6b998a43375b866cc2bd4c2",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(34)),
+    ),
+    "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML": Derived(
+        "SYNTHS/072 Kyoto Phono.XML",
+        "690716bab5fbe4835d3d7e925bf1d9b9cd666fc3ff8280e44815b2b70bb40c46",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(28)),
+    ),
+    # Dub techno's Pad: 126 an octave up (the owner's Techno listening answers, DI3). The Pad plays an octave under
+    # the Pad Register's default, under the Stab's chord, where 126 (its second carrier already at -17) sounded an
+    # octave too low. Both carriers and both modulators move, so the FM ratios and the timbre stay.
+    "SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML": Derived(
+        "SYNTHS/126 Dark FM Pad.XML",
+        "f6aee81d39281b7393975f491f79cddc2abfeeb7b1d19b2ac8b73ce3afcceb0f",
+        Transpose("osc1", 12),
+        Transpose("osc2", -5),
+        Transpose("modulator1", -12),
+        Transpose("modulator2", 16),
+    ),
+}
+
+
+def licence_gaps(pack):
+    """DERIVED files that pack/LICENSES.md's derived section doesn't list with their source, as messages."""
+    path = os.path.join(pack, LICENSES)
+    text = ""
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    section = (
+        text.split(DERIVED_HEADING, 1)[1].split("\n## ", 1)[0]
+        if DERIVED_HEADING in text
+        else ""
+    )
+    gaps = []
+    for target, derived in DERIVED.items():
+        rows = [line for line in section.splitlines() if f"`{target}`" in line]
+        if not any(f"`{derived.source}`" in row for row in rows):
+            gaps.append(
+                f'{target} (from {derived.source}): no row in {LICENSES}\'s "{DERIVED_HEADING[3:]}"'
+            )
+    return gaps
 
 
 def git_ignored(pack, paths):
@@ -367,11 +943,36 @@ def main(argv=None):
         action="store_true",
         help="--pack is a commit's tree: every file counts, gitignored and ._* ones too",
     )
+    parser.add_argument(
+        "--factory",
+        default=FACTORY,
+        help="the factory card's files, the derived presets' sources (default: $DELUGE_FACTORY_CARD, else "
+        "~/source/delugemu-sd/sdcard); without them --check only checks those presets are there",
+    )
     args = parser.parse_args(argv)
     files = {**SAMPLES, **PRESETS}
+    if os.path.isdir(args.factory):
+        files.update(
+            {path: (lambda d=d: d.make(args.factory)) for path, d in DERIVED.items()}
+        )
+    elif not args.check:
+        print(f"no factory card at {args.factory}: give --factory", file=sys.stderr)
+        return 1
+    else:
+        print(
+            f"no factory card at {args.factory}: the derived presets are checked for presence only",
+            file=sys.stderr,
+        )
     stale = []
+    for path in DERIVED:
+        if path not in files and not os.path.exists(os.path.join(args.pack, path)):
+            stale.append(path)
     for path, make in files.items():
-        data = make()
+        try:
+            data = make()
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
         data = to_wav(data) if path.endswith(".wav") else data
         target = os.path.normpath(os.path.join(args.pack, path))
         current = None
@@ -388,15 +989,20 @@ def main(argv=None):
     for path in stale:
         print(("stale: " if args.check else "wrote: ") + path)
     unexpected = (
-        unexpected_files(args.pack, files, args.committed) if args.check else []
+        unexpected_files(args.pack, {**files, **DERIVED}, args.committed)
+        if args.check
+        else []
     )
+    gaps = licence_gaps(args.pack)
+    for gap in gaps:
+        print("unlisted: " + gap)
     for path in unexpected:
         print(
             "unexpected: "
             + path
             + " (the script doesn't write it: delete it, or make it in the script)"
         )
-    return 1 if args.check and (stale or unexpected) else 0
+    return 1 if (args.check and (stale or unexpected)) or gaps else 0
 
 
 if __name__ == "__main__":

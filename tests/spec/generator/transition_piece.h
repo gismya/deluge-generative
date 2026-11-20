@@ -9,6 +9,7 @@
 #include "sound_swap_piece.h"
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -339,12 +340,28 @@ inline constexpr WeightedBars kOneBar[] = {{1, 1}};
 inline const Genre kFourBarPhrases = acidWith("acid 4", 4, kFourBars);
 inline const Genre kOneBarPhrases = acidWith("acid 1", 1, kOneBar);
 
+/// Whether a glide's write of `tempo`, after `last`, moves from `from` towards `to` without passing it. A repeat of
+/// `last` moves nothing, so the caller skips it.
+inline bool glidesTowards(int32_t last, int32_t tempo, int32_t from, int32_t to) {
+	return to > from ? tempo > last && tempo <= to : tempo < last && tempo >= to;
+}
+
+/// The ticks a cut's first tempo write lands between (spec §13.3): its glide starts the Glide setting before the cut
+/// line, or at the confirm if that is later, and the first write is where it has moved the tempo by one unit, under a
+/// tick per unit of change after that.
+inline std::pair<int32_t, int32_t> cutGlideFirstWrite(int32_t cutAt, int32_t glide, int32_t confirmTick, int32_t from,
+                                                      int32_t to) {
+	const int32_t starts = std::max(cutAt - glide, confirmTick);
+	return {starts, starts + glide / std::abs(to - from) + 1};
+}
+
 constexpr int32_t kInTempo = 13400;
 constexpr int32_t kInSwing = 12;
 
-/// Techno plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
-/// `transitions`. The pending Recipe differs in tempo, swing and key. The members below do what the Perform adapter
-/// does around the lifecycle.
+/// A piece plays from its first Groove, with a transition's lifecycle beside it: `lifecycle` is the firmware's
+/// `transitions`. Built from genres, it plays Techno (or the genre given) at kOutTempo, and the pending Recipe is
+/// Acid's with the incoming genre, kInTempo, kInSwing and D, so it differs in tempo, swing and key. Built from two
+/// Recipes, each plays as given. The members below do what the Perform adapter does around the lifecycle.
 struct TransitionPiece : StepwisePiece<TransitionSink> {
 	Generator* const out = &generator; ///< The instance that plays first.
 	/// The firmware's `soundSwaps`. A transition being pending refuses its presses.
@@ -355,13 +372,14 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	explicit TransitionPiece(const Genre* genre = &genres::technoAcid, const Genre* incoming = nullptr)
 	    : StepwisePiece(startOf(genre)), sounds(driver, queue, currentRecipe),
 	      lifecycle(*this, sounds, pendingOf(incoming != nullptr ? incoming : genre)) {
-		steering.pending = [this] { return lifecycle.pending(); };
-		sounds.held = [this] { return lifecycle.pending(); };
-		sink.sounds = &sounds;
-		driver.setTempo(kOutTempo, sink);
-		sink.tempos.clear();
-		lifecycle.phrase = phraseOf(*genre);
-		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
+		wire(*genre, incoming);
+	}
+	/// A piece of `playing` from its first Groove at seed 3, whose transition changes to `pending`: each Recipe at its
+	/// own genre, tempo, swing and key. For a genre change between two genres' own Recipes.
+	TransitionPiece(const Recipe& playing, const Recipe& pending)
+	    : StepwisePiece(Start{.recipe = playing, .seed = 3, .skipIntro = true}), sounds(driver, queue, currentRecipe),
+	      lifecycle(*this, sounds, pending) {
+		wire(*playing.genre, pending.genre != playing.genre ? pending.genre : nullptr);
 	}
 
 	/// A phrase of `genre` in now()'s unit, as the firmware's phraseLength() reads it.
@@ -380,6 +398,14 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 		runToStepLine(step, -1);
 		confirm(style, cutGlideTicks);
 	}
+	/// Whether the incoming roster's first Section is a Groove and its first phrase is in the history with `drop`: on
+	/// a Drop (BUILD INTO A DROP, drop) or cut in plain (HARD CUT AT PHRASE, !drop).
+	[[nodiscard]] bool startsInGroove(bool drop) const {
+		ArcPhrase first;
+		return sink.first(true, EventKind::Section).event.section == SectionKind::Groove
+		       && driver.history().at(0, first) && first.drop == drop;
+	}
+
 	/// The playing core takes what is queued: one more step is decided.
 	void decideOne() { decideBefore(driver.playing()->nextStep() + 1); }
 	/// Fills the steering queue with presses that undo each other, leaving `room` places.
@@ -422,6 +448,18 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	}
 
 private:
+	/// What the Perform adapter wires around the lifecycle, and the tempo the piece plays at.
+	void wire(const Genre& genre, const Genre* incoming) {
+		steering.pending = [this] { return lifecycle.pending(); };
+		sounds.held = [this] { return lifecycle.pending(); };
+		sink.sounds = &sounds;
+		driver.setTempo(currentRecipe.tempo, sink);
+		driver.setSwing(currentRecipe.swing, sink);
+		sink.tempos.clear();
+		sink.swings.clear();
+		lifecycle.phrase = phraseOf(genre);
+		lifecycle.pendingPhrase = incoming != nullptr ? phraseOf(*incoming) : 0;
+	}
 	static Start startOf(const Genre* genre) {
 		Start start{.seed = 3, .skipIntro = true};
 		start.recipe.genre = genre;

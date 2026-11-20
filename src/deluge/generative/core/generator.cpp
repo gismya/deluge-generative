@@ -52,7 +52,16 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
 	rested_ = 0;
+	busyHalves_[0] = {};
+	busyHalves_[1] = {};
 	filled_ = false;
+	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
+	dropOut_ = -1;
+	sirenSounding_ = false;
+	hasSiren_ = genreHasSiren(*genre_);
+	dropOutFrom_ = 0;
+	dropOutTo_ = 0;
+	dropOutAfter_ = 0;
 	for (PartState& part : parts_) {
 		part = PartState{};
 	}
@@ -66,6 +75,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 			control.part = static_cast<uint8_t>(p);
 			control.lane = controlSetLane(part, set);
 			control.kind = controlSetKind(part, set);
+			control.delaySetup = throwsDelay(part, control.lane);
 		}
 	}
 	closeWashFrom_ = kNever;
@@ -108,7 +118,8 @@ GEN_STEP_CODE Chord Generator::chord() const {
 GEN_STEP_CODE void Generator::voiceChordAt(int32_t root) {
 	voiced_ = voiceChord(recipe_.scale, root,
 	                     extensionLevel(recipe_.macros[Macro::Complexity], genre_->harmony.extensionFloor,
-	                                    genre_->harmony.extensionCeiling));
+	                                    genre_->harmony.extensionCeiling),
+	                     {}, genre_->harmony.extensionOrder);
 }
 
 GEN_STEP_CODE int32_t Generator::stepsToChordLine() const {
@@ -182,8 +193,8 @@ GEN_STEP_CODE int32_t Generator::walkChord(int32_t step) {
 	key.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
 	key.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
 	key.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
-	const int32_t next = nextChord(*graph, recipe_.scale, current, previousChord_, place, draw(key), ChordGuard{},
-	                               colourMoves(recipe_.scale));
+	const int32_t next = nextChord(*graph, recipe_.scale, current, previousChord_, place, draw(key),
+	                               genre_->harmony.guard, colourMoves(recipe_.scale));
 	if (next != current) {
 		previousChord_ = static_cast<int8_t>(current);
 	}
@@ -264,16 +275,23 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 		cutSectionLine(step);
 	}
 	sectionRules(step);
+	dropOutRules(step);
 	fillRules(step);
 	updateSilent(step);
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
+	uint8_t avoidedParts = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		decidePart(p, step);
+		avoidedParts |= decidePart(p, step) ? partBit(p) : 0;
 	}
 	if (arc_.stepInBar() == 0) {
-		lateEntries(step);
+		lateEntries(step, avoidedParts);
 	}
+#ifdef GENERATOR_TEST_SEAMS
+	if (testDecided_ != nullptr) {
+		testDecided_(*this, n, step.density);
+	}
+#endif
 	updateControls(step);
 
 	queueNoteOffsBefore(decisionTick(n + 1));
@@ -320,8 +338,13 @@ void Generator::skipTo(int32_t step) {
 	}
 }
 
-void Generator::decidePart(int32_t partIndex, const Step& step) {
+GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
+	// Respond's halves, counted before the part decides. A Kit part lists no rules (genreValid()): decideKit() counts
+	// each lane's.
+	if (spec.lanes.empty()) {
+		countHalves(partIndex, -1, step);
+	}
 	if (!spec.lanes.empty()) {
 		decideKit(partIndex, step);
 	}
@@ -346,6 +369,35 @@ void Generator::decidePart(int32_t partIndex, const Step& step) {
 	}
 #endif
 	parts_[partIndex].newTake = false;
+	// Read after the part's pick, which a phrase line may change.
+	return endAvoided(partIndex, step);
+}
+
+GEN_STEP_CODE bool Generator::endAvoided(int32_t partIndex, const Step& step) {
+	// A note from an earlier step never sounds into a step Avoid leaves free of the part (spec §5.5).
+	if (!avoided(partIndex, step)) {
+		return false;
+	}
+	const PartSpec& spec = genre_->parts[partIndex];
+	if (spec.flavour != Flavour::Loop) {
+		sounding_.endPitchedBy(partIndex, step.tick);
+		return true;
+	}
+	// A Loop note plays plain: the note that started at the part's last onset (PartState::loopOn: a tie's last
+	// segment, since extend() keeps the first segment's onTick) ends at its gate or the line, whichever comes first.
+	// That is the note that can sound into this step (§8.6's overlap rule); one the Section line has already cut there
+	// counts too. It can't end before this step's decision tick: a note-off due earlier has already gone out. Notes
+	// that start after loopOn, a ratchet's later hits and a late entry's re-strike, end on the line at most, so a
+	// ratchet stays inside its 16th. No cut ever ends a note before it starts.
+	const int32_t loopOn = parts_[partIndex].loopOn;
+	const int32_t plain = std::clamp<int32_t>(loopOn + spec.loop.gateTicks, decisionTick(step.index), step.tick);
+	sounding_.forEach(partIndex, [&](SoundingNote& note) {
+		if (note.offTick >= step.tick) {
+			const int32_t end = note.onTick > loopOn ? step.tick : plain;
+			SoundingNotes::cutAt(note, std::max<int32_t>(end, note.onTick + 1));
+		}
+	});
+	return true;
 }
 
 // ---- Note bookkeeping (spec §2.7, §12.5) ----

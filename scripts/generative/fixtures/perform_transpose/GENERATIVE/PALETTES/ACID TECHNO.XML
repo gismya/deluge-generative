@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- perform_transpose.txt's Acid techno palette override (spec §10.1): ACID is a preset saved at whole-sound transpose
+     -24, and the Impact lane loads GEN Impact (saved at -12), since its folder lists nothing (spec §10.5). -->
+<palette>
+	<part name="ACID">
+		<preset path="SYNTHS/047 Basic Dirty Bass.XML"/>
+	</part>
+	<lane name="impact">
+		<folder path="SAMPLES/FX/NoImpact"/>
+		<preset path="SYNTHS/GENERATIVE/FX/GEN Impact.XML"/>
+	</lane>
+</palette>

@@ -41,7 +41,7 @@ otherwise.
   `genreValid()`, and `genre_data_spec` checks every genre. A genre with a bigger roster (two Pads, say) adds to the table,
   and a flavour that starts more notes per onset than its role's `onsetNotes()`, or overlaps more than the next onset
   (an Arp with notes longer than its steps), evicts notes: `roster_room_spec` plays the table's worst case. When
-  `sizeof(Generator)` changes, update §20's "The M1 core is N B" with the ARM size:
+  `sizeof(Generator)` changes, update §20's "The core is N B" with the ARM size:
   `scripts/generative/generator_size.py` measures it (the firmware's `arm-none-eabi-g++` on a probe naming
   `Size<sizeof(Generator)>`), and fails in `check_all.py` until §20 states it.
 - A Bass or Lead part's table is two notes, so it keeps one bound (spec §2.7, §5.2): every note ends by the time the
@@ -81,10 +81,11 @@ otherwise.
   a macro turn can land on the stop step itself, with the cut, after that step's advance.
 - Genre data that would hang the device is checked at compile time: a bad interplay rule makes `planned()` recurse
   forever. Each genre table has `static_assert(genreValid(...))` (`core/capacity.h`: a palette, since `Genre::palette`
-  is dereferenced unchecked, the interplay rules, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
+  is dereferenced unchecked, the interplay rules, `avoidRulesValid()`, `rollFillsValid()`, `rosterFits()` (at most `kMaxParts` parts: `partCount()` stops
   there, so a 7th part would never play), `sustainValid()`, `loopNotesValid()`, the flavour checks, `harmonyValid()`,
-  `sweepsValid()`, `buildBarsValid()`, `rollUncut()` and `buildEndsInPhrase()`), as each Techno subgenre does. A new rule goes into `genreValid()` and gets
-  its own `genre_data_spec` case, which names the rule that failed where the `static_assert` can't. The period rules
+  `sweepsValid()`, `buildBarsValid()`, `rollUncut()`, `cutAndGapUnderBuild()` and `dropOutsValid()`), as each Techno
+  subgenre does. A new rule goes into `genreValid()` and gets its own `genre_data_spec` case, which names the rule
+  that failed where the `static_assert` can't. The period rules
   (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
   `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness. `subgenreOf()` is `consteval` and
   rejects a subgenre as a parent at compile time.
@@ -96,8 +97,8 @@ otherwise.
   rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()` with its lane test (the
   dim's is `!silenced()`, the plan's `Keeps::lets()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
   `outroEndsAfter()` (with `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not
-  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `buildEndsInPhrase()` in
-  `genreValid()` keeps each shorter than a phrase.
+  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `cutAndGapUnderBuild()` in
+  `genreValid()` keeps each shorter than a phrase and than the shortest Build (Dub's is 1 bar).
 - Trap: a Sustain holds its voicing over bar and phrase lines with no new note-on, so a history that counts note-ons
   shows a phrase a held Drone or Pad plays through as unheard. The Perform driver's `PhraseHistory` hears a part in
   every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (`Event::noteKey()`, the
@@ -146,3 +147,55 @@ otherwise.
   1–2 play steps 3, 7, 11, 14 and 15, some at the default Density). A part that must stay off the kick (Melodic
   techno's rolling bass) needs the subgenre's own Drums part, with a kick on the beats only (`kMelodicDrums`), and a
   spec that checks against the kick's note-ons, not against the beats.
+- A genre of its own (no parent) is written whole, `constexpr Genre kX{...}` in its own file (`genres/ambient.cpp`),
+  its `extern` in `genre.h` and a row in `kGenres` (`genre.cpp`); `gen_emu.py`'s `genre_names()` finds it with no edit.
+  Its spec file's `describe` takes the file stem (`ambient_spec.cpp` → `describe ambient`), which clashes with a
+  file-local `const Genre& ambient`: name the reference something else.
+- `genre_data_spec`'s off-beat authoring rules hold every tier 1+ pattern, a lane gated far above the default Density
+  too: its strongest off-beat hit must be 7 or more, not a ghost, and in the top half of its importances (Ambient's
+  soft percussion, gated at 35). A tier 1+ pattern with only on-beat hits fails (a clap on 2 and 4 with a ghost
+  pickup): give such a lane one tier, as Psytrance's Clap has. `patterns_spec`'s Density-0 check skips a gated lane as
+  it skips a gated part.
+- A Loop's gate is one value for its part, so notes held to the pattern's end (§5.2's long Loop notes) need every
+  pattern of the pool the same length: Ambient's Bass pool is one 2-bar pattern with a 2-bar gate.
+- A gate on a part a Break keeps must sit at or under the Break's Density at the default macros, or the Break keeps it
+  silent: Ambient's bells are gated at 10, its Break dip being 25 − 15.
+- A Sustain part counts toward the Intro floor (`lowestGate()`), though it has no pool: without it Ambient's floor
+  was its bells' gate and the bells played from the Intro's first step.
+- A genre whose open hat plays every & loses every closed hat there: the default Replace pair (Open hat replaces
+  Closed hat, spec §5.7) drops the closed hat's hit on each shared step. Psytrance keeps its open hat sparse.
+- The Open hat pairs with the Closed hat by tag name (§10.3): a set whose hat tags differ (the Psy set's `CLHAT-` and
+  `OPHAT-`) never pairs that way, so with a second machine in both lists the Open hat rolls its own weights against
+  the Closed hat's set. Psytrance's hats take the Psy set alone.
+- A part gated over the default Density still plays late in a Build: the Build's Density ramp (+12 for Psytrance)
+  passes the gate. Leave it out of `buildKeeps` if it should come in on the Drop (Psytrance's Lead).
+- A gated part leaves a Drop phrase early when the Drop's lift decays under its gate (Psytrance's Lead left after bar
+  10 at a 1-phrase decay). A longer `dropDecayPhrases` keeps it in, but `genre_data_spec` checks the decay fits the
+  shortest Groove at Motion 50; Psytrance is its named exception (spec §9.3), and `psytrance_spec` shows the cut-off.
+- A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
+  ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
+- A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
+  checking "no note in the against half" then passes with the rule's strength at 0. House's Lead has lead-ins in each
+  bar's first half for Respond to thin; check a spec like that bites by running it once with the strength at 0.
+- Respond's (and every interplay rule's) draw is keyed on the pick and the pattern step, so it holds while the pick
+  does, and a Lead pick can hold for a whole Groove. A line with one lead-in a bar keeps all of them or none in a
+  piece: give the thinned steps several steps of their own (House's tier-1 answers have two or three a bar). Measure
+  the kept share per seed against the rule at strength 0 *and sensitivity 0*: with sensitivity left on, a "strength
+  0" copy still thins at a Complexity over the default.
+- A lane tag matches any part of a file name (`tagMatches()`), and a lane listing two folders matches in both: House's
+  Impact tag "909", over the Crash and Kick folders, rolled a 909 kick 6 times in 7, and "909 Kick" took the
+  distorted and dry kicks too. Name a single file by its path (`SAMPLES/DRUMS/Crash/909 Crash.wav`), and check a new
+  palette's tags against `tests/spec/generator/fixtures/factory_card.txt`.
+- Drum kits (spec §10.2): `DrumKits` on the `Palette`, machines in `core/genres/drum_machines.h`, rolled in
+  `rollPart()` (`palette.cpp`) from the part's own kit stream (`kKitSlot`), so the lanes' draws don't move. A kit tag
+  is rolled as a one-tag copy of the lane (`rollKitTag()`), so it matches the lane's folders whatever its list says:
+  a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
+  the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
+  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
+- A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
+  usually meant the mark had slid one step off the hit it was for.
+- Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the
+  Chords'). A genre whose parts must stay apart in every key sets each Register with anchors a whole octave apart, so
+  the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
+- A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
+  restoring the table, or `theory_review.py` and later probes read the mutant.

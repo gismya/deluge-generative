@@ -19,7 +19,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - One clip per part, as long as the whole song. Compose never cuts a clip; Capture does, at sound re-rolls and key changes ([§17.6](17-capture.md#176-changes-partway-through-a-piece)). The firmware's longest clip (`kMaxSequenceLength`, about 1.6 billion ticks) is far beyond 20 minutes.
 - Sections, the Drop lift, the Gap and gestures are notes and nodes along that one clip.
-- The core still cuts sounding notes at every Section line and re-strikes those still holding on its first step ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)), so a Capture split ([§17.5](17-capture.md#175-song-shape)) never cuts a note.
+- The core still cuts sounding notes at every Section line and re-strikes those still holding on its first step ([§12.5](12-runtime.md#125-mute-gate-and-note-offs)), so a Capture split ([§17.5](17-capture.md#175-song-shape)) never cuts a note, except a Sustain's that holds across Section lines ([§5.2](05-parts-and-lanes.md#52-flavours)): the split ends it there and the next song strikes it again.
 - A part that never sounds in the whole song (below its Density gate throughout) gets **no clip** and no track. A part that sounds for only some of it gets rests.
 - Every Drums or FX clip has a row for every lane the part has, in the fixed lane order, even when silent.
 

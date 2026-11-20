@@ -60,9 +60,7 @@ describe transitions("Transitions", $ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 		t.runBars(4 * phrase / kStepsPerBar);
-		ArcPhrase first;
-		expect(t.driver.history().at(0, first)).to_be_true();
-		expect(first.drop).to_be_true();
+		expect(t.startsInGroove(true)).to_be_true();
 	});
 
 	it("ends every outgoing note by the start step and drains the outgoing instance", _ {
@@ -78,7 +76,7 @@ describe transitions("Transitions", $ {
 				continue;
 			}
 			if (p.event.kind == EventKind::NoteOn) {
-				expect(p.at).to_be_less_than(t.sink.startAt + kTicksPerStep / 2); // at most a lean past it
+				expect(p.at).to_be_less_than(t.sink.startAt);
 				sounding++;
 			}
 			if (p.event.kind == EventKind::NoteOff) {
@@ -87,7 +85,9 @@ describe transitions("Transitions", $ {
 			}
 		}
 		expect(sounding).to_equal(0);
-		expect(lastOff).to_be_greater_than(t.sink.startAt - 1);
+		// The last ones end on the start step, none after it. Equal, not at most: this piece's held notes sound into the
+		// start step, so the cut there ends them; a piece with nothing sounding by then would need at most.
+		expect(lastOff).to_equal(t.sink.startAt);
 		expect(t.out->droppedEvents()).to_equal(0U);
 	});
 
@@ -138,6 +138,28 @@ describe transitions("Transitions", $ {
 			expect(t.sink.drained).to_equal(1);
 			expect(t.sink.throwsCut).to_equal(0); // it fell all the way
 			expect(t.driver.outgoing() == nullptr).to_be_true();
+		});
+
+		it("carries the delay Throw's level past the start step where the kit has a delay setup", _ {
+			const auto kitDelay = technoEdited([](PartSpec& part) {
+				part.drift.weight = 0;
+				if (part.role == Role::Drums) {
+					part.delay = {.on = true};
+				}
+			});
+			Transition t(&kitDelay->genre);
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.runBars(2 * phrase / kStepsPerBar);
+			bool lifted = false;
+			for (const Played& p : space(t, 0, Lane::None, false)) {
+				lifted = lifted || (p.at >= t.sink.startAt - kBeat && p.event.snap && p.event.throwDelay() == 100);
+			}
+			expect(lifted).to_be_true();
+			std::vector<int32_t> falling;
+			for (const Played& p : space(t, 0, Lane::None, true)) {
+				falling.push_back(p.event.throwDelay());
+			}
+			expect(falling == std::vector<int32_t>{75, 50, 25, 0}).to_be_true();
 		});
 
 		it("cuts the fall on a stop or a jump, and tells the sink once, to put the outgoing parts' Space back home", _ {
@@ -291,10 +313,7 @@ describe transitions("Transitions", $ {
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.startAt).to_equal(stepTick(phrase));
 		expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
-		expect(t.sink.first(true, EventKind::Section).event.section == SectionKind::Groove).to_be_true();
-		ArcPhrase first;
-		expect(t.driver.history().at(0, first)).to_be_true();
-		expect(first.drop).to_be_false();
+		expect(t.startsInGroove(false)).to_be_true();
 	});
 
 	it("is cancelled while it waits, and the playing roster plays on", _ {
@@ -331,7 +350,7 @@ describe transitions("Transitions", $ {
 		for (const auto& [at, tempo] : t.sink.tempos) {
 			expect(at).to_be_greater_than(buildAt - kLookaheadTicks - 1);
 			expect(at).to_be_less_than(t.sink.startAt + 1);
-			expect(tempo).to_be_greater_than(last - 1); // only rises, 128 to 134
+			expect(tempo == last || glidesTowards(last, tempo, kOutTempo, kInTempo)).to_be_true(); // 128 up to 134
 			last = tempo;
 		}
 		if (!t.sink.tempos.empty()) {
@@ -355,7 +374,8 @@ describe transitions("Transitions", $ {
 		t.runBars(2 * phrase / kStepsPerBar);
 		expect(t.sink.tempos.size()).to_be_greater_than(size_t{1});
 		if (t.sink.tempos.size() > 1) {
-			expect(t.sink.tempos.front().first).to_be_greater_than(t.sink.startAt - bar - 1);
+			const auto [earliest, latest] = cutGlideFirstWrite(t.sink.startAt, bar, stepTick(3) - 1, kOutTempo, kInTempo);
+			expect(t.sink.tempos.front().first).to_be_between(earliest, latest);
 			expect(t.sink.tempos.back().first).to_equal(t.sink.startAt);
 			expect(t.sink.tempos.back().second).to_equal(kInTempo);
 		}
@@ -504,9 +524,7 @@ describe transitions("Transitions", $ {
 			expect(t.lifecycle.current().recipe().genre == &genres::technoDetroit).to_be_true();
 			// A Build, then the new roster on its Drop: not a Cut.
 			expect(t.sink.last(false, EventKind::Section).event.section == SectionKind::Build).to_be_true();
-			ArcPhrase first;
-			expect(t.driver.history().at(0, first)).to_be_true();
-			expect(first.drop).to_be_true();
+			expect(t.startsInGroove(true)).to_be_true();
 			const int32_t parts = partCount(genres::technoDetroit);
 			expect(parts).to_equal(6);
 			int32_t motif = -1;

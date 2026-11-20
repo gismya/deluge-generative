@@ -1,6 +1,14 @@
 # Perform's transport (#108, spec §13.2, §12.4, §12.7, §13.7) over the sysex test port. Start as after boot:
 # transport stopped, the current clip a synth or kit clip. The external-clock part sends MIDI clock from the host
 # ("clock"), so run it in delugemu (test_port_emu.py) or on a Deluge whose USB MIDI port receives clock.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/perform/clock_follow.h src/deluge/playback/
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -117,7 +125,7 @@ expect event gen_section INTRO 0 clip_pos=0 within=5
 encoder 2 1
 wait 300
 encoder 2 1
-expect event EXT
+expect event /^gen_tempo_popup .* EXT$/
 # The tempo it reads off the host's clock is measured against delugemu's audio clock, which jitters under host load
 # (118-123 over a minute). Each bar's reading is logged only when it changes, so the script waits for one within
 # 1 BPM: the readings scatter around the master's tempo.

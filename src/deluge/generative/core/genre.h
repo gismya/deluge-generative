@@ -61,7 +61,7 @@ struct Pattern {
 
 	/// Written as two strings of 16 or 32 characters, one per step, so tables read like a step sequencer:
 	///   importance: '.' never, '1'–'9' as Density allows, 'X' anchor
-	///   levels:     'g' ghost, 'a' accent, anything else normal
+	///   levels:     'g' ghost, 'a' accent, anything else normal; a 'g' or 'a' over a '.' is a compile-time error
 	template <int32_t N>
 	consteval Pattern(const char (&importances)[N], const char (&levels)[N], uint8_t complexityTier, // NOLINT
 	                  uint8_t pickWeight = 1)
@@ -74,6 +74,9 @@ struct Pattern {
 			char c = importances[i];
 			if (c == '.') {
 				importance[i] = 0;
+				if (levels[i] == 'g' || levels[i] == 'a') {
+					throw "a level mark ('g' or 'a') sits on a step that never plays ('.')";
+				}
 			}
 			else if (c == 'X') {
 				importance[i] = kAnchor;
@@ -124,12 +127,20 @@ constexpr bool gateOpens(bool wasOpen, int32_t threshold, int32_t density) {
 
 // ---- Interplay rules (slot 6, spec §5.5) ----
 
-/// What a rule marks as against. Lock is built; Avoid lands with Psytrance and Respond with House.
+/// What a rule marks as against.
 enum class RuleKind : uint8_t {
 	/// Against every step where the target has no onset. With `offBeat` (the spec's `off` option), every step except
 	/// the target's onsets one 8th
 	/// later (wrapping inside its pattern), so a four-on-the-floor kick leaves the & steps free.
 	Lock,
+	/// Against every step where the target has a planned onset. A pitched source's note never sounds into one it
+	/// doesn't play, and genreValid() keeps the source's anchors off every step the target can play
+	/// (avoidRulesValid()).
+	Avoid,
+	/// Against the half of each bar where the target has more planned onsets, the first on a non-zero tie, neither
+	/// when both are empty, counted at the half-bar's first step (Generator::countHalves()). Its target neither lists
+	/// a Respond rule nor reads one through its own rules (interplayRulesValid()).
+	Respond,
 };
 
 /// What a rule reads: a part, by its index in the roster, or one of a Drums part's lanes. A Drums part with no lane
@@ -150,6 +161,16 @@ struct InterplayRule {
 	/// Percentage points the strength moves over Complexity's whole 0–50 range, signed.
 	int8_t sensitivity = 0;
 };
+
+/// A rule at full strength (100 %), in effectiveStrength()'s units.
+constexpr int32_t kFullStrength = 100 * kMacroFull;
+
+/// A rule's effective strength, 0 to kFullStrength, in 1/kMacroFull-percent units: its strength moved by its
+/// sensitivity over the Recipe's Complexity away from the genre's default (spec §5.5).
+constexpr int32_t effectiveStrength(const InterplayRule& rule, int32_t complexity, int32_t defaultComplexity) {
+	const int32_t strength = rule.strength * kMacroFull + rule.sensitivity * (complexity - defaultComplexity);
+	return strength < 0 ? 0 : strength > kFullStrength ? kFullStrength : strength;
+}
 
 // ---- Expression (spec §8.2, §8.4, §8.5) ----
 
@@ -183,6 +204,24 @@ struct Expression {
 
 // ---- Parts and lanes (slot 5, spec §5) ----
 
+/// A tempo-synced delay time's note (spec §10.6): a whole note down to a 32nd, the range the stock sync menu offers,
+/// for a genre's tables to pick from (Dub, #131, the first).
+enum class DelayNote : uint8_t { Whole, Half, Quarter, Eighth, Sixteenth, ThirtySecond };
+/// A delay time's feel: even, dotted (×1.5) or triplet (×2/3).
+enum class DelayFeel : uint8_t { Even, Dotted, Triplet };
+
+/// A delay setup (spec §10.6): the four plain fields of a sound's Delay the Generator writes on every load of the
+/// sound, a chosen one included. Feedback home stays as the preset saved it. A part, kit row or kit with one gets the
+/// delay Throw (spec §11.4); one with none (`on` false) throws reverb only.
+struct DelaySetup {
+	bool on = false;
+	DelayNote note = DelayNote::Eighth;
+	DelayFeel feel = DelayFeel::Even;
+	bool pingPong = false;
+	bool analog = false;
+	constexpr bool operator==(const DelaySetup&) const = default;
+};
+
 struct LaneSpec {
 	Lane lane = Lane::Kick;
 	std::span<const Pattern> pool;
@@ -195,6 +234,10 @@ struct LaneSpec {
 	/// Ticks from a hit's note-on to its note-off. Drum one-shots under 2 s ignore it and play out.
 	uint8_t gateTicks = 6;
 	Expression expression;
+	/// The lane's row's delay setup (spec §10.6): a Drums or FX row is a Sound with its own delay.
+	DelaySetup delay;
+	/// A Siren lane's held note, in bars (spec §9.5, tuning): 1 up to the phrase. 0 on every other lane.
+	uint8_t heldBars = 0;
 };
 
 /// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
@@ -304,6 +347,21 @@ struct SustainSpec {
 	/// The first Extension plays wherever the part does, at any Density, as the root does: a genre whose every chord
 	/// must sound its Extension (Detroit techno's Strings, spec §4.5). A pedal has none.
 	bool anchorExtension = false;
+	/// When set, a Section line the part plays on both sides of holds the notes whose pitch stays, at the velocity
+	/// they started with, even on a chord change, and only a changed pitch ends and strikes there: no re-strike on
+	/// the Drop's step (Ambient's Pad and Drone, spec §5.2). The one exception is the first Groove's first line, where
+	/// the whole voicing strikes once, so a piece begun in an Intro plays at the Groove's level, not the Intro's.
+	/// Every other cut still re-strikes it. Sustain only (sustainValid()).
+	bool holdsAcrossSections = false;
+	/// When set, a chord change holds the notes whose pitch the new voicing keeps, at the velocity they started with,
+	/// and only the changed pitches end and strike (Ambient's Pad, spec §5.2). A Section line follows
+	/// holdsAcrossSections. Sustain only (sustainValid()).
+	bool holdsCommonTones = false;
+	/// An open voicing (openVoicing()): the first chord puts the root and the 5th near the tonic and the 3rd and the
+	/// Extensions an octave up, and each later one moves each voice the least, so the spread holds. Wants a Register
+	/// about two octaves wide (Ambient's Pad, spec §5.2). A Sustain voicing chords only, with no doubled root
+	/// (sustainValid()).
+	bool openVoicing = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -452,14 +510,35 @@ struct PartSpec {
 	Expression expression;
 	GestureSpec gestures;
 	DriftSpec drift;
-	/// Synth parts: the post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning).
-	/// 100 keeps the preset's; never above it (1–100).
+	/// The post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning): a synth
+	/// part's, or each row's of a Kit part (Drums, FX). 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
+	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
+	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup
+	/// is written on load and never thrown: FX lanes throw their own rows (spec §11.4).
+	DelaySetup delay;
+	/// How far a Throw lifts delay feedback above home where the part, a row or its kit has a delay setup, in menu
+	/// units, before the driver's cap at 23 (spec §11.4, tuning).
+	uint8_t throwDelayDepth = 12;
 
 	[[nodiscard]] constexpr Register registerOrDefault() const { return reg.anchor ? reg : defaultRegister(role); }
 	/// A synth part plays one card preset; a Kit part (Drums, FX) plays its lanes' sounds instead (spec §10.1).
 	[[nodiscard]] constexpr bool synth() const { return lanes.empty(); }
 };
+
+/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
+constexpr int32_t laneCount(const PartSpec& part) {
+	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
+}
+/// The index of `lane` in a Kit part's lanes, or -1.
+constexpr int32_t laneIndexOf(const PartSpec& part, Lane lane) {
+	for (int32_t l = 0; l < laneCount(part); l++) {
+		if (part.lanes[l].lane == lane) {
+			return l;
+		}
+	}
+	return -1;
+}
 
 /// "`replacing` replaces `replaced`": lanes of one part play independently, except that when both land on the same
 /// step, the replaced lane's hit is dropped before any voice starts (spec §5.7).
@@ -480,6 +559,11 @@ struct HarmonySpec {
 	const ChordGraph* graph = nullptr;
 	uint8_t extensionFloor = 0;
 	uint8_t extensionCeiling = 2;
+	/// The order chords try their Extensions in (spec §7.4): the Generator-wide 7, 9, sus4, 6 unless the genre sets
+	/// its own (Ambient's kNinthFirst).
+	ExtensionOrder extensionOrder{};
+	/// The chord guard's rule and factor (spec §7.4); the Generator-wide default unless the genre overrides it.
+	ChordGuard guard{};
 };
 
 // ---- Section rules (slot 9, spec §9) ----
@@ -524,8 +608,21 @@ struct PartsAndLanes {
 
 	/// Whether it holds a part's note on `lane` (Lane::None for a pitched part's).
 	[[nodiscard]] constexpr bool has(int32_t part, Lane lane) const {
-		return (parts & (1U << static_cast<uint32_t>(part))) != 0
-		       || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
+		return (parts & partBit(part)) != 0 || (lane != Lane::None && (lanes & laneBit(lane)) != 0);
+	}
+	/// Whether it holds no part and no lane.
+	[[nodiscard]] constexpr bool empty() const { return parts == 0 && lanes == 0; }
+	/// Whether it shares a part or a lane with `other`.
+	[[nodiscard]] constexpr bool intersects(const PartsAndLanes& other) const {
+		return (parts & other.parts) != 0 || (lanes & other.lanes) != 0;
+	}
+	/// It with `other`'s parts and lanes too.
+	[[nodiscard]] constexpr PartsAndLanes with(const PartsAndLanes& other) const {
+		return {static_cast<uint8_t>(parts | other.parts), static_cast<uint16_t>(lanes | other.lanes)};
+	}
+	/// It without `other`'s parts and lanes.
+	[[nodiscard]] constexpr PartsAndLanes without(const PartsAndLanes& other) const {
+		return {static_cast<uint8_t>(parts & ~other.parts), static_cast<uint16_t>(lanes & ~other.lanes)};
 	}
 	constexpr bool operator==(const PartsAndLanes&) const = default;
 };
@@ -559,6 +656,12 @@ struct Keeps {
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the section rules' own.
 	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
+};
+
+/// How a genre wants to be entered in a transition (spec §9.5, §9.7): the style the confirm highlights.
+enum class TransitionEntry : uint8_t {
+	Drop,  ///< BUILD INTO A DROP: the default.
+	Intro, ///< FADE THROUGH: for a genre that never drops (Ambient).
 };
 
 struct ArcSpec {
@@ -598,6 +701,9 @@ struct ArcSpec {
 	/// this chance, per-mille at Motion 25, scaled by the Phrase accent curve.
 	Lane accentLane = Lane::None;
 	int16_t accentChance = 0;
+	/// The style the transition confirm highlights when this genre is the incoming one (spec §9.5). Only the
+	/// highlight: the player may pick any style.
+	TransitionEntry transitionEntry = TransitionEntry::Drop;
 
 	/// What still plays in a Section of `kind` (spec §9.5): a Break's or Build's keeps; elsewhere everything.
 	[[nodiscard]] constexpr Keeps keepsIn(SectionKind kind) const {
@@ -617,13 +723,14 @@ struct ArcSpec {
 enum class FillKind : uint8_t {
 	Rest, ///< the masked lanes and parts play nothing for its length
 	Swap, ///< the masked lanes play a fill pattern from their fill pool instead of their normal one
+	Roll, ///< the masked lane plays a short Build-style ramp, as the Build roll does (spec §8.7)
 };
 
 /// One of a genre's fill entries.
 struct FillEntry {
 	FillKind kind = FillKind::Rest;
-	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. Never an FX
-	/// lane: section rules own them.
+	/// A Rest: Drums lanes and whole Bass, Chords, Pad or Lead parts. A Swap: Drums lanes with a fill pool. A Roll: one
+	/// Drums lane. Never an FX lane: section rules own them.
 	PartsAndLanes mask;
 	/// Its length, 1, 2 or 4 beats, ending on the phrase line. A held fill ignores it.
 	uint8_t beats = 1;
@@ -632,6 +739,19 @@ struct FillEntry {
 
 /// A section-end chance a genre leaves unset: it then uses its fill chance (spec §8.7).
 constexpr int16_t kSameAsFillChance = -1;
+
+// ---- Drop-outs (slot 6, spec §8.8) ----
+
+/// One of a genre's drop-out entries: whole parts or Drums lanes falling silent for a few bars in a Groove.
+struct DropOutEntry {
+	/// Whole Bass, Chords, Pad or Lead parts, and Drums lanes. Never an FX lane: section rules own them.
+	PartsAndLanes mask;
+	/// Its length, 1, 2, 4 or 8 bars, from a bar line.
+	uint8_t bars = 1;
+	uint8_t weight = 1;
+	/// The part or lane in the mask whose last hits before it spike Space, held while it lasts (spec §11.4), or none.
+	PartsAndLanes throwTarget;
+};
 
 // ---- The Build roll (spec §8.3) ----
 
@@ -699,6 +819,10 @@ constexpr int32_t kThrowDecaySteps = kStepsPerBeat;
 /// A Throw spikes on a part's hits this many steps before its line at most (tuning). The Generator decides one step
 /// at a time, so it can't know which hit will be the last (spec §11.4).
 constexpr int32_t kThrowWindowSteps = kStepsPerBeat;
+/// Whether a step `stepsBefore` steps before a Throw's line is in its window (kThrowWindowSteps).
+constexpr bool inThrowWindow(int32_t stepsBefore) {
+	return stepsBefore >= 1 && stepsBefore <= kThrowWindowSteps;
+}
 /// Whether a gesture ever moves `control`: Close and Rise move Brightness, Wash, Rise on a Riser and Throw Space, and
 /// Rise Thin.
 constexpr bool gestureMoves(SoundControl control) {
@@ -708,9 +832,9 @@ constexpr bool gestureMoves(SoundControl control) {
 /// Drift's depth at weight 1000 and Motion 50, in control units: about half each control's range (spec §11.5,
 /// tuning). It scales with Motion, so Motion 0 stops it.
 constexpr int32_t kDriftDepth = 50;
-/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, which is one phrase in every built-in genre
-/// (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at 0. A constant, so the step's walk divides
-/// by a constant.
+/// Steps between the walk's seeded points at Motion 25: a fixed 8 bars, one phrase in every built-in genre but
+/// Psytrance, whose 16-bar phrase passes two (spec §11.5's "about one phrase"). Twice as often at Motion 50, never at
+/// 0. A constant, so the step's walk divides by a constant.
 constexpr int32_t kDriftPointSteps = 8 * kStepsPerBar;
 /// The walk's points apart in Motion units: each step moves it on by Motion, so Motion 25 passes one a phrase.
 constexpr int32_t kDriftApart = kDriftPointSteps * macroPoints(25);
@@ -771,6 +895,13 @@ struct Genre {
 	int16_t fillChance = 0;
 	/// The chance instead for a Groove's last phrase before a Break or Build, scaled the same way.
 	int16_t sectionEndChance = kSameAsFillChance;
+	/// Drop-out entries (spec §8.8). Empty: none plays.
+	std::span<const DropOutEntry> dropOuts;
+	/// Chance, per-mille at Motion 25, that a drop-out starts on the next bar line, drawn at each bar line of a Groove
+	/// where one may. The drop-out Motion curve scales it (spec §3.5, tuning).
+	int16_t dropOutChance = 0;
+	/// Bars after a drop-out ends before the next may start, at least 1.
+	uint8_t dropOutGapBars = 1;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)
@@ -790,8 +921,12 @@ constexpr bool fitsPhrase(int32_t bars, int32_t phraseBars) {
 
 /// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that fits the
 /// phrase (fitsPhrase()), so a chord never straddles a phrase line; at most kMaxChordMoves moves, each between two
-/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid.
+/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid. Its Extension order
+/// tries each Extension once, the 6 after the 7 (extensionOrderValid()).
 constexpr bool harmonyValid(const Genre& genre) {
+	if (!extensionOrderValid(genre.harmony.extensionOrder)) {
+		return false;
+	}
 	const ChordGraph* graph = genre.harmony.graph;
 	if (graph == nullptr) {
 		return true;
@@ -819,12 +954,28 @@ extern const Genre technoMelodic;
 extern const Genre technoDub;
 /// Detroit techno (spec §4.5): a Chord graph walked under a root-rhythm bass, Strings, a Stab and a Motif lead.
 extern const Genre technoDetroit;
+/// Ambient (spec §4.5): pads and a drone over a slow Chord graph, a held sub, sparse bells and soft percussion, an Arc
+/// that swells and recedes and never drops.
+extern const Genre ambient;
+/// Psytrance (spec §4.5): a four-on-the-floor kick under a rolling 16th bass that Avoids it, a pedal Drone, a swept
+/// Lead and a 16th Arp, in 16-bar phrases with long Builds into hard Drops.
+extern const Genre psytrance;
+/// Dub (spec §4.5): roots dub, not Dub techno. One-drop drums, an offbeat skank, a bass that carries the tune and a
+/// melodica, with drop-outs thrown into dotted-8th echoes and a Siren on Drops.
+extern const Genre dub;
+/// House (spec §4.5): four on the floor with claps on 2 and 4, an offbeat bass, 7th stabs and Strings over a walking
+/// Chord graph, swung hats leaning late, and a Lead that Responds to the bass in each bar's second half.
+extern const Genre house;
 /// The Techno parent's: its drum and FX lanes only, which every subgenre's palette shares.
 extern const Palette technoPalette;
 extern const Palette technoAcidPalette;
 extern const Palette technoMelodicPalette;
 extern const Palette technoDubPalette;
 extern const Palette technoDetroitPalette;
+extern const Palette ambientPalette;
+extern const Palette psytrancePalette;
+extern const Palette dubPalette;
+extern const Palette housePalette;
 } // namespace genres
 
 /// Whether a Techno subgenre's roster has what the Techno parent's tables assume (spec §4.5, #218): Drums first and FX
@@ -873,14 +1024,8 @@ constexpr bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const
 		return false;
 	}
 	const PartSpec& targetSpec = genre.parts[target.part];
-	if (target.lane != Lane::None) {
-		bool found = false;
-		for (const LaneSpec& spec : targetSpec.lanes) {
-			found = found || spec.lane == target.lane;
-		}
-		if (!found) {
-			return false;
-		}
+	if (target.lane != Lane::None && laneIndexOf(targetSpec, target.lane) < 0) {
+		return false;
 	}
 	if (target.part < part) {
 		return true;
@@ -890,11 +1035,65 @@ constexpr bool targetsEarlier(const Genre& genre, int32_t part, Lane lane, const
 	       && static_cast<int32_t>(target.lane) < static_cast<int32_t>(lane);
 }
 
+/// Whether `rules` holds a rule of `kind`.
+constexpr bool hasRule(std::span<const InterplayRule> rules, RuleKind kind) {
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == kind) {
+			return true;
+		}
+	}
+	return false;
+}
+
+constexpr bool targetResponds(const Genre& genre, const RuleTarget& target);
+
+/// Whether any of `rules`, listed on part `part` (and on `lane` of it), reads, at any depth, something that lists a
+/// Respond rule. A rule that doesn't read something earlier is skipped (interplayRulesValid() rejects it on its own),
+/// so the walk always goes back through the roster and ends. It keeps no memo, so a target reached by several paths is
+/// walked again on each: rosters are at most kMaxParts parts and their rules a handful, and it runs at compile time
+/// (genreValid()) or once at load.
+constexpr bool readsRespond(const Genre& genre, int32_t part, Lane lane, std::span<const InterplayRule> rules) {
+	for (const InterplayRule& rule : rules) {
+		if (targetsEarlier(genre, part, lane, rule) && targetResponds(genre, rule.target)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether what `target` names (the part, the lane, or for a Kit part read whole any lane) lists a Respond rule, or
+/// reads through its own rules, at any depth, something that does: its plan in a half-bar would then depend on a
+/// Respond count that isn't taken yet.
+constexpr bool targetResponds(const Genre& genre, const RuleTarget& target) {
+	const PartSpec& part = genre.parts[target.part];
+	if (target.lane == Lane::None
+	    && (hasRule(part.rules, RuleKind::Respond) || readsRespond(genre, target.part, Lane::None, part.rules))) {
+		return true;
+	}
+	for (const LaneSpec& lane : part.lanes) {
+		if ((target.lane == Lane::None || lane.lane == target.lane)
+		    && (hasRule(lane.rules, RuleKind::Respond) || readsRespond(genre, target.part, lane.lane, lane.rules))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/// Whether `rule`, listed on part `part` (and on `lane` of it), reads something generated before it, and, for
+/// Respond, something that neither responds nor reads a Respond source at any depth.
+constexpr bool ruleValid(const Genre& genre, int32_t part, Lane lane, const InterplayRule& rule) {
+	return targetsEarlier(genre, part, lane, rule)
+	       && (rule.kind != RuleKind::Respond || !targetResponds(genre, rule.target));
+}
+
 } // namespace detail
 
 /// Whether every interplay rule names a part or lane that exists and is generated earlier: an earlier part in the
 /// roster, or an earlier lane of the same part in the fixed lane order (spec §5.5). A rule that doesn't would make the
-/// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined.
+/// Generator's planned() recurse forever, so every built-in genre `static_assert`s it where it is defined. And no
+/// Respond rule reads a part or lane that lists one or reads one through its own rules, at any depth: counting the
+/// target's halves at a half-bar's first step reads its plan in the other half too, whose own Respond count isn't
+/// taken yet.
 constexpr bool interplayRulesValid(const Genre& genre) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()); p++) {
 		const PartSpec& part = genre.parts[p];
@@ -902,16 +1101,126 @@ constexpr bool interplayRulesValid(const Genre& genre) {
 			return false; // a Kit part plays only its lanes' rules
 		}
 		for (const InterplayRule& rule : part.rules) {
-			if (!detail::targetsEarlier(genre, p, Lane::None, rule)) {
+			if (!detail::ruleValid(genre, p, Lane::None, rule)) {
 				return false;
 			}
 		}
 		for (const LaneSpec& lane : part.lanes) {
 			for (const InterplayRule& rule : lane.rules) {
-				if (!detail::targetsEarlier(genre, p, lane.lane, rule)) {
+				if (!detail::ruleValid(genre, p, lane.lane, rule)) {
 					return false;
 				}
 			}
+		}
+	}
+	return true;
+}
+
+namespace detail {
+
+/// Bit s: one of `pool`'s patterns has an onset (with `anchors`, an anchor) on step s of a bar, at any tier. A pattern
+/// that divides the bar (1, 2, 4 or 8 steps) repeats across it; one of whole bars folds onto it. Any other length
+/// drifts across the bar, so its hits count as every step.
+constexpr uint32_t barSteps(std::span<const Pattern> pool, bool anchors) {
+	constexpr uint32_t kWholeBar = (1U << kStepsPerBar) - 1;
+	uint32_t bits = 0;
+	for (const Pattern& pattern : pool) {
+		const int32_t length = pattern.length;
+		const bool fits = length > 0 && (kStepsPerBar % length == 0 || length % kStepsPerBar == 0);
+		for (int32_t s = 0; s < length; s++) {
+			const bool hit = anchors ? pattern.importance[s] == kAnchor : pattern.importance[s] > 0;
+			if (!hit) {
+				continue;
+			}
+			if (!fits) {
+				bits |= kWholeBar;
+				continue;
+			}
+			for (int32_t b = s % kStepsPerBar; b < kStepsPerBar; b += length) {
+				bits |= 1U << b;
+			}
+		}
+	}
+	return bits;
+}
+
+/// Bit s: `target` can have an onset on step s of a bar: a lane's pool, a pitched part's, or every lane of a Kit.
+constexpr uint32_t targetBarSteps(const Genre& genre, const RuleTarget& target) {
+	if (target.part >= genre.parts.size()) {
+		return 0; // interplayRulesValid() rejects it
+	}
+	const PartSpec& part = genre.parts[target.part];
+	if (part.lanes.empty()) {
+		return barSteps(part.pool, false);
+	}
+	uint32_t bits = 0;
+	for (const LaneSpec& lane : part.lanes) {
+		bits |= target.lane == Lane::None || lane.lane == target.lane ? barSteps(lane.pool, false) : 0;
+	}
+	return bits;
+}
+
+/// Whether a source's Avoid rules can do what they say (avoidRulesValid()): `sustain` for a Sustain part, `flam` its
+/// Ornaments' flam weight.
+constexpr bool avoidSourceValid(const Genre& genre, std::span<const Pattern> pool, std::span<const InterplayRule> rules,
+                                bool sustain, int32_t flam) {
+	const uint32_t anchors = barSteps(pool, true);
+	for (const InterplayRule& rule : rules) {
+		if (rule.kind == RuleKind::Avoid
+		    && (sustain || flam > 0 || (anchors & targetBarSteps(genre, rule.target)) != 0)) {
+			return false;
+		}
+	}
+	return true;
+}
+constexpr bool avoidSourceValid(const Genre& genre, const PartSpec& part) {
+	return avoidSourceValid(genre, part.pool, part.rules, part.flavour == Flavour::Sustain,
+	                        part.expression.ornaments.flam);
+}
+constexpr bool avoidSourceValid(const Genre& genre, const LaneSpec& lane) {
+	return avoidSourceValid(genre, lane.pool, lane.rules, false, lane.expression.ornaments.flam);
+}
+
+} // namespace detail
+
+/// Whether every Avoid rule can do what it says (spec §5.5, §8.1). No anchor in any of the source's pool patterns falls
+/// on a step where any of the target's pool patterns has an onset, at any tier, comparing patterns of different
+/// lengths by their step in the bar: an anchor always plays, so it would play where the rule must leave a hole. No
+/// Sustain part lists one: it has no onsets to thin, and Generator::avoided() would cut its voicing on every target
+/// step. And no source flams: a flam's grace hit on the step after an avoided one starts inside the avoided 16th.
+constexpr bool avoidRulesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (!detail::avoidSourceValid(genre, part)) {
+			return false;
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			if (!detail::avoidSourceValid(genre, lane)) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/// Whether each Roll fill entry names exactly one lane and no whole part, and that lane is a non-FX lane of a Drums
+/// part in the roster (spec §8.7): a Roll plays on one Drums lane.
+constexpr bool rollFillsValid(const Genre& genre) {
+	for (const FillEntry& fill : genre.fills) {
+		if (fill.kind != FillKind::Roll) {
+			continue;
+		}
+		if (fill.mask.parts != 0 || std::popcount(fill.mask.lanes) != 1) {
+			return false;
+		}
+		bool found = false;
+		for (const PartSpec& part : genre.parts) {
+			for (const LaneSpec& lane : part.lanes) {
+				found = found
+				        || (part.role == Role::Drums && !isFxLane(lane.lane) && fill.mask.lanes == laneBit(lane.lane));
+			}
+		}
+		if (!found) {
+			return false;
 		}
 	}
 	return true;
@@ -1155,17 +1464,93 @@ constexpr bool rollUncut(const Genre& genre) {
 	return true;
 }
 
-/// Whether the Build cut and the Gap each end the Build in less than a phrase (spec §9.1, §13.5): the Arc plan leaves
-/// them out because neither covers a whole phrase, so one that did would plan a phrase as playing that plays nothing.
-constexpr bool buildEndsInPhrase(const Genre& genre) {
-	return genre.arc.buildCutBars < genre.phraseBars && gapSteps(genre.arc.gap) < genre.phraseSteps();
+/// The genre's shortest Build in bars, no longer than its phrase (spec §9.1).
+constexpr int32_t shortestBuildBars(const Genre& genre) {
+	int32_t shortest = genre.phraseBars;
+	for (const WeightedBars& build : genre.arc.buildBars) {
+		shortest = std::min<int32_t>(shortest, build.bars);
+	}
+	return shortest;
+}
+
+/// Whether the Build cut and the Gap are each shorter than the genre's shortest Build and its phrase (spec §9.1, §9.5,
+/// §13.5): the Arc plan counts a Build's keeps as sounding and leaves the cut and the Gap out, so one that covered a
+/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing.
+constexpr bool cutAndGapUnderBuild(const Genre& genre) {
+	const int32_t shortest = shortestBuildBars(genre);
+	return genre.arc.buildCutBars < shortest && gapSteps(genre.arc.gap) < shortest * kStepsPerBar;
+}
+
+/// Whether every Siren lane holds its note 1 bar up to a phrase, on an FX part, and no other lane sets a held length
+/// (spec §9.5): a Siren that outlasted its phrase would ring on into the next Section's plan.
+constexpr bool sirensValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& lane : part.lanes) {
+			const bool siren = lane.lane == Lane::Siren && part.role == Role::FX;
+			if (siren ? lane.heldBars < 1 || lane.heldBars > genre.phraseBars : lane.heldBars != 0) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
+/// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
+/// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
+/// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
+/// per-mille.
+constexpr bool dropOutsValid(const Genre& genre) {
+	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
+		return false;
+	}
+	for (const DropOutEntry& entry : genre.dropOuts) {
+		const PartsAndLanes mask = entry.mask;
+		const PartsAndLanes target = entry.throwTarget;
+		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4 && entry.bars != 8) || entry.bars > genre.phraseBars
+		    || mask.empty()) {
+			return false;
+		}
+		if (!target.without(mask).empty() || std::popcount(target.parts) + std::popcount(target.lanes) > 1) {
+			return false;
+		}
+		bool leavesSome = false;
+		uint8_t pitched = 0;
+		uint16_t drumLanes = 0;
+		for (size_t p = 0; p < genre.parts.size(); p++) {
+			const PartSpec& part = genre.parts[p];
+			const bool inMask = (mask.parts & partBit(static_cast<int32_t>(p))) != 0;
+			if (part.lanes.empty()) {
+				pitched |= partBit(static_cast<int32_t>(p));
+				leavesSome = leavesSome || !inMask;
+				continue;
+			}
+			if (part.role != Role::Drums) {
+				continue; // FX lanes are the section rules' own
+			}
+			for (const LaneSpec& lane : part.lanes) {
+				drumLanes |= laneBit(lane.lane);
+				leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+			}
+		}
+		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~drumLanes) != 0 || !leavesSome) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
-/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()).
+/// phrase (fitsPhrase()), and no anchored Extension or open voicing on a pedal, which voices none (pedalVoicing()).
+/// Only a Sustain holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes
+/// uncut, and only decideSustain() ends or extends them. Only a Sustain voices open, and doubles no root there
+/// (openVoicing()).
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
+			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing) {
+				return false;
+			}
 			continue;
 		}
 		const SustainSpec& sustain = part.sustain;
@@ -1173,6 +1558,9 @@ constexpr bool sustainValid(const Genre& genre) {
 			return false;
 		}
 		if (sustain.pedal && sustain.anchorExtension) {
+			return false;
+		}
+		if (sustain.openVoicing && (sustain.pedal || sustain.doubleRoot)) {
 			return false;
 		}
 	}
@@ -1191,10 +1579,6 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
-/// How many of a Kit part's lanes the Generator plays: its lanes, up to kMaxLanesPerPart.
-constexpr int32_t laneCount(const PartSpec& part) {
-	return std::min<int32_t>(static_cast<int32_t>(part.lanes.size()), kMaxLanesPerPart);
-}
 /// What a control set is, which decides the layers that move it (spec §11.3–§11.5).
 enum class ControlSetKind : uint8_t {
 	Part,    ///< A pitched part's own: every layer.
@@ -1253,6 +1637,44 @@ constexpr Lane controlSetLane(const PartSpec& part, int32_t set) {
 		return Lane::None;
 	}
 	return part.lanes[set - (layout.own ? 1 : 0)].lane;
+}
+/// The delay setup of `part`'s control set on `lane` (spec §10.6): a lane's row's, or for Lane::None the part's own
+/// (a synth's, or a Kit's at kit level). Off for a lane the part doesn't list.
+constexpr DelaySetup delaySetupOf(const PartSpec& part, Lane lane) {
+	if (lane == Lane::None) {
+		return part.delay;
+	}
+	const int32_t l = laneIndexOf(part, lane);
+	return l >= 0 ? part.lanes[l].delay : DelaySetup{};
+}
+/// Whether the genre's FX part lists a Siren lane (spec §10.5).
+constexpr bool genreHasSiren(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (genre.parts[p].role == Role::FX && laneIndexOf(genre.parts[p], Lane::Siren) >= 0) {
+			return true;
+		}
+	}
+	return false;
+}
+/// Whether any part, row or kit of the genre has a delay setup (spec §10.6).
+constexpr bool genreHasDelaySetup(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.delay.on) {
+			return true;
+		}
+		for (int32_t l = 0; l < laneCount(part); l++) {
+			if (part.lanes[l].delay.on) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+/// Whether a Throw on `part`'s control set on `lane` lifts delay feedback (spec §11.4): it has a delay setup and the
+/// part a Throw depth above 0. Otherwise it throws reverb only.
+constexpr bool throwsDelay(const PartSpec& part, Lane lane) {
+	return delaySetupOf(part, lane).on && part.throwDelayDepth > 0;
 }
 /// The control sets over the whole roster.
 constexpr int32_t controlSets(const Genre& genre) {

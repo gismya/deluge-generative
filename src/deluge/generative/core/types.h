@@ -51,7 +51,12 @@ constexpr int32_t kLookaheadTicks = 12;
 /// Lean runs from -kMaxLean to +kMaxLean ticks.
 constexpr int32_t kMaxLean = 12;
 constexpr int32_t kStepsPerBeat = 4;
-constexpr int32_t kStepsPerBar = 16; ///< Every v1 genre is 4/4 on a 16th grid (spec §4.3).
+constexpr int32_t kStepsPerBar = 16;                ///< Every v1 genre is 4/4 on a 16th grid (spec §4.3).
+constexpr int32_t kHalfBarSteps = kStepsPerBar / 2; ///< Respond's half-bar (spec §5.5).
+/// Which half of its bar `step` is in: 0 or 1.
+constexpr int32_t halfOf(int32_t step) {
+	return (step % kStepsPerBar) / kHalfBarSteps;
+}
 constexpr int32_t kTicksPerBeat = kStepsPerBeat * kTicksPerStep;
 constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
 
@@ -160,8 +165,8 @@ constexpr int32_t onsetNotes(Role role) {
 		return maxLanes(role);
 	}
 }
-/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's (spec §4.5).
-/// The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
+/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's and House's
+/// (spec §4.5). The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
 /// genre_data_spec holds every genre's roster to what it gives.
 constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, Role::Chords, Role::Lead, Role::FX};
 

@@ -7,6 +7,7 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <span>
 #include <string_view>
 
 namespace harness::render {
@@ -24,13 +26,35 @@ const char* const kUsage =
     "usage: generator_render [--out PREFIX] [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
-    "                        [--pack DIR] [--card DIR]\n"
+    "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only] [--mute PART]...\n"
+    "       generator_render --list-sounds [--genre NAME] [--entropy N] [Recipe flags] [--pack DIR] [--card DIR]\n"
+    "       generator_render --list-palettes\n"
+    "       generator_render --list-risers\n"
     "\n"
     "Renders a Recipe and seed through the harness to PREFIX.wav, PREFIX.mid and PREFIX.txt (spec 21.2). PREFIX\n"
     "defaults to the repo's build/renders/<genre>-seed<seed>.\n"
     "Macros are OLED points, 0 to 50. Anything not given keeps what the genre's new Recipe rolls from --entropy\n"
     "(default 0). Samples come from --pack (default: the repo's pack/) and then --card (default:\n"
-    "~/source/delugemu-sd/sdcard).\n";
+    "~/source/delugemu-sd/sdcard).\n"
+    "--bars is the most it plays (default 16). --end-after-drop arms End on the Drop's first step, so the piece plays\n"
+    "one Arc cycle and ends after its Outro; it warns if no Drop came, and the WAV's hour limit then counts the\n"
+    "bars it played. --mute PART (a sidebar row, 1 to the genre's part count, at most 6: the part order, as gen_emu.py "
+    "capture --mute; "
+    "repeatable)\n"
+    "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"
+    "MIDI file and piano roll keep every part. --midi-only writes only PREFIX.mid. The MIDI file's last track, "
+    "THEORY,\n"
+    "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
+    "scripts/generative/theory_review.py.\n"
+    "--list-sounds prints the sounds the render's WAV plays, rolled from --entropy over --pack and --card: one\n"
+    "\"PART<TAB>path\" a line per part, \"PART.LANE<TAB>path\" per lane of a Drums or FX part (- for none). The "
+    "card's\n"
+    "file order can differ from the render's, so a capture can pick another file from the same entropy.\n"
+    "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
+    "line, for scripts/generative/osc_octaves.py.\n"
+    "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
+    "shortest Build in ms at the top of its tempo range, and the lane's folders and tags, each |-separated, for\n"
+    "scripts/generative/riser_fit.py.\n";
 
 namespace {
 
@@ -105,6 +129,54 @@ bool writeFile(const std::string& path, const void* data, size_t size) {
 
 } // namespace
 
+std::string pitchedPalettePresets() {
+	std::string out;
+	for (const Genre* genre : allGenres()) {
+		for (const PartSpec& part : genre->parts) {
+			// The parts the load sets to whole-sound transpose 0: the ones whose oscillators' octaves it can't reach.
+			if (!partSoundSettings(part).zeroTranspose || genre->palette == nullptr) {
+				continue;
+			}
+			for (const PaletteEntry& entry : genre->palette->partEntries(part)) {
+				out += std::string(genre->name) + "\t" + part.name + "\t" + entry.path + "\n";
+			}
+		}
+	}
+	return out;
+}
+
+std::string riserLanes() {
+	std::string out;
+	for (const Genre* genre : allGenres()) {
+		const bool hasRiser = std::ranges::any_of(genre->parts, [](const PartSpec& part) {
+			return std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.lane == Lane::Riser; });
+		});
+		if (!hasRiser || genre->palette == nullptr) {
+			continue;
+		}
+		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
+		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
+		// bars over an 8-bar phrase.
+		const std::span<const WeightedBars> builds = genre->arc.buildBars;
+		const int32_t buildBars =
+		    builds.empty() ? genre->phraseBars : std::ranges::min(builds, {}, &WeightedBars::bars).bars;
+		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
+		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
+		const LaneSounds none{.lane = Lane::Riser};
+		const LaneSounds& lane = sounds != nullptr ? *sounds : none;
+		std::string folders;
+		for (const char* folder : laneFolders(lane)) {
+			folders += (folders.empty() ? "" : "|") + std::string(folder);
+		}
+		std::string tags;
+		for (const TagWeight& tag : lane.tags) {
+			tags += (tags.empty() ? "" : "|") + std::string(tag.tag);
+		}
+		out += std::string(genre->name) + "\t" + std::to_string(ms) + "\t" + folders + "\t" + tags + "\n";
+	}
+	return out;
+}
+
 Parsed parseArgs(int argc, const char* const* argv) {
 	Parsed parsed;
 	Request& r = parsed.request;
@@ -121,12 +193,38 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			parsed.help = true;
 			return parsed;
 		}
+		if (flag == "--end-after-drop") {
+			r.endAfterDrop = true;
+			continue;
+		}
+		if (flag == "--midi-only") {
+			r.midiOnly = true;
+			continue;
+		}
+		if (flag == "--list-sounds") {
+			parsed.listSounds = true;
+			continue;
+		}
+		if (flag == "--list-palettes") {
+			if (argc != 2) {
+				return fail("--list-palettes takes no other arguments");
+			}
+			parsed.listPalettes = true;
+			return parsed;
+		}
+		if (flag == "--list-risers") {
+			if (argc != 2) {
+				return fail("--list-risers takes no other arguments");
+			}
+			parsed.listRisers = true;
+			return parsed;
+		}
 		int32_t macro = -1;
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
 		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy", "--bars", "--key", "--scale",
-		                                              "--tempo", "--swing", "--pack",    "--card", "--out"};
+		                                              "--tempo", "--swing", "--pack",    "--card", "--out", "--mute"};
 		if (macro < 0 && std::find(std::begin(kFlags), std::end(kFlags), flag) == std::end(kFlags)) {
 			return fail("unknown argument: " + std::string(flag));
 		}
@@ -189,6 +287,12 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			}
 			r.overrides.swing = static_cast<int8_t>(n);
 		}
+		else if (flag == "--mute") {
+			if (!parseInt(value, 1, kMaxParts, &n)) {
+				return fail("--mute takes a part, 1 to " + std::to_string(kMaxParts));
+			}
+			r.mutedParts |= 1U << (n - 1);
+		}
 		else if (flag == "--pack") {
 			pack = value;
 		}
@@ -200,8 +304,13 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		}
 		i++;
 	}
+	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
+	const auto parts = static_cast<int32_t>(genre->parts.size());
+	if ((r.mutedParts >> parts) != 0) {
+		return fail(std::string(genre->name) + " has " + std::to_string(parts) + " parts: --mute takes 1 to "
+		            + std::to_string(parts));
+	}
 	if (r.out.empty()) {
-		const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
 		r.out = std::string(GENERATOR_RENDER_REPO_ROOT "/build/renders/") + genre->name + "-seed"
 		        + std::to_string(r.overrides.seed);
 	}
@@ -212,32 +321,156 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	return parsed;
 }
 
-Rendered render(const Request& request) {
-	RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
-	if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
-		return {{}, std::move(why)};
-	}
+namespace {
+
+Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_t* droppedEvents, bool* endArmed) {
+	Rendering rendering{rolled.recipe, {}, rolled.seed, request.overrides.entropy, request.bars, {}, {}};
 	Run run;
 	run.recipe = rolled.recipe;
 	run.seed = rolled.seed;
+	bool armEnd = false;
+	bool armed = false;
+	// Each driver call decides at most one step, so the last decided step's queries are that step's. An Ornament hit
+	// due at the decision's own tick (a flam's grace leaned early) can play before this reads the buffer: it then gets
+	// no step=, and theory_review.py puts it on its main hit, a 16th or less after it.
+	run.watch = [&](const Generator& generator) {
+		if (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
+			const int32_t decided = generator.nextStep() - 1;
+			for (int32_t i = 0; i < generator.lastStepEventCount(); i++) {
+				const Event& e = generator.lastStepEvent(i);
+				if (e.kind == EventKind::NoteOn && e.ornament) {
+					rendering.ornamentSteps.emplace_back(e, decided);
+				}
+			}
+		}
+		while (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
+			rendering.steps.push_back(
+			    {generator.chord(), generator.effectiveMacro(Macro::Energy), generator.effectiveMacro(Macro::Density)});
+		}
+		armEnd = armEnd || (request.endAfterDrop && generator.arc().dropStartsHere());
+	};
+	run.steer = [&](int32_t /*nextStep*/, SteeringQueue& queue) {
+		if (armEnd && !armed) {
+			armed = queue.push({CommandKind::End, 0, 1});
+		}
+	};
 	Result played = play(run, request.bars);
-
-	// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the card
-	// folder. File order differs from the card's (RootsLister), so a lane can pick another file than a capture does.
-	Rendering rendering{rolled.recipe, {}, rolled.seed, request.bars, std::move(played.events)};
-	RootsLister lister(request.library);
-	const bool rolledAll = rollSounds(*rolled.recipe.genre, *rolled.recipe.genre->palette, rendering.sounds,
-	                                  request.overrides.entropy, lister);
-	Audio audio = renderAudio(rendering, request.library);
-	std::vector<uint8_t> midi = midiFile(rendering);
-	std::string roll = pianoRoll(rendering);
-
-	Rendered rendered{std::move(audio.warnings), {}};
-	if (!rolledAll) {
-		rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
+	if (played.ended) {
+		constexpr int32_t kTicksPerBar = kStepsPerBar * kTicksPerStep;
+		rendering.bars = std::min(request.bars, (played.endedAt + kTicksPerBar - 1) / kTicksPerBar);
 	}
-	if (played.droppedEvents != 0) {
-		rendered.warnings.push_back(std::to_string(played.droppedEvents) + " events dropped on overflow");
+	// The driver decides ahead of what plays: keep the steps of the bars played.
+	rendering.steps.resize(
+	    std::min<size_t>(rendering.steps.size(), static_cast<size_t>(rendering.bars) * kStepsPerBar));
+	rendering.events = std::move(played.events);
+	if (droppedEvents != nullptr) {
+		*droppedEvents = played.droppedEvents;
+	}
+	if (endArmed != nullptr) {
+		*endArmed = armed;
+	}
+	return rendering;
+}
+
+/// The rendering with each note-on of a part in `mutedParts` muted, as Perform's sidebar mutes it (spec §12.5): heard()
+/// leaves it out of the WAV, and its note-off still passes.
+Rendering withMutes(const Rendering& rendering, uint32_t mutedParts) {
+	Rendering muted = rendering;
+	for (Event& e : muted.events) {
+		if (e.kind == EventKind::NoteOn && e.part < 32 && ((mutedParts >> e.part) & 1U) != 0) {
+			e.muted = true;
+		}
+	}
+	return muted;
+}
+
+/// The Recipe's sound picks from the overrides' entropy, the entropy a capture build rolls from, over the library.
+SoundPicks rolledSounds(const Genre& genre, const Request& request, bool* rolledAll) {
+	SoundPicks sounds{};
+	RootsLister lister(request.library);
+	*rolledAll = rollSounds(genre, *genre.palette, sounds, request.overrides.entropy, lister);
+	return sounds;
+}
+
+} // namespace
+
+std::string soundPicks(const Request& request, bool* rolledAll) {
+	const Genre& genre = *rollWithOverrides(*allGenres()[0], request.overrides).recipe.genre;
+	bool all = false;
+	const SoundPicks sounds = rolledSounds(genre, request, &all);
+	if (rolledAll != nullptr) {
+		*rolledAll = all;
+	}
+	auto path = [](const SoundPath& pick) { return pick.empty() ? std::string("-") : std::string(pick.c_str()); };
+	std::string out;
+	for (size_t p = 0; p < genre.parts.size(); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.lanes.empty()) {
+			out += std::string(part.name) + "\t" + path(sounds.part[p]) + "\n";
+		}
+		if (const RolledKit kit = rolledKit(*genre.palette, part, static_cast<int32_t>(p), request.overrides.entropy);
+		    kit.machine != nullptr) {
+			std::string swaps;
+			for (size_t w = 0; w < genre.palette->kits.swaps.size() && w < kMaxKitSwaps; w++) {
+				if ((kit.swaps >> w) & 1U) {
+					const KitSwap& swap = genre.palette->kits.swaps[w];
+					swaps += (swaps.empty() ? "" : ",") + std::string(kLaneNames[static_cast<int32_t>(swap.lane)]) + "="
+					         + swap.tag;
+				}
+			}
+			out += std::string(part.name) + ".kit\t" + kit.machine->name + "\t" + (swaps.empty() ? "-" : swaps) + "\n";
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			const auto l = static_cast<int32_t>(lane.lane);
+			out += std::string(part.name) + "." + kLaneNames[l] + "\t" + path(sounds.lane[l]) + "\n";
+		}
+	}
+	return out;
+}
+
+Rendering playRequest(const Request& request, uint32_t* droppedEvents, bool* endArmed) {
+	return playRolled(request, rollWithOverrides(*allGenres()[0], request.overrides), droppedEvents, endArmed);
+}
+
+Rendered render(const Request& request) {
+	const RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
+	// Before it plays, unless --end-after-drop makes --bars only a ceiling: then the bars it played count.
+	if (!request.midiOnly && !request.endAfterDrop) {
+		if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
+			return {{}, std::move(why)};
+		}
+	}
+	uint32_t dropped = 0;
+	bool endArmed = false;
+	Rendering rendering = playRolled(request, rolled, &dropped, &endArmed);
+	if (!request.midiOnly && request.endAfterDrop) {
+		if (std::string why = audioLengthError(rendering.bars, rolled.recipe.tempo); !why.empty()) {
+			return {{}, std::move(why)};
+		}
+	}
+	Rendered rendered;
+	if (request.endAfterDrop && !endArmed) {
+		rendered.warnings.push_back("--end-after-drop: no Drop in " + std::to_string(request.bars)
+		                            + " bars, so End was never armed and the piece has no Outro");
+	}
+	Audio audio;
+	std::string roll;
+	if (!request.midiOnly) {
+		// Sound picks rolled from the overrides' entropy, the entropy a capture build rolls from, over pack/ and the
+		// card folder. File order differs from the card's (RootsLister), so a lane can pick another file than a
+		// capture does.
+		bool rolledAll = false;
+		rendering.sounds = rolledSounds(*rendering.recipe.genre, request, &rolledAll);
+		audio = renderAudio(withMutes(rendering, request.mutedParts), request.library);
+		roll = pianoRoll(rendering);
+		rendered.warnings.insert(rendered.warnings.end(), audio.warnings.begin(), audio.warnings.end());
+		if (!rolledAll) {
+			rendered.warnings.push_back("a sound folder couldn't be listed: some parts and lanes have no sound pick");
+		}
+	}
+	std::vector<uint8_t> midi = midiFile(rendering);
+	if (dropped != 0) {
+		rendered.warnings.push_back(std::to_string(dropped) + " events dropped on overflow");
 	}
 	const std::filesystem::path folder = std::filesystem::path(request.out).parent_path();
 	std::error_code ignored; // a folder that can't be made shows up as a file that can't be written
@@ -248,13 +481,14 @@ Rendered render(const Request& request) {
 		const char* ext;
 		const void* data;
 		size_t size;
+		bool write;
 	} files[] = {
-	    {".wav", audio.wav.data(), audio.wav.size()},
-	    {".mid", midi.data(), midi.size()},
-	    {".txt", roll.data(), roll.size()},
+	    {".wav", audio.wav.data(), audio.wav.size(), !request.midiOnly},
+	    {".mid", midi.data(), midi.size(), true},
+	    {".txt", roll.data(), roll.size(), !request.midiOnly},
 	};
 	for (const auto& file : files) {
-		if (!writeFile(request.out + file.ext, file.data, file.size)) {
+		if (file.write && !writeFile(request.out + file.ext, file.data, file.size)) {
 			rendered.error = "can't write " + request.out + file.ext;
 			break;
 		}

@@ -341,6 +341,15 @@ describe detroit_techno("Detroit techno", $ {
 	});
 
 	context("its Bass (spec §4.5, §5.2)", _ {
+		it("takes the Bass Register's default, the tonic within 6 semitones of C2 (spec §10.6: heard pitch)", _ {
+			const Register reg = detroit.parts[kBassPart].registerOrDefault();
+			const Register fallback = defaultRegister(Role::Bass);
+			expect(static_cast<int32_t>(reg.anchor)).to_equal(36);
+			expect(static_cast<int32_t>(reg.anchor)).to_equal(static_cast<int32_t>(fallback.anchor));
+			expect(static_cast<int32_t>(reg.spanLow)).to_equal(static_cast<int32_t>(fallback.spanLow));
+			expect(static_cast<int32_t>(reg.spanHigh)).to_equal(static_cast<int32_t>(fallback.spanHigh));
+		});
+
 		it("is a Loop on root rhythm: the beats and the & before the next, a 16th pickup with Complexity", _ {
 			const PartSpec& bass = detroit.parts[kBassPart];
 			for (const Pattern& pattern : bass.pool) {
@@ -461,9 +470,9 @@ describe detroit_techno("Detroit techno", $ {
 	});
 
 	context("its Motif (spec §4.5, §5.2, §5.6)", _ {
-		it("is a Lead Motif of one- and two-bar riffs, gated at 30", _ {
+		it("is a Lead Motif of one- and two-bar riffs, gated at 27", _ {
 			const PartSpec& motif = detroit.parts[kMotifPart];
-			expect(motif.densityGate).to_equal(macroPoints(30));
+			expect(motif.densityGate).to_equal(macroPoints(27));
 			bool one = false;
 			bool two = false;
 			for (const Pattern& pattern : motif.pool) {
@@ -473,9 +482,14 @@ describe detroit_techno("Detroit techno", $ {
 			expect(one && two).to_be_true();
 		});
 
-		it("is silent in a Groove at the default macros, and plays from each Drop (Done-when)", _ {
+		it("plays every bar of each Drop and nothing else at the default macros (Done-when, #120 round 1)", _ {
+			// The Drop is the Groove's first Drop decay (1 phrase) after a Build: the lift keeps the gate open through
+			// it and the gate closes on the bar where the lift has decayed to the centre.
+			const int32_t dropSteps = detroit.arc.dropDecayPhrases * detroit.phraseSteps();
 			int32_t drops = 0;
 			int32_t heardDrops = 0;
+			int32_t dropBars = 0;
+			int32_t heardBars = 0;
 			int32_t grooveSteps = 0;
 			for (Scale scale : detroit.facts.scales) {
 				for (uint32_t seed = 1; seed <= 10; seed++) {
@@ -486,14 +500,23 @@ describe detroit_techno("Detroit techno", $ {
 							motifSteps.push_back(std::min<int32_t>(stepOf(e), static_cast<int32_t>(walked.steps.size()) - 1));
 						}
 					}
-					// Each step's Section, and whether its Groove opened with a Drop.
-					std::vector<bool> fromDrop(walked.steps.size());
+					// Each step's Section, and whether it is in a Drop: its Groove opened with one, within the decay.
+					std::vector<bool> inDrop(walked.steps.size());
 					bool dropped = false;
+					int32_t sectionStep = 0;
 					for (size_t n = 0; n < walked.steps.size(); n++) {
 						const Walked::Step& step = walked.steps[n];
 						dropped = step.sectionStart ? step.drop : dropped;
-						fromDrop[n] = dropped && step.section == SectionKind::Groove;
-						grooveSteps += !fromDrop[n] && step.section == SectionKind::Groove ? 1 : 0;
+						sectionStep = step.sectionStart ? 0 : sectionStep + 1;
+						inDrop[n] = dropped && step.section == SectionKind::Groove && sectionStep < dropSteps;
+						grooveSteps += !inDrop[n] && step.section == SectionKind::Groove ? 1 : 0;
+						if (inDrop[n] && sectionStep % kStepsPerBar == 0 && n + kStepsPerBar <= walked.steps.size()) {
+							dropBars++;
+							const bool heard = std::any_of(motifSteps.begin(), motifSteps.end(), [&](int32_t s) {
+								return s >= static_cast<int32_t>(n) && s < static_cast<int32_t>(n) + kStepsPerBar;
+							});
+							heardBars += heard ? 1 : 0;
+						}
 						if (step.drop) {
 							drops++;
 							const bool heard = std::any_of(motifSteps.begin(), motifSteps.end(), [&](int32_t s) {
@@ -503,13 +526,15 @@ describe detroit_techno("Detroit techno", $ {
 						}
 					}
 					for (int32_t s : motifSteps) {
-						expect(static_cast<bool>(fromDrop[s])).to_be_true();
+						expect(static_cast<bool>(inDrop[s])).to_be_true();
 					}
 				}
 			}
 			expect(grooveSteps).to_be_greater_than(10000);
 			expect(drops).to_be_greater_than(10);
 			expect(heardDrops).to_equal(drops);
+			expect(dropBars).to_be_greater_than(drops * 7);
+			expect(heardBars).to_equal(dropBars);
 		});
 
 		it("plays only the playing chord's notes, in its Register, one note at a time", _ {
@@ -580,8 +605,9 @@ describe detroit_techno("Detroit techno", $ {
 					continue;
 				}
 				synthParts++;
+				// At least 3 before the ear check trimmed them (spec §10.1, #120 round 1), never none.
 				auto entries = detroit.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
+				expect(entries.size()).to_be_greater_than(size_t{0});
 				for (const PaletteEntry& entry : entries) {
 					expect(card.has(entry.path)).to_be_true();
 				}

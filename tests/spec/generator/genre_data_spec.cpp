@@ -294,7 +294,7 @@ describe genre_data("Every built-in genre", $ {
 				oddBuild.arc.buildBars = unfitBuild; // buildBarsValid()
 				expect(genreValid(oddBuild)).to_be_false();
 			}
-			Genre phraseCut = *genre; // buildEndsInPhrase(): a cut over a whole phrase
+			Genre phraseCut = *genre; // cutAndGapUnderBuild(): a cut over a whole phrase
 			phraseCut.arc.buildCutBars = genre->phraseBars;
 			expect(rollUncut(phraseCut)).to_be_true(); // fails on its own rule, not the roll's
 			expect(genreValid(phraseCut)).to_be_false();
@@ -304,6 +304,7 @@ describe genre_data("Every built-in genre", $ {
 				Genre cutRoll = *genre; // rollUncut(): the cut by lane
 				cutRoll.arc.buildCutBars = 1;
 				cutRoll.arc.buildCut.lanes |= laneBit(roll);
+				expect(rollUncut(cutRoll)).to_be_false(); // its own rule, whatever a 1-bar Build makes of the cut
 				expect(genreValid(cutRoll)).to_be_false();
 				for (size_t p = 0; p < genre->parts.size(); p++) {
 					const PartSpec& part = genre->parts[p];
@@ -482,6 +483,34 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "chords", .parts = chords})).to_be_true();
 	});
 
+	it("rejects an open voicing on a part that isn't a Sustain, on a pedal, which voices no chord, or with a doubled root", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pedal[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.pedal = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pedal", .parts = pedal})).to_be_false();
+		const PartSpec doubled[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.doubleRoot = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "doubled", .parts = doubled})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
+	it("rejects a hold across Section lines on a part that isn't a Sustain, which only decideSustain() honours", _ {
+		const PartSpec stab[] = {
+		    {.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsAcrossSections = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsAcrossSections = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
+	it("rejects held common tones on a part that isn't a Sustain, which only decideSustain() honours", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsCommonTones = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsCommonTones = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
 	it("gives each part a flavour its role allows, which its sounding-note table is sized for (spec §5.2, §2.7)", _ {
 		// Drums and FX have none; Bass plays Loop; Lead Loop, Arp or Motif; Chords Stab; Pad Sustain.
 		const std::map<Role, std::set<Flavour>> allowed = {
@@ -549,6 +578,17 @@ describe genre_data("Every built-in genre", $ {
 		expect(fits(8, 12)).to_be_false();
 	});
 
+	it("rejects an Extension order that doesn't try each Extension once, or tries the 6 before the 7 (spec §7.4)", _ {
+		auto valid = [](ExtensionOrder order) { return harmonyValid(Genre{.harmony = {.extensionOrder = order}}); };
+		using enum Extension;
+		expect(valid(ExtensionOrder{})).to_be_true();
+		expect(valid(kNinthFirst)).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Seventh, Sixth, Sus4}})).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Ninth, Seventh, Sixth}})).to_be_false(); // the sus4 never tried
+		expect(valid(ExtensionOrder{{Sixth, Seventh, Ninth, Sus4}})).to_be_false();  // the 6 before the 7 never plays
+		expect(valid(ExtensionOrder{{Seventh, Ninth, Sus4, static_cast<Extension>(4)}})).to_be_false(); // the 5th
+	});
+
 	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target off them", _ {
 		auto valid = [](std::span<const ChordMove> moves, uint8_t target, uint8_t period) {
 			const ChordGraph graph{.moves = moves, .cadenceTarget = target, .cadencePeriod = period};
@@ -592,24 +632,57 @@ describe genre_data("Every built-in genre", $ {
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
 	});
 
-	it("ends a Build with a cut and a Gap shorter than a phrase, which the Arc plan leaves out (spec §9.1, §13.5)", _ {
+	it("ends a Build with a cut and a Gap each shorter than its shortest Build and its phrase (spec §9.1, §9.5)", _ {
 		for (const Genre* genre : allGenres()) {
-			expect(buildEndsInPhrase(*genre)).to_be_true();
+			expect(cutAndGapUnderBuild(*genre)).to_be_true();
 		}
 	});
 
-	it("rejects a Build cut or Gap that covers a whole phrase (buildEndsInPhrase())", _ {
-		const auto ends = [](uint8_t phraseBars, uint8_t cutBars, GapLength gap) {
-			return buildEndsInPhrase(Genre{
-			    .name = "ends", .phraseBars = phraseBars, .arc = {.buildCutBars = cutBars, .gap = gap}});
+	it("rejects a Build cut or Gap that covers a whole phrase or the shortest Build (cutAndGapUnderBuild())", _ {
+		static constexpr WeightedBars kEight[] = {{8, 1}};
+		static constexpr WeightedBars kOneOrEight[] = {{8, 2}, {1, 1}};
+		static constexpr WeightedBars kTwo[] = {{2, 1}};
+		static constexpr WeightedBars kSixteen[] = {{16, 1}};
+		const auto ends = [](uint8_t phraseBars, std::span<const WeightedBars> builds, uint8_t cutBars,
+		                     GapLength gap) {
+			return cutAndGapUnderBuild(Genre{.name = "ends",
+			                                 .phraseBars = phraseBars,
+			                                 .arc = {.buildBars = builds, .buildCutBars = cutBars, .gap = gap}});
 		};
-		expect(ends(8, 7, GapLength::Bar)).to_be_true();
-		expect(ends(8, 8, GapLength::None)).to_be_false();
-		expect(ends(8, 9, GapLength::None)).to_be_false();
-		expect(ends(2, 1, GapLength::Bar)).to_be_true();
-		expect(ends(1, 0, GapLength::Beat)).to_be_true();
-		expect(ends(1, 0, GapLength::Bar)).to_be_false();
-		expect(ends(1, 1, GapLength::None)).to_be_false();
+		expect(ends(8, kEight, 7, GapLength::Bar)).to_be_true();
+		expect(ends(8, kEight, 8, GapLength::None)).to_be_false();
+		expect(ends(8, kEight, 9, GapLength::None)).to_be_false();
+		expect(ends(2, kTwo, 1, GapLength::Bar)).to_be_true();
+		expect(ends(1, kOneOrEight, 0, GapLength::Beat)).to_be_true();
+		expect(ends(1, kOneOrEight, 0, GapLength::Bar)).to_be_false();
+		expect(ends(1, kOneOrEight, 1, GapLength::None)).to_be_false();
+		// A 1-bar Build in an 8-bar phrase: a 1-bar cut or Gap would cover all of it (spec §9.5).
+		expect(ends(8, kOneOrEight, 1, GapLength::None)).to_be_false();
+		expect(ends(8, kOneOrEight, 0, GapLength::Bar)).to_be_false();
+		expect(ends(8, kOneOrEight, 0, GapLength::Beat)).to_be_true();
+		expect(ends(8, kTwo, 1, GapLength::Bar)).to_be_true();
+		expect(ends(8, kTwo, 2, GapLength::None)).to_be_false();
+		// A Build longer than the phrase: the phrase still bounds them, as the Arc plan leaves them out of it.
+		expect(ends(8, kSixteen, 8, GapLength::None)).to_be_false();
+		expect(ends(8, kSixteen, 7, GapLength::Bar)).to_be_true();
+	});
+
+	it("holds a Siren's note 1 bar up to a phrase, and no other lane's (sirensValid(), spec §9.5)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(sirensValid(*genre)).to_be_true();
+		}
+		const auto valid = [](uint8_t sirenBars, uint8_t fallBars, Role role) {
+			const LaneSpec lanes[] = {{.lane = Lane::Fall, .heldBars = fallBars},
+			                          {.lane = Lane::Siren, .heldBars = sirenBars}};
+			const PartSpec parts[] = {{.role = role, .lanes = lanes}};
+			return sirensValid(Genre{.name = "sirens", .phraseBars = 8, .parts = parts});
+		};
+		expect(valid(2, 0, Role::FX)).to_be_true();
+		expect(valid(8, 0, Role::FX)).to_be_true();
+		expect(valid(0, 0, Role::FX)).to_be_false();
+		expect(valid(9, 0, Role::FX)).to_be_false();
+		expect(valid(2, 1, Role::FX)).to_be_false();
+		expect(valid(2, 0, Role::Drums)).to_be_false();
 	});
 
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {
@@ -659,7 +732,7 @@ describe genre_data("Every built-in genre", $ {
 				expect(fill.beats * kStepsPerBeat).to_be_less_than(genre->phraseSteps());
 				expect(fill.mask.parts != 0 || fill.mask.lanes != 0).to_be_true();
 				for (int32_t p = 0; p < kMaxParts; p++) {
-					const bool named = (fill.mask.parts & (1U << p)) != 0;
+					const bool named = (fill.mask.parts & partBit(p)) != 0;
 					// Whole parts only in a Rest, and only pitched ones: Bass, Chords, Pad or Lead.
 					expect(named && (fill.kind != FillKind::Rest || p >= static_cast<int32_t>(genre->parts.size())
 					                 || !genre->parts[p].lanes.empty()))
@@ -685,8 +758,14 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("fits its Drop decay in its shortest Groove at Motion 50", _ {
+	it("fits its Drop decay in its shortest Groove at Motion 50, but for Psytrance's named exception", _ {
 		for (const Genre* genre : allGenres()) {
+			// Spec §9.3's named exception (#349): Psytrance's 2-phrase decay keeps its Lead (gate 30) in for a Drop's
+			// whole first phrase. In a Groove shorter than the decay the lift stops at the next Section
+			// (psytrance_spec shows it).
+			if (genre == &genres::psytrance) {
+				continue;
+			}
 			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less
 			// the bars a Build shorter than a phrase takes from it after Groove → Build (spec §9.3).
 			int64_t multiple = motionMultiple(curves::grooveLength, kMacroFull);
@@ -826,6 +905,18 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
+	it("anchors no Avoid source on a step its target can play, and lists Avoid on no Sustain nor a source that may flam", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(avoidRulesValid(*genre)).to_be_true();
+		}
+	});
+
+	it("plays each Roll fill on one Drums lane", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(rollFillsValid(*genre)).to_be_true();
+		}
+	});
+
 	it("thins to the anchors alone at Density 0 and lets every step through at full Density", _ {
 		for (const Genre* genre : allGenres()) {
 			const DensityCurve& curve = genre->densityCurve;
@@ -838,6 +929,107 @@ describe genre_data("Every built-in genre", $ {
 				expect(curve.threshold(density)).to_be_less_than(curve.threshold(density - 1) + 1);
 			}
 		}
+	});
+	context("drop-out entries (dropOutsValid(), spec §8.8)", _ {
+		// Acid techno's roster: Drums, Bass, Drone (a Pad) and FX.
+		constexpr int32_t kAcidDrums = 0;
+		constexpr int32_t kAcidBass = 1;
+		constexpr int32_t kAcidDrone = 2;
+		const auto withEntries = [](std::span<const DropOutEntry> entries) {
+			Genre genre = genres::technoAcid;
+			genre.dropOuts = entries;
+			return genre;
+		};
+		const PartsAndLanes bass{.parts = partBit(kAcidBass)};
+		const PartsAndLanes drone{.parts = partBit(kAcidDrone)};
+		const PartsAndLanes pitched{.parts = static_cast<uint8_t>(partBit(kAcidBass) | partBit(kAcidDrone))};
+		/// Acid's Drums lanes, those with a pool or every one.
+		const auto drumLanes = [](bool pooledOnly) {
+			uint16_t lanes = 0;
+			for (const LaneSpec& lane : genres::technoAcid.parts[kAcidDrums].lanes) {
+				lanes |= pooledOnly && lane.pool.empty() ? 0 : laneBit(lane.lane);
+			}
+			return lanes;
+		};
+
+		it("holds every built-in genre", _ {
+			for (const Genre* genre : allGenres()) {
+				expect(dropOutsValid(*genre)).to_be_true();
+			}
+		});
+
+		it("refuses an entry that silences every pitched part and every Drums lane with a pool", _ {
+			const DropOutEntry everything[] = {{.mask = {.parts = pitched.parts, .lanes = drumLanes(true)}}};
+			// Pool-less lanes don't count: dropping them too still silences everything.
+			const DropOutEntry withPoolless[] = {{.mask = {.parts = pitched.parts, .lanes = drumLanes(false)}}};
+			const DropOutEntry leavesTheDrone[] = {{.mask = {.parts = bass.parts, .lanes = drumLanes(false)}}};
+			const DropOutEntry leavesTheKick[] = {
+			    {.mask = {.parts = pitched.parts,
+			              .lanes = static_cast<uint16_t>(drumLanes(true) & ~laneBit(Lane::Kick))}}};
+			expect(dropOutsValid(withEntries(everything))).to_be_false();
+			expect(dropOutsValid(withEntries(withPoolless))).to_be_false();
+			expect(dropOutsValid(withEntries(leavesTheDrone))).to_be_true();
+			expect(dropOutsValid(withEntries(leavesTheKick))).to_be_true();
+			// genreValid() holds it.
+			expect(genreValid(withEntries(everything))).to_be_false();
+			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
+		});
+
+		it("refuses a length but 1, 2, 4 or 8 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
+		   "target outside the mask or more than one", _ {
+			for (uint8_t bars : {1, 2, 4, 8}) {
+				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
+				expect(dropOutsValid(withEntries(ok))).to_be_true();
+			}
+			{
+				const DropOutEntry eight[] = {{.mask = bass, .bars = 8}};
+				Genre shortPhrases = withEntries(eight);
+				shortPhrases.phraseBars = 4;
+				expect(dropOutsValid(shortPhrases)).to_be_false();
+			}
+			for (uint8_t bars : {0, 3, 6, 16}) {
+				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
+				expect(dropOutsValid(withEntries(wrong))).to_be_false();
+			}
+			const DropOutEntry empty[] = {{.mask = {}}};
+			const DropOutEntry fxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
+			const DropOutEntry wholeKit[] = {{.mask = {.parts = partBit(kAcidDrums)}}};
+			const DropOutEntry targetOutside[] = {{.mask = bass, .throwTarget = drone}};
+			const DropOutEntry twoTargets[] = {{.mask = pitched, .throwTarget = pitched}};
+			const DropOutEntry laneAndPart[] = {
+			    {.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)},
+			     .throwTarget = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)}}};
+			for (std::span<const DropOutEntry> entries :
+			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane),
+			      std::span<const DropOutEntry>(wholeKit),
+			      std::span<const DropOutEntry>(targetOutside), std::span<const DropOutEntry>(twoTargets),
+			      std::span<const DropOutEntry>(laneAndPart)}) {
+				expect(dropOutsValid(withEntries(entries))).to_be_false();
+			}
+		});
+
+		it("refuses an entry longer than the phrase, which the Arc plan's leaving it out relies on", _ {
+			const DropOutEntry fourBars[] = {{.mask = bass, .bars = 4}};
+			Genre genre = withEntries(fourBars);
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 4;
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 2;
+			expect(dropOutsValid(genre)).to_be_false();
+		});
+
+		it("refuses a gap under a bar and a chance outside 0 to 1000", _ {
+			const DropOutEntry entries[] = {{.mask = bass}};
+			Genre genre = withEntries(entries);
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.dropOutGapBars = 0;
+			expect(dropOutsValid(genre)).to_be_false();
+			genre.dropOutGapBars = 1;
+			genre.dropOutChance = 1001;
+			expect(dropOutsValid(genre)).to_be_false();
+			genre.dropOutChance = -1;
+			expect(dropOutsValid(genre)).to_be_false();
+		});
 	});
 });
 

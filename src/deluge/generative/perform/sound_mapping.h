@@ -257,8 +257,39 @@ constexpr int32_t maxParamsPerSet(int32_t cables) {
 	return most;
 }
 
+/// Whether binding delay feedback for a delay Throw (spec §11.4) on an engine whose Space doesn't move it already still
+/// fits maxParamsFor(Space) and maxParamsPerSet(): the driver's buffers are sized by them.
+constexpr bool throwDelayFits(int32_t cables) {
+	for (int32_t engine = 0; engine < mapping::kNumEngines; engine++) {
+		int32_t space = 0;
+		int32_t all = 0;
+		bool delay = false;
+		for (int32_t control = 0; control < kNumSoundControls; control++) {
+			for (const TargetRange& range :
+			     controlTargets(static_cast<SoundControl>(control), static_cast<Engine>(engine))) {
+				const int32_t params = maxParams(range.target, cables);
+				all += params;
+				if (static_cast<SoundControl>(control) == SoundControl::Space) {
+					space += params;
+					delay = delay || range.target == Target::DelayFeedback;
+				}
+			}
+		}
+		const int32_t extra = delay ? 0 : 1;
+		if (space + extra > maxParamsFor(SoundControl::Space, cables) || all + extra > maxParamsPerSet(cables)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /// Param units per menu unit for a standard 0–50 param, as the stock menus scale them (2^31 / 25, rounded down).
 constexpr int64_t kParamUnitsPerMenuUnit = 85899345;
+/// A standard param's value in menu units (0–50), rounded to the nearest as the stock menu shows it
+/// (computeCurrentValueForStandardMenuItem(), which portable code can't include), for test events and reports.
+constexpr int32_t menuUnits(int32_t value) {
+	return static_cast<int32_t>(((int64_t{value} - INT32_MIN) * 50 + (int64_t{1} << 31)) >> 32);
+}
 /// A patch cable's amount runs from -kCableAmountFull to kCableAmountFull.
 constexpr int32_t kCableAmountFull = 1 << 30;
 
@@ -267,6 +298,17 @@ constexpr int32_t kCableAmountFull = 1 << 30;
 /// of its range the offset reaches, never below ×0, and never 0 from a home that isn't (the firmware deletes a cable
 /// set to 0: ×0 gives ±1).
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset);
+
+/// The most delay feedback a Throw lifts to, in menu units (spec §11.4): each repeat's gain is the menu value / 25, so
+/// at 23 an echo still fades, and from 25 it grows.
+constexpr int32_t kThrowDelayCap = 23;
+
+/// Delay feedback where a delay Throw plays (spec §11.4), on a set with a delay setup. `range` is Space's share of
+/// delay feedback there (0..0 where Space doesn't move it), `home` and `offset` as for targetValue(), `depth` the
+/// part's Throw depth in menu units and `percent` the Throw's level (Event::throwDelay()). At 100, while it holds,
+/// max(home, min(home + depth, kThrowDelayCap)), replacing Space's share; down to 0 it falls linearly back to what
+/// the other layers say (targetValue()).
+int32_t throwDelayValue(const TargetRange& range, int32_t home, int32_t offset, int32_t depth, int32_t percent);
 
 /// A player edit's home (spec §11.6): the home from which `offset` plays `value`, the param's new value, clamped to
 /// the param's own range. For a linear target, home = value − the share of the range the offset reaches, whether or

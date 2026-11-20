@@ -6,6 +6,12 @@
 # gen_riser_on sample_ms=N at the Riser's note-on (0: a synth Riser); gen_riser ok=0|1 sample_ms= to_drop_ms=
 # sixteenth_ms= at its note-off. ok=1 needs a sample, ending within a 16th of the note-off. Listening: the same run.
 # needs: pack risers in SAMPLES/FX/Riser (the Deluge's card; delugemu's has none), so check_all.py skips it
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/card_sounds.*
+# covers: src/deluge/generative/perform/riser_timing.h src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/playback/playback_handler.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
