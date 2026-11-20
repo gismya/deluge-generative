@@ -33,14 +33,7 @@ CARD = os.path.join(os.path.expanduser("~"), "source", "delugemu-sd", "sdcard")
 PACK = os.path.join(REPO, "pack")
 
 # Presets kept though they're flagged: (genre, part, path) -> why. Each must still be listed by that genre's part.
-ALLOWED = {
-    (
-        "techno-acid",
-        "ACID",
-        "SYNTHS/165 Acid Arp.XML",
-    ): "Acid techno's ACID main pick and the first ear check (spec §18.3): its oscillators "
-    "carry its octaves (-36, -24) and ACID's Register is the Bass default, where it has always sounded",
-}
+ALLOWED = {}
 
 SILENT = 0x80000000  # a param at its minimum: the oscillator's volume is off
 

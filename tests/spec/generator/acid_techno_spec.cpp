@@ -205,9 +205,8 @@ describe acid_techno("Acid techno", $ {
 		expect(breakBars).to_be_greater_than(30);
 	});
 
-	it("keeps the Drone's fifth in a Break from Density 35, a bare root below: the parent's Break dip thins it", _ {
-		// The Break dips Density by 20 (the parent's, so the kept drums play as Techno's did): at the default 25 only
-		// anchors play, the Drone's root among them (spec §8.1).
+	it("keeps the Drone's fifth in a Break at the default Density: its Break dips by 5, not the parent's 20", _ {
+		// At the default 25 the Break plays at Density 20, enough for the Drone's 5th (spec §8.1, #120 round 1).
 		for (int32_t density : {25, 35}) {
 			int32_t breakBars = 0;
 			int32_t withFifth = 0;
@@ -224,15 +223,16 @@ describe acid_techno("Acid techno", $ {
 				}
 			}
 			expect(breakBars).to_be_greater_than(30);
-			expect(withFifth).to_equal(density == 25 ? 0 : breakBars);
+			expect(withFifth).to_equal(breakBars);
 		}
 	});
 
 	context("its palette (spec §10.1, §18.3)", _ {
-		it("picks the acid presets for ACID and the drone pads for the DRONE, all on the factory card", _ {
+		it("picks 005 Sweet Mono Bass alone for ACID and the drone pads for the DRONE, all on the factory card", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			const auto acidEntries = acid.palette->partEntries(acid.parts[kAcidPart]);
-			expect(std::string(acidEntries[0].path)).to_equal(std::string("SYNTHS/165 Acid Arp.XML"));
+			expect(acidEntries.size()).to_equal(size_t{1});
+			expect(std::string(acidEntries[0].path)).to_equal(std::string("SYNTHS/005 Sweet Mono Bass.XML"));
 			const auto droneEntries = acid.palette->partEntries(acid.parts[kDronePart]);
 			expect(droneEntries.size()).to_equal(size_t{4});
 			std::set<std::string> drones;

@@ -243,14 +243,14 @@ constexpr void softBreakDip(Genre& genre) {
 
 constexpr Scale kAcidScales[] = {Scale::Minor, Scale::Phrygian};
 
-/// The default genre (spec §4.5). Its drums, acid line and Arc play as Techno did before the split; the Drone is new
-/// (acid_fingerprint_spec).
+/// The default genre (spec §4.5). Its drums and acid line play as Techno did before the split, with a Drone under them
+/// and a soft Break dip (#120 round 1).
 constexpr Genre kTechnoAcid = [] {
 	Genre genre = subgenreOf(kTechnoParent);
 	genre.name = "techno-acid";
 	genre.oledName = "ACID TECHNO";
 	genre.shortName = "ACID";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kAcidScales;
@@ -258,6 +258,8 @@ constexpr Genre kTechnoAcid = [] {
 	genre.palette = &technoAcidPalette;
 	// The breakdown is the Drone under the parent's kick, rim and closed hat.
 	genre.arc.breakKeeps.parts = partBit(2);
+	// With the parent's dip the Drone lost its 5th and the drums thinned to a few hits (tuning, #120 round 1).
+	softBreakDip(genre);
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoAcid),
@@ -350,8 +352,6 @@ constexpr PartSpec kMelodicParts[] = {
         .name = "BASS",
         .pool = kRollingBass,
         .band = {0, 2},
-        // The Bass Register's shape an octave down: the tonic sounds between F#0 and F1.
-        .reg = {.anchor = 24, .spanLow = -5, .spanHigh = 12},
         .loop = kRollingLoop,
         .expression = {.spread = 6},
         .gestures = kGestures,
@@ -412,7 +412,7 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.name = "techno-melodic";
 	genre.oledName = "MELODIC TECHNO";
 	genre.shortName = "MELODIC";
-	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 122;
 	genre.facts.tempoHighBpm = 128;
 	genre.facts.scales = kMelodicScales;
@@ -738,8 +738,10 @@ constexpr PartSpec kDetroitParts[] = {
         .name = "MOTIF",
         .pool = kDetroitRiffs,
         .band = {0, 2},
-        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33 (tuning).
-        .densityGate = macroPoints(30),
+        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33. With the gate's
+        // hysteresis (2) it stays open while any lift is left and closes on the bar where the lift has decayed to the
+        // centre: the whole Drop and none of the Groove (tuning, #120 round 1).
+        .densityGate = macroPoints(27),
         .motif = {.positions = kRiffPositions,
                   .draws = {.leap = {2, 4}, .octaveUp = {0, 150}, .accent = 150},
                   .reroll = 100,
@@ -782,7 +784,7 @@ constexpr Genre kTechnoDetroit = [] {
 	genre.name = "techno-detroit";
 	genre.oledName = "DETROIT TECHNO";
 	genre.shortName = "DETROIT";
-	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kDetroitScales;

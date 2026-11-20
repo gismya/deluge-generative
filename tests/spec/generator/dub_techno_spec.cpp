@@ -477,7 +477,7 @@ describe dub_techno("Dub techno", $ {
 	});
 
 	context("its palette (spec §10.1, §18.3)", _ {
-		it("gives the Sub, the Stab and the Pad at least 3 presets each, on the factory card with the pack", _ {
+		it("gives the Sub, the Stab and the Pad presets on the factory card with the pack, the Sub trimmed to 2 by ear", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			expect(dub.palette != nullptr && dub.palette != genres::technoAcid.palette).to_be_true();
 			int32_t synthParts = 0;
@@ -486,8 +486,9 @@ describe dub_techno("Dub techno", $ {
 					continue;
 				}
 				synthParts++;
+				// At least 3 before the ear check trimmed them (spec §10.1, #120 round 1), never none.
 				auto entries = dub.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
+				expect(entries.size()).to_be_greater_than(size_t{0});
 				for (const PaletteEntry& entry : entries) {
 					expect(card.has(entry.path)).to_be_true();
 				}

@@ -32,12 +32,10 @@ namespace {
 
 // ---- Synth parts ----
 
-// 165 Acid Arp with its arp cleared at load (spec §10.6) is the first ear check (spec §18.3).
+// 005's mono bass alone (#120 round 1): 015 and 097 sounded off, and 165 Acid Arp sat too low and didn't work with its
+// arp cleared at load (spec §10.6).
 constexpr PaletteEntry kAcid[] = {
-    {"SYNTHS/165 Acid Arp.XML", 3},
-    {"SYNTHS/015 Resonant Filter Bass.XML", 2},
-    {"SYNTHS/097 Saturated Filter.XML", 2},
-    {"SYNTHS/005 Sweet Mono Bass.XML", 1},
+    {"SYNTHS/005 Sweet Mono Bass.XML", 3},
 };
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/047 Basic Dirty Bass.XML", 3},
@@ -138,31 +136,28 @@ constexpr LaneSounds kLanes[] = {
 // ---- Melodic techno (#226) ----
 
 /// The rolling bass: short, plucky presets with no long tail, so the 16ths stay apart. 000's env2 filter pluck is the
-/// main pick; 012's sync sweep and 050's plain FM vary it.
+/// main pick; 012's sync sweep varies it. Both sit at the Bass default Register (C2); 047 and 050 were dropped (#120
+/// round 1, #252).
 constexpr PaletteEntry kRollingBassSounds[] = {
     {"SYNTHS/000 Rich Saw Bass.XML", 3},
-    {"SYNTHS/047 Basic Dirty Bass.XML", 2},
     {"SYNTHS/012 Blunt Sync Bass.XML", 1},
-    {"SYNTHS/050 FM Basic Bass.XML", 1},
 };
 /// The Arp: short FM plucks and an arp lead (its saved arp cleared at load, spec §10.6), releases under a second and
 /// one to three unison voices, so 16ths on a POLY voice stay within the voice budget. No stacked interval, pitch
-/// wobble or heavy FX, and none of the acid presets (factory card research §2.5). 167's metallic FM is an arp sound
-/// with a 0.5 s release; 058's FM pluck and 067's mallet vary it. Not 068 FM Bells 1: its oscillator sits an octave
-/// up, so it plays an octave over the Register (spec §10.6, osc_octaves.py).
+/// wobble or heavy FX, and none of the acid presets (factory card research §2.5).
+/// 058's FM pluck is the main pick, 067's mallet varies it (167 FM Metallic Bass Arp was dropped, #120 round 1). Not
+/// 068 FM Bells 1: its oscillator sits an octave up, so it plays an octave over the Register (spec §10.6,
+/// osc_octaves.py).
 constexpr PaletteEntry kArpLeadSounds[] = {
-    {"SYNTHS/167 FM Metallic Bass Arp.XML", 3},
-    {"SYNTHS/058 FM Rising Attack.XML", 2},
+    {"SYNTHS/058 FM Rising Attack.XML", 3},
     {"SYNTHS/067 Marimba.XML", 1},
 };
 /// The Pad, re-struck every 2 bars (about 3.8 s): soft pads with attacks well under the chord's length, releases under
 /// 2 s, and no built-in interval (a stacked 5th, 3rd or 2nd turns a 4-note chord into a cluster), saved arp, heavy FX
-/// or off-key tuning (factory card research §2.5). 153's soft chorused FM is the main pick: it attacks in 0.1 s, so
-/// each chord speaks at once, and settles at sustain 20, under the bass and lead. 139's detuned saws swell in over
-/// 1.1 s, and 151's FM in 1.8 s, blooming within the chord. 142's phaser pad is the occasional variation. All four have
-/// one or two unison voices, so a 4-note chord and its release stay within the voice budget.
+/// or off-key tuning (factory card research §2.5). 139's detuned saws swell in over 1.1 s, and 151's FM in 1.8 s,
+/// blooming within the chord. 142's phaser pad is the occasional variation (153 FM Modulation Pad was dropped, #120
+/// round 1). All three have one or two unison voices, so a 4-note chord and its release stay within the voice budget.
 constexpr PaletteEntry kMelodicPad[] = {
-    {"SYNTHS/153 FM Modulation Pad.XML", 3},
     {"SYNTHS/139 Detuned Saw Pad.XML", 2},
     {"SYNTHS/151 Radiant FM Pad.XML", 2},
     {"SYNTHS/142 Phaser.XML", 1},
@@ -178,12 +173,11 @@ constexpr RoleSounds kMelodicRoles[] = {
 // ---- Dub techno (#221) ----
 
 /// The sub: round, plain basses that hold a long note, played at whole-sound transpose 0 (spec §10.6), so the Sub's
-/// Register (C2) is the pitch heard. 002's round square is the main pick; 050's plain FM and
-/// 047's plain dirty bass vary it.
+/// Register (C2) is the pitch heard. 002's round square is the main pick; 050's plain FM varies it (047 was dropped,
+/// #120 round 1).
 constexpr PaletteEntry kSubSounds[] = {
     {"SYNTHS/002 Basic Square Bass.XML", 3},
     {"SYNTHS/050 FM Basic Bass.XML", 2},
-    {"SYNTHS/047 Basic Dirty Bass.XML", 1},
 };
 /// The Stab: the pack's dry copies of three factory chord presets (#322), with their own echo off (delay feedback 0)
 /// and louder, so the part's delay setup (techno.cpp) and its Throws alone make the echo. 037's fifth on every note
@@ -228,11 +222,10 @@ constexpr auto kDubLanes = [] {
 // ---- Detroit techno (#220) ----
 
 /// The root-rhythm bass: plain, short basses, played at whole-sound transpose 0 (spec §10.6), so the Bass Register (C2)
-/// is the pitch heard. 047's dirty saw is the main pick; 007's detuned saw, 050's plain FM and
-/// 012's sync sweep vary it.
+/// is the pitch heard. 007's detuned saw is the main pick; 050's plain FM and 012's sync sweep vary it (047 was
+/// dropped, #120 round 1).
 constexpr PaletteEntry kRootBassSounds[] = {
-    {"SYNTHS/047 Basic Dirty Bass.XML", 3},
-    {"SYNTHS/007 Detuned Saw Bass.XML", 2},
+    {"SYNTHS/007 Detuned Saw Bass.XML", 3},
     {"SYNTHS/050 FM Basic Bass.XML", 1},
     {"SYNTHS/012 Blunt Sync Bass.XML", 1},
 };
@@ -246,19 +239,16 @@ constexpr PaletteEntry kStringsSounds[] = {
     {"SYNTHS/131 Warm Strings.XML", 1},
 };
 /// The Stab: chord presets with no transpose and no built-in interval, short enough for 16ths (factory card research
-/// §2.5). 086's organ stab is the main pick; 083's chorused ringmod and 088's ringmod with a pitch yelp vary it, and
-/// 071's Rhodes softens it.
+/// §2.5). It picks 088's ringmod with a pitch yelp and 071's Rhodes equally often (086 Techno Organ and 083 Dark
+/// Chorus were dropped, #120 round 1).
 constexpr PaletteEntry kDetroitStabSounds[] = {
-    {"SYNTHS/086 Techno Organ.XML", 3},
-    {"SYNTHS/083 Dark Chorus.XML", 2},
     {"SYNTHS/088 Yelp Chords.XML", 1},
     {"SYNTHS/071 Rhodes.XML", 1},
 };
-/// The Motif: bells and plain leads with no transpose, releases under a second, so a riff's notes stay apart. 069's
-/// FM bell is the main pick; 021's plain square and 058's FM pluck vary it. Not 068 FM Bells 1: its oscillator sits an
-/// octave up, so it plays an octave over the Register (spec §10.6, osc_octaves.py).
+/// The Motif: plain leads with no transpose, releases under a second, so a riff's notes stay apart: 021's plain square
+/// and 058's FM pluck (069 FM Bells 2 was dropped, #120 round 1). Not 068 FM Bells 1: its oscillator sits an octave
+/// up, so it plays an octave over the Register (spec §10.6, osc_octaves.py).
 constexpr PaletteEntry kMotifSounds[] = {
-    {"SYNTHS/069 FM Bells 2.XML", 3},
     {"SYNTHS/021 80s TV Lead.XML", 1},
     {"SYNTHS/058 FM Rising Attack.XML", 1},
 };
