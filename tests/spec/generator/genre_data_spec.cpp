@@ -504,6 +504,13 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
 	});
 
+	it("rejects held common tones on a part that isn't a Sustain, which only decideSustain() honours", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsCommonTones = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdsCommonTones = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
 	it("gives each part a flavour its role allows, which its sounding-note table is sized for (spec §5.2, §2.7)", _ {
 		// Drums and FX have none; Bass plays Loop; Lead Loop, Arp or Motif; Chords Stab; Pad Sustain.
 		const std::map<Role, std::set<Flavour>> allowed = {
@@ -968,13 +975,19 @@ describe genre_data("Every built-in genre", $ {
 			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
 		});
 
-		it("refuses a length but 1, 2 or 4 bars, an empty mask, an FX lane, a whole Kit, a target outside the mask "
-		   "or more than one", _ {
-			for (uint8_t bars : {1, 2, 4}) {
+		it("refuses a length but 1, 2, 4 or 8 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
+		   "target outside the mask or more than one", _ {
+			for (uint8_t bars : {1, 2, 4, 8}) {
 				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
 				expect(dropOutsValid(withEntries(ok))).to_be_true();
 			}
-			for (uint8_t bars : {0, 3, 8}) {
+			{
+				const DropOutEntry eight[] = {{.mask = bass, .bars = 8}};
+				Genre shortPhrases = withEntries(eight);
+				shortPhrases.phraseBars = 4;
+				expect(dropOutsValid(shortPhrases)).to_be_false();
+			}
+			for (uint8_t bars : {0, 3, 6, 16}) {
 				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
 				expect(dropOutsValid(withEntries(wrong))).to_be_false();
 			}

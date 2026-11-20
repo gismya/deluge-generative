@@ -83,6 +83,10 @@ constexpr Genre kSlowHoldingPad = [] {
 	genre.harmony.graph = &kSlowTurnGraph;
 	return genre;
 }();
+/// A Pad that holds its common tones at every chord change (Ambient's, spec §5.2), on the chord-a-bar graph.
+constexpr PartSpec kCommonToneParts[] = {
+    {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "PAD", .sustain = {.holdsCommonTones = true}}};
+constexpr Genre kTurningCommonTonePad = withGraph(padGenre(kCommonToneParts));
 constexpr PartSpec kGatedHoldingParts[] = {{.role = Role::Pad,
                                             .flavour = Flavour::Sustain,
                                             .name = "PAD",
@@ -224,6 +228,22 @@ describe sustain("The Sustain flavour", $ {
 		auto offs = pitched(result, EventKind::NoteOff);
 		for (int32_t bar = 1; bar <= 4; bar++) {
 			expect(pitchesAt(offs, bar * kBarTicks) == pitchesAt(ons, (bar - 1) * kBarTicks)).to_be_true();
+		}
+		expect(result.evictedNotes).to_equal(0U);
+	});
+
+	it("holds the common tones at each chord change when its part holds them: only the changed notes end and strike", _ {
+		Result result = play(runOf(kTurningCommonTonePad), 5);
+		auto ons = pitched(result, EventKind::NoteOn);
+		auto offs = pitched(result, EventKind::NoteOff);
+		// i (E3 A3 C4), iv (D3 F3 A3), i (C3 E3 A3), as when it re-strikes; A3 rings from bar 0 on.
+		expect(pitchesAt(ons, 0) == std::set<int32_t>{52, 57, 60}).to_be_true();
+		expect(pitchesAt(ons, kBarTicks) == std::set<int32_t>{50, 53}).to_be_true();
+		expect(pitchesAt(offs, kBarTicks) == std::set<int32_t>{52, 60}).to_be_true();
+		expect(pitchesAt(ons, 2 * kBarTicks) == std::set<int32_t>{48, 52}).to_be_true();
+		expect(pitchesAt(offs, 2 * kBarTicks) == std::set<int32_t>{50, 53}).to_be_true();
+		for (const Event& on : ons) {
+			expect(on.pitch != 57 || on.tick == 0).to_be_true();
 		}
 		expect(result.evictedNotes).to_equal(0U);
 	});
@@ -370,6 +390,25 @@ describe sustain("The Sustain flavour", $ {
 			expect(pitchesAt(pitched(result, EventKind::NoteOn), 4 * kBarTicks) == std::set<int32_t>{50, 53}).to_be_true();
 			expect(pitchesAt(pitched(result, EventKind::NoteOff), 4 * kBarTicks) == std::set<int32_t>{52, 60}).to_be_true();
 			expect(pitched(result, EventKind::NoteOn).size()).to_equal(size_t{5});
+		});
+
+		it("re-strikes a holding part's whole voicing once, on the first Groove's first line, when the piece began in an Intro", _ {
+			// The Intro is one phrase: the Groove starts on bar 4. The notes the Intro's Density ramp brought in, one a
+			// bar, strike again at the Groove's level (round 1's Q341, #341), and hold on from there.
+			Run run = runOf(kHoldingPad);
+			run.skipIntro = false;
+			Result result = play(run, 7);
+			expect(restruckAt(result, 4 * kBarTicks, {52, 57, 60})).to_be_true();
+			for (const Event& on : pitched(result, EventKind::NoteOn)) {
+				expect(on.tick <= 4 * kBarTicks).to_be_true();
+			}
+		});
+
+		it("holds a holding part's voicing on a later Groove's first line: only the first Groove re-strikes it", _ {
+			Run run = runOf(kHoldingPad);
+			run.steer = steerAt({{20, force(SectionKind::Break)}, {36, force(SectionKind::Groove)}}); // bars 4 and 8
+			Result result = play(run, 10);
+			expect(ticksOfAll(pitched(result, EventKind::NoteOn)) == std::multiset<int32_t>{0, 0, 0}).to_be_true();
 		});
 
 		it("re-strikes the whole voicing on a Section line with a chord change, when its part doesn't hold", _ {

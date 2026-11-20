@@ -27,7 +27,13 @@ differs from what it would write, and any file here it doesn't write.
 | `SAMPLES/DRUMS/Ride/GEN Ride 2.wav` | 909-style ride with a bell |
 | `SAMPLES/DRUMS/Clap/GEN Clap 1.wav` | Drum-machine clap, three bursts and a short tail |
 | `SAMPLES/DRUMS/Clap/GEN Clap 2.wav` | Drum-machine clap, wider spacing and a longer tail |
-| `SYNTHS/GENERATIVE/GEN Sine Sub.XML` | Ambient's Bass: one sine, an 80 ms attack, full sustain, a 1.5 s release, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Sine Sub.XML` | A soft sine bass (Ambient's Bass before its sounds round 1): one sine, an 80 ms attack, full sustain, a 1.5 s release, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML` | Ambient's Drone, tape strings: two saws a few cents apart, three unison voices spread wide, a soft 12 dB low-pass, a breath of noise, a slow pitch wow, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML` | Ambient's Drone, breathing filter: a square and a saw an octave up into a resonant 12 dB low-pass a slow LFO sweeps, per-voice pulse-width movement, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML` | Ambient's Drone, glass fifth: a sine with a quiet sine an octave and a fifth over it that a slow LFO fades, two unison voices spread wide, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML` | Ambient's Bass, felt pulse: two squares a few cents apart into a 12 dB low-pass blooming over half a second, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML` | Ambient's Bass, folded sine: a sine with a quiet saw an octave up through the wavefolder, velocity to volume and fold |
+| `SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML` | Ambient's Bass, tape bass: a saw and a triangle into a dark 24 dB low-pass with a filter bloom, a little noise and a slow pitch wobble, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Psy Bass.XML` | Psytrance's Bass: a saw and a square an octave down into a resonant low-pass, a filter envelope, sustain 0, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Dub Sub.XML` | Dub's Bass: a sine with a quiet triangle, a soft attack, a quick release, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Melodica.XML` | Dub's Melodica: a square reed and a detuned saw, a breath of noise, a soft attack, velocity to volume and filter |
