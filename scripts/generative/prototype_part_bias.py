@@ -40,12 +40,18 @@ GENRES = [
     ),
 ]
 MACROS = ["density", "energy", "complexity", "motion"]
-MODELS = ["linear", "curved", "gateshift"]
+MODELS = ["linear", "curved", "knee", "blend", "gateshift"]
 MODEL_LABEL = {
     "linear": "1 linear (v+o, clamped)",
     "curved": "3 curved (headroom)",
+    "knee": "knee hybrid (linear, easing near the ends)",
+    "blend": "50/50 blend (linear + curved)",
     "gateshift": "3 curved + 4 gate shift",
 }
+# The models with full-mix renders (at MIX_BIASES), to keep the folder's size down; the rest have solo renders.
+MIX_MODELS = ["linear", "curved", "knee"]
+# The models in the Arc pass.
+ARC_MODELS = ["linear", "curved", "knee", "blend"]
 BIASES = [-20, -10, -5, 5, 10, 20]
 AUDIO_MACROS = ["density", "energy"]
 MIX_BIASES = [-20, -10, 10, 20]
@@ -60,7 +66,7 @@ FULL = 3200  # macro units at 50
 
 def models_for(macro: str) -> list[str]:
     # The gate shift differs from curved only at the Density gates.
-    return MODELS if macro == "density" else MODELS[:2]
+    return MODELS if macro == "density" else MODELS[:-1]
 
 
 def name(genre, macro, model, bias, kind, centre=None):
@@ -170,7 +176,7 @@ def main() -> int:
                     jobs.append(
                         job(a.out, genre, part, macro, model, bias, True, audio_macro)
                     )
-                    if audio_macro and bias in MIX_BIASES:
+                    if audio_macro and bias in MIX_BIASES and model in MIX_MODELS:
                         jobs.append(
                             job(a.out, genre, part, macro, model, bias, False, True)
                         )
@@ -179,7 +185,7 @@ def main() -> int:
                 jobs.append(
                     job(a.out, genre, part, macro, "linear", 0, True, False, centre)
                 )
-                for model in ("linear", "curved"):
+                for model in ARC_MODELS:
                     for bias in (-20, 20):
                         jobs.append(
                             job(
@@ -245,7 +251,7 @@ def main() -> int:
                         part_names,
                         part,
                     )
-                    for model in ("linear", "curved"):
+                    for model in ARC_MODELS:
                         for bias in (-20, 20):
                             stem = name(genre, macro, model, bias, "solo", centre)
                             res = per_bar(
@@ -284,6 +290,8 @@ def main() -> int:
         for j in jumps
     ]
     data["mixBiases"] = MIX_BIASES
+    data["mixModels"] = MIX_MODELS
+    data["arcModels"] = ARC_MODELS
     with open(os.path.join(a.out, "index.html"), "w") as f:
         f.write(PAGE.replace("/*DATA*/null", json.dumps(data, separators=(",", ":"))))
     with open(os.path.join(a.out, "README.md"), "w") as f:
@@ -305,6 +313,15 @@ PROTOTYPE, throwaway. It answers one question for #303: should a part's Part bia
 (model 1: `v + o`, clamped 0–50) or **curved** (model 3, headroom-proportional: `o > 0`: `v + o/50·(50−v)`,
 `o < 0`: `v·(1 + o/50)`)? Model 4 (a threshold shift) is shown for Density's gates as "curved + gate shift".
 
+Two mixes of linear and curved are shown beside them:
+- **Knee hybrid**: exactly `v + o` while the end the bias heads for (50 for a bias up, 0 for a bias down) is at least
+  K = max(10, 2·|o|) points away, capped at 50. Inside that knee the bias shrinks in step with the room left
+  (`o·d/K`, d points from the end), so the part reaches the end together with the shared value. Why that K: 2·|o|
+  keeps the part moving at least half as fast as the shared value inside the knee, so it keeps following the Arc where
+  linear pins it at 0 or 50; the 10-point floor eases a small bias in rather than kinking right at the end. From
+  |o| = 25 the knee covers the whole range and the hybrid is the curved model.
+- **50/50 blend**: the mean of the linear and curved values.
+
 ## How to play it
 
 Open `index.html` in a browser (double-click; it plays from `file://`, no server). Everything is on that page:
@@ -316,13 +333,14 @@ Open `index.html` in a browser (double-click; it plays from `file://`, no server
   - **Notes per bar** of the biased part, per model, against the unbiased part (grey).
   - **Who plays**: a row per part for each bar it plays a note in; the biased part's rows per model at the bottom.
 - Energy, Complexity and Motion sweep with Density held at 40, above every biased part's gate, so it plays.
-- **Listen** (Density and Energy): a player per render. *Solo* is the biased part alone; *Mix* is the whole piece.
+- **Listen** (Density and Energy): a player per render. *Solo* is the biased part alone; *Mix* is the whole piece
+  (linear, curved and knee only, at ±10 and ±20).
   Each player has **A/B**: it switches between the biased render and the unbiased reference at the same position, so
   you hear the bias and nothing else. The bias buttons pick the renders.
 - **The Arc pass**: the value held at 25 and at 40 while the Arc goes Groove → Break → Build → Drop over {arc_bars} bars, for
-  ±20. Here the bias is applied after the Arc (`effectiveOn`), so neither model jumps when the Build starts; the
-  table under it gives the largest jump measured. What differs is the Build's rise: linear clamps at 50, so a +20
-  part stops rising early.
+  ±20. Here the bias is applied after the Arc (`effectiveOn`), so no model jumps when the Build starts; the
+  line under it gives the largest jump measured. What differs is the Build's rise: linear clamps at 50, so a +20
+  part stops rising early; the knee, the blend and curved keep rising.
 
 ## Files
 
@@ -334,7 +352,7 @@ Open `index.html` in a browser (double-click; it plays from `file://`, no server
 
 ## What to answer on #303
 
-Linear or curved? The same curve for all four macros, or which differ? And for Density's gates: the curve, or the
+Linear, curved, the knee hybrid or the blend? The same curve for all four macros, or which differ? And for Density's gates: the curve, or the
 gate shift (model 4)?
 
 Regenerate with `python3 scripts/generative/prototype_part_bias.py` (see its `--help`).
@@ -343,13 +361,13 @@ Regenerate with `python3 scripts/generative/prototype_part_bias.py` (see its `--
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Part bias curve prototype (#414)</title>
 <style>
-:root{color-scheme:light dark;--fg:#222;--bg:#fff;--mute:#888;--grid:#ddd;--lin:#d9480f;--cur:#1971c2;--gs:#2b8a3e;--ref:#999}
-@media (prefers-color-scheme:dark){:root{--fg:#ddd;--bg:#161616;--grid:#333;--lin:#ff8a4c;--cur:#5aa9ff;--gs:#69db7c;--ref:#777}}
+:root{color-scheme:light dark;--fg:#222;--bg:#fff;--mute:#888;--grid:#ddd;--lin:#d9480f;--cur:#1971c2;--gs:#2b8a3e;--knee:#9c36b5;--blend:#0c8599;--ref:#999}
+@media (prefers-color-scheme:dark){:root{--fg:#ddd;--bg:#161616;--grid:#333;--lin:#ff8a4c;--cur:#5aa9ff;--gs:#69db7c;--knee:#da77f2;--blend:#3bc9db;--ref:#777}}
 body{font:14px/1.45 system-ui,sans-serif;color:var(--fg);background:var(--bg);margin:0 auto;max-width:1200px;padding:16px}
 h1{font-size:22px}h2{margin-top:40px;border-top:1px solid var(--grid);padding-top:16px}h3{margin:18px 0 6px}
 .note{color:var(--mute)}.row{display:flex;gap:16px;flex-wrap:wrap}.panel{flex:1;min-width:340px}
 svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:10px}
-.ax{stroke:var(--grid)}.lin{stroke:var(--lin)}.cur{stroke:var(--cur)}.gs{stroke:var(--gs)}.ref{stroke:var(--ref)}
+.ax{stroke:var(--grid)}.lin{stroke:var(--lin)}.cur{stroke:var(--cur)}.gs{stroke:var(--gs)}.knee{stroke:var(--knee)}.blend{stroke:var(--blend)}.ref{stroke:var(--ref)}
 button{font:inherit;padding:3px 9px;margin:2px;border:1px solid var(--grid);background:none;color:var(--fg);border-radius:4px;cursor:pointer}
 button.on{background:var(--cur);color:#fff;border-color:var(--cur)}
 .players{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:8px}
@@ -360,14 +378,20 @@ table{border-collapse:collapse}td,th{padding:2px 8px;border-bottom:1px solid var
 <h1>Part bias: linear or curved? <span class="note">(#414 prototype, throwaway)</span></h1>
 <p>One part per genre gets a Part bias on one macro while the Recipe value sweeps 0 → 50. Compare
 <b style="color:var(--lin)">model 1, linear</b> (<code>v+o</code>, clamped) with
-<b style="color:var(--cur)">model 3, curved</b> (headroom-proportional), and for Density
+<b style="color:var(--cur)">model 3, curved</b> (headroom-proportional) and two mixes of them:
+<b style="color:var(--knee)">the knee hybrid</b> (linear through the middle, easing into the curve near 0 and 50) and
+<b style="color:var(--blend)">a 50/50 blend</b> of linear and curved. For Density also
 <b style="color:var(--gs)">curved notes + model 4, a gate shift</b>. The bias is applied after the Arc
 (<code>effectiveOn</code>). Renders are the harness's rough render, not the Deluge's sound. See README.md.</p>
 <div id="curves"></div>
 <div id="main"></div>
 <script>
 const D=/*DATA*/null;
-const COL={linear:'lin',curved:'cur',gateshift:'gs'};
+const COL={linear:'lin',curved:'cur',gateshift:'gs',knee:'knee',blend:'blend'};
+function lin(x,o){return Math.min(50,Math.max(0,x+o))}
+function cur(x,o){return o>=0?x+o/50*(50-x):x*(1+o/50)}
+function knee(x,o){const k=Math.min(50,Math.max(10,2*Math.abs(o))),room=o>=0?50-x:x;return room>=k?x+o:x+o*room/k}
+const CURVE={linear:lin,curved:cur,knee,blend:(x,o)=>(lin(x,o)+cur(x,o))/2};
 const FULL=3200;
 function el(t,a={},...k){const e=document.createElement(t);for(const[n,v]of Object.entries(a)){if(n==='on')e.onclick=v;else e.setAttribute(n,v)}for(const c of k)e.append(c);return e}
 function svg(w,h,body){return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`}
@@ -382,11 +406,11 @@ function sections(bars,w,h,l,b){let s='',start=0,k=0;for(let i=1;i<=bars.length;
 (function(){
   const W=380,H=260,L=34,B=28;const c=document.getElementById('curves');c.append(el('h2',{},'The curves'));
   const row=el('div',{class:'row'});
-  for(const model of ['linear','curved']){let s=frame(W,H,L,B,50,50,'shared value (points)','part value',[0,10,20,30,40,50]);
-    for(const o of [-20,-10,-5,0,5,10,20]){const v=[];for(let x=0;x<=50;x++){let y;if(model==='linear')y=Math.min(50,Math.max(0,x+o));else y=o>=0?x+o/50*(50-x):x*(1+o/50);v.push(y)}
+  for(const model of ['linear','curved','knee','blend']){let s=frame(W,H,L,B,50,50,'shared value (points)','part value',[0,10,20,30,40,50]);
+    for(const o of [-20,-10,-5,0,5,10,20]){const v=[];for(let x=0;x<=50;x++){v.push(CURVE[model](x,o))}
       s+=line(pts(v,W,H,L,B,50,50),o===0?'ref':COL[model],o<0);}
     const p=el('div',{class:'panel'});p.innerHTML=`<b>${D.models[model]}</b> (bias −20 … +20)`+svg(W,H,s);row.append(p)}
-  const p=el('div',{class:'panel note'});p.innerHTML=`<p><b>Read:</b> linear keeps the offset exact but hits 0 or 50 early: at a shared 45, +10 gives +5, and a −20 part is silent until the shared value passes 20. Curved never saturates early: +10 is 10/50 of the way to 50, so it shrinks near the top, and −10 shrinks the value by a fifth, so it shrinks near 0. Both ends stay reachable.</p><p>Gate shift (Density only): the part's Density gate sees <code>shared + bias</code>, unclamped, so a gate at 30 biased +10 opens at a shared 20, exactly as linear; notes and thinning follow the curve.</p>`;row.append(p);c.append(row)})();
+  const p=el('div',{class:'panel note'});p.innerHTML=`<p><b>Read:</b> linear keeps the offset exact but hits 0 or 50 early: at a shared 45, +10 gives +5, and a −20 part is silent until the shared value passes 20. Curved never saturates early: +10 is 10/50 of the way to 50, so it shrinks near the top, and −10 shrinks the value by a fifth, so it shrinks near 0. Both ends stay reachable.</p><p><b>Knee hybrid:</b> exactly linear while the end the bias heads for is at least K = max(10, 2·|bias|) points away (capped at 50); inside that knee the bias shrinks in step with the room left, so the part still reaches 0 or 50 with the shared value and moves at least half as fast as it, so it keeps following the Arc. From |bias| 25 it is the curved model. <b>Blend:</b> halfway between linear and curved everywhere.</p><p>Gate shift (Density only): the part's Density gate sees <code>shared + bias</code>, unclamped, so a gate at 30 biased +10 opens at a shared 20, exactly as linear; notes and thinning follow the curve.</p>`;row.append(p);c.append(row)})();
 // Per genre and macro.
 const main=document.getElementById('main');
 for(const g of D.genres){
@@ -427,6 +451,7 @@ for(const g of D.genres){
       for(const kind of ['solo','mix']){
         if(kind==='mix'&&!D.mixBiases.includes(bias)){players.append(el('div',{class:'player note'},`Mix: rendered at ${D.mixBiases.join(', ')} only.`));continue}
         for(const k of models){
+          if(kind==='mix'&&!D.mixModels.includes(k))continue;
           const biased=`renders/${g.genre}-${macro}-${k}-${tag}-${kind}.wav`,ref=`renders/${g.genre}-${macro}-ref-${kind}.wav`;
           const au=el('audio',{controls:'',preload:'none',src:biased});let onRef=false;
           const ab=el('button',{on:()=>{const t=au.currentTime,playing=!au.paused;onRef=!onRef;au.src=onRef?ref:biased;au.currentTime=t;if(playing)au.play();ab.textContent=onRef?'B: reference (unbiased)':'A: biased';ab.classList.toggle('on',onRef)}},'A: biased');
@@ -442,7 +467,7 @@ for(const g of D.genres){
       for(const[c,arc]of Object.entries(m.arc)){
         const W=380,H=200,L=34,B=28,n=arc.ref.bars.length-1;let s=frame(W,H,L,B,n,50,'bar','value (points)',[0,10,20,30,40,50]);
         s+=sections(arc.ref.bars,W,H,L,B);s+=line(pts(arc.ref.bars.map(x=>x.shared/64),W,H,L,B,n,50),'ref',false);
-        for(const k of ['linear','curved'])for(const b of [-20,20]){const r=arc[`${k}${b>0?'+':''}${b}`];s+=line(pts(r.bars.map(x=>x.biased/64),W,H,L,B,n,50),COL[k],b<0)}
+        for(const k of D.arcModels)for(const b of [-20,20]){const r=arc[`${k}${b>0?'+':''}${b}`];s+=line(pts(r.bars.map(x=>x.biased/64),W,H,L,B,n,50),COL[k],b<0)}
         row.append(Object.assign(el('div',{class:'panel'}),{innerHTML:`<b>Centre ${c}</b> <span class="note">solid +20, dashed −20; grey: shared</span>`+svg(W,H,s)}));
       }
     }

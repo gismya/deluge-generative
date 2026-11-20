@@ -61,7 +61,7 @@ struct RootsLister final : FolderLister {
 
 int usage() {
 	std::fputs("part_bias_prototype --genre G --part NAME --macro energy|density|complexity|motion\n"
-	           "  --model linear|curved|gateshift --bias POINTS [--centre POINTS] [--density POINTS]\n"
+	           "  --model linear|curved|gateshift|knee|blend --bias POINTS [--centre POINTS] [--density POINTS]\n"
 	           "  [--entropy N] [--bars N] [--solo] [--no-audio] [--pack DIR] [--card DIR] --out PREFIX\n",
 	           stderr);
 	return 2;
@@ -121,6 +121,12 @@ int main(int argc, char** argv) {
 			}
 			else if (value == "gateshift") {
 				model = prototype::BiasModel::CurvedGateShift;
+			}
+			else if (value == "knee") {
+				model = prototype::BiasModel::Knee;
+			}
+			else if (value == "blend") {
+				model = prototype::BiasModel::Blend;
 			}
 			else {
 				return usage();

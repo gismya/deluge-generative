@@ -49,7 +49,7 @@ Result playBiased(int32_t density, int32_t part, BiasModel model, Macro macro, i
 // clang-format off
 describe part_bias_prototype("Part bias prototype", $ {
 	it("is the identity at bias 0 for every model", _ {
-		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift}) {
+		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift, BiasModel::Knee, BiasModel::Blend}) {
 			for (int32_t v = 0; v <= kMacroFull; v += 25) {
 				expect(prototype::biased(model, v, 0)).to_equal(v);
 				expect(prototype::biasedGate(model, v, 0)).to_equal(v);
@@ -77,7 +77,7 @@ describe part_bias_prototype("Part bias prototype", $ {
 	});
 
 	it("is monotonic in the shared value and in the bias for every model", _ {
-		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift}) {
+		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift, BiasModel::Knee, BiasModel::Blend}) {
 			for (int32_t o = -kMacroFull; o <= kMacroFull; o += 160) {
 				for (int32_t v = 0; v < kMacroFull; v += 5) {
 					const int32_t here = prototype::biased(model, v, o);
@@ -86,6 +86,53 @@ describe part_bias_prototype("Part bias prototype", $ {
 				}
 			}
 		}
+	});
+
+	it("stays within 0..50 and reaches both ends for every model", _ {
+		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::Knee, BiasModel::Blend}) {
+			for (int32_t o = -kMacroFull; o <= kMacroFull; o += 64) {
+				for (int32_t v = 0; v <= kMacroFull; v += 25) {
+					expect(prototype::biased(model, v, o)).to_be_between(int32_t{0}, kMacroFull);
+				}
+				expect(prototype::biased(model, o >= 0 ? kMacroFull : 0, o)).to_equal(o >= 0 ? kMacroFull : 0);
+			}
+		}
+	});
+
+	it("plays the knee hybrid as linear while the end it heads for is 2·|bias| or more away", _ {
+		expect(prototype::biased(BiasModel::Knee, macroPoints(20), macroPoints(10))).to_equal(macroPoints(30));
+		expect(prototype::biased(BiasModel::Knee, macroPoints(30), macroPoints(10))).to_equal(macroPoints(40));
+		expect(prototype::biased(BiasModel::Knee, macroPoints(30), -macroPoints(10))).to_equal(macroPoints(20));
+		expect(prototype::biased(BiasModel::Knee, macroPoints(20), -macroPoints(10))).to_equal(macroPoints(10));
+		// A small bias still eases over the last 10 points.
+		expect(prototype::biased(BiasModel::Knee, macroPoints(40), macroPoints(5))).to_equal(macroPoints(45));
+		expect(prototype::biased(BiasModel::Knee, macroPoints(45), macroPoints(5))).to_be_less_than(kMacroFull);
+	});
+
+	it("eases the knee hybrid into its end, so a part keeps following the shared value at half its speed or more", _ {
+		for (int32_t o : {macroPoints(5), macroPoints(10), macroPoints(20), -macroPoints(5), -macroPoints(10),
+		                  -macroPoints(20)}) {
+			for (int32_t v = 0; v + 64 <= kMacroFull; v += 64) {
+				const int32_t rise = prototype::biased(BiasModel::Knee, v + 64, o) - prototype::biased(BiasModel::Knee, v, o);
+				expect(rise).to_be_between(int32_t{31}, int32_t{64});
+			}
+		}
+		// Linear pins a +20 part at 50 from a shared 30; the knee doesn't.
+		expect(prototype::biased(BiasModel::Linear, macroPoints(40), macroPoints(20))).to_equal(kMacroFull);
+		expect(prototype::biased(BiasModel::Knee, macroPoints(40), macroPoints(20))).to_equal(macroPoints(45));
+	});
+
+	it("is the curved model from a bias of 25 up", _ {
+		for (int32_t o : {macroPoints(25), macroPoints(40), -macroPoints(25), -macroPoints(50)}) {
+			for (int32_t v = 0; v <= kMacroFull; v += 25) {
+				expect(prototype::biased(BiasModel::Knee, v, o)).to_equal(prototype::biased(BiasModel::Curved, v, o));
+			}
+		}
+	});
+
+	it("blends linear and curved half and half", _ {
+		expect(prototype::biased(BiasModel::Blend, macroPoints(40), macroPoints(20))).to_equal(macroPoints(47));
+		expect(prototype::biased(BiasModel::Blend, macroPoints(10), -macroPoints(20))).to_equal(macroPoints(3));
 	});
 
 	it("moves a Density gate as a threshold shift in the gate-shift model, unclamped", _ {
@@ -106,7 +153,7 @@ describe part_bias_prototype("Part bias prototype", $ {
 		run.seed = rolled.seed;
 		run.skipIntro = true;
 		const Result plain = play(run, 16);
-		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift}) {
+		for (BiasModel model : {BiasModel::Linear, BiasModel::Curved, BiasModel::CurvedGateShift, BiasModel::Knee, BiasModel::Blend}) {
 			const Result zero = playBiased(35, 3, model, Macro::Density, 0);
 			expect(zero.events == plain.events).to_be_true();
 		}
