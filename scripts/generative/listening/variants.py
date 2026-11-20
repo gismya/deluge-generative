@@ -9,6 +9,8 @@ changes nothing: an option that changes nothing there can't be heard there (psyt
 """
 
 import filecmp
+import hashlib
+import json
 import os
 import shlex
 import shutil
@@ -29,10 +31,50 @@ def git(worktree, *args, **kw):
     return subprocess.run(["git", "-C", worktree, *args], check=True, **kw)
 
 
+def trees(worktree):
+    return [t for t in TREES if os.path.isdir(os.path.join(worktree, t))]
+
+
+def uncommitted(worktree):
+    """`git status --porcelain` of src/ and pack/: what revert would throw away."""
+    return git(
+        worktree,
+        "status",
+        "--porcelain",
+        "--",
+        *trees(worktree),
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def require_clean(worktree):
+    """Raises ValueError if `worktree` has uncommitted work under src/ or pack/: revert would delete it."""
+    dirty = uncommitted(worktree)
+    if dirty:
+        raise ValueError(
+            f"{worktree} has uncommitted work under src/ or pack/, which reverting a variant would delete; commit it, "
+            "or leave --worktree out to use a scratch worktree:\n" + dirty.rstrip()
+        )
+
+
 def revert(worktree):
-    """Restores src/ and pack/ to the worktree's HEAD, new files included."""
-    git(worktree, "checkout", "-q", "--", *TREES)
-    git(worktree, "clean", "-fdq", "--", *TREES)
+    """Restores src/ and pack/ to the worktree's HEAD, new files included. Only for a worktree this toolkit owns (a
+    scratch one), or one require_clean passed before its variant went in."""
+    git(worktree, "checkout", "-q", "--", *trees(worktree))
+    git(worktree, "clean", "-fdq", "--", *trees(worktree))
+
+
+def scratch_worktree(repo, path):
+    """A detached worktree of `repo` at `path` (in the scratch folder, so the toolkit owns it), made if missing, its
+    src/ and pack/ reverted and moved to `repo`'s HEAD, so it builds what the repo has now."""
+    head = git(repo, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    if not os.path.exists(path):
+        git(repo, "worktree", "add", "--detach", "-q", path, head)
+        return path
+    revert(path)
+    git(path, "checkout", "--detach", "-q", head)
+    return path
 
 
 def diff_path(session, name):
@@ -61,7 +103,9 @@ def build_tree(worktree, variant):
 
 
 def make(worktree, session, variants):
-    """Writes each variant's diff to <session>/diffs/. `worktree` must be clean under src/ and pack/."""
+    """Writes each variant's diff to <session>/diffs/. Raises ValueError, changing nothing, if `worktree` has
+    uncommitted work under src/ or pack/."""
+    require_clean(worktree)
     os.makedirs(os.path.join(session, "diffs"), exist_ok=True)
     out = {}
     try:
@@ -69,7 +113,7 @@ def make(worktree, session, variants):
             revert(worktree)
             build_tree(worktree, v)
             d = git(
-                worktree, "diff", "--", *TREES, capture_output=True, text=True
+                worktree, "diff", "--", *trees(worktree), capture_output=True, text=True
             ).stdout
             if not d:
                 raise ValueError(f"{name}: an empty diff")
@@ -114,16 +158,33 @@ def build_render(worktree, dest):
 
 
 def build_renders(worktree, session, names, bin_dir):
-    """bin_dir/<name> for `base` and each variant: generator_render built with it applied. Reverts after."""
+    """bin_dir/<name> for `base` and each variant: generator_render built with it applied. Reverts after. Raises
+    ValueError, changing nothing, if `worktree` has uncommitted work under src/ or pack/."""
+    require_clean(worktree)
     out = {}
     try:
         for name in ["base", *[n for n in names if n != "base"]]:
             revert(worktree)
             apply(worktree, session, name)
             out[name] = build_render(worktree, os.path.join(bin_dir, name))
+            with open(out[name] + ".json", "w") as fh:
+                json.dump(render_stamp(worktree, session, name), fh)
     finally:
         revert(worktree)
     return out
+
+
+def render_stamp(worktree, session, name):
+    """What bin/<name> was built from: the commit and the variant's diff. clips.py refuses a render whose stamp
+    differs from the repo's now: a diff remade or a new commit since prove."""
+    diff = "-"
+    if name != "base":
+        with open(diff_path(session, name), "rb") as fh:
+            diff = hashlib.sha256(fh.read()).hexdigest()
+    head = git(
+        worktree, "rev-parse", "HEAD", capture_output=True, text=True
+    ).stdout.strip()
+    return {"variant": name, "diff": diff, "head": head}
 
 
 def render_midi(render, genre, seed, bars, extra, out_prefix):

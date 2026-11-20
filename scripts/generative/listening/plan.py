@@ -88,6 +88,10 @@ class Plan:
                 lines.append(
                     f"  {c.name}: {c.variant}, {r.seconds[c.name]:g} s{serves}"
                 )
+        lines.append(
+            "(an estimate: the runners claim whole variants, costliest first, as each frees up, so the split can "
+            "differ; the links and seconds per variant don't)"
+        )
         total = sum(r.audio_seconds for r in self.runners)
         lines.append(
             f"total: {sum(len(r.captures) for r in self.runners)} captures, "

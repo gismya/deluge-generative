@@ -185,6 +185,23 @@ def render_midi(card, scratch, out_dir, genre):
     return files
 
 
+def cut_key(scratch, clip):
+    """What a clip's m4a was cut from: its source, bars, and the source WAV's identity (inode, size, mtime) and
+    sidecar. A capture taken again, or new bars, changes it, and build() cuts the clip again."""
+    raw = os.path.join(scratch, "raw", clip["src"])
+    st = os.stat(raw + ".wav")
+    with open(raw + ".json") as fh:
+        sidecar = fh.read()
+    return [
+        clip["src"],
+        list(clip["bars"]),
+        st.st_ino,
+        st.st_size,
+        st.st_mtime_ns,
+        sidecar,
+    ]
+
+
 def build(session, scratch, out_dir, recut=False):
     """Cuts every clip, renders the MIDI files, writes index.html and variants.md. Returns warning lines; raises
     ValueError listing the content file's problems."""
@@ -197,6 +214,12 @@ def build(session, scratch, out_dir, recut=False):
         if words(c) > MAX_WORDS
     ]
     seconds = {}
+    index_path = os.path.join(out_dir, "audio", "cuts.json")
+    try:
+        with open(index_path) as fh:
+            cuts = json.load(fh)
+    except (OSError, ValueError):
+        cuts = {}
     for card in session["cards"]:
         for clip in card["clips"]:
             info = source_info(scratch, clip["src"])
@@ -207,24 +230,22 @@ def build(session, scratch, out_dir, recut=False):
                     f"{card['id']} clip {clip['stem']}: bar {end} is past {clip['src']}'s "
                     f"{info['seconds']:g} s; cut short"
                 )
-            if recut or not os.path.exists(dest):
-                seconds[clip["stem"]] = round(
-                    cutter.cut(
-                        os.path.join(scratch, "raw", clip["src"] + ".wav"),
-                        dest,
-                        info["tempo"],
-                        first,
-                        end,
-                        scratch=scratch,
-                    ),
-                    1,
+            key = cut_key(scratch, clip)
+            done = cuts.get(clip["stem"])
+            if recut or not os.path.exists(dest) or not done or done["key"] != key:
+                cut_s = cutter.cut(
+                    os.path.join(scratch, "raw", clip["src"] + ".wav"),
+                    dest,
+                    info["tempo"],
+                    first,
+                    end,
+                    scratch=scratch,
                 )
-            else:
-                seconds[clip["stem"]] = round(
-                    min(end * 240.0 / info["tempo"], info["seconds"])
-                    - first * 240.0 / info["tempo"],
-                    1,
-                )
+                cuts[clip["stem"]] = done = {"key": key, "seconds": round(cut_s, 1)}
+                os.makedirs(os.path.dirname(index_path), exist_ok=True)
+                with open(index_path, "w") as fh:
+                    json.dump(cuts, fh, indent=1)
+            seconds[clip["stem"]] = done["seconds"]
         card["midiFiles"] = render_midi(card, scratch, out_dir, session["genre"])
     data = page_data(session, seconds)
     with open(os.path.join(out_dir, "index.html"), "w") as fh:

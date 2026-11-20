@@ -111,12 +111,21 @@ class Job:
 
 
 _PARSER = None
+_NAMES = {}
+
+
+def _names(kind, read):
+    """gen_emu's genre or scale names, read from the source once."""
+    if kind not in _NAMES:
+        _NAMES[kind] = read()
+    return _NAMES[kind]
 
 
 def _recipe_parser():
     global _PARSER
     if _PARSER is None:
-        p = argparse.ArgumentParser(prog="job args", add_help=False)
+        # allow_abbrev=False: argparse would read --sec as --seconds and --rend as --render, which the runner drops
+        p = argparse.ArgumentParser(prog="job args", add_help=False, allow_abbrev=False)
         gen_emu.add_recipe_args(p)
         _PARSER = p
     return _PARSER
@@ -140,6 +149,14 @@ def parse_args(args, genre):
         raise JobError(err.getvalue().strip().splitlines()[-1]) from None
     if ns.key is not None and ns.key not in gen_emu.KEYS:
         raise JobError(f"--key {ns.key}: unknown key")
+    if ns.scale is not None and ns.scale not in _names("scales", gen_emu.scale_names):
+        raise JobError(
+            f"--scale {ns.scale}: unknown scale (have {', '.join(_names('scales', gen_emu.scale_names))})"
+        )
+    if ns.genre not in _names("genres", gen_emu.genre_names):
+        raise JobError(
+            f"--genre {ns.genre}: unknown genre (have {', '.join(_names('genres', gen_emu.genre_names))})"
+        )
     recipe = Recipe(**{f: getattr(ns, f) for f in RECIPE_FIELDS})
     return recipe, tuple(sorted(set(ns.mute or [])))
 

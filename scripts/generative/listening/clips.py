@@ -7,6 +7,7 @@ that takes it (#402).
 """
 
 import concurrent.futures
+import json
 import math
 import os
 import subprocess
@@ -14,6 +15,7 @@ import tempfile
 
 from . import jobs as _jobs
 from . import runner as _runner
+from . import variants as _variants
 
 
 def takes_mute(render):
@@ -52,7 +54,7 @@ def render_one(capture, render, raw, tempo):
     return capture.name
 
 
-def render_all(job_list, scratch, base_render=None):
+def render_all(job_list, scratch, session, base_render=None):
     """Renders every job (merged by prefix), all at once. Returns the names rendered."""
     from . import recipe
 
@@ -70,6 +72,17 @@ def render_all(job_list, scratch, base_render=None):
         if not os.path.exists(render):
             raise _jobs.JobError(
                 f"{c.name}: no {render}; prove the variant first (it keeps its generator_render)"
+            )
+        stamp = _variants.render_stamp(_runner.REPO, session, c.variant)
+        try:
+            with open(render + ".json") as fh:
+                built = json.load(fh)
+        except (OSError, ValueError):
+            built = None
+        if built != stamp:
+            raise _jobs.JobError(
+                f"{c.name}: {render} was built from another commit or diff than the repo's now; prove "
+                f"{c.variant} again"
             )
         if c.job.mutes and not takes_mute(render):
             raise _jobs.JobError(

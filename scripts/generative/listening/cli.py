@@ -35,19 +35,19 @@ def cmd_card(a):
 
 
 def cmd_variants(a):
+    # A scratch worktree by default: make and prove revert src/ and pack/ around each variant.
+    if a.worktree:
+        wt = a.worktree
+    else:
+        wt = variants.scratch_worktree(
+            runner.REPO, os.path.join(a.scratch, "wt", a.action)
+        )
     if a.action == "make":
-        defined = page_module_variants(a.content)
         for name, n in variants.make(
-            a.worktree or runner.REPO, a.session, defined
+            wt, a.session, page_module_variants(a.content)
         ).items():
             print(f"{name}: {n} lines")
         return 0
-    wt = a.worktree or os.path.join(a.scratch, "wt", "prove")
-    if not os.path.exists(wt):
-        subprocess.run(
-            ["git", "-C", runner.REPO, "worktree", "add", "--detach", "-q", wt, "HEAD"],
-            check=True,
-        )
     extra = [w for arg in a.extra for w in arg.split()]
     for line in variants.prove(
         wt, a.session, a.names, a.genre, range(1, a.seeds + 1), a.bars, extra, a.scratch
@@ -80,13 +80,20 @@ def cmd_run(a):
     if a.dry_run:
         return 0
     failed = r.run()
-    if failed:
-        print("failed: " + ", ".join(failed))
+    for c in failed:
+        why = (
+            f"marker {r.failed_marker(c)}; delete it to try again"
+            if r.failed(c)
+            else "not captured"
+        )
+        print(f"failed: {c.name} ({why}; log {os.path.join(r.raw, c.name + '.log')})")
     return 1 if failed else 0
 
 
 def cmd_clips(a):
-    names = clips.render_all(jobs.load_jobs(a.jobs, a.genre), a.scratch, a.render)
+    names = clips.render_all(
+        jobs.load_jobs(a.jobs, a.genre), a.scratch, a.session, a.render
+    )
     print(f"rendered {len(names)}: {', '.join(names)}")
     return 0
 
@@ -122,9 +129,12 @@ def parser():
     )
     v.add_argument(
         "--worktree",
-        help="make: default the repo (clean under src/ and pack/); prove: <scratch>/wt/prove",
+        help="default <scratch>/wt/<action>, a worktree of the repo's HEAD; one you give must be clean under src/ and pack/",
     )
-    v.add_argument("--scratch", help="prove: keeps bin/<name> and the MIDI there")
+    v.add_argument(
+        "--scratch",
+        help="its worktree (wt/make, wt/prove); prove keeps bin/<name> and the MIDI there",
+    )
     v.add_argument("--genre")
     v.add_argument(
         "--seeds", type=int, default=20, help="prove: seeds 1..N, entropy = seed"
@@ -164,6 +174,11 @@ def parser():
     o.add_argument("--genre", required=True)
     o.add_argument("--scratch", required=True)
     o.add_argument(
+        "--session",
+        required=True,
+        help="the session folder: its diffs/ check each render is current",
+    )
+    o.add_argument(
         "--render",
         help="the base generator_render for the Recipe check (default <scratch>/bin/base)",
     )
@@ -182,7 +197,7 @@ def parser():
 def main(argv=None):
     a = parser().parse_args(argv)
     if a.command == "variants":
-        need = {"make": ("content",), "prove": ("scratch", "genre")}[a.action]
+        need = {"make": ("content", "scratch"), "prove": ("scratch", "genre")}[a.action]
         missing = [f"--{n}" for n in need if not getattr(a, n)]
         if missing:
             sys.exit(f"variants {a.action} needs {', '.join(missing)}")
@@ -197,5 +212,12 @@ def main(argv=None):
             "clips": cmd_clips,
             "page": cmd_page,
         }[a.command](a)
-    except (jobs.JobError, ValueError) as e:
+    except (jobs.JobError, ValueError, RuntimeError) as e:
+        # RuntimeError: generator_render refused a Recipe (gen_emu.render_piece)
         sys.exit(str(e))
+    except subprocess.CalledProcessError as e:
+        out = e.stderr or e.output or b""
+        out = out.decode(errors="replace") if isinstance(out, bytes) else out
+        sys.exit(
+            f"{' '.join(map(str, e.cmd))}: exit {e.returncode}\n{out.strip()[-600:]}"
+        )

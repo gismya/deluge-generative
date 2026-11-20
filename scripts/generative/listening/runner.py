@@ -19,6 +19,8 @@ retried once; before each capture the runner waits while the pause file exists o
 emulators (qemu-system processes, any session's).
 """
 
+import contextlib
+import hashlib
 import json
 import os
 import subprocess
@@ -51,6 +53,9 @@ class Run:
         self.raw = os.path.join(self.scratch, "raw")
         self.captures = _jobs.merge(job_list)
         self.tempos = None
+        self.head = None  # the repo's HEAD: what every runner's worktree builds
+        self._turn = threading.Lock()
+        self._active = 0  # this run's captures between their turn and their end (their qemu may not be up yet)
 
     # -- planning --
 
@@ -102,69 +107,119 @@ class Run:
                 fh.write(line + "\n")
             print(line, flush=True)
 
+    def stamp(self, capture):
+        """What makes a WAV this capture's: the variant and its diff's hash, the card image (path, size, mtime), the
+        capture's flags and the source commit. A WAV whose sidecar differs is captured again."""
+        card = self.card_path(capture.job.card)
+        st = os.stat(card) if os.path.exists(card) else None
+        diff = "-"
+        if capture.variant != "base":
+            with open(_variants.diff_path(self.session, capture.variant), "rb") as fh:
+                diff = hashlib.sha256(fh.read()).hexdigest()
+        return {
+            "variant": capture.variant,
+            "diff": diff,
+            "card": f"{card} {st.st_size} {st.st_mtime_ns}" if st else card,
+            "args": " ".join(capture.job.capture_flags()),
+            "head": self.head or self.repo_head(),
+        }
+
+    def repo_head(self):
+        return subprocess.run(
+            ["git", "-C", self.repo, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def seconds(self, capture):
+        return _plan.seconds(capture.bars, self.tempos[capture.name])
+
     def done(self, capture):
+        """Whether every name the capture serves has a WAV of these arguments, source and card, long enough."""
+        stamp, need = self.stamp(capture), self.seconds(capture)
         return all(
-            os.path.exists(os.path.join(self.raw, n + ".wav")) for n in capture.serves
+            os.path.exists(os.path.join(self.raw, n + ".wav"))
+            and is_current(read_info(self.raw, n), stamp, need)
+            for n in capture.serves
         )
 
+    def failed_marker(self, capture):
+        return os.path.join(self.raw, capture.name + ".failed")
+
     def failed(self, capture):
-        return os.path.exists(os.path.join(self.raw, capture.name + ".failed"))
+        """Whether this capture, with these arguments, already failed twice. A marker from other arguments is old."""
+        try:
+            with open(self.failed_marker(capture)) as fh:
+                return json.load(fh) == self.stamp(capture)
+        except (OSError, ValueError):
+            return False
 
     def claim(self, variant):
         """Takes variant's lock, or one whose pid is gone. True if this process holds it."""
         locks = os.path.join(self.raw, "locks")
         os.makedirs(locks, exist_ok=True)
         path = os.path.join(locks, variant.replace(os.sep, "_") + ".lock")
-        for _ in range(2):
+        for _ in range(5):
             try:
                 fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
                 try:
                     with open(path) as fh:
                         pid = int(fh.read().strip() or 0)
+                except FileNotFoundError:
+                    continue  # released or taken over just now: try again
                 except (OSError, ValueError):
-                    pid = 0
+                    pid = 0  # being written: a crash between create and write leaves it empty
                 if pid and (pid == os.getpid() or _jobs.gen_emu.pid_running(pid)):
                     return False
-                os.replace(path, path + ".stale")  # its runner died
+                try:
+                    os.replace(path, path + ".stale")  # its runner died
+                except FileNotFoundError:
+                    pass  # another runner took it over first: try again
                 continue
             with os.fdopen(fd, "w") as fh:
                 fh.write(str(os.getpid()))
             return True
         return False
 
+    def release(self, variant):
+        path = os.path.join(self.raw, "locks", variant.replace(os.sep, "_") + ".lock")
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)
+
     def wait_turn(self):
+        """Waits while the pause file exists or the host would pass the cap, then counts this capture as active.
+        Other sessions' emulators come from ps; this run's are counted by self._active from their turn on, since a
+        capture links for a minute before its qemu starts. Call end_turn() after the capture."""
         pause = os.path.join(self.scratch, "pause")
         said = False
-        while os.path.exists(pause) or emulators() >= self.cap:
+        while True:
+            with self._turn:
+                others = emulators(exclude_children_of=os.getpid())
+                if not os.path.exists(pause) and others + self._active < self.cap:
+                    self._active += 1
+                    return
             if not said:
                 self.say(
-                    f"waiting: pause={os.path.exists(pause)} emulators={emulators()} (cap {self.cap})"
+                    f"waiting: pause={os.path.exists(pause)} emulators: {others} others', {self._active} this "
+                    f"run's (cap {self.cap})"
                 )
                 said = True
             time.sleep(POLL_S)
 
+    def end_turn(self):
+        with self._turn:
+            self._active -= 1
+
     def worktree(self, index):
-        wt = os.path.join(self.scratch, "wt", f"r{index}")
-        if not os.path.exists(wt):
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    self.repo,
-                    "worktree",
-                    "add",
-                    "--detach",
-                    "-q",
-                    wt,
-                    "HEAD",
-                ],
-                check=True,
-            )
-        return wt
+        """Runner index's worktree, at the repo's HEAD."""
+        return _variants.scratch_worktree(
+            self.repo, os.path.join(self.scratch, "wt", f"r{index}")
+        )
 
     def capture(self, index, wt, capture):
-        seconds = _plan.seconds(capture.bars, self.tempos[capture.name])
+        seconds = self.seconds(capture)
         own = os.path.join(self.scratch, "out", f"r{index}")
         os.makedirs(own, exist_ok=True)
         tmp = os.path.join(own, capture.name + ".wav")
@@ -187,12 +242,15 @@ class Run:
             self.wait_turn()
             t0 = time.time()
             log = os.path.join(self.raw, f"{capture.name}.log")
-            with open(log, "a") as fh:
-                fh.write(f"== attempt {attempt}: {' '.join(cmd)}\n")
-                fh.flush()
-                r = subprocess.run(
-                    cmd, cwd=wt, stdout=fh, stderr=subprocess.STDOUT, check=False
-                )
+            try:
+                with open(log, "a") as fh:
+                    fh.write(f"== attempt {attempt}: {' '.join(cmd)}\n")
+                    fh.flush()
+                    r = subprocess.run(
+                        cmd, cwd=wt, stdout=fh, stderr=subprocess.STDOUT, check=False
+                    )
+            finally:
+                self.end_turn()
             with open(log) as fh:
                 tail = (fh.read().strip().splitlines() or [""])[-1][-160:]
             if r.returncode == 0 and os.path.exists(tmp):
@@ -204,7 +262,12 @@ class Run:
                         os.replace(link, link + ".old")
                     os.link(final, link)
                 write_info(
-                    self.raw, capture, self.tempos[capture.name], seconds, "delugemu"
+                    self.raw,
+                    capture,
+                    self.tempos[capture.name],
+                    seconds,
+                    "delugemu",
+                    self.stamp(capture),
                 )
                 self.say(
                     f"{capture.name}: ok, {seconds:g} s in {time.time() - t0:.0f} s, runner {index}, "
@@ -223,7 +286,8 @@ class Run:
                 )
             if attempt == 1:
                 time.sleep(RETRY_WAIT_S)
-        open(os.path.join(self.raw, capture.name + ".failed"), "w").close()
+        with open(self.failed_marker(capture), "w") as fh:
+            json.dump(self.stamp(capture), fh)
         return False
 
     def runner(self, index, groups):
@@ -238,8 +302,11 @@ class Run:
                 _variants.revert(wt)
                 _variants.apply(wt, self.session, variant)
                 self.say(f"runner {index}: {variant}, {len(todo)} captures")
-                for c in todo:
-                    self.capture(index, wt, c)
+                try:
+                    for c in todo:
+                        self.capture(index, wt, c)
+                finally:
+                    self.release(variant)
         finally:
             if wt:
                 _variants.revert(wt)
@@ -248,6 +315,7 @@ class Run:
     def run(self):
         """Runs the captures on self.runners threads. Returns the names of the failed captures."""
         os.makedirs(self.raw, exist_ok=True)
+        self.head = self.repo_head()
         secs = {
             c.name: _plan.seconds(c.bars, self.tempos[c.name]) for c in self.captures
         }
@@ -260,28 +328,70 @@ class Run:
             t.start()
         for t in threads:
             t.join()
-        return [c.name for c in self.captures if not self.done(c)]
+        return [c for c in self.captures if not self.done(c)]
 
 
-def write_info(raw, capture, tempo, seconds, kind):
-    """raw/<name>.json beside each WAV the capture serves: what the cutter and the page read."""
+def write_info(raw, capture, tempo, seconds, kind, stamp=None):
+    """raw/<name>.json beside each WAV the capture serves: what the cutter and the page read, and the stamp done()
+    compares (Run.stamp)."""
     for name in capture.serves:
-        info = {
-            "tempo": tempo,
-            "seconds": seconds,
-            "variant": capture.variant,
-            "card": capture.job.card,
-            "args": " ".join(capture.job.capture_flags()),
-            "kind": kind,
-            "capture": capture.name,
-        }
+        info = dict(
+            stamp
+            or {
+                "variant": capture.variant,
+                "args": " ".join(capture.job.capture_flags()),
+            }
+        )
+        info.update(
+            {"tempo": tempo, "seconds": seconds, "kind": kind, "capture": capture.name}
+        )
         with open(os.path.join(raw, name + ".json"), "w") as fh:
             json.dump(info, fh, indent=1)
 
 
-def emulators():
-    """The qemu-system processes on the host, any session's."""
+def read_info(raw, name):
+    try:
+        with open(os.path.join(raw, name + ".json")) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def is_current(info, stamp, seconds):
+    """Whether a WAV's sidecar `info` shows it was captured as `stamp` says (Run.stamp), for `seconds` or more."""
+    if not info:
+        return False
+    return (
+        all(info.get(k) == v for k, v in stamp.items())
+        and info.get("seconds", 0) >= seconds - 1e-6
+    )
+
+
+def emulators(exclude_children_of=None):
+    """The qemu-system processes on the host, any session's, less those under process `exclude_children_of`."""
     out = subprocess.run(
-        ["ps", "-axo", "command"], capture_output=True, text=True, check=False
+        ["ps", "-axo", "pid=,ppid=,command="],
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout
-    return sum(1 for line in out.splitlines() if "qemu-system" in line.split(" ", 1)[0])
+    procs = []
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            procs.append((int(parts[0]), int(parts[1]), parts[2]))
+    mine = set()
+    if exclude_children_of is not None:
+        mine = {exclude_children_of}
+        grew = True
+        while grew:
+            grew = False
+            for pid, ppid, _ in procs:
+                if ppid in mine and pid not in mine:
+                    mine.add(pid)
+                    grew = True
+    return sum(
+        1
+        for pid, _, cmd in procs
+        if "qemu-system" in cmd.split(" ", 1)[0] and pid not in mine
+    )

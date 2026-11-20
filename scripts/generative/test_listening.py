@@ -2,10 +2,14 @@
 check, the cutter's bar math and the page."""
 
 import array
+import os
+import subprocess
+import tempfile
+import types
 import unittest
 
 import theory_review
-from listening import cutter, jobs, page, plan, recipe
+from listening import cutter, jobs, page, plan, recipe, runner, variants
 
 
 class JobFile(unittest.TestCase):
@@ -27,6 +31,18 @@ class JobFile(unittest.TestCase):
                 "e1 | base | pack | 8 | --seed 1\ne2 | base | pack | 8 | --densty 3\n",
                 genre="psytrance",
             )
+
+    def test_an_abbreviated_flag_fails_at_load(self):
+        # argparse would take --sec as --seconds and --rend as --render, and the runner would drop both
+        for args in ("--sec 30", "--rend /x", "--dens 30"):
+            with self.subTest(args), self.assertRaises(jobs.JobError):
+                jobs.parse_jobs(f"e1 | base | pack | 8 | {args}\n", genre="psytrance")
+
+    def test_an_unknown_scale_or_genre_fails_at_load(self):
+        with self.assertRaisesRegex(jobs.JobError, "--scale minr"):
+            jobs.parse_jobs("e1 | base | pack | 8 | --scale minr\n", genre="psytrance")
+        with self.assertRaisesRegex(jobs.JobError, "--genre psytranse"):
+            jobs.parse_jobs("e1 | base | pack | 8 | --seed 1\n", genre="psytranse")
 
     def test_a_flag_the_runner_sets_fails_at_load(self):
         with self.assertRaisesRegex(jobs.JobError, "--seconds"):
@@ -233,6 +249,121 @@ class Page(unittest.TestCase):
         )
         self.assertIn("execCommand('copy')", html)
         self.assertNotIn("/*DATA*/null", html)
+
+
+class Recut(unittest.TestCase):
+    def test_a_clip_is_cut_again_when_its_source_is_captured_again_or_its_bars_change(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as scratch:
+            os.makedirs(os.path.join(scratch, "raw"))
+            wav = os.path.join(scratch, "raw", "e1.wav")
+
+            def capture(data):
+                with open(wav, "wb") as fh:
+                    fh.write(data)
+                with open(os.path.join(scratch, "raw", "e1.json"), "w") as fh:
+                    fh.write('{"tempo": 143.0, "seconds": 41.3}')
+
+            capture(b"one")
+            clip = {"stem": "c", "src": "e1", "bars": [0, 8]}
+            first = page.cut_key(scratch, clip)
+            self.assertEqual(page.cut_key(scratch, clip), first)
+            self.assertNotEqual(page.cut_key(scratch, dict(clip, bars=[0, 12])), first)
+            os.remove(
+                wav
+            )  # a new capture is a new file (os.replace), so a new inode and mtime
+            capture(b"two, longer")
+            self.assertNotEqual(page.cut_key(scratch, clip), first)
+
+
+STAMP = {
+    "variant": "base",
+    "diff": "-",
+    "card": "pack 1 2",
+    "args": "--genre psytrance --key D#",
+    "head": "abc",
+}
+
+
+class Reuse(unittest.TestCase):
+    STAMP = types.MappingProxyType(STAMP)
+
+    def test_a_wav_captured_with_these_arguments_and_long_enough_is_reused(self):
+        info = dict(self.STAMP, seconds=41.3, tempo=143.0)
+        self.assertTrue(runner.is_current(info, self.STAMP, 30.0))
+
+    def test_a_wav_captured_with_other_arguments_is_captured_again(self):
+        info = dict(self.STAMP, args="--genre psytrance --key D", seconds=41.3)
+        self.assertFalse(runner.is_current(info, self.STAMP, 30.0))
+
+    def test_a_wav_from_other_source_or_another_diff_is_captured_again(self):
+        self.assertFalse(
+            runner.is_current(
+                dict(self.STAMP, head="old", seconds=41.3), self.STAMP, 30.0
+            )
+        )
+        self.assertFalse(
+            runner.is_current(
+                dict(self.STAMP, diff="old", seconds=41.3), self.STAMP, 30.0
+            )
+        )
+
+    def test_a_wav_shorter_than_the_jobs_now_need_is_captured_again(self):
+        self.assertFalse(
+            runner.is_current(dict(self.STAMP, seconds=20.0), self.STAMP, 30.0)
+        )
+
+    def test_no_sidecar_means_capture_again(self):
+        self.assertFalse(runner.is_current(None, self.STAMP, 30.0))
+
+
+def git_repo(folder):
+    """A repo with src/a.txt committed."""
+    run = lambda *a: subprocess.run(
+        ["git", "-C", folder, *a], check=True, capture_output=True
+    )
+    run("init", "-q")
+    os.makedirs(os.path.join(folder, "src"))
+    with open(os.path.join(folder, "src", "a.txt"), "w") as fh:
+        fh.write("one\n")
+    run("add", ".")
+    run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a")
+
+
+class Variants(unittest.TestCase):
+    def test_make_refuses_a_worktree_with_uncommitted_work_under_src_and_leaves_it(
+        self,
+    ):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            path = os.path.join(repo, "src", "a.txt")
+            with open(path, "w") as fh:
+                fh.write("work in progress\n")
+            edit = variants.Variant(edits=[("src/a.txt", "work", "play")])
+            with self.assertRaisesRegex(ValueError, "uncommitted"):
+                variants.make(repo, session, {"v": edit})
+            with open(path) as fh:
+                self.assertEqual(fh.read(), "work in progress\n")
+
+    def test_make_writes_the_diff_and_leaves_a_clean_worktree_clean(self):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            variants.make(
+                repo,
+                session,
+                {"v": variants.Variant(edits=[("src/a.txt", "one", "two")])},
+            )
+            with open(variants.diff_path(session, "v")) as fh:
+                self.assertIn("+two", fh.read())
+            with open(os.path.join(repo, "src", "a.txt")) as fh:
+                self.assertEqual(fh.read(), "one\n")
 
 
 if __name__ == "__main__":
