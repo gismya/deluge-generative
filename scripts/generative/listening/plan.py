@@ -1,8 +1,9 @@
 """Which runner captures what, in which order, and what it costs.
 
-Each runner has its own worktree and build dir. A capture whose (variant, Recipe) differs from the last one in its
-build dir relinks the firmware (about 55 s under LTO); mutes and length don't. So a variant's Captures all go to one
-runner, sorted by Recipe, and the runner applies the variant once for them.
+Each runner has its own worktree and build dir. Applying or reverting a variant changes the source, so the runner's
+next capture relinks the firmware (about 55 s under LTO). A Recipe change builds nothing: gen_emu patches the Recipe
+into a copy of the built ELF (#401); nor do mutes and length. So a variant's Captures all go to one runner, and the
+runner applies the variant once for them. They still run in Recipe order, so the plan reads in that order.
 """
 
 import math
@@ -36,13 +37,13 @@ def order(captures):
 
 
 def links(captures):
-    """The links a build dir makes running these Captures in order: one per change of (variant, Recipe), the first
-    included."""
+    """The links a build dir makes running these Captures in order: one per change of variant, the first included (a
+    runner reverts and applies before each variant's group, and moves its worktree to the repo's HEAD at the start)."""
     n, last = 0, None
     for c in captures:
-        if (c.variant, c.recipe) != last:
+        if c.variant != last:
             n += 1
-            last = (c.variant, c.recipe)
+            last = c.variant
     return n
 
 
@@ -90,7 +91,7 @@ class Plan:
                 )
         lines.append(
             "(an estimate: the runners claim whole variants, costliest first, as each frees up, so the split can "
-            "differ; the links and seconds per variant don't)"
+            "differ; the links and seconds per variant don't. A link per variant: a new Recipe builds nothing)"
         )
         total = sum(r.audio_seconds for r in self.runners)
         lines.append(

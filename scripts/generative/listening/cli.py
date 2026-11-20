@@ -1,6 +1,7 @@
 """python3 scripts/generative/listen.py COMMAND: the listening-session toolkit's commands.
 
-  card     make <scratch>/card_<name>.img: the stock card with pack/ copied over it (--no-pack: stock only)
+  card     make <scratch>/card_<name>.img: the stock card with pack/ copied over it (--no-pack: stock only), and
+           --palette files as palette overrides
   variants make the session's diffs from its content file's VARIANTS (make), or prove them in the harness (prove)
   run      check every job's Recipe, then capture in delugemu on N runners (--dry-run: print the build plan only)
   clips    rough-render jobs offline with each variant's generator_render
@@ -13,23 +14,68 @@ build dirs; delete it once the page passes its browser test).
 
 import argparse
 import os
+import re
+import shutil
 import subprocess
 import sys
 
 from . import clips, jobs, page, runner, variants
 
 STOCK = os.path.expanduser("~/source/delugemu-sd/deluge_sd.img")
+PALETTE_MAX_BYTES = 8192  # spec 10.1: the firmware ignores a larger override file
+
+
+def oled_names(repo=None):
+    """Every genre's OLED name, the stem of its palette override file (GENERATIVE/PALETTES/<GENRE NAME>.XML)."""
+    folder = os.path.join(
+        repo or runner.REPO, "src", "deluge", "generative", "core", "genres"
+    )
+    names = set()
+    for name in os.listdir(folder):
+        if name.endswith(".cpp"):
+            with open(os.path.join(folder, name)) as fh:
+                names |= set(re.findall(r'oledName\s*=\s*"([^"]+)"', fh.read()))
+    return names
+
+
+def palette_dest(path, names):
+    """Where the palette override file `path` goes on the card. Its file name must be a genre's OLED name and .XML, and
+    it must fit the firmware's limit: else the firmware ignores it and the built-in palette plays, unnoticed."""
+    base = os.path.basename(path)
+    stem, ext = os.path.splitext(base)
+    if ext != ".XML" or stem not in names:
+        raise ValueError(
+            f"{path}: a palette override is named <GENRE NAME>.XML, one of: "
+            + ", ".join(sorted(n + ".XML" for n in names))
+        )
+    if not os.path.isfile(path):
+        raise ValueError(f"{path}: no such file")
+    if os.path.getsize(path) > PALETTE_MAX_BYTES:
+        raise ValueError(
+            f"{path}: over {PALETTE_MAX_BYTES} bytes; the firmware would ignore it"
+        )
+    return "GENERATIVE/PALETTES/" + base
 
 
 def cmd_card(a):
     from fat_image import FatImage, copy_tree
 
+    names = oled_names()
+    dests = [(palette_dest(p, names), p) for p in a.palette]
     os.makedirs(a.scratch, exist_ok=True)
     path = os.path.join(a.scratch, f"card_{a.name}.img")
-    subprocess.run(["cp", "-c", a.stock, path], check=True)  # an APFS clone: instant
-    if not a.no_pack:
-        with FatImage(path) as card:
+    if sys.platform == "darwin":
+        subprocess.run(
+            ["cp", "-c", a.stock, path], check=True
+        )  # an APFS clone: instant
+    else:
+        shutil.copyfile(a.stock, path)
+    with FatImage(path) as card:
+        if not a.no_pack:
             copy_tree(card, os.path.join(runner.REPO, "pack"))
+        for dest, src in dests:
+            with open(src, "rb") as fh:
+                card.write_file(dest, fh.read())
     print(path)
     return 0
 
@@ -117,7 +163,17 @@ def parser():
     c = sub.add_parser("card", help="make a card image in the scratch folder")
     c.add_argument("--scratch", required=True)
     c.add_argument("--stock", default=STOCK)
-    c.add_argument("--no-pack", action="store_true")
+    c.add_argument(
+        "--no-pack",
+        action="store_true",
+        help="the stock card only: a pack preset then plays its factory fallback",
+    )
+    c.add_argument(
+        "--palette",
+        action="append",
+        default=[],
+        help="a palette override file named <GENRE NAME>.XML (spec 10.1), written to GENERATIVE/PALETTES/; repeatable",
+    )
     c.add_argument("name")
 
     v = sub.add_parser("variants", help="make or prove the table variants")
@@ -204,6 +260,8 @@ def main(argv=None):
     for name in ("scratch", "session", "content", "worktree", "render"):
         if getattr(a, name, None):
             setattr(a, name, os.path.abspath(os.path.expanduser(getattr(a, name))))
+    if a.command == "card":
+        a.palette = [os.path.abspath(os.path.expanduser(p)) for p in a.palette]
     try:
         return {
             "card": cmd_card,

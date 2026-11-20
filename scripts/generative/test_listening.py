@@ -2,6 +2,8 @@
 check, the cutter's bar math and the page."""
 
 import array
+import contextlib
+import io
 import os
 import subprocess
 import tempfile
@@ -9,7 +11,8 @@ import types
 import unittest
 
 import theory_review
-from listening import cutter, jobs, page, plan, recipe, runner, variants
+from listening import cli, cutter, jobs, page, plan, recipe, runner, variants
+from test_fat_image import make_fat32
 
 
 class JobFile(unittest.TestCase):
@@ -84,11 +87,11 @@ class Ordering(unittest.TestCase):
         self.assertEqual(abs(names.index("a") - names.index("d")), 1)
         self.assertEqual(sorted(names[4:]), ["b", "e"])
 
-    def test_one_runner_links_once_per_variant_and_recipe(self):
+    def test_one_runner_links_once_per_variant_not_per_recipe(self):
         captures = jobs.merge(jobs.parse_jobs(ORDER_JOBS, genre="psytrance"))
         (runner,) = plan.plan(captures, runners=1, tempo_of=lambda c: 120.0).runners
-        # base seed 1, base seed 1 key D#, base seed 2, s1 seed 1
-        self.assertEqual(runner.links, 4)
+        # base (three Recipes: a Recipe is patched into the ELF, #401), then s1
+        self.assertEqual(runner.links, 2)
 
     def test_a_variant_stays_on_one_runner(self):
         captures = jobs.merge(jobs.parse_jobs(ORDER_JOBS, genre="psytrance"))
@@ -97,15 +100,15 @@ class Ordering(unittest.TestCase):
             sorted({c.variant for c in r.captures} for r in p.runners),
             [{"base"}, {"s1"}],
         )
-        self.assertEqual(sum(r.links for r in p.runners), 4)
+        self.assertEqual(sum(r.links for r in p.runners), 2)
 
     def test_the_dry_run_prints_links_per_runner_and_the_seconds_captured(self):
         captures = jobs.merge(jobs.parse_jobs(ORDER_JOBS, genre="psytrance"))
         text = plan.plan(captures, runners=2, tempo_of=lambda c: 120.0).text()
-        # base: 4 captures of 17 s, 3 links; s1: 2 captures, 1 link. 6 captures of 8 bars at 120 BPM: 6 x 17 s.
-        self.assertRegex(text, r"runner 1: 4 captures, 3 links, 68.0 s of audio")
+        # base: 4 captures of 17 s, 1 link; s1: 2 captures, 1 link. 6 captures of 8 bars at 120 BPM: 6 x 17 s.
+        self.assertRegex(text, r"runner 1: 4 captures, 1 link, 68.0 s of audio")
         self.assertRegex(text, r"runner 2: 2 captures, 1 link, 34.0 s of audio")
-        self.assertIn("total: 6 captures, 4 links, 102.0 s captured", text)
+        self.assertIn("total: 6 captures, 2 links, 102.0 s captured", text)
 
     def test_seconds_come_from_bars_at_the_harness_tempo_plus_a_second(self):
         # 8 bars at 120 BPM: 16 s, and a second to spare
@@ -364,6 +367,66 @@ class Variants(unittest.TestCase):
                 self.assertIn("+two", fh.read())
             with open(os.path.join(repo, "src", "a.txt")) as fh:
                 self.assertEqual(fh.read(), "one\n")
+
+
+class PaletteCard(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+
+    def palette(self, name, data=b"<palette/>"):
+        path = os.path.join(self.tmp, name)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return path
+
+    def test_the_genres_oled_names_are_read_from_their_tables(self):
+        self.assertTrue({"AMBIENT", "ACID TECHNO", "PSYTRANCE"} <= cli.oled_names())
+
+    def test_an_override_must_be_named_after_a_genre(self):
+        names = {"AMBIENT"}
+        self.assertEqual(
+            cli.palette_dest(self.palette("AMBIENT.XML"), names),
+            "GENERATIVE/PALETTES/AMBIENT.XML",
+        )
+        for bad in ("ambient.XML", "AMBIENT.xml", "AMBIENT TECHNO.XML"):
+            with self.assertRaisesRegex(ValueError, "AMBIENT.XML"):
+                cli.palette_dest(self.palette(bad), names)
+
+    def test_an_override_past_the_firmwares_limit_is_refused(self):
+        big = self.palette("AMBIENT.XML", b" " * (cli.PALETTE_MAX_BYTES + 1))
+        with self.assertRaisesRegex(ValueError, "ignore"):
+            cli.palette_dest(big, {"AMBIENT"})
+
+    def test_card_writes_the_override_onto_its_copy_of_the_stock_card(self):
+        import fat_image
+
+        stock = os.path.join(self.tmp, "stock.img")
+        make_fat32(stock)
+        palette = self.palette("AMBIENT.XML", b"<palette>drone</palette>")
+        scratch = os.path.join(self.tmp, "scratch")
+        with contextlib.redirect_stdout(io.StringIO()):
+            cli.main(
+                [
+                    "card",
+                    "--scratch",
+                    scratch,
+                    "--stock",
+                    stock,
+                    "--no-pack",
+                    "--palette",
+                    palette,
+                    "d1",
+                ]
+            )
+        with fat_image.FatImage(os.path.join(scratch, "card_d1.img")) as card:
+            self.assertEqual(
+                card.read_file("GENERATIVE/PALETTES/AMBIENT.XML"),
+                b"<palette>drone</palette>",
+            )
+        with fat_image.FatImage(stock) as card:
+            self.assertEqual(card.listdir(), [])
 
 
 if __name__ == "__main__":
