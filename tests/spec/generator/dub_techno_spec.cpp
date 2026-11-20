@@ -477,7 +477,7 @@ describe dub_techno("Dub techno", $ {
 	});
 
 	context("its palette (spec §10.1, §18.3)", _ {
-		it("gives the Sub, the Stab and the Pad at least 3 presets each, on the factory card, the Stab's led by 037 Echo Chord", _ {
+		it("gives the Sub, the Stab and the Pad at least 3 presets each, on the factory card with the pack", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			expect(dub.palette != nullptr && dub.palette != genres::technoAcid.palette).to_be_true();
 			int32_t synthParts = 0;
@@ -493,11 +493,35 @@ describe dub_techno("Dub techno", $ {
 				}
 			}
 			expect(synthParts).to_equal(3);
+		});
+
+		it("rolls the Stab from the pack's dry copies, led by GEN Echo Chord Dry, never the factory originals (#322)", _ {
 			const auto stabs = dub.palette->partEntries(dub.parts[kStabPart]);
 			const auto main = std::max_element(stabs.begin(), stabs.end(), [](const PaletteEntry& a, const PaletteEntry& b) {
 				return a.weight < b.weight;
 			});
-			expect(std::string(main->path)).to_equal(std::string("SYNTHS/037 Echo Chord.XML"));
+			expect(std::string(main->path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML"));
+			FakeCard card = harness::factoryCardWithPack();
+			std::set<std::string> rolled;
+			for (uint32_t entropy = 0; entropy < 200; entropy++) {
+				SoundPicks sounds;
+				expect(rollSounds(dub, *dub.palette, sounds, entropy, card)).to_be_true();
+				rolled.insert(sounds.part[kStabPart].c_str());
+			}
+			expect(rolled == std::set<std::string>{"SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML"})
+			    .to_be_true();
+		});
+
+		it("falls back to the factory originals, with their own echo, on a card without the pack (spec §10.1)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML", "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML",
+			                  "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML"};
+			SoundLoad load =
+			    loadPartSound(*dub.palette, dub.parts[kStabPart], "SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML", loader);
+			expect(load.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/037 Echo Chord.XML"));
 		});
 
 		it("takes Techno's lanes but a shaker alone on Perc 2", _ {
