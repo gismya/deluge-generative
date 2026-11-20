@@ -27,6 +27,10 @@ using namespace harness;
 using namespace harness::render;
 using namespace deluge::generative;
 
+#ifndef GENERATOR_RENDER_REPO_ROOT // set by CMake; a bare syntax check has none
+#define GENERATOR_RENDER_REPO_ROOT "."
+#endif
+
 namespace {
 
 struct RootsLister final : FolderLister {
@@ -69,7 +73,7 @@ int main(int argc, char** argv) {
 	std::string genreName;
 	std::string partName;
 	std::string out;
-	std::string pack = std::string(GENERATOR_RENDER_REPO_ROOT) + "/pack";
+	std::string pack = GENERATOR_RENDER_REPO_ROOT "/pack";
 	std::string card;
 	if (const char* home = std::getenv("HOME")) {
 		card = std::string(home) + "/source/delugemu-sd/sdcard";
@@ -126,10 +130,10 @@ int main(int argc, char** argv) {
 			biasPoints = std::atoi(value.c_str());
 		}
 		else if (flag == "--density") {
-			heldDensity = std::clamp(std::atoi(value.c_str()), 0, kMacroPoints);
+			heldDensity = std::clamp<int32_t>(std::atoi(value.c_str()), 0, kMacroPoints);
 		}
 		else if (flag == "--centre") {
-			fixedCentre = std::clamp(std::atoi(value.c_str()), 0, kMacroPoints);
+			fixedCentre = std::clamp<int32_t>(std::atoi(value.c_str()), 0, kMacroPoints);
 		}
 		else if (flag == "--entropy") {
 			entropy = static_cast<uint32_t>(std::strtoul(value.c_str(), nullptr, 10));
@@ -170,7 +174,7 @@ int main(int argc, char** argv) {
 	if (heldDensity >= 0) {
 		overrides.macroPoints[static_cast<int32_t>(Macro::Density)] = static_cast<int8_t>(heldDensity);
 	}
-	overrides.macroPoints[macro] = static_cast<int8_t>(std::max(fixedCentre, 0));
+	overrides.macroPoints[macro] = static_cast<int8_t>(std::max<int32_t>(fixedCentre, 0));
 	const RolledRecipe rolled = rollWithOverrides(*genre, overrides);
 
 	prototype::PartBias bias;

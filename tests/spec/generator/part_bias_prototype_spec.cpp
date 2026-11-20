@@ -59,8 +59,8 @@ describe part_bias_prototype("Part bias prototype", $ {
 
 	it("keeps both ends reachable and stays within 0..50 for the curved model", _ {
 		for (int32_t o = -kMacroFull; o <= kMacroFull; o += 64) {
-			expect(prototype::biased(BiasModel::Curved, 0, o)).to_be_between(0, kMacroFull);
-			expect(prototype::biased(BiasModel::Curved, kMacroFull, o)).to_be_between(0, kMacroFull);
+			expect(prototype::biased(BiasModel::Curved, 0, o)).to_be_between(int32_t{0}, kMacroFull);
+			expect(prototype::biased(BiasModel::Curved, kMacroFull, o)).to_be_between(int32_t{0}, kMacroFull);
 		}
 		expect(prototype::biased(BiasModel::Curved, kMacroFull, -macroPoints(20))).to_be_less_than(kMacroFull);
 		expect(prototype::biased(BiasModel::Curved, kMacroFull, macroPoints(20))).to_equal(kMacroFull);
