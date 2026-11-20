@@ -1478,15 +1478,55 @@ constexpr bool sirensValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether every pitched part's Register anchor stays a MIDI note under every octave shift (spec §7.3): its anchor
-/// ± 12 × kMaxOctaveShift within 0–127, so shiftedRegister()'s byte never wraps.
+/// The lowest and highest notes a pitched part can play unshifted, in any key (spec §7.3). Every flavour plays inside
+/// the Register's span around the part's tonic: a Loop, a Motif and a pedal through noteFor()'s fold, a voicing and its
+/// doubled root at the nearest place inside it, an Arp from the root's lowest place up, folded down. The tonic is the
+/// key root nearest the anchor, the lower on a tie, so it lies from 6 below the anchor to 5 above whatever the key.
+struct PitchReach {
+	int32_t lowest = 0;
+	int32_t highest = 0;
+};
+constexpr PitchReach pitchReach(const PartSpec& part) {
+	const Register reg = part.registerOrDefault();
+	return {reg.anchor - 6 + reg.spanLow, reg.anchor + 5 + reg.spanHigh};
+}
+
+/// The octave shifts a part takes (spec §3.1, §7.3): those of -kMaxOctaveShift..kMaxOctaveShift that keep its whole
+/// reach inside MIDI's 0–127, so no note of it is ever clamped. Only 0 for Drums and FX.
+struct OctaveRange {
+	int32_t lowest = 0;
+	int32_t highest = 0;
+	[[nodiscard]] constexpr bool contains(int32_t shift) const { return shift >= lowest && shift <= highest; }
+	[[nodiscard]] constexpr int32_t clamp(int32_t shift) const {
+		return shift < lowest ? lowest : shift > highest ? highest : shift;
+	}
+};
+constexpr OctaveRange octaveRange(const PartSpec& part) {
+	if (!hasRegister(part.role)) {
+		return {};
+	}
+	const PitchReach reach = pitchReach(part);
+	OctaveRange range{-kMaxOctaveShift, kMaxOctaveShift};
+	while (range.lowest < 0 && reach.lowest + 12 * range.lowest < 0) {
+		range.lowest++;
+	}
+	while (range.highest > 0 && reach.highest + 12 * range.highest > 127) {
+		range.highest--;
+	}
+	return range;
+}
+
+/// Whether every pitched part plays inside MIDI's range unshifted, so its octave range holds 0, and its Register anchor
+/// ± 12 × kMaxOctaveShift stays a MIDI note, so shiftedRegister()'s byte never wraps (spec §7.3).
 constexpr bool registersShiftValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (!hasRegister(part.role)) {
 			continue;
 		}
 		const int32_t anchor = part.registerOrDefault().anchor;
-		if (anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127) {
+		const PitchReach reach = pitchReach(part);
+		if (anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127 || reach.lowest < 0
+		    || reach.highest > 127) {
 			return false;
 		}
 	}

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace harness;
@@ -22,11 +23,11 @@ Command octaveTo(uint8_t part, int32_t value) {
 	return {CommandKind::SetOctave, part, value};
 }
 
-/// `events` with `part`'s notes moved by `semitones`, held in MIDI's range as noteFor() holds them.
+/// `events` with `part`'s notes moved by `semitones`.
 std::vector<Event> movedBy(std::vector<Event> events, int32_t part, int32_t semitones) {
 	for (Event& event : events) {
 		if ((event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) && event.part == part) {
-			event.pitch = static_cast<uint8_t>(std::clamp<int32_t>(event.pitch + semitones, 0, 127));
+			event.pitch = static_cast<uint8_t>(event.pitch + semitones);
 		}
 	}
 	return events;
@@ -50,6 +51,16 @@ Run shiftedRun(const Genre& genre, int32_t part, int32_t shift) {
 	run.recipe.octave[part] = static_cast<int8_t>(shift);
 	run.seed = 11;
 	return run;
+}
+
+/// The index of the part named `name` in `genre`'s roster.
+int32_t partNamed(const Genre& genre, std::string_view name) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (genre.parts[p].name == name) {
+			return p;
+		}
+	}
+	return -1;
 }
 
 /// The re-voice case (spec §7.3): `part` of `genre` steered `shift` octaves a few steps before bar 4's line. No note
@@ -159,14 +170,69 @@ describe octave("Octave shift", $ {
 		expect(hasRegister(Role::FX)).to_be_false();
 	});
 
-	it("moves a shifted part's notes by exactly 12 semitones an octave, in every genre, and nothing else", _ {
+	it("takes, per part, only the shifts that keep its whole reach a MIDI note", _ {
+		expect(octaveRange(genres::technoDub.parts[partNamed(genres::technoDub, "SUB")]).lowest).to_equal(-1);
+		expect(octaveRange(genres::technoDub.parts[partNamed(genres::technoDub, "SUB")]).highest).to_equal(2);
+		const PartSpec& lead = genres::psytranceClassic.parts[partNamed(genres::psytranceClassic, "LEAD")];
+		expect(octaveRange(lead).lowest).to_equal(-2);
+		expect(octaveRange(lead).highest).to_equal(1);
+		expect(octaveRange(genres::technoAcid.parts[kDrums]).lowest).to_equal(0);
+		expect(octaveRange(genres::technoAcid.parts[kDrums]).highest).to_equal(0);
 		for (const Genre* genre : allGenres()) {
-			const Result plain = play(shiftedRun(*genre, 0, 0), 48);
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				const OctaveRange range = octaveRange(genre->parts[p]);
+				expect(range.lowest >= -kMaxOctaveShift && range.lowest <= 0).to_be_true();
+				expect(range.highest <= kMaxOctaveShift && range.highest >= 0).to_be_true();
+			}
+		}
+	});
+
+	it("keeps every note of a part inside its shifted reach at every shift it takes, in every key", _ {
+		// The reach is worked out from the Register alone (pitchReach()): this checks no flavour plays past it, in
+		// every key root, so no allowed shift ever clamps a note at 0 or 127.
+		for (const Genre* genre : allGenres()) {
 			for (int32_t p = 0; p < partCount(*genre); p++) {
 				if (!hasRegister(genre->parts[p].role)) {
 					continue;
 				}
-				for (int32_t shift : {-2, -1, 1, 2}) {
+				const PitchReach reach = pitchReach(genre->parts[p]);
+				const OctaveRange range = octaveRange(genre->parts[p]);
+				for (int32_t shift = range.lowest; shift <= range.highest; shift++) {
+					for (uint8_t root = 0; root < 12; root++) {
+						Run run = shiftedRun(*genre, p, shift);
+						run.recipe.keyRoot = root;
+						run.recipe.macros.set(Macro::Complexity, kMacroFull); // Answers, wide Motifs and Arps
+						run.skipIntro = true;
+						const Result result = play(run, 16);
+						for (const Event& event : only(result.events, EventKind::NoteOn)) {
+							if (event.part != p) {
+								continue;
+							}
+							const int32_t low = reach.lowest + 12 * shift;
+							const int32_t high = reach.highest + 12 * shift;
+							if (event.pitch < low || event.pitch > high || low < 0 || high > 127) {
+								expect(std::string{genre->name} + " part " + std::to_string(p) + " shift "
+								       + std::to_string(shift) + " root " + std::to_string(root) + ": note "
+								       + std::to_string(event.pitch) + " outside " + std::to_string(low) + ".."
+								       + std::to_string(high))
+								    .to_equal(std::string{});
+							}
+						}
+					}
+				}
+			}
+		}
+	});
+
+	it("moves a shifted part's notes by exactly 12 semitones an octave, in every genre, and nothing else", _ {
+		for (const Genre* genre : allGenres()) {
+			const Result plain = play(shiftedRun(*genre, 0, 0), 48);
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				const OctaveRange range = octaveRange(genre->parts[p]);
+				for (int32_t shift = range.lowest; shift <= range.highest; shift++) {
+					if (shift == 0) {
+						continue;
+					}
 					const Result shifted = play(shiftedRun(*genre, p, shift), 48);
 					const std::string difference = firstDifference(shifted.events, movedBy(plain.events, p, 12 * shift));
 					if (!difference.empty()) {
@@ -253,6 +319,23 @@ describe octave("Octave shift", $ {
 	it("replaces a waiting shift with another", _ {
 		Result result = playSteered(2, {{3, octaveTo(kAcid, 1)}, {5, octaveTo(kAcid, -2)}});
 		expect(result.generator->octave(kAcid)).to_equal(-2);
+	});
+
+	it("refuses a shift past the part's octave range, and starts a Recipe's at the nearest it takes", _ {
+		const Genre& genre = genres::technoDub;
+		const auto sub = static_cast<uint8_t>(partNamed(genre, "SUB"));
+		LogEntry entries[8];
+		SteeringLog log(entries, 8);
+		Run run = shiftedRun(genre, 0, 0);
+		run.skipIntro = true;
+		run.log = &log;
+		run.steer = steerAt({{3, octaveTo(sub, -2)}});
+		Result refused = play(run, 2);
+		expect(refused.generator->octave(sub)).to_equal(0);
+		expect(log.size()).to_equal(0);
+
+		Result started = play(shiftedRun(genre, sub, -2), 1);
+		expect(started.generator->octave(sub)).to_equal(-1);
 	});
 
 	it("refuses Drums and FX, parts past the roster and shifts past two octaves", _ {

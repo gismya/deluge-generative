@@ -323,6 +323,9 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 
 void PerformView::octaveTurn(int32_t part, int32_t offset) {
 	// Drums and FX have no Register: nothing to do, and no popup (spec §13.5).
+	if (octaveEdgePopup(part, offset)) {
+		return;
+	}
 	PressOutcome outcome = PressOutcome::NothingToDo;
 	const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part), offset, &outcome);
 	if (refusedWithPopup(outcome) || shift == deluge::generative::kNoOctaveWaiting) {
@@ -336,6 +339,25 @@ void PerformView::octaveTurn(int32_t part, int32_t offset) {
 	TEST_EVENT("gen_press octave part=%ld shift=%ld y=%ld", static_cast<long>(part), static_cast<long>(shift),
 	           static_cast<long>(offset));
 	TEST_EVENT("gen_octave_popup %s", text);
+}
+
+bool PerformView::octaveEdgePopup(int32_t part, int32_t direction) {
+	if (!performAdapter.steering().octaveAtEdge(part, direction)) {
+		return false;
+	}
+	// The shift as it goes on is the lowest or highest the part takes: refused, and the popup says so (spec §13.5).
+	const int32_t shift = performAdapter.steering().octaveAhead(part);
+	char text[deluge::generative::perform::kQueueLineChars + 16];
+	deluge::generative::perform::queueLabel(
+	    {deluge::generative::CommandKind::SetOctave, static_cast<uint8_t>(part), shift},
+	    *performAdapter.steering().rosterGenre(), {text, deluge::generative::perform::kQueueLineChars + 1});
+	const l10n::String edge =
+	    direction < 0 ? l10n::String::STRING_FOR_OCTAVE_LOWEST : l10n::String::STRING_FOR_OCTAVE_HIGHEST;
+	strncat(text, " ", sizeof(text) - strlen(text) - 1);
+	strncat(text, l10n::get(edge), sizeof(text) - strlen(text) - 1);
+	display->displayPopup(text);
+	TEST_EVENT("gen_octave_popup %s", text);
+	return true;
 }
 
 void PerformView::refreshFaders() {

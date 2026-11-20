@@ -37,6 +37,11 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 
 void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop) {
 	recipe_ = recipe;
+	// A shift the part's octave range doesn't take (a Recipe from elsewhere) plays at the nearest it does (spec §7.3).
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		recipe_.octave[p] = static_cast<int8_t>(
+		    p < partCount(*recipe.genre) ? octaveRange(recipe.genre->parts[p]).clamp(recipe_.octave[p]) : 0);
+	}
 	seed_ = seed;
 	takes_ = takes;
 	genre_ = recipe.genre;

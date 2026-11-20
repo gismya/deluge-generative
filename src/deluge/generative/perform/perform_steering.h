@@ -190,11 +190,12 @@ public:
 
 	/// OCTAVES ▸ or SHIFT + Y: `part`'s octave shift `shift` from the next bar line; the shift playing pressed again
 	/// cancels the one waiting. Stopped, the shift is the Recipe's at once, and the next start plays it. Nothing to do
-	/// for a part with no Register (Drums, FX), a part past the roster, or a shift past kMaxOctaveShift.
+	/// for a part with no Register (Drums, FX), a part past the roster, or a shift past the part's octave range.
 	[[gnu::noinline]] PressOutcome pressOctave(uint8_t part, int32_t shift);
 	/// A SHIFT + Y turn or an OCTAVES ▸ turn: the shift one down or up (`direction`) from octaveAhead(), pressed as
 	/// pressOctave() does. `outcome` is what the press did.
-	/// @return the shift pressed, or kNoOctaveWaiting if none was: there's none that way, or nothing to do.
+	/// @return the shift pressed, or kNoOctaveWaiting if none was: the part's octave range ends that way (the caller's
+	/// LOWEST or HIGHEST popup, octaveAtEdge()), or nothing to do.
 	[[gnu::noinline]] int32_t stepOctave(uint8_t part, int32_t direction, PressOutcome* outcome);
 	/// `part`'s octave shift as it goes on: its newest press still in the steering queue, else the shift waiting in
 	/// the core, else the one playing (the Recipe's while stopped). 0 for Drums and FX.
@@ -203,6 +204,12 @@ public:
 	[[nodiscard]] int32_t octave(int32_t part) const;
 	/// Whether `part` of the roster has a Register, so it takes an octave shift.
 	[[nodiscard]] bool takesOctave(int32_t part) const;
+	/// The shifts `part` of the roster takes: those that keep every note of it a MIDI note (spec §7.3). Only 0 for a
+	/// part that takes none.
+	[[nodiscard]] OctaveRange octavesOf(int32_t part) const;
+	/// Whether a turn `direction` from octaveAhead() would leave `part`'s octave range: the turn is refused, and the
+	/// player is told the shift is the lowest or highest the part takes.
+	[[nodiscard]] bool octaveAtEdge(int32_t part, int32_t direction) const;
 
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
@@ -564,8 +571,19 @@ bool PerformSteering<Adapter>::takesOctave(int32_t part) const {
 }
 
 template <typename Adapter>
+OctaveRange PerformSteering<Adapter>::octavesOf(int32_t part) const {
+	return takesOctave(part) ? octaveRange(rosterGenre()->parts[part]) : OctaveRange{};
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::octaveAtEdge(int32_t part, int32_t direction) const {
+	return direction != 0 && takesOctave(part)
+	       && !octavesOf(part).contains(octaveAhead(part) + (direction > 0 ? 1 : -1));
+}
+
+template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::pressOctave(uint8_t part, int32_t shift) {
-	if (leaving_ || !takesOctave(part) || shift < -kMaxOctaveShift || shift > kMaxOctaveShift) {
+	if (leaving_ || !takesOctave(part) || !octavesOf(part).contains(shift)) {
 		return PressOutcome::NothingToDo;
 	}
 	octavePresses_++;
@@ -584,8 +602,8 @@ int32_t PerformSteering<Adapter>::stepOctave(uint8_t part, int32_t direction, Pr
 		return kNoOctaveWaiting;
 	}
 	const int32_t shift = octaveAhead(part) + (direction > 0 ? 1 : -1);
-	if (shift < -kMaxOctaveShift || shift > kMaxOctaveShift) {
-		return kNoOctaveWaiting; // none that way
+	if (!octavesOf(part).contains(shift)) {
+		return kNoOctaveWaiting; // the part's octave range ends that way
 	}
 	*outcome = pressOctave(part, shift);
 	return refused(*outcome) || *outcome == PressOutcome::NothingToDo ? kNoOctaveWaiting : shift;

@@ -121,7 +121,7 @@ A part's pitch home: the octave its key root sits in, and the span around that r
 _Avoid_: Range, octave, tessitura
 
 **Octave shift**:
-A Recipe value per pitched part, two octaves down to two up, that moves the part's Register by whole octaves: every note of the part moves by the same octaves and nothing else about the music changes. The player steps it in Perform, and it lands at the next bar line.
+A Recipe value per pitched part, up to two octaves down or up as far as every note of the part stays a MIDI note, that moves the part's Register by whole octaves: every note of the part moves by the same octaves and nothing else about the music changes. The player steps it in Perform, and it lands at the next bar line.
 _Avoid_: Transpose, octave offset
 
 **Interplay rule**:

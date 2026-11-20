@@ -180,7 +180,9 @@ otherwise.
   `registerOrDefault()` moved by `Recipe::octave`. A new flavour that reads `spec.registerOrDefault()` itself ignores
   the shift, and `octave_spec` fails. A shift that lands moves the part's held voicing (`PartState::voicing`) with it
   in `apply()`, so voice leading goes on as a translation: without that, `leadVoicing()` places the new voicing near
-  the old one's pitches inside the moved Register, not 12 apart. Notes past MIDI's 0–127 clamp (Dub techno's bass at
-  −2 reaches 0), so `octave_spec` compares against clamped pitches. A shift up alone doesn't show a voicing left
+  the old one's pitches inside the moved Register, not 12 apart. A part takes only the shifts that keep its reach
+  in MIDI's range (`octaveRange()`, `pitchReach()` in `core/genre.h`): the reach is worked out from the Register
+  alone, so a new flavour that plays outside the span (a note above `spanHigh`, a grace note an octave down) must
+  widen `pitchReach()`, or `octave_spec`'s every-key reach case fails. A shift up alone doesn't show a voicing left
   behind in a Stab: its voicings sit low in their window, and voice-led from below the moved window takes the same
   notes. The re-voice spec runs each Sustain and Stab part down an octave too, which does.

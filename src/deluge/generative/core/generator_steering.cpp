@@ -45,10 +45,10 @@ constexpr bool validTake(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && command.value >= 0 && command.value < kMaxTakes;
 }
 
-/// Whether a SetOctave names a pitched part of the roster and a shift in range (spec §7.3).
+/// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
 constexpr bool validOctave(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
-	       && command.value >= -kMaxOctaveShift && command.value <= kMaxOctaveShift;
+	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
 
 /// Whether a Section kind can be forced: Groove, Break or Build (spec §9.6, §13.5). The Outro comes with End.

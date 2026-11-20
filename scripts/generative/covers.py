@@ -137,7 +137,10 @@ BUILDERS = {
     "gen_menu": (),
     "gen_menu_cancel_change": (),
     "gen_octave_landed": (),
-    "gen_octave_popup": ("src/deluge/generative/perform/queue_text.*",),  # queueLabel()
+    "gen_octave_popup": (
+        "src/deluge/generative/perform/queue_text.*",
+        *_L10N,
+    ),  # queueLabel(), LOWEST|HIGHEST
     "gen_page": (),
     "gen_page_leds": (),
     "gen_palette_override": _GENRE,

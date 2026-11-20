@@ -1,12 +1,13 @@
 # A part's octave shift (#397, spec §7.3, §13.4, §13.5, §13.6) over the sysex test port: SHIFT + Y turn steps the
 # focused pitched part's shift with a popup, it lands on the next bar line, nothing happens on Drums or with no part
-# focused, and the Perform menu's OCTAVES ▸ lists the pitched parts and steers them. Runs on a Deluge (deluge_probe.py
+# focused, a turn past the part's octave range is refused with a LOWEST or HIGHEST popup, and the Perform menu's
+# OCTAVES ▸ lists the pitched parts and steers them. Runs on a Deluge (deluge_probe.py
 # session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
 # clip.
 #
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3 (y 5), FX row 4. Two taps on a sidebar part
 # pad (x 9) lock its focus. gen_press octave part= shift= y=<turn>|menu: a press stepped the shift. gen_octave_popup
-# <text>: SHIFT + Y's popup, as QUEUE names the action. gen_octave_landed part= shift= step= bar_line=yes|no: the shift
+# <text>: SHIFT + Y's popup, as QUEUE names the action, or the shift with LOWEST or HIGHEST when a turn is refused. gen_octave_landed part= shift= step= bar_line=yes|no: the shift
 # landed in the core. Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first); with no
 # transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES.
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view.h
@@ -63,13 +64,14 @@ expect event gen_octave_popup ACID OCT +1
 button SHIFT up
 expect event /^gen_status .*\|>OCT/
 expect event /^gen_octave_landed part=1 shift=1 step=\d+ bar_line=yes/ within=10
-# Two octaves is as far as it goes: the second turn up does nothing
+# +2 is the highest ACID takes: the turn past it is refused, with a popup saying so (spec §13.5)
 button SHIFT down
 wait 50
 encoder 0 1
 expect event gen_press octave part=1 shift=2 y=1
 mark
 encoder 0 1
+expect event gen_octave_popup ACID OCT +2 HIGHEST
 expect no_event gen_press since=mark within=1
 # Back down onto the shift that plays (+1) cancels the +2 waiting
 encoder 0 -1

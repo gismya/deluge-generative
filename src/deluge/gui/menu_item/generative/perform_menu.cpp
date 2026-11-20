@@ -33,6 +33,7 @@
 #include "gui/menu_item/selection.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
+#include "gui/views/perform_view.h"
 #include "hid/display/oled.h"
 #include "io/midi/test_port.h"
 #include <cstdint>
@@ -291,10 +292,14 @@ public:
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
 		return performAdapter.steering().takesOctave(part_);
 	}
-	[[nodiscard]] int32_t getMinValue() const override { return -deluge::generative::kMaxOctaveShift; }
-	[[nodiscard]] int32_t getMaxValue() const override { return deluge::generative::kMaxOctaveShift; }
+	// Only the shifts the part takes: those that keep every note of it a MIDI note (spec §7.3).
+	[[nodiscard]] int32_t getMinValue() const override { return performAdapter.steering().octavesOf(part_).lowest; }
+	[[nodiscard]] int32_t getMaxValue() const override { return performAdapter.steering().octavesOf(part_).highest; }
 	void readCurrentValue() override { setValue(performAdapter.steering().octaveAhead(part_)); }
 	void selectEncoderAction(int32_t offset) override {
+		if (PerformView::octaveEdgePopup(part_, offset)) {
+			return;
+		}
 		PressOutcome outcome = PressOutcome::NothingToDo;
 		const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part_), offset, &outcome);
 		refusedWithPopup(outcome);

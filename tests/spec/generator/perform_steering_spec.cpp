@@ -205,7 +205,9 @@ describe perform_steering("The Perform driver's steering", $ {
 			expect(outcome == PressOutcome::Accepted).to_be_true();
 			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(2);
 			expect(piece.steering.octaveAhead(kBass)).to_equal(2);
-			// Two octaves is as far as it goes.
+			// Two octaves is as far as it goes: the view's HIGHEST popup asks octaveAtEdge().
+			expect(piece.steering.octaveAtEdge(kBass, 1)).to_be_true();
+			expect(piece.steering.octaveAtEdge(kBass, -1)).to_be_false();
 			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(kNoOctaveWaiting);
 			expect(outcome == PressOutcome::NothingToDo).to_be_true();
 			piece.decideMore(2);
@@ -238,6 +240,9 @@ describe perform_steering("The Perform driver's steering", $ {
 			for (uint8_t part : {uint8_t{0}, fx}) {
 				PressOutcome outcome = PressOutcome::Accepted;
 				expect(piece.steering.takesOctave(part)).to_be_false();
+				expect(piece.steering.octavesOf(part).lowest).to_equal(0);
+				expect(piece.steering.octavesOf(part).highest).to_equal(0);
+				expect(piece.steering.octaveAtEdge(part, 1)).to_be_false(); // no popup on Drums or FX
 				expect(piece.steering.stepOctave(part, 1, &outcome)).to_equal(kNoOctaveWaiting);
 				expect(outcome == PressOutcome::NothingToDo).to_be_true();
 				expect(piece.steering.pressOctave(part, 1) == PressOutcome::NothingToDo).to_be_true();
