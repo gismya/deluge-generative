@@ -219,6 +219,7 @@ describe render_command("Rough render command", $ {
 		for (const Genre* genre : allGenres()) {
 			small = genre->parts.size() < kMaxParts ? genre : small;
 		}
+		expect(small != nullptr).to_be_true();
 		if (small != nullptr) {
 			const std::string past = std::to_string(small->parts.size() + 1);
 			const std::string why = std::string(small->name) + " has " + std::to_string(small->parts.size())
