@@ -78,11 +78,13 @@ constexpr TagWeight kCrashTags[] = {{"808", 2}, {"CR78", 1}, {"XV5080", 1}};
 /// Simmons toms, the nearest to a syndrum.
 constexpr TagWeight kTomTags[] = {{"SDS5", 3}, {"808", 1}};
 constexpr const char* const kPerc1Folders[] = {"SAMPLES/DRUMS/Shaker", "SAMPLES/DRUMS/Claves"};
-constexpr TagWeight kPerc1Tags[] = {{"Cabasa", 2}, {"Claves", 1}};
+/// The cabasas by machine, not a bare "Cabasa", which matches the Linndrum's (owner: no Linndrum in Dub).
+constexpr TagWeight kPerc1Tags[] = {{"DDD1 Cabasa", 1}, {"Drumtraks Cabasa", 1}, {"Claves", 1}};
 /// The RX-5's bongos live in `Block`.
 constexpr const char* const kPerc2Folders[] = {"SAMPLES/DRUMS/Block", "SAMPLES/DRUMS/ConL", "SAMPLES/DRUMS/ConM",
                                                "SAMPLES/DRUMS/ConH"};
-constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"Conga", 1}};
+/// The kit machines' congas, not a bare "Conga", which matches the Linndrum's (owner: no Linndrum in Dub).
+constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"808 Conga", 1}, {"CR78 Conga", 1}};
 
 // ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
 

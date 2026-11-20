@@ -53,6 +53,9 @@ constexpr PartSpec kParts[] = {{.role = Role::Drums, .name = "DRUMS", .lanes = k
 constexpr KitSwap kSwaps[] = {{Lane::Snare, "DDD1"}, {Lane::ClosedHat, "DDD1"}};
 
 constexpr Palette kNoSwaps{.lanes = kLanes, .kits = {.machines = kMachines}};
+/// The 909 three times as likely as the 808.
+constexpr MachineWeight kWeightedMachines[] = {{&k909, 3}, {&k808, 1}};
+constexpr Palette kWeighted{.lanes = kLanes, .kits = {.machines = kWeightedMachines}};
 constexpr Palette kHalfSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 constexpr Palette kAlwaysSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps, .swapPercent = 100}};
 constexpr Palette kNeverSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps, .swapPercent = 0}};
@@ -255,6 +258,29 @@ describe drum_kits("Drum kits", $ {
 		}
 	});
 
+	it("rolls Regenerate's machine by its weights, so it may stay, where NEW SOUND always moves (#395)", _ {
+		FakeCard card = kitCard();
+		const Genre genre = genreWith(kWeighted);
+		int32_t kept = 0;
+		int32_t on909 = 0;
+		int32_t moved = 0;
+		const auto machineOf = [](const SoundPicks& sounds) { return fileName(sounds.lane[at(Lane::Snare)]).substr(0, 3); };
+		for (uint32_t entropy = 0; entropy < 400; entropy++) {
+			const SoundPicks before = rolled(genre, entropy, card);
+			SoundPicks regenerated = before;
+			rollIncomingSounds(genre, genre, *genre.palette, regenerated, entropy + 1000, card);
+			kept += machineOf(regenerated) == machineOf(before) ? 1 : 0;
+			on909 += machineOf(regenerated) == "909" ? 1 : 0;
+			SoundPicks renewed = before;
+			rollPartSounds(genre, *genre.palette, 0, renewed, entropy + 1000, card);
+			moved += machineOf(renewed) != machineOf(before) ? 1 : 0;
+		}
+		// 909 at 3 in 4 whatever played before: kept 3/4 * 3/4 + 1/4 * 1/4 = 5/8 of the time.
+		expect(on909).to_be_between(255, 345);
+		expect(kept).to_be_between(200, 300);
+		expect(moved).to_equal(400);
+	});
+
 	it("gives every genre one main machine per piece, its swaps aside", _ {
 		FakeCard card = harness::factoryCardWithPack();
 		for (const Genre* genre : allGenres()) {
@@ -305,6 +331,21 @@ describe drum_kits("Drum kits", $ {
 				expect(std::string(entry.machine->name)).not_().to_equal(gone->second);
 			}
 			const bool anywhere = gone->second != "DDD1";
+			// The lane lists alone too: they are what a lane without the machine plays, and every load's fallback
+			// chain, so a bare tag ("Conga") there must not reach the removed machine's files either.
+			Palette listsOnly = *genre->palette;
+			listsOnly.kits = {};
+			for (uint32_t entropy = 0; anywhere && entropy < 300; entropy++) {
+				SoundPicks sounds;
+				rollSounds(*genre, listsOnly, sounds, entropy, card);
+				for (Lane lane : drumLanes(*genre)) {
+					const std::string name = fileName(sounds.lane[at(lane)]);
+					if (startsWith(name, gone->second)) {
+						std::printf("%s: lane list rolls %s\n", genre->name, name.c_str());
+					}
+					expect(startsWith(name, gone->second)).to_be_false();
+				}
+			}
 			for (uint32_t entropy = 0; entropy < 300; entropy++) {
 				SoundPicks sounds = rolled(*genre, entropy, card);
 				for (Lane lane : drumLanes(*genre)) {

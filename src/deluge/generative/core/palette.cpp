@@ -465,9 +465,10 @@ bool rollKitTag(const LaneSounds& sounds, const char* tag, FolderLister& lister,
 }
 
 /// Rolls part `p`'s picks into `sounds`. With `reroll`, each pick tries to move away from the one it replaces, where
-/// the palette offers another (a sound re-roll), and the kit moves to another machine. False on a card error.
+/// the palette offers another (a sound re-roll). With `newMachine` too (NEW SOUND on the part), the kit moves to
+/// another machine; without it (Regenerate), the machine rolls by its weights and may stay. False on a card error.
 bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks& sounds, uint32_t entropy,
-              FolderLister& lister, bool reroll) {
+              FolderLister& lister, bool reroll, bool newMachine) {
 	const PartSpec& part = genre.parts[p];
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
 	EntropyStream draws = partDraws(entropy, kPartSlot + static_cast<uint32_t>(p));
@@ -477,7 +478,7 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 		sounds.part[p].set(entries[entry].path);
 	}
 	const KitRoll kit =
-	    rollKit(palette.kits, part, p, entropy, reroll ? playingMachine(palette.kits, part, sounds) : -1);
+	    rollKit(palette.kits, part, p, entropy, newMachine ? playingMachine(palette.kits, part, sounds) : -1);
 	// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled, and the Closed hat's swap if it
 	// played one. Lanes come in the fixed order, so the Closed hat rolls first.
 	const char* closedHatTag = nullptr;
@@ -540,7 +541,7 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
                 FolderLister& lister) {
 	sounds = SoundPicks{};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		if (!rollPart(genre, palette, p, sounds, entropy, lister, false)) {
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, false, false)) {
 			return false;
 		}
 	}
@@ -552,13 +553,14 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts) {
 		return true;
 	}
-	return rollPart(genre, palette, part, sounds, entropy, lister, true);
+	return rollPart(genre, palette, part, sounds, entropy, lister, true, true);
 }
 
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		if (!rollPart(genre, palette, p, sounds, entropy, lister, true)) {
+		// The drum machine rolls by its weights and may stay (owner, #395): only NEW SOUND forces another.
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, true, false)) {
 			return false;
 		}
 	}

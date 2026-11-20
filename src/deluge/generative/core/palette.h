@@ -212,13 +212,14 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
 
 /// A sound re-roll (spec §10.7, §13.4): rolls `part`'s picks again from `palette` and fresh entropy, as rollSounds()
 /// rolls them, but each pick moves away from the one in `sounds` where the palette offers another, so NEW SOUND is
-/// heard as new. A Kit part re-rolls every lane it plays. Every other part's and lane's picks stay. Returns false on a
-/// card error, with the part's picks partly rolled: roll into a copy.
+/// heard as new. A Kit part re-rolls every lane it plays, its drum kit on another machine (spec §10.2). Every other
+/// part's and lane's picks stay. Returns false on a card error, with the part's picks partly rolled: roll into a copy.
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
 /// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
-/// keeps the sound it has where its palette offers another. Returns false on a card error, with the picks partly
+/// keeps the sound it has where its palette offers another, but a Kit's drum machine rolls by its weights and may stay
+/// (spec §10.2). Returns false on a card error, with the picks partly
 /// rolled: roll into a copy.
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister);
