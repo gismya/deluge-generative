@@ -268,6 +268,7 @@ describe ambient("Ambient", $ {
 			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kV, kI}, {kII, kI}, {kVI, kI}})
 			    .to_be_true();
 			expect(graph.repeatWeight).to_equal(40);
+			expect(graph.homePull).to_equal(40); // owner, round 1's Q338 (#338)
 			expect(graph.barsPerChord).to_equal(8);
 			expect(graph.cadenceTarget).to_equal(kNoCadenceTarget);
 			expect(ambientGenre.harmony.extensionFloor).to_equal(1);
@@ -360,10 +361,10 @@ describe ambient("Ambient", $ {
 			expect(bass.loop.answers.empty()).to_be_true();
 			expect(bass.loop.slide.atZero == 0 && bass.loop.slide.atFull == 0).to_be_true();
 			expect(bass.expression.spread).to_equal(0);
-			// The key's root between F#1 and F2, an octave under the Drone's, with room for the octave down under it.
+			// The key's root between F#1 and F2, an octave under the Drone's, every chord root at or over it.
 			expect(bass.reg.anchor).to_equal(36);
-			expect(bass.reg.spanLow).to_equal(-12);
-			expect(bass.reg.spanHigh).to_equal(5);
+			expect(bass.reg.spanLow).to_equal(-1);
+			expect(bass.reg.spanHigh).to_equal(11);
 			for (uint8_t key = 0; key < 12; key++) {
 				const int32_t tonic = tonicNote(bass.reg, key);
 				expect(tonic >= 30 && tonic <= 41).to_be_true();
@@ -388,11 +389,13 @@ describe ambient("Ambient", $ {
 			expect(notes).to_be_greater_than(40);
 		});
 
-		it("plays the Bass's octave down at Complexity 50, under the key's root, and nothing an octave over it", _ {
+		it("keeps the Bass out of the lowest octave: no note under F#1 (about 46 Hz) or the key's root, none up to the "
+		   "Drone, at Complexity 50 too", _ {
 			const PartSpec& bass = ambientGenre.parts[kBassPart];
-			int32_t under = 0;
-			for (uint32_t seed = 1; seed <= 4; seed++) {
-				Recipe recipe = ambientRecipe(Scale::Major, static_cast<uint8_t>(seed * 5 % 12), seed);
+			expect(bass.loop.draws.octaveDown.atZero == 0 && bass.loop.draws.octaveDown.atFull == 0).to_be_true();
+			int32_t aboveRoot = 0;
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				Recipe recipe = ambientRecipe(Scale::Major, static_cast<uint8_t>(seed % 12), seed);
 				recipe.macros.set(Macro::Complexity, macroPoints(50));
 				const int32_t tonic = tonicNote(bass.reg, recipe.keyRoot);
 				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar, {}, true);
@@ -400,12 +403,12 @@ describe ambient("Ambient", $ {
 					if (e.part != kBassPart) {
 						continue;
 					}
-					expect(e.pitch >= tonic - 12 && e.pitch <= tonic + 5).to_be_true();
-					// V and vi fold to a 4th and a minor 3rd under the tonic; only the octave down goes lower.
-					under += e.pitch < tonic - 5 ? 1 : 0;
+					expect(e.pitch).to_be_greater_than(29);
+					expect(e.pitch >= tonic && e.pitch < tonic + 12).to_be_true();
+					aboveRoot += e.pitch > tonic ? 1 : 0;
 				}
 			}
-			expect(under).to_be_greater_than(0);
+			expect(aboveRoot).to_be_greater_than(0);
 		});
 
 		it("voices each chord on its Pad, Extensions included, never more than 4 notes, with a 16-bar Sweep", _ {
@@ -480,7 +483,7 @@ describe ambient("Ambient", $ {
 
 		it("plays sparse bells on its Lead: a Motif gated at 10, two-bar figures with empty bars, about 10 notes a minute", _ {
 			const PartSpec& lead = ambientGenre.parts[kLeadPart];
-			expect(lead.densityGate).to_equal(macroPoints(10));
+			expect(lead.densityGate).to_equal(macroPoints(8));
 			expect(lead.expression.spread).to_equal(10);
 			expect(lead.expression.spreadMode == SpreadMode::Fresh).to_be_true();
 			expect(lead.motif.reroll).to_equal(350);
@@ -557,8 +560,8 @@ describe ambient("Ambient", $ {
 		});
 
 		// The Drone and the Pad are gated at 0 and count toward the Intro floor (spec §9.4), so the Intro builds from
-		// them: Density rises from 0 over the Intro's 16 bars, the bells (10) about 6 bars in, the Bass (15) about 10.
-		it("builds the Intro from the Drone: an Intro floor of 0, the bells about 6 bars in, the Bass about 10", _ {
+		// them: Density rises from 0 over the Intro's 16 bars, the bells (8) about 5 bars in, the Bass (15) about 10.
+		it("builds the Intro from the Drone: an Intro floor of 0, the bells about 5 bars in, the Bass about 10", _ {
 			for (uint32_t seed = 1; seed <= 4; seed++) {
 				const Walked walked = walk(ambientRecipe(Scale::Major, 2, seed), seed, 16 * kStepsPerBar);
 				expect(walked.generator->arc().introFloor()).to_equal(0);
@@ -600,7 +603,7 @@ describe ambient("Ambient", $ {
 			    .to_be_true();
 			expect(gates
 			       == std::vector<int16_t>{macroPoints(47), macroPoints(44), macroPoints(40), macroPoints(36),
-			                               macroPoints(28), macroPoints(32)})
+			                               macroPoints(29), macroPoints(32)})
 			    .to_be_true();
 			std::vector<Lane> fx;
 			for (const LaneSpec& lane : ambientGenre.parts[kFxPart].lanes) {
@@ -665,9 +668,13 @@ describe ambient("Ambient", $ {
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
-		it("gives every synth part at least 3 presets, each on the factory card or in the pack, its role listing them", _ {
+		it("gives every synth part at least 3 presets but the Drone, which the owner trimmed to 2, each on the factory card "
+		   "or in the pack, its role listing them", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			expect(harness::fewestPartPresets(ambientGenre)).to_be_greater_than(size_t{2});
+			for (int32_t part : {kBassPart, kPadPart, kLeadPart}) {
+				expect(ambientGenre.palette->partEntries(ambientGenre.parts[part]).size()).to_be_greater_than(size_t{2});
+			}
+			expect(ambientGenre.palette->partEntries(ambientGenre.parts[kDronePart]).size()).to_equal(size_t{2});
 			expect(harness::partPresetsMissing(ambientGenre, card).empty()).to_be_true();
 			// The pack's sine sub is the Bass's main pick.
 			expect(harness::mainPick(ambientGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Sine Sub.XML x3"));

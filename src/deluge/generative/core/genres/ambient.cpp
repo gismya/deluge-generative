@@ -110,10 +110,11 @@ constexpr LaneSpec kDrumLanes[] = {
      .band = {0, 1},
      .densityGate = macroPoints(36),
      .expression = {.spread = 12}},
+    // 29, not 28: the Build's top and the Drop lift reach 28 at the default macros (owner, round 1's Q336: none there).
     {.lane = Lane::Perc1,
      .pool = kMallets,
      .band = {0, 1},
-     .densityGate = macroPoints(28),
+     .densityGate = macroPoints(29),
      .expression = {.spread = 10}},
     {.lane = Lane::Perc2, .pool = kWood, .band = {0, 1}, .densityGate = macroPoints(32), .expression = {.spread = 10}},
 };
@@ -135,11 +136,11 @@ constexpr int16_t kSlowDrift = 1500;
 
 constexpr LineWeight kRootOnly[] = {{0, 1}};
 
-/// The root alone, the octave below now and then as Complexity rises, never sliding; each note held two bars, to the
-/// pattern's end, ending before the next pick may start (loopNotesValid()).
+/// The root alone, never sliding and with no octave down (owner, round 1's I2: under F#1 it is mud); each note held two
+/// bars, to the pattern's end, ending before the next pick may start (loopNotesValid()).
 constexpr LoopSpec kSubLoop{
     .degrees = kRootOnly,
-    .draws = {.leap = 0, .octaveUp = 0, .octaveDown = {0, 200}, .accent = 0},
+    .draws = {.leap = 0, .octaveUp = 0, .octaveDown = 0, .accent = 0},
     .slide = 0,
     .mutation = 60,
     .gateTicks = 2 * kTicksPerBar,
@@ -167,10 +168,10 @@ constexpr PartSpec kParts[] = {
         .band = {0, 0},
         // Over the Intro floor (the Drone's 0), so it enters as the Intro's Density rises (tuning).
         .densityGate = macroPoints(15),
-        // The key's root between F#1 and F2, an octave under the Drone's (anchor C3) in every key; IV sits a 4th up, V
-        // and vi fold under the root, so the Bass never reaches the Drone. spanLow −12 gives the octave down room: the
-        // default Register's −5 folded it back up.
-        .reg = {.anchor = 36, .spanLow = -12, .spanHigh = 5},
+        // The key's root between F#1 and F2, an octave under the Drone's (anchor C3) in every key, and every chord root
+        // at or over it, up to a 7th: never under F#1 (about 46 Hz; owner, round 1's I2) and never up to the Drone. The
+        // semitone under the root makes the Register 12 wide; it is the 7th degree, no Ambient chord's root.
+        .reg = {.anchor = 36, .spanLow = -1, .spanHigh = 11},
         .loop = kSubLoop,
         .expression = {.spread = 0},
         .gestures = kNoGestures,
@@ -208,9 +209,10 @@ constexpr PartSpec kParts[] = {
         .name = "BELLS",
         .pool = kBells,
         .band = {0, 3},
-        // At the Break's Density at the default macros (25 − 15), so the Break keeps the bells, their anchored 1s; the
-        // brief's "about 20" would close them there. They enter as the Intro's Density passes 10 (tuning).
-        .densityGate = macroPoints(10),
+        // Under the Break's Density at the default macros (25 − 15), so the Break keeps the bells down to a Density of
+        // 23 (owner, round 1's QBG, #340); the brief's "about 20" would close them there. They enter as the Intro's
+        // Density passes 8 (tuning).
+        .densityGate = macroPoints(8),
         .motif = kBellsMotif,
         .expression = {.spread = 10, .spreadMode = SpreadMode::Fresh},
         .gestures = kNoGestures,
@@ -253,7 +255,7 @@ constexpr ChordMove kMoves[] = {
 
 /// 8 bars a chord, one a phrase, and a heavy repeat, so a chord often holds 16 or 24 bars. No cadence target.
 constexpr ChordGraph kGraph{
-    .homePull = 10,
+    .homePull = 40, // owner, round 1's Q338 (#338): at 10, Dorian's IV held too long
     .moves = kMoves,
     .repeatWeight = 40,
     .barsPerChord = 8,

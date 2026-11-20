@@ -31,29 +31,30 @@ namespace {
 
 /// The Pad: slow attacks and long releases. Not 127, 155 or 156: each adds a major 3rd to every note, a cluster under
 /// a chord with its Extensions. Not 140 Slow Aural Swells: its oscillators sit one and two octaves down
-/// (osc_octaves.py). 135 carries reverb 35 of its own, so Space has less room on it.
+/// (osc_octaves.py). The owner dropped 135 Soothing Growth Pad and 147 Resonant Filter Pad by ear (#133, round 1).
 constexpr PaletteEntry kPad[] = {
-    {"SYNTHS/131 Warm Strings.XML", 2},     {"SYNTHS/118 Small Bridge Pad.XML", 2},
-    {"SYNTHS/151 Radiant FM Pad.XML", 2},   {"SYNTHS/135 Soothing Growth Pad.XML"},
-    {"SYNTHS/157 Rich FM Pad 4.XML"},       {"SYNTHS/145 Eerie High Pad.XML"},
-    {"SYNTHS/147 Resonant Filter Pad.XML"},
+    {"SYNTHS/131 Warm Strings.XML", 2}, {"SYNTHS/118 Small Bridge Pad.XML", 2}, {"SYNTHS/151 Radiant FM Pad.XML", 2},
+    {"SYNTHS/157 Rich FM Pad 4.XML"},   {"SYNTHS/145 Eerie High Pad.XML"},
 };
 /// The Drone (the key's root and fifth, held for whole Sections): 125's ringmod drone is the main pick; 148 stacks an
-/// open fifth on each note, harmless on a pedal; 126's dark FM stacks another, as in Acid techno's Drone. Not the
-/// draft's 056 FM Bell Modulation: its oscillators sit an octave up, so it would drone over the Pad (osc_octaves.py).
+/// open fifth on each note, harmless on a pedal. The owner dropped 126 Dark FM Pad by ear, too rumbly (#133, round 1),
+/// so the Drone has 2 entries until a pack drone comes (#313). Not the draft's 056 FM Bell Modulation: its oscillators
+/// sit an octave up, so it would drone over the Pad (osc_octaves.py).
 constexpr PaletteEntry kDrone[] = {
     {"SYNTHS/125 Evolving Pad.XML", 3},
     {"SYNTHS/148 Warm 5th Pad.XML", 2},
-    {"SYNTHS/126 Dark FM Pad.XML", 1},
 };
-/// The bells: struck sounds whose long tails are welcome here. 121's saved arp is cleared at load (spec §10.6). Not
-/// 068 FM Bells 1: its oscillator sits an octave up, so it plays an octave over the Register (spec §10.6,
-/// osc_octaves.py).
+/// The bells: struck sounds whose long tails are welcome here. The owner dropped 054 Ghostly Sines and 121 Tiny Lights
+/// by ear (#133, round 1). Not 068 FM Bells 1: its oscillator sits an octave up, so it plays an octave over the
+/// Register (spec §10.6, osc_octaves.py).
 constexpr PaletteEntry kBells[] = {
-    {"SYNTHS/070 Glockenspiel.XML", 2}, {"SYNTHS/106 Hang Drum.XML", 2},     {"SYNTHS/168 Hang Drum.XML", 2},
-    {"SYNTHS/069 FM Bells 2.XML", 1},   {"SYNTHS/054 Ghostly Sines.XML", 1}, {"SYNTHS/121 Tiny Lights.XML", 1},
+    {"SYNTHS/070 Glockenspiel.XML", 2},
+    {"SYNTHS/106 Hang Drum.XML", 2},
+    {"SYNTHS/168 Hang Drum.XML", 2},
+    {"SYNTHS/069 FM Bells 2.XML", 1},
 };
 /// The Bass: the pack's soft sine sub (spec §18.2) is the main pick; 169's double bass and 002's round square vary it.
+/// The owner dropped all three by ear (#133, round 1); they stay until a sound search finds others (round 2).
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/GENERATIVE/GEN Sine Sub.XML", 3},
     {"SYNTHS/169 Double Bass.XML", 2},
