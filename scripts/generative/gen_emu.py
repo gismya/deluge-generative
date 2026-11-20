@@ -217,12 +217,12 @@ def bar_runs(bars, bar_seconds):
 WavVerdict = collections.namedtuple("WavVerdict", "failures warnings checked")
 
 
-def wav_failures(pcm, seconds, steps, step_seconds):
+def wav_failures(pcm, seconds, steps, step_seconds, quiet_bars=frozenset()):
     """Whether S32LE stereo audio is a whole capture of `seconds`, as a WavVerdict:
     - failures: short; silent in the beat after a step of `steps` (the onsets of the harness render's notes in parts
       the capture didn't mute; step 0 starts at PLAY), with the last beats clipped to the capture's end; or a run of
       CORRUPT_RUN full-scale samples. Silence anywhere else is fine: an isolated or sparse capture is silent where its
-      parts rest.
+      parts rest, and so are the bars in `quiet_bars` (--quiet-bars: a riser alone starts from silence).
     - warnings: a run of FULL_SCALE_RUN full-scale samples (the mix clips).
     - checked: how many steps' beats it checked."""
     failures, warnings = [], []
@@ -235,6 +235,8 @@ def wav_failures(pcm, seconds, steps, step_seconds):
     silent_bars = set()
     checked = 0
     for step in sorted(steps):
+        if step // STEPS_PER_BAR in quiet_bars:
+            continue
         start = int(step * step_frames)
         if start + step_frames > limit:
             continue  # less than a 16th before the capture's end (or where it stopped short): latency would fail it
@@ -259,6 +261,28 @@ def wav_failures(pcm, seconds, steps, step_seconds):
             f"a run of {run[0]} full-scale samples at {run[1]:.1f} s: the mix clips"
         )
     return WavVerdict(failures, warnings, checked)
+
+
+def bar_set(text):
+    """--quiet-bars' value: bars from PLAY (bar 0), comma-separated, each a bar or a range: `47` or `3,40-42`."""
+    bars = set()
+    for item in text.split(","):
+        first, dash, last = item.strip().partition("-")
+        try:
+            a, b = int(first), int(last if dash else first)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"{text!r}: bars from 0, as 47 or 3,40-42"
+            ) from None
+        if a < 0 or b < a:
+            raise argparse.ArgumentTypeError(f"{text!r}: bars from 0, as 47 or 3,40-42")
+        bars.update(range(a, b + 1))
+    return frozenset(bars)
+
+
+def quiet_bars(args):
+    """Every bar the --quiet-bars flags name."""
+    return frozenset().union(*(getattr(args, "quiet_bars", None) or []))
 
 
 def active_steps(parts, muted):
@@ -1205,7 +1229,11 @@ def capture_one(args, elf, mutes, harness=None):
     if harness:
         parts, step_seconds = harness
         verdict = wav_failures(
-            pcm, args.seconds, active_steps(parts, set(mutes)), step_seconds
+            pcm,
+            args.seconds,
+            active_steps(parts, set(mutes)),
+            step_seconds,
+            quiet_bars(args),
         )
     else:
         verdict = wav_failures(pcm, args.seconds, set(), 1.0)
@@ -1277,7 +1305,9 @@ def check_wavs(args):
     bad = 0
     for path in args.wavs:
         try:
-            verdict = wav_failures(read_wav(path), args.seconds, steps, step_seconds)
+            verdict = wav_failures(
+                read_wav(path), args.seconds, steps, step_seconds, quiet_bars(args)
+            )
         except (OSError, EOFError, ValueError, wave.Error) as exc:
             verdict = WavVerdict([str(exc)], [], 0)
         for warning in verdict.warnings:
@@ -1339,6 +1369,14 @@ def add_recipe_args(p):
         choices=range(1, MUTE_ROWS + 1),
         metavar="PART",
         help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+    )
+    p.add_argument(
+        "--quiet-bars",
+        type=bar_set,
+        action="append",
+        metavar="BARS",
+        help="bars from PLAY (bar 0) where the check expects silence, as 47 or 3,40-42: an FX part alone, whose "
+        "riser starts from silence; repeatable",
     )
     p.add_argument(
         "--render",

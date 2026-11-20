@@ -4,8 +4,9 @@
 - variant: `base`, or a variant whose diff is <session>/diffs/<variant>.diff;
 - card: the card image <scratch>/card_<card>.img, or a path ending in .img;
 - bars: how many bars from PLAY (bar 0) the clips need; the seconds come from the harness render's tempo;
-- args: gen_emu.py capture's Recipe flags and --mute, split with shlex and parsed by gen_emu's own parser, so a bad
-  flag fails when the file loads.
+- args: gen_emu.py capture's Recipe flags, --mute and --quiet-bars, split with shlex and parsed by gen_emu's own
+  parser, so a bad flag fails when the file loads. --quiet-bars names bars where gen_emu's check expects silence (an
+  FX part alone: its riser starts from silence); it isn't part of the audio, so it never makes a WAV stale.
 
 A comment is a whole line starting with `#`. Never cut a line at `#`: keys are spelled with it (`--key D#`).
 """
@@ -101,6 +102,7 @@ class Job:
     mutes: tuple = ()
     line: int = 0
     args: str = field(default="", compare=False)
+    quiet: tuple = ()  # --quiet-bars, sorted: for the check only
 
     def group(self):
         """What a capture shares with a longer one it is a prefix of: (variant, card, Recipe, mutes)."""
@@ -132,7 +134,7 @@ def _recipe_parser():
 
 
 def parse_args(args, genre):
-    """(Recipe, mutes) from a job's args. Raises JobError on a flag gen_emu's capture would refuse, or one the runner
+    """(Recipe, mutes, quiet bars) from a job's args. Raises JobError on a flag gen_emu's capture would refuse, or one the runner
     sets itself."""
     try:
         words = shlex.split(args)
@@ -158,7 +160,11 @@ def parse_args(args, genre):
             f"--genre {ns.genre}: unknown genre (have {', '.join(_names('genres', gen_emu.genre_names))})"
         )
     recipe = Recipe(**{f: getattr(ns, f) for f in RECIPE_FIELDS})
-    return recipe, tuple(sorted(set(ns.mute or [])))
+    return (
+        recipe,
+        tuple(sorted(set(ns.mute or []))),
+        tuple(sorted(gen_emu.quiet_bars(ns))),
+    )
 
 
 def parse_jobs(text, genre, source="jobs"):
@@ -183,11 +189,11 @@ def parse_jobs(text, genre, source="jobs"):
                 raise JobError(f"bars {bars!r}: not a number") from None
             if bars <= 0:
                 raise JobError("bars must be more than 0")
-            recipe, mutes = parse_args(args, genre)
+            recipe, mutes, quiet = parse_args(args, genre)
         except JobError as e:
             raise JobError(f"{source}:{n}: {e}") from None
         seen.add(name)
-        out.append(Job(name, variant, card, bars, recipe, mutes, n, args))
+        out.append(Job(name, variant, card, bars, recipe, mutes, n, args, quiet))
     return out
 
 
@@ -210,6 +216,7 @@ class Capture:
 
     job: Job
     serves: tuple  # the names of the Jobs it serves, its own first
+    quiet: tuple = ()  # every bar the Jobs it serves name in --quiet-bars
 
     @property
     def name(self):
@@ -238,7 +245,9 @@ def merge(job_list):
         longest = max(members, key=lambda j: j.bars)  # max keeps the first of equals
         out.append(
             Capture(
-                longest, (longest.name, *(j.name for j in members if j is not longest))
+                longest,
+                (longest.name, *(j.name for j in members if j is not longest)),
+                tuple(sorted({b for j in members for b in j.quiet})),
             )
         )
     return out

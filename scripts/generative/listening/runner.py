@@ -8,18 +8,21 @@ folder. gen_emu.py stays the only thing that boots delugemu.
   out/r<N>/             its captures in progress
   raw/<name>.wav        finished captures; a merged capture is hard-linked under each job name it serves
   raw/<name>.log        gen_emu's log of each attempt
-  raw/locks/<variant>.lock   the runner that claimed a variant's captures (its pid)
+  raw/locks/<unit>.lock the runner that claimed a variant's captures, or a chunk of them (its pid)
   raw/<name>.failed     a capture that failed twice
   pause                 while it exists, no capture starts
   run.log
 
-A runner claims a whole variant at a time (costliest first), applies its diff once, takes its captures in Recipe
-order, and reverts after. Before any capture, every job passes the Recipe check (recipe.py). A failed capture is
-retried once; before each capture the runner waits while the pause file exists or the host runs `cap` or more
-emulators (qemu-system processes, any session's).
+A runner claims a whole variant at a time (costliest first), or a chunk of one that holds most of the work
+(plan.groups), applies its diff once, takes its captures in Recipe order, and reverts after. Before any capture, every
+job passes the Recipe check (recipe.py). A failed capture is retried once; a retry whose WAV is byte-identical to the
+first attempt's is kept, since the check's failure is then the audio's own (its sidecar's `check` says why). Before
+each capture the runner waits while the pause file exists or the host runs `cap` or more emulators (qemu-system
+processes, any session's).
 """
 
 import contextlib
+import filecmp
 import hashlib
 import json
 import os
@@ -147,11 +150,15 @@ class Run:
     def failed_marker(self, capture):
         return os.path.join(self.raw, capture.name + ".failed")
 
+    def failed_stamp(self, capture):
+        """The stamp a failure is kept under: the capture's, and the bars its check let be silent."""
+        return {**self.stamp(capture), "quiet": list(capture.quiet)}
+
     def failed(self, capture):
         """Whether this capture, with these arguments, already failed twice. A marker from other arguments is old."""
         try:
             with open(self.failed_marker(capture)) as fh:
-                return json.load(fh) == self.stamp(capture)
+                return json.load(fh) == self.failed_stamp(capture)
         except (OSError, ValueError):
             return False
 
@@ -218,12 +225,9 @@ class Run:
             self.repo, os.path.join(self.scratch, "wt", f"r{index}"), self.head
         )
 
-    def capture(self, index, wt, capture):
-        seconds = self.seconds(capture)
-        own = os.path.join(self.scratch, "out", f"r{index}")
-        os.makedirs(own, exist_ok=True)
-        tmp = os.path.join(own, capture.name + ".wav")
-        cmd = [
+    def command(self, index, wt, capture, tmp, seconds):
+        """gen_emu.py capture's command line for `capture` on runner `index`, writing `tmp`."""
+        return [
             sys.executable,
             os.path.join(wt, "scripts", "generative", "gen_emu.py"),
             "capture",
@@ -237,7 +241,23 @@ class Run:
             "--out",
             tmp,
             *capture.job.capture_flags(),
+            *(
+                ["--quiet-bars", ",".join(map(str, capture.quiet))]
+                if capture.quiet
+                else []
+            ),
         ]
+
+    def capture(self, index, wt, capture):
+        seconds = self.seconds(capture)
+        own = os.path.join(self.scratch, "out", f"r{index}")
+        os.makedirs(own, exist_ok=True)
+        tmp = os.path.join(own, capture.name + ".wav")
+        cmd = self.command(index, wt, capture, tmp, seconds)
+        bad = os.path.join(self.raw, "bad")
+        first = os.path.join(bad, f"{capture.name}-attempt1.wav")
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(first)  # an earlier run's: only this run's first attempt counts
         for attempt in (1, 2):
             self.wait_turn()
             t0 = time.time()
@@ -253,7 +273,15 @@ class Run:
                 self.end_turn()
             with open(log) as fh:
                 tail = (fh.read().strip().splitlines() or [""])[-1][-160:]
-            if r.returncode == 0 and os.path.exists(tmp):
+            # A retry the same to the byte: the emulator is deterministic, so the check's failure is the audio's own
+            same = (
+                attempt == 2
+                and r.returncode == 1
+                and os.path.exists(tmp)
+                and os.path.exists(first)
+                and filecmp.cmp(tmp, first, shallow=False)
+            )
+            if (r.returncode == 0 or same) and os.path.exists(tmp):
                 final = os.path.join(self.raw, capture.name + ".wav")
                 os.replace(tmp, final)
                 for other in capture.serves[1:]:
@@ -267,8 +295,18 @@ class Run:
                     self.tempos[capture.name],
                     seconds,
                     "delugemu",
-                    self.stamp(capture),
+                    dict(self.stamp(capture), check=f"failed: {tail}")
+                    if same
+                    else self.stamp(capture),
                 )
+                if same:
+                    self.say(
+                        f"{capture.name}: kept, the retry is byte-identical, so the check's failure is in the audio "
+                        f"itself (a riser from silence? --quiet-bars); listen before using it | {tail}"
+                    )
+                    with contextlib.suppress(FileNotFoundError):
+                        os.remove(first)
+                    return True
                 self.say(
                     f"{capture.name}: ok, {seconds:g} s in {time.time() - t0:.0f} s, runner {index}, "
                     f"{capture.variant}, attempt {attempt} | {tail}"
@@ -279,7 +317,6 @@ class Run:
                 f"attempt {attempt} | {tail}"
             )
             if os.path.exists(tmp):
-                bad = os.path.join(self.raw, "bad")
                 os.makedirs(bad, exist_ok=True)
                 os.replace(
                     tmp, os.path.join(bad, f"{capture.name}-attempt{attempt}.wav")
@@ -287,26 +324,31 @@ class Run:
             if attempt == 1:
                 time.sleep(RETRY_WAIT_S)
         with open(self.failed_marker(capture), "w") as fh:
-            json.dump(self.stamp(capture), fh)
+            json.dump(self.failed_stamp(capture), fh)
         return False
 
     def runner(self, index, groups):
-        """Claims variants in `groups` order until none is left."""
-        wt = None
+        """Claims units (variants, or chunks of one) in `groups` order until none is left."""
+        wt, applied = None, None
         try:
-            for variant, captures in groups:
+            for unit, captures in groups:
                 todo = [c for c in captures if not self.done(c) and not self.failed(c)]
-                if not todo or not self.claim(variant):
+                if not todo or not self.claim(unit):
                     continue
+                variant = captures[0].variant
                 wt = wt or self.worktree(index)
-                _variants.revert(wt)
-                _variants.apply(wt, self.session, variant)
-                self.say(f"runner {index}: {variant}, {len(todo)} captures")
+                if (
+                    applied != variant
+                ):  # a second chunk of the variant applied already: no relink
+                    _variants.revert(wt)
+                    _variants.apply(wt, self.session, variant)
+                    applied = variant
+                self.say(f"runner {index}: {unit}, {len(todo)} captures")
                 try:
                     for c in todo:
                         self.capture(index, wt, c)
                 finally:
-                    self.release(variant)
+                    self.release(unit)
         finally:
             if wt:
                 _variants.revert(wt)
@@ -319,7 +361,7 @@ class Run:
         secs = {
             c.name: _plan.seconds(c.bars, self.tempos[c.name]) for c in self.captures
         }
-        order = _plan.groups(self.captures, secs)
+        order = _plan.groups(self.captures, secs, self.runners)
         threads = [
             threading.Thread(target=self.runner, args=(i + 1, order))
             for i in range(self.runners)
@@ -329,6 +371,15 @@ class Run:
         for t in threads:
             t.join()
         return [c for c in self.captures if not self.done(c)]
+
+
+def delugemu_warnings():
+    """gen_emu's warnings when the installed delugemu (its default paths) isn't the pinned one (delugemu.pin)."""
+    gen_emu = _jobs.gen_emu
+    installed = gen_emu.installed_versions(
+        gen_emu.QEMU, os.path.join(gen_emu.HOME, "source", "delugemu")
+    )
+    return gen_emu.pin_warnings(gen_emu.read_pin(), installed)
 
 
 def write_info(raw, capture, tempo, seconds, kind, stamp=None):

@@ -202,6 +202,24 @@ def cut_key(scratch, clip):
     ]
 
 
+def clip_warnings(card_id, clip, info):
+    """What to read before a clip goes on the page: it is cut short, or its capture failed gen_emu's check twice with
+    the same bytes and was kept (runner.py), so its silence may be a fault, not the music."""
+    out = []
+    end = clip["bars"][1]
+    if end * 240.0 / info["tempo"] > info["seconds"] + 1e-6:
+        out.append(
+            f"{card_id} clip {clip['stem']}: bar {end} is past {clip['src']}'s "
+            f"{info['seconds']:g} s; cut short"
+        )
+    if info.get("check"):
+        out.append(
+            f"{card_id} clip {clip['stem']}: {clip['src']} was kept with its check {info['check']}; listen to it, "
+            "or give its job --quiet-bars for the bars that are silent on purpose"
+        )
+    return out
+
+
 def build(session, scratch, out_dir, recut=False):
     """Cuts every clip, renders the MIDI files, writes index.html and variants.md. Returns warning lines; raises
     ValueError listing the content file's problems."""
@@ -225,11 +243,7 @@ def build(session, scratch, out_dir, recut=False):
             info = source_info(scratch, clip["src"])
             dest = os.path.join(out_dir, "audio", clip["stem"] + ".m4a")
             first, end = clip["bars"]
-            if end * 240.0 / info["tempo"] > info["seconds"] + 1e-6:
-                warnings.append(
-                    f"{card['id']} clip {clip['stem']}: bar {end} is past {clip['src']}'s "
-                    f"{info['seconds']:g} s; cut short"
-                )
+            warnings += clip_warnings(card["id"], clip, info)
             key = cut_key(scratch, clip)
             done = cuts.get(clip["stem"])
             if recut or not os.path.exists(dest) or not done or done["key"] != key:
