@@ -57,6 +57,8 @@ button 4 3 down
 wait 50
 button 4 3 up
 expect ui=sound_editor
+encoder 3 5
+encoder 3 -1
 button 4 3 down
 wait 50
 button 4 3 up

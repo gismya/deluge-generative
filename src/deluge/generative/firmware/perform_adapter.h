@@ -26,6 +26,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/entry_source.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/transitions.h"
 #include "generative/perform/clip_page.h"
@@ -152,11 +153,14 @@ using LeaveEnded = void (*)(JobOutcome outcome);
 class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
-	/// player's song plays, then swapped in stopped with the Generator blocks allocated. The job first rolls a fresh
-	/// Current Recipe for `genre` (its sound picks read the card). A cancel before the swap, or a card error, leaves
-	/// the player's song untouched, and a card error in the roll leaves the Current Recipe as it was.
-	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy.
-	bool beginEntry(const Genre& genre, EntryEnded ended);
+	/// player's song plays, then swapped in stopped with the Generator blocks allocated. For a genre the job first
+	/// rolls a fresh Current Recipe (its sound picks read the card); for a file it first loads the file into the
+	/// Current Recipe, re-rolling missing sounds (CurrentRecipe::load()). Once rolled or loaded, it stays the Current
+	/// Recipe whatever happens after. A cancel before the swap, or a card error, leaves the player's song untouched,
+	/// and a card error in the roll or the load leaves the Current Recipe as it was.
+	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy, or if the source is
+	/// the Current Recipe and none exists.
+	bool beginEntry(const EntrySource& source, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
 	void leave(LeaveEnded ended);

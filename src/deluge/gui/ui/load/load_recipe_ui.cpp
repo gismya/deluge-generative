@@ -27,6 +27,7 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/compose_screen.h"
+#include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/ui.h"
 #include "gui/ui_timer_manager.h"
@@ -74,6 +75,11 @@ std::string_view withoutExtension(const char* name) {
 /// while stopped; on the Compose screen it replaces the Current Recipe.
 void loadChosen() {
 	gen::firmware::showVersionNotice(chosen.file); // spec §16.2
+	if (deluge::gui::menu_item::generative::performFromShowing()) {
+		// PERFORM FROM's FILE...: DISCARD SONG? now, and OK enters Perform on the file (spec §14.1, §14.3).
+		deluge::gui::menu_item::generative::performFromFile(chosen.file, chosen.name);
+		return;
+	}
 	if (!rootUIIsGenerativePerform()) {
 		deluge::gui::menu_item::generative::loadComposeRecipe(chosen.file, chosen.name);
 		return;

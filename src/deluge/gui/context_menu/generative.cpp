@@ -56,14 +56,17 @@ char const* Generative::getTitle() {
 }
 
 std::span<char const*> Generative::getOptions() {
-	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_PERFORM)};
-	return {options, 1};
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_PERFORM),
+	                                l10n::get(l10n::String::STRING_FOR_COMPOSE)};
+	return {options, std::size(options)};
 }
 
 bool Generative::acceptCurrentOption() {
-	// PERFORM opens PERFORM FROM, full screen, in place of this menu.
+	// PERFORM opens PERFORM FROM and COMPOSE opens COMPOSE FROM, full screen, in place of this menu.
+	const bool perform = currentOption == 0;
 	close();
-	if (soundEditor.setup(nullptr, &menu_item::generative::performFromMenu)) {
+	if (soundEditor.setup(nullptr, perform ? &menu_item::generative::performFromMenu
+	                                       : &menu_item::generative::composeFromMenu)) {
 		openUI(&soundEditor);
 	}
 	return true;
@@ -102,15 +105,12 @@ bool DiscardSong::acceptCurrentOption() {
 		menu_item::generative::buildComposeRecipe();
 		return true;
 	}
-	if (genre_ == nullptr) {
-		return false;
-	}
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();
 
 	// The build is a modal runner job: the player's song plays on under the working animation, and BACK cancels.
 	generativeModalUI.open(generative::firmware::performAdapter.entryJob());
-	if (!generative::firmware::performAdapter.beginEntry(*genre_, entryEnded)) {
+	if (!generative::firmware::performAdapter.beginEntry(source_, entryEnded)) {
 		generativeModalUI.jobEnded();
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}

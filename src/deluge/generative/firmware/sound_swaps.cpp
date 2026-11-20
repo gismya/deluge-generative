@@ -21,6 +21,7 @@
 #include "generative/core/palette.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/compose_edits.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/retirements.h"
@@ -275,6 +276,8 @@ void SoundSwaps::swapIn(int32_t part) {
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);
+	// The Compose screen's previous pick for the part was the one before a re-roll there, two picks back now.
+	forgetPreviousPick(current, part);
 	swaps_++;
 }
 

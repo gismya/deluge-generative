@@ -31,6 +31,7 @@
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/menu_item/generative/row_value.h"
+#include "gui/menu_item/generative/source_rows.h"
 #include "gui/menu_item/integer.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
@@ -98,6 +99,10 @@ void reportPick(const char* row, const gen::SoundPath& path) {
 	TEST_EVENT("gen_compose_pick %s path=%s", row, path.empty() ? "-" : path.c_str());
 #endif
 }
+
+/// How far below a row's y the selected row's highlight reaches: Submenu::drawSubmenuItemsForOled() inverts yPixel to
+/// yPixel + 8. InPlaceRow redraws its value's box inside that highlight, so the two must agree.
+constexpr int32_t kRowHighlightBottom = 8;
 
 /// The value rows' room: what's left of a row after its name (`name`), in characters.
 int32_t charsAfter(std::string_view name) {
@@ -180,6 +185,19 @@ void backToScreen() {
 	}
 }
 
+/// After a genre pick or a file's load from a source list: the Compose screen, showing the new Recipe. From the
+/// screen's FROM it goes back up to the screen; from COMPOSE FROM the screen opens in its place.
+void showComposeScreen() {
+	if (isUIOpen(&soundEditor) && soundEditor.menuItemNavigationRecord[0] == &composeScreen) {
+		backToScreen();
+		return;
+	}
+	if (isUIOpen(&soundEditor)) {
+		soundEditor.exitCompletely();
+	}
+	openComposeScreen();
+}
+
 /// A roll's end: the screen shows the Recipe as it is now.
 void rollEnded(JobOutcome outcome) {
 	if (outcome == JobOutcome::Done) {
@@ -209,12 +227,15 @@ public:
 	MenuItem* selectButtonPress() override {
 		const auto ended = [](JobOutcome outcome) {
 			if (outcome == JobOutcome::Done) {
-				backToScreen();
+				showComposeScreen();
 			}
 			rollEnded(outcome);
 		};
 		const gen::Genre* genre = genreAt(slot_);
-		if (genre == nullptr || !gen::firmware::beginGenreRoll(*genre, ended)) {
+		if (genre == nullptr) {
+			display->displayError(Error::UNSPECIFIED); // can't happen: a slot with no genre hides
+		}
+		else if (!gen::firmware::beginGenreRoll(*genre, ended)) {
 			refusedBusy();
 		}
 		return NO_NAVIGATION;
@@ -226,10 +247,11 @@ private:
 
 PLACE_SDRAM_BSS GenreMenuItems<ComposeGenreItem> composeGenres{l10n::String::STRING_FOR_GENRE};
 
-/// FROM ▸: the sources a Recipe comes from (spec §14.1). Its value is the Recipe's genre.
-class FromMenu final : public Submenu {
+/// FROM ▸: the sources a Recipe comes from (spec §14.1), GENRE ▸ and FILE...: CURRENT RECIPE is the one the screen
+/// shows. Its value is the Recipe's genre.
+class FromMenu final : public SourceMenu {
 public:
-	using Submenu::Submenu;
+	using SourceMenu::SourceMenu;
 	int32_t getSubmenuItemTypeRenderLength() override { return valueAndArrowRenderLength(shown()); }
 	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValueAndArrow(*this, shown(), yPixel); }
 
@@ -487,7 +509,7 @@ private:
 		hid::display::oled_canvas::Canvas& canvas = hid::display::OLED::main;
 		const int32_t minX = OLED_MAIN_WIDTH_PIXELS - valueRenderLength(shown()) + kValueGap;
 		const int32_t maxX = OLED_MAIN_WIDTH_PIXELS - kValueRightMargin - 1;
-		const int32_t maxY = drawnY_ + kTextSpacingY - 1; // the row's highlight: Submenu's yPixel to yPixel + 8
+		const int32_t maxY = drawnY_ + kRowHighlightBottom;
 		canvas.clearAreaExact(minX, drawnY_, maxX, maxY);
 		if (!hidden_) {
 			drawRowValue(shown(), drawnY_);
@@ -724,7 +746,8 @@ public:
 
 // ---- The items ----
 
-PLACE_SDRAM_BSS FromMenu fromMenu{l10n::String::STRING_FOR_FROM, {&composeGenres.menu()}};
+PLACE_SDRAM_BSS FileRow fileRow{l10n::String::STRING_FOR_FILE_DOTS};
+PLACE_SDRAM_BSS FromMenu fromMenu{l10n::String::STRING_FOR_FROM, "screen", nullptr, {&composeGenres.menu(), &fileRow}};
 PLACE_SDRAM_BSS RegenerateRow regenerateRow{l10n::String::STRING_FOR_REGENERATE};
 
 PLACE_SDRAM_BSS NewSeedRow newSeedRow{l10n::String::STRING_FOR_NEW_SEED};
@@ -769,9 +792,19 @@ PLACE_SDRAM_BSS ComposeScreen composeScreenItem{
      &complexityRow, &motionRow, &soundsMenu, &lengthRow, &buildRow},
 };
 
+// COMPOSE FROM (spec §14.1): the Generative menu's COMPOSE. Its GENRE ▸ and FILE... are FROM's: they show the
+// screen once the Recipe is rolled or loaded.
+PLACE_SDRAM_BSS CurrentRecipeRow composeCurrentRow{l10n::String::STRING_FOR_CURRENT_RECIPE,
+                                                   [] { showComposeScreen(); }};
+PLACE_SDRAM_BSS SourceMenu composeFromItem{l10n::String::STRING_FOR_COMPOSE_FROM,
+                                           "compose",
+                                           &composeCurrentRow,
+                                           {&composeCurrentRow, &composeGenres.menu(), &fileRow}};
+
 } // namespace
 
 Submenu& composeScreen = composeScreenItem;
+Submenu& composeFromMenu = composeFromItem;
 
 bool openComposeScreen() {
 	if (rootUIIsGenerativePerform()) {
@@ -805,7 +838,7 @@ void buildComposeRecipe() {
 			TEST_EVENT("gen_compose_build refused why=perform");
 		}
 		else {
-			TEST_EVENT("gen_compose_build refused why=no_recipe");
+			TEST_EVENT("gen_compose_build refused why=recipe");
 		}
 		return;
 	}
@@ -821,6 +854,8 @@ void loadComposeRecipe(const gen::RecipeFile& file, const gen::perform::RecipeNa
 	auto ended = [](JobOutcome outcome) {
 		if (outcome == JobOutcome::Done) {
 			reportRecipe("loaded");
+			showComposeScreen(); // the screen on top, wherever the browser opened: its LOAD, FROM or COMPOSE FROM
+			return;
 		}
 		if (isUIOpen(&soundEditor)) {
 			renderUIsForOled();

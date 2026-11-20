@@ -23,6 +23,7 @@
 #include "generative/firmware/blank_song.h"
 #include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
@@ -74,21 +75,31 @@ public:
 	EntryJob() : Job(Kind::Modal) {}
 
 	/// Before each submit: a job whose task can't start ends Failed without run(), so nothing else resets these.
-	void prepare(const Genre& genre, EntryEnded ended) {
-		genre_ = &genre;
+	void prepare(const EntrySource& source, EntryEnded ended) {
+		source_ = source;
 		ended_ = ended;
 		error_ = Error::NONE;
 		soundsMissing_ = 0;
+		soundsReplaced_ = 0;
 		ran_ = false;
 		submitted_ = getSystemTicks();
 	}
 
 	JobOutcome run(Chunks& chunks) override {
 		ran_ = true;
-		// A fresh Recipe for the genre (spec §14.1). Its sound picks read the card, so it rolls here, in the job; on a
-		// card error the Current Recipe stays as it was. Once rolled, it stays the Current Recipe: a later cancel or a
-		// load error leaves the new roll in place (spec §14.2).
-		error_ = currentRecipe.rollFromGenre(*genre_, &chunks);
+		// A fresh Recipe for a genre, or a Recipe file's (spec §14.1). Its sound picks read the card, so it rolls or
+		// loads here, in the job; on a card error the Current Recipe stays as it was. Once rolled or loaded, it stays
+		// the Current Recipe: a later cancel or a load error leaves it in place (spec §14.2). CURRENT RECIPE builds the
+		// Current Recipe as it is.
+		if (source_.genre != nullptr) {
+			error_ = currentRecipe.rollFromGenre(*source_.genre, &chunks);
+		}
+		else if (source_.file != nullptr) {
+			error_ = currentRecipe.load(*source_.file, *source_.name, soundsReplaced_, &chunks);
+		}
+		else if (!currentRecipe.exists) {
+			error_ = Error::UNSPECIFIED; // beginEntry() refuses it: nothing to build
+		}
 		if (error_ == Error::ABORTED_BY_USER) {
 			return JobOutcome::Cancelled;
 		}
@@ -137,7 +148,11 @@ public:
 		                                              : "failed",
 		           ran_ ? 1 : 0, msSince(submitted_));
 #endif
-		if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
+		if (outcome == JobOutcome::Done && soundsReplaced_ > 0) {
+			// A file's missing sounds were re-rolled: that popup comes first, as a LOAD's does (spec §16.6).
+			showSoundsReplaced(soundsReplaced_);
+		}
+		else if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
 			// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing_));
@@ -149,11 +164,12 @@ public:
 	}
 
 private:
-	const Genre* genre_ = nullptr;
+	EntrySource source_;
 	EntryEnded ended_ = nullptr;
 	uint32_t submitted_ = 0;
 	bool ran_ = false;
 	int32_t soundsMissing_ = 0;
+	int32_t soundsReplaced_ = 0; ///< A file's missing sounds, re-rolled
 	Error error_ = Error::NONE;
 };
 
@@ -291,15 +307,22 @@ const Genre& delayTestGenre(const Genre& genre) {
 } // namespace
 #endif
 
-bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
+bool PerformAdapter::beginEntry(const EntrySource& source, EntryEnded ended) {
 	if (active() || runner.busy()) {
+		return false;
+	}
+	if (source.genre == nullptr && source.file == nullptr && !currentRecipe.exists) {
 		return false;
 	}
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
-	entry.prepare(TestPort::delaySetupsHeld() ? delayTestGenre(genre) : genre, ended);
+	// "hold delay_setups" changes a genre pick's genre only: a file's or the Current Recipe's plays as it is.
+	entry.prepare(TestPort::delaySetupsHeld() && source.genre != nullptr
+	                  ? EntrySource::of(delayTestGenre(*source.genre))
+	                  : source,
+	              ended);
 #else
-	entry.prepare(genre, ended);
+	entry.prepare(source, ended);
 #endif
 	return runner.submit(entry); // only false if entry is already queued, which the busy check rules out
 }
