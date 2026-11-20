@@ -1,5 +1,6 @@
 # perform_recipe_load.txt's and compose_recipe_load.txt's card (test_port_emu.py builds it): the factory card with
 # RECIPES/ holding the files the scripts load (spec §16.2, §16.5, §16.6). Every file is Acid techno's, but LOAD
 # TECHNO, which names Techno's parent table. LOAD OK's picks are on the factory card; LOAD MISSING's ACID preset and
-# Kick sample aren't. LOAD OLDER names an older genre version. LOAD BROKEN is cut short. Lanes left out of a file have
+# Kick sample aren't. LOAD OLDER names an older genre version, and has macros
+# unlike LOAD OK's (35, 25, 45, 15 points), so a playing LOAD shows them landing. LOAD BROKEN is cut short. Lanes left out of a file have
 # no pick, so they load their palette's files and nothing is replaced for them.

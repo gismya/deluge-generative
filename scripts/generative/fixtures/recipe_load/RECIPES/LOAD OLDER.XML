@@ -9,10 +9,10 @@
 	scale="minor"
 	seed="3735928559">
 	<macros
-		energy="640"
-		density="2560"
-		complexity="1280"
-		motion="1920" />
+		energy="2240"
+		density="1600"
+		complexity="2880"
+		motion="960" />
 	<part
 		name="ACID"
 		take="2"

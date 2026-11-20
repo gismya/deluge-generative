@@ -99,6 +99,16 @@ public:
 	}
 
 	JobOutcome run(Chunks& chunks) override {
+#if ENABLE_SYSEX_TEST
+		if (TestPort::preloadHeld()) {
+			// Test hook ("hold preload"): wait here, yielding, so a script's BACK lands while the edit runs.
+			TEST_EVENT("gen_recipe_roll %s held", rollName(roll_));
+			TestPort::waitWhilePreloadHeld(chunks);
+			if (chunks.cancelled()) {
+				return JobOutcome::Cancelled; // the Current Recipe as it was
+			}
+		}
+#endif
 		before = currentRecipe.sounds;
 		switch (roll_) {
 		case RecipeRoll::Genre:

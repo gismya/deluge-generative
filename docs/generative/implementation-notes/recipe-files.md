@@ -49,3 +49,6 @@ otherwise.
   in `incomingStarts()`: `incomingKeepsMacros_` sits in the padding after `dropReported_`.
 - Scripts: `perform_recipe_load.txt`, `compose_recipe_load.txt`, on the card `scripts/generative/fixtures/recipe_load`
   (its RECIPES/ files are hand-written; lanes left out have no pick, so nothing is replaced for them).
+- `hold preload` also parks the Compose screen's card edits (`RollJob`, `gen_recipe_roll <roll> held`), so a script
+  can BACK a LOAD or a roll while it runs (`compose_recipe_load.txt`). A playing LOAD's macros show as
+  `gen_macro_landed` right after the start step: give the file macros unlike the live ones, or the check can't fail.

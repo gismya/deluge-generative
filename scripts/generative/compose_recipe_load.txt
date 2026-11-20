@@ -1,8 +1,10 @@
 # Recipe LOAD on the Compose screen (#139, spec §14.4, §16.5, §16.6) over the sysex test port, on the card
 # fixtures/recipe_load. LOAD opens the browser on RECIPES/ even before a Current Recipe exists; a chosen file replaces
 # the Current Recipe as a modal job, ready for BUILD, and the screen is back on top. LOAD MISSING's two missing sounds
-# are re-rolled (2 SOUNDS REPLACED); LOAD OK matches its file, macros included.
-# gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|replaced sounds=; gen_recipe_roll load done;
+# are re-rolled (2 sounds replaced); LOAD OK matches its file, macros included. BACK during a load (held by "hold
+# preload") cancels it, and the Recipe stays as it was.
+# gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|replaced sounds=; gen_recipe_roll load held|done|
+# cancelled;
 # gen_compose_recipe loaded ...; gen_recipe_check name= read= error= match= recipe= seed= takes= sounds=.
 # needs: card fixtures/recipe_load (its own card; test_port_emu.py builds it)
 # covers: src/deluge/gui/ui/load/load_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
@@ -48,6 +50,29 @@ wait 50
 button SELECT_ENC up
 expect event gen_recipe_roll load done error=0 within=30
 expect ui=sound_editor
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
+
+# ---- BACK during the load cancels it: the Recipe stays LOAD OK (spec §16.5) ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD OK.XML within=10
+encoder 3 -1
+expect event gen_recipe_load at=LOAD MISSING.XML within=5
+hold preload
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect event gen_recipe_roll load held within=10
+expect ui=generative_modal
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_roll load cancelled error=0 within=10
+expect ui=sound_editor
+expect no_event gen_recipe_load replaced within=1
 check recipe *
 expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
 

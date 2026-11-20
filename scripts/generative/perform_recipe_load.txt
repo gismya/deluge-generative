@@ -2,7 +2,7 @@
 # fixtures/recipe_load (its card.txt lists the files). LOAD opens the browser on RECIPES/ with the QWERTY, which hides
 # once the player scrolls; a pad press brings it back. A file cut short and one naming Techno's parent table are
 # refused and the browser stays. Stopped, a file loads at once: LOAD MISSING's two missing sounds are re-rolled (2
-# SOUNDS REPLACED, so it no longer matches its file but for the sounds), LOAD OK matches its file. Playing, LOAD OLDER
+# sounds replaced, so it no longer matches its file but for the sounds), LOAD OK matches its file. Playing, LOAD OLDER
 # shows its version notice and asks the transition confirm; the confirm's default plays through, and the new piece
 # has the file's Recipe, seed, takes and macros ("check recipe *").
 # gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|refused why=|stopped result= working=|replaced
@@ -17,6 +17,7 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/menu_item/generative/compose_screen.*
 # covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.*
 # covers: scripts/generative/fixtures/recipe_load/card.txt
 start_state
 include perform_open.txt
@@ -131,7 +132,14 @@ button SELECT_ENC up
 expect event gen_confirm load style=0 result=0 within=5
 expect ui=generative_perform
 expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
+# The live macros are LOAD OK's (10, 40, 20, 30 points) until the start step; from there the new instance plays the
+# file's (35, 25, 45, 15), not the live ones (spec §12.9), and the Current Recipe has them ("check recipe *").
+expect no_event gen_macro_landed within=1
 expect event gen_transition start style=0 within=90
+expect event gen_macro_landed macro=0 units=2240 within=5
+expect event gen_macro_landed macro=1 units=1600 within=5
+expect event gen_macro_landed macro=2 units=2880 within=5
+expect event gen_macro_landed macro=3 units=960 within=5
 expect playing=true
 check recipe *
-expect event gen_recipe_check name=LOAD OLDER read=other_version error=0 match=1 within=10
+expect event gen_recipe_check name=LOAD OLDER read=other_version error=0 match=1 recipe=1 within=10

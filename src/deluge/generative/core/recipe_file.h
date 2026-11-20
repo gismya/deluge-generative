@@ -95,7 +95,7 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file);
 
 enum class RecipeFileRead : uint8_t {
 	Ok,
-	/// The file names another version of its genre (spec §16.2): it loaded, and the OLED says so (`OLDER ACID
+	/// The file names another version of its genre (spec §16.2): it loaded, and the OLED says so (`Older ACID
 	/// TECHNO`).
 	OtherVersion,
 	/// The file names a genre this firmware doesn't have (spec §16.2): nothing loaded.
