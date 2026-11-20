@@ -169,6 +169,9 @@ otherwise.
   the Closed hat's set. Psytrance's hats take the Psy set alone.
 - A part gated over the default Density still plays late in a Build: the Build's Density ramp (+12 for Psytrance)
   passes the gate. Leave it out of `buildKeeps` if it should come in on the Drop (Psytrance's Lead).
+- A gated part leaves a Drop phrase early when the Drop's lift decays under its gate (Psytrance's Lead left after bar
+  10 at a 1-phrase decay). A longer `dropDecayPhrases` keeps it in, but `genre_data_spec` checks the decay fits the
+  shortest Groove at Motion 50; Psytrance is its named exception (spec §9.3), and `psytrance_spec` shows the cut-off.
 - A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
   ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
 - A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
