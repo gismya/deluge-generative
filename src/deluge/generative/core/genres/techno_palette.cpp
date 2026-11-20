@@ -237,8 +237,8 @@ constexpr PaletteEntry kStringsSounds[] = {
     {"SYNTHS/131 Warm Strings.XML", 1},
 };
 /// The Stab: chord presets with no transpose and no built-in interval, short enough for 16ths (factory card research
-/// §2.5). 088's ringmod with a pitch yelp and 071's Rhodes (086 Techno Organ and 083 Dark Chorus were dropped, #120
-/// round 1).
+/// §2.5). It picks 088's ringmod with a pitch yelp and 071's Rhodes equally often (086 Techno Organ and 083 Dark
+/// Chorus were dropped, #120 round 1).
 constexpr PaletteEntry kDetroitStabSounds[] = {
     {"SYNTHS/088 Yelp Chords.XML", 1},
     {"SYNTHS/071 Rhodes.XML", 1},

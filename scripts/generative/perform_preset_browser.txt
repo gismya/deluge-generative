@@ -268,7 +268,7 @@ pad 1 6 down
 wait 50
 pad 1 6 up
 expect event gen_press sound part=1 previous=0 result=0
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -390,7 +390,7 @@ wait 50
 button KIT up
 expect event gen_press sound part=1 previous=0 result=0
 expect no_event gen_browser open within=1
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -451,7 +451,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition phase=preloading
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=15
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=15
 expect event gen_transition phase=queued within=15
 # ACID is still locked: the new roster hasn't started
 button SYNTH down
