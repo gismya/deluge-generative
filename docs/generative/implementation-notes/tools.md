@@ -67,3 +67,15 @@ lists them. The script judges nothing. Hand the summary to a fresh agent with th
 Where the findings go: each fault is fixed in the slice's PR (a retune if the genre has a golden already), and the
 review runs again; each judgement call becomes its own GitHub issue for the owner (label `needs-triage`), linked from
 the slice's PR. The PR's test plan lists the review's run and its findings. The review never blocks a merge.
+
+## Listening-session toolkit
+
+- `scripts/generative/listening/` (`listen.py`) builds listening sessions; its tests are `test_listening.py`. A job
+  line's comment is a whole line: never cut a line at `#`, since keys are spelled with it (`--key D#`). The Recipe
+  check (`listening/recipe.py`) compares each job's harness THEORY `recipe` and `key` lines with the job's own flags,
+  because `gen_emu.py check` renders the same arguments the capture got and so passes a mangled job.
+- Job args go through `gen_emu.add_recipe_args`, so a new gen_emu Recipe flag reaches jobs with no edit here; add it
+  to `jobs.RECIPE_FIELDS` and `recipe.mismatches` so the check and the merge see it.
+- The runner applies a variant once per claimed group and reverts after; ninja goes by mtime, so a revert followed by
+  the same apply still relinks. Merged captures are hard links in `raw/`: the cutter reads `raw/<name>.json` for the
+  tempo, so write one for any WAV you put there by hand.

@@ -2,14 +2,20 @@
 
 How to render a session's clips, and the traps the first session (Psytrance, round 1) hit. Read it before the first capture.
 
-Start from that session's scripts in `~/.cache/deluge-generative-m2/tuning/psytrance/round-1/tools/`:
-- `content.py`: the cards, clips and held questions;
-- `cap2.py`: the capture runner. Its `check_wav.py` is now `gen_emu.py check`, which `capture` runs itself;
-- `variants.py`: the table edits;
-- `song.py` and `normal_cap.py`: a normal-mode song, and its capture;
-- `build_session.py` with `page.html`: it cuts the clips and writes `index.html` and `variants.md`.
+Use the toolkit in the repo, `scripts/generative/listening/` (`python3 scripts/generative/listen.py --help`). A session writes only its content: a content file (cards), a variants file and job files, kept in the session folder's `tools/`. Its unit tests run in `check_all.py`; don't copy an earlier session's `tools/` scripts. The steps:
 
-Swap in the new genre's content, and keep the rest.
+1. `listen.py card --scratch X pack`: `X/card_pack.img`, the stock card with `pack/` copied over it (`--no-pack`: stock only).
+2. `listen.py variants make --session S --scratch X --content S/tools/variants_def.py`: each variant's diff to `S/diffs/<name>.diff`, made in a scratch worktree of the repo's HEAD (`X/wt/make`); commit what the variants build on first. A `--worktree` you give must be clean under `src/` and `pack/`: `make` and `prove` revert those around each variant. The file defines `VARIANTS = {name: Variant(patches=[...], edits=[(file, old, new)], why="...")}`; each `old` must occur once.
+3. `listen.py variants prove --session S --scratch X --genre G NAME...`: builds each variant's `generator_render` in its own worktree (`X/wt/prove`), keeps it as `X/bin/<name>`, and prints the seeds (entropy = seed, default 20) where the variant changes no note.
+4. `listen.py run --genre G --session S --scratch X --runners N JOBS...` captures in delugemu. `--dry-run` stops after the Recipe check and prints the build plan: per runner its captures, links and seconds, and the totals. Then `listen.py clips --genre G --session S --scratch X JOBS...` rough-renders the note-only cards' jobs with each variant's `X/bin/<name>`, all at once, in seconds. It refuses a `bin/<name>` built from another commit or diff than now: prove that variant again.
+5. `listen.py page --content S/tools/content.py --session S --scratch X`: cuts the clips into `S/audio/` and writes `S/index.html` and `S/variants.md`. The content file's schema is in `listening/page.py`'s docstring; the build fails on a clip whose source doesn't exist and warns on a card past 60 words.
+
+A job line is `name | variant | card | bars | args`: `bars` is how far from PLAY (bar 0) the clips need, and the seconds come from the harness render's tempo. `args` are `gen_emu.py capture`'s Recipe flags and `--mute`, parsed by gen_emu's own parser when the file loads. What the toolkit does for you, so a session doesn't redo it:
+- **A comment is a whole line.** Keys are spelled with `#`: ambient rules 1's runner cut `--key D#` to `--key D` and captured three clips in the wrong key, and `gen_emu.py check` passed them, since it rendered the same wrong arguments.
+- **The Recipe check**: before any capture, each job's harness THEORY `recipe` and `key` lines must match what it asked for (key, scale, tempo, macros, seed, entropy). A mismatch stops the run.
+- **Merging**: jobs of the same variant, card, Recipe and mutes share one capture, the longest; the shorter ones are hard links to it (a shorter capture is a bit-exact prefix).
+- **Order**: a runner claims a whole variant (costliest first), applies its diff once in its own worktree (`X/wt/r<N>`), takes its captures in Recipe order, and reverts after, so it relinks only when the variant or Recipe changes.
+- **Runners**: each with its own `--build-dir` (`X/build/r<N>`) and `--out` folder; a variant's lock in `X/raw/locks/`; one retry; waits while `X/pause` exists or the host runs `--cap` (default 6) emulators or more. Raw WAVs, logs and each source's sidecar (`X/raw/<name>.json`: its tempo, seconds, and what it was captured from) stay in the scratch folder. A rerun keeps a WAV only if its sidecar matches the job now (flags, variant diff, card image, source commit) and covers its bars; anything else is captured again. Each runner's worktree moves to the repo's HEAD when the run starts. `page` cuts a clip again when its source WAV or its bars change.
 
 ## Before any capture: the harness
 
@@ -17,31 +23,41 @@ Check every question in the harness first: a capture takes a minute, and the har
 
 - Build `generator_render` with `./dbt test --generator -n`. For each candidate Recipe, render with `--end-after-drop --midi-only`, and read the MIDI file with `theory_review.piece_from_midi(open(path, "rb").read())`. A piece holds its sections (bar, label), the tempo and key, and each part's notes (`velocity`, `end`, drum lanes by note).
 - **Pick seeds and macros where the ticket's behaviour shows**: the section the question is about, the pattern entry it names, the Bass velocities it quotes. `--motion 50` brings the Break, Build and Drop sooner (Psytrance: the Drop at bar 80 instead of 160).
-- **Prove each table variant changes what the ticket says**, before you build it into firmware. Apply the edit, rebuild the harness, copy `generator_render` aside per variant, revert, and compare the variant's render with the base render (`cmp` on the MIDI files over 20+ seeds, or count the notes). Tickets from a theory review can misread the table. Psytrance round 1 found three such cases:
+- **Prove each table variant changes what the ticket says**, before you build it into firmware. `listen.py variants prove` builds each variant's `generator_render` and compares its MIDI with the base's over 20 seeds; count the notes yourself where the claim is narrower than "changes something". Tickets from a theory review can misread the table. Psytrance round 1 found three such cases:
   - an option that changes nothing at the Complexity the ticket names: `ByComplexity::at()` interpolates, so `{2, 6}` and `{4, 6}` both give a leap of 5 at Complexity 25 or less;
   - a pattern entry that sounds the same as the ticket's fix, because its `7`s already play at the default Density, while the behaviour came from another entry;
   - a "sparse" option that took the part out entirely.
 
   When the question as written can't be heard, render the nearest audible version, and say why on the card.
+- **Rough-render clips** (a card about the notes only, as `SKILL.md` step 3 sorts them): `listen.py clips` renders them with the variant's own `generator_render` (the one `prove` kept), and the page cuts them like captures (the bars start at 0 too). 205 s of psytrance renders in 6 s. Kit rows play their real samples; pitched parts play one stand-in voice, every sound at home: no presets, sound controls or Drift sweeps. `--mute PART` in a job leaves that part out (generator_render's `--mute`, the same rows as gen_emu's), so a rough-render card can have its isolated clips too.
 - **Palette picks per entropy:** a WAV render (not `--midi-only`) prints `warning: PART: SYNTHS/… not modelled` for each preset it loads. A part only loads once it plays, so add `--density 50 --bars 20` to see the Lead's. Scan entropies 0–30 to find one per pick. Each entropy also rolls its own key and tempo.
 
 ## Captures
 
 - The genre must be on the branch you capture from. M2 genres were on `m2-all-genres`, not `generative`.
-- **Pack card:** clone the stock image, `cp -c ~/source/delugemu-sd/deluge_sd.img card.img` (an APFS clone, instant), then `fat_image.copy_tree(FatImage("card.img"), "pack")`.
+- **Pack card:** `listen.py card --scratch X pack` (an APFS clone of the stock image, `pack/` copied over it).
 - A capture's audio starts at PLAY, which is the harness's bar 0. Cut clips by bar, at the capture's tempo (`240 / bpm` s a bar). Check it once: the Build's Gap is a silent beat right before the Drop.
 - `--mute` rows follow the genre's part order (Psytrance: 1 DRUMS, 2 BASS, 3 DRONE, 4 LEAD, 5 ARP, 6 FX). A drum lane can't be soloed. An isolated capture is silent where the muted parts would play; the check below allows for it.
-- Costs on an M4 Pro: an 85 s capture takes 35–50 s, a 170 s one about 65–85 s, and a fresh `--build-dir` adds a 2-minute full build. gen_emu writes 32-bit WAVs, about 60 MB per 170 s. Keep them in the scratchpad.
-- **One capture at a time** (at most two delugemu on the host, one per session, as `SKILL.md` step 3 says). Queue the jobs in a file and run them in order.
+- Costs on an M4 Pro: a capture takes about 19 s (boot, enter Perform) plus a quarter of its length, so an 85 s capture about 35–50 s. A fresh `--build-dir` adds a 2-minute full build.
+- **A new Recipe relinks the firmware.** gen_emu compiles the Recipe (seed, entropy, macros, key, scale, tempo, swing) into the capture build, so a capture whose Recipe differs from the last one in its `--build-dir` relinks under LTO first: 47–60 s, one core, 1 GB. So does a table variant applied or reverted, even a revert to the same text (ninja goes by file times). Mutes and `--seconds` don't. Psytrance round 2 spent about as long linking as emulating. Until #401 lands:
+  - sort each runner's jobs by variant, then by Recipe, so equal ones run back to back;
+  - apply a variant once before its group and revert it once after, not around each capture;
+  - keep the base jobs on a runner whose worktree never takes a variant.
+- **A shorter capture is the start of a longer one, bit for bit**, for the same build, card, Recipe and mutes. Give each such combination one capture, as long as its latest card needs, and cut every clip from it.
+- gen_emu writes 32-bit WAVs, about 60 MB per 170 s. Keep them, the card images and the build dirs (735 MB each) in a scratch folder, not the session folder, and delete it when the page is done. Ambient rules 1 left 2.6 GB in its session folder for a 48 MB page.
+- **At most six captures at once on the host**, across all sessions, as `SKILL.md` step 3 says. Each needs its own `--build-dir`, built beforehand. Measured in #377 (85 s psytrance capture, M4 Pro, 12 cores): identical sha256 and a passing `check` at 1, 2, 4 and 6 at once; wall time per capture 31 s alone, 33 s at two, 42 s at four, 38 s at six; throughput 2.7, 5.0, 8.0 and 13.2 captured seconds per wall second. Queue the jobs in a file and run up to six at a time.
+- The first capture into a freshly built `--build-dir` can rebuild the git-state version and relink, about 40 s, before its emulator starts (#377 saw it once per dir). Count it when you time captures, or run one throwaway capture per dir first.
 - **Each capture checks its WAV** (`gen_emu.py check`, run by `capture` unless `--no-check`), and exits 1 if it fails. Capture again any that fails. After the firmware, `capture` builds the harness's `generator_render` from the same source (only that target, in `build/tests/`) and renders the same Recipe, so a table variant's capture is checked against the variant's notes. It fails a WAV that:
   - is shorter than `--seconds`;
   - is silent for the beat after a 16th where the harness render of the same Recipe starts a note in a part the capture didn't mute (so isolated captures and sparse sections such as Dub's Intro pass, and a dropout shorter than a bar fails);
   - is at full scale for 50 ms in a row (clipped flat or corrupt). A shorter run is a WARNING: the mix clips.
 
+  It doesn't check the key: it passes a capture in the wrong key (#405 adds a pitch check). Until then, the Recipe check above catches a mangled job.
+
   To check WAVs made before, or by hand: `gen_emu.py check WAV... ` with the capture's Recipe flags, `--seconds` and `--mute`s. It reads the newest `generator_render` under `build/tests/` (or `--render`), logs which, and warns if the Generator's source changed after it was built. With six emulators on the host (two sessions at three each), captures came back short, corrupt and partly silent. Before capturing a bad one again, wait for the other session's emulator to finish.
-- A capture rebuilds from its worktree's source before it boots. Apply a table variant just before its capture, and revert it right after.
+- A capture rebuilds from its worktree's source before it boots. Keep a table variant applied through its group of captures in that worktree, and revert it right after the group.
 - Give two captures that might ever run at once separate `--build-dir`s: gen_emu writes the capture's Recipe header into the build dir before it builds. They can share an `--out` folder: each capture names its raw dump after its WAV and its process, and claims its WAV's name when it starts. (Round 1 lost 38 captures to a shared folder, before that.)
-- **Clips:** cut with Python's `wave`, shift the 32-bit samples to 16-bit (`>> 16`), fade 10 ms at each end so a loop doesn't click, and encode with `afconvert -f m4af -d aac -b 160000`. Keep the captured level: a level is part of what the owner judges.
+- **Clips:** `listen.py page` cuts them: by bar at the source's tempo, 32-bit to 16-bit (`>> 16`), 10 ms fades so a loop doesn't click, `afconvert -f m4af -d aac -b 160000`. It keeps the captured level: a level is part of what the owner judges.
 
 ## Normal mode: a song file in delugemu
 
