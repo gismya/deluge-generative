@@ -13,7 +13,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - **Path length.** A sound pick holds a card path of at most 127 characters (128 bytes with its terminator). Files with longer paths are skipped when picks are rolled, and a longer palette path counts as missing.
 - **Fallback chain.** If a pick doesn't load, try the next palette entry. If nothing loads, use the Deluge default synth patch and show one OLED warning. Generative mode still starts.
 - **Missing path on Recipe load:** re-roll from this card's palette and warn ([§16.6](16-recipe-files.md#166-missing-sounds-and-sharing)).
-- **Minimum length.** Each part has at least 3 palette entries, and each lane a genre always plays has at least 3 files after tag filtering. Gated lanes may have fewer.
+- **Minimum length.** Each part starts with at least 3 palette entries; a part an ear check has trimmed may keep fewer, but never none (Techno round 1, #120: Acid techno's ACID keeps one), and each lane a genre always plays has at least 3 files after tag filtering. Gated lanes may have fewer.
 - **Velocity.** Every palette Synth must respond to velocity, through a velocity cable or DX7 operator velocity sensitivity. A script over `pack/` checks pack presets, run locally. The Generator never adds cables.
 - **Unison.** Chords palettes avoid presets with more than 4 unison voices. Pads may use them.
 

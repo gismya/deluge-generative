@@ -23,10 +23,11 @@ const Genre& techno = genres::technoAcid;
 
 // clang-format off
 describe techno_palette("Acid techno's palette", $ {
-	it("gives every synth part at least 3 presets, each on the factory card or in the pack", _ {
+	it("gives every synth part a preset at least, each on the factory card or in the pack", _ {
+		// ACID keeps 005 Sweet Mono Bass alone after the ear check (spec §10.1, #120 round 1).
 		FakeCard card = harness::factoryCardWithPack();
 		expect(techno.palette != nullptr).to_be_true();
-		expect(harness::fewestPartPresets(techno)).to_be_greater_than(size_t{2});
+		expect(harness::fewestPartPresets(techno)).to_be_greater_than(size_t{0});
 		expect(harness::partPresetsMissing(techno, card).empty()).to_be_true();
 	});
 

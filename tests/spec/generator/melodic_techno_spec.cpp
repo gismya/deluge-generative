@@ -438,8 +438,9 @@ describe melodic_techno("Melodic techno", $ {
 					continue;
 				}
 				synthParts++;
+				// At least 3 before the ear check trimmed them (spec §10.1, #120 round 1), never none.
 				auto entries = melodic.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
+				expect(entries.size()).to_be_greater_than(size_t{0});
 				for (const PaletteEntry& entry : entries) {
 					expect(card.has(entry.path)).to_be_true();
 					if (part.role == Role::Lead) {
