@@ -300,8 +300,13 @@ bool PerformView::partFrozen(int32_t part) {
 
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
 	// Y turn: the focused part's take back or forward, from the one queued or else the one playing (spec §13.5).
+	// SHIFT + Y turn: its octave shift down or up instead.
 	const int32_t part = focusedPart();
 	if (part < 0 || offset == 0) {
+		return ActionResult::DEALT_WITH;
+	}
+	if (Buttons::isShiftButtonPressed()) {
+		octaveTurn(part, offset);
 		return ActionResult::DEALT_WITH;
 	}
 	PressOutcome outcome = PressOutcome::NothingToDo;
@@ -314,6 +319,23 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 		refreshClipPage();
 	}
 	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::octaveTurn(int32_t part, int32_t offset) {
+	// Drums and FX have no Register: nothing to do, and no popup (spec §13.5).
+	PressOutcome outcome = PressOutcome::NothingToDo;
+	const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part), offset, &outcome);
+	if (refusedWithPopup(outcome) || shift == deluge::generative::kNoOctaveWaiting) {
+		return;
+	}
+	const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
+	char text[deluge::generative::perform::kQueueLineChars + 1];
+	deluge::generative::perform::queueLabel(
+	    {deluge::generative::CommandKind::SetOctave, static_cast<uint8_t>(part), shift}, *genre, text);
+	display->displayPopup(text);
+	TEST_EVENT("gen_press octave part=%ld shift=%ld y=%ld", static_cast<long>(part), static_cast<long>(shift),
+	           static_cast<long>(offset));
+	TEST_EVENT("gen_octave_popup %s", text);
 }
 
 void PerformView::refreshFaders() {

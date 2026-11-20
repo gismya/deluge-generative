@@ -176,3 +176,9 @@ otherwise.
   notes ended a bar or more before the drop-out's end, so `extend()` finds none and the voicing strikes again there.
   The draw reads `Arc::ahead()` with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section
   start known when it is drawn; one a later press moves is cut on the line instead.
+- Octave shift (§7.3, #397): `Generator::partRegister()` is the one Register a flavour reads, the genre's
+  `registerOrDefault()` moved by `Recipe::octave`. A new flavour that reads `spec.registerOrDefault()` itself ignores
+  the shift, and `octave_spec` fails. A shift that lands moves the part's held voicing (`PartState::voicing`) with it
+  in `apply()`, so voice leading goes on as a translation: without that, `leadVoicing()` places the new voicing near
+  the old one's pitches inside the moved Register, not 12 apart. Notes past MIDI's 0–127 clamp (Dub techno's bass at
+  −2 reaches 0), so `octave_spec` compares against clamped pitches.

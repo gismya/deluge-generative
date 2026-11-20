@@ -132,3 +132,9 @@ otherwise.
   presses and releases meanwhile, to the new UI, which `openUI()` has made current before `opened()`. A Perform hold
   that a release would act on checks that Perform is on top (End: `endPadActs()`) rather than letting go before
   `openUI()`.
+- SHIFT + Y (`PerformView::octaveTurn()`) and OCTAVES ▸ step from `PerformSteering::octaveAhead()`, which reads the
+  newest SetOctave still in the steering queue (`SteeringQueue::newest()`): stepping from the core's value, two turns
+  inside one step window would press the same shift twice, and the second cancels the first. The rows read it at each
+  draw, so they need no `Basis`. `octavePresses_` is a byte, in padding: the steering's size moves
+  `PerformAdapter::sink_`, which the start step's modulo-8 `static_assert` in `incomingStarts()` pins (a `uint32_t`
+  there broke it).

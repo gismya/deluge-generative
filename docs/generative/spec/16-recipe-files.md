@@ -9,6 +9,7 @@ A **Recipe file** holds the Current Recipe and nothing more:
 - the genre's stable name and its genre version;
 - tempo as an integer in hundredths of a BPM, and swing (the glide targets if a glide is running), key and scale;
 - the four macros;
+- each pitched part's octave shift ([§7.3](07-pitch.md#73-register)); a file without it loads as 0;
 - every sound pick as a card path;
 - the seed and every part's take.
 

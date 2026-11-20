@@ -212,6 +212,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_BUILD, "Build"},
         {STRING_FOR_SOUNDS, "Sounds"},
         {STRING_FOR_NEW_SEED, "New seed"},
+        {STRING_FOR_OCTAVES, "Octaves"},
         {STRING_FOR_LEFT_INPUT, "Left input"},
         {STRING_FOR_RIGHT_INPUT, "Right input"},
         {STRING_FOR_STEREO_INPUT, "Stereo input"},

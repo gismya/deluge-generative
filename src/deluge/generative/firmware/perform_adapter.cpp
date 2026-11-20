@@ -153,6 +153,15 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
 	}
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		// A SetOctave landed on the last decided step: the Current Recipe still has the shift before it.
+		if (generator_->octave(p) != currentRecipe.recipe.octave[p]) {
+			const int32_t landed = generator_->nextStep() - 1;
+			TEST_EVENT("gen_octave_landed part=%ld shift=%ld step=%ld bar_line=%s", static_cast<long>(p),
+			           static_cast<long>(generator_->octave(p)), static_cast<long>(landed),
+			           landed % kStepsPerBar == 0 ? "yes" : "no");
+		}
+	}
 #endif
 	steering_.recordLanded(*generator_);
 	if (driver_.jumps() != jumps) {

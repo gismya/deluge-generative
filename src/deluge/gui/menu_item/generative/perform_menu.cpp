@@ -275,6 +275,49 @@ private:
 	char text_[4] = {};
 };
 
+// ---- OCTAVES ----
+
+/// A pitched part's octave shift, -2 to +2 (spec §7.3, §13.6): a turn steps from the shift it shows, as a SHIFT + Y
+/// turn does. It shows the shift as it goes on (PerformSteering::octaveAhead()), read afresh at each draw: a press in
+/// the steering queue, the shift waiting for its bar line, or the one playing. Drums and FX have no row.
+class OctaveItem final : public Integer {
+public:
+	explicit OctaveItem(int32_t part) : Integer(l10n::String::STRING_FOR_OCTAVES), part_(part) {}
+	[[nodiscard]] std::string_view getName() const override {
+		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
+		return genre != nullptr && part_ < deluge::generative::partCount(*genre) ? genre->parts[part_].name : "";
+	}
+	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return performAdapter.steering().takesOctave(part_);
+	}
+	[[nodiscard]] int32_t getMinValue() const override { return -deluge::generative::kMaxOctaveShift; }
+	[[nodiscard]] int32_t getMaxValue() const override { return deluge::generative::kMaxOctaveShift; }
+	void readCurrentValue() override { setValue(performAdapter.steering().octaveAhead(part_)); }
+	void selectEncoderAction(int32_t offset) override {
+		PressOutcome outcome = PressOutcome::NothingToDo;
+		const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part_), offset, &outcome);
+		refusedWithPopup(outcome);
+		if (shift == deluge::generative::kNoOctaveWaiting) { // none that way, or nothing to do
+			return;
+		}
+		TEST_EVENT("gen_press octave part=%ld shift=%ld menu", static_cast<long>(part_), static_cast<long>(shift));
+		setValue(shift);
+		Number::selectEncoderAction(offset);
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shownText()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shownText(), yPixel); }
+
+private:
+	const char* shownText() {
+		const int32_t shift = performAdapter.steering().octaveAhead(part_);
+		snprintf(text_, sizeof(text_), shift > 0 ? "+%ld" : "%ld", static_cast<long>(shift));
+		return text_;
+	}
+	int32_t part_;
+	char text_[4] = {};
+};
+
 // ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
 
 /// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE. To
@@ -353,6 +396,14 @@ PLACE_SDRAM_BSS SeedTakesSubmenu seedTakesMenu{
     {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5]},
 };
 
+static_assert(deluge::generative::kMaxParts == 6, "one OctaveItem per part slot below");
+PLACE_SDRAM_BSS OctaveItem octaveItems[deluge::generative::kMaxParts] = {OctaveItem{0}, OctaveItem{1}, OctaveItem{2},
+                                                                         OctaveItem{3}, OctaveItem{4}, OctaveItem{5}};
+PLACE_SDRAM_BSS Submenu octavesMenu{
+    l10n::String::STRING_FOR_OCTAVES,
+    {&octaveItems[0], &octaveItems[1], &octaveItems[2], &octaveItems[3], &octaveItems[4], &octaveItems[5]},
+};
+
 void SeedTakesSubmenu::beginSession(MenuItem* navigatedBackwardFrom) {
 	if (navigatedBackwardFrom == nullptr) {
 		// Opened, rather than back from a row: what the rows read last time may be another piece's or Recipe's.
@@ -371,7 +422,8 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
-    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu},
+    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
+     &octavesMenu},
 };
 
 void refreshPerformMenu() {
@@ -380,6 +432,7 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.steering().takePresses(part);
 	}
+	presses += performAdapter.steering().octavePresses();
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
 	static Basis shownBasis;
@@ -389,9 +442,12 @@ void refreshPerformMenu() {
 	shownBasis = basisNow(presses);
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
-	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu;
+	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu || item == &octavesMenu;
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
+	}
+	for (OctaveItem& octave : octaveItems) {
+		ours = ours || item == &octave;
 	}
 	for (GenreGroup& group : transitionGenres.groups()) {
 		ours = ours || item == &group; // its `= REGEN` row moves when a genre change starts

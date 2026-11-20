@@ -67,6 +67,8 @@ public:
 	ActionResult horizontalEncoderAction(int32_t offset) override;
 	/// Y turn: the focused part's take back or forward; forward past the newest makes a new take (spec §13.5).
 	ActionResult verticalEncoderAction(int32_t offset, bool inCardRoutine) override;
+	/// SHIFT + Y turn: the focused part's octave shift one down or up, with a popup (spec §13.5).
+	void octaveTurn(int32_t part, int32_t offset);
 	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.

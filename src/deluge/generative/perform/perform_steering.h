@@ -265,7 +265,7 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
-	/// Octave shift presses, and BACK taps (which may cancel one), since power-on, from any control.
+	/// Octave shift presses, and BACK taps (which may cancel one), from any control, modulo 256.
 	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
 
 private:
@@ -319,10 +319,12 @@ private:
 	uint32_t pieces_ = 0;
 	uint32_t keyPresses_ = 0;
 	uint32_t takePresses_[kMaxParts] = {};
-	uint32_t octavePresses_ = 0;
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 	GlideLength glide_ = kDefaultGlide;
+	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
+	/// step pins (PerformAdapter::incomingStarts()).
+	uint8_t octavePresses_ = 0;
 };
 
 // ---- Definitions ----

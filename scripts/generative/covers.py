@@ -136,6 +136,8 @@ BUILDERS = {
     ),
     "gen_menu": (),
     "gen_menu_cancel_change": (),
+    "gen_octave_landed": (),
+    "gen_octave_popup": ("src/deluge/generative/perform/queue_text.*",),  # queueLabel()
     "gen_page": (),
     "gen_page_leds": (),
     "gen_palette_override": _GENRE,
