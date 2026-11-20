@@ -34,10 +34,13 @@ struct Piece : StepwisePiece<> {
 	MacroFaderHolds holds;
 	FillHolds fills;
 	bool stopped = false;
+	int32_t focused = -1; ///< The part on the knobs, or -1 for the Recipe level.
 
 	Piece() : StepwisePiece({.seed = 3, .skipIntro = true, .logEntries = 64}) {}
 	/// What the core plays for `macro` now: the SetMacro that last landed, or the Recipe's.
 	[[nodiscard]] int32_t corePlays(Macro macro) const { return driver.playing()->recipe().macros[macro]; }
+	/// Has the instance that plays decide `steps` more steps.
+	void decideMore(int32_t steps) { decideBefore(driver.playing()->nextStep() + steps); }
 	/// The SetMacros the core logged, as they landed.
 	[[nodiscard]] std::vector<LogEntry> macrosLogged() const {
 		std::vector<LogEntry> out;
@@ -52,19 +55,20 @@ struct Piece : StepwisePiece<> {
 	void pressFader(int32_t x, int32_t row, uint32_t now) {
 		const KeyboardPadAt at = resolveKeyboardPad(x, row);
 		const int32_t units = macroLevelUnits(at.level);
-		holds.press(at.macro, at.pad, units, now);
-		steering.holdMacro(at.macro, units);
+		holds.press(at.macro, at.pad, units, now, focused);
+		steering.holdFader(holds.part(at.macro), at.macro, units);
 	}
 	/// And up: a tap keeps the value as the centre, a hold steers back to the centre.
 	void releaseFader(int32_t x, int32_t row, uint32_t now) {
 		const KeyboardPadAt at = resolveKeyboardPad(x, row);
 		const int32_t units = holds.units(at.macro);
+		const int32_t part = holds.part(at.macro);
 		switch (holds.release(at.macro, at.pad, now, kMacroTapMs)) {
 		case MacroFaderHolds::Release::Keep:
-			steering.keepMacroCentre(at.macro, units);
+			steering.keepFader(part, at.macro, units);
 			break;
 		case MacroFaderHolds::Release::SpringBack:
-			steering.springMacroBack(at.macro);
+			steering.springFaderBack(part, at.macro);
 			break;
 		case MacroFaderHolds::Release::None:
 			break;
@@ -84,6 +88,8 @@ struct Piece : StepwisePiece<> {
 		KeyboardPageInput in;
 		in.centres = currentRecipe.macros;
 		in.holds = &holds;
+		in.focused = focused;
+		in.bias = currentRecipe.bias;
 		in.piece = stopped ? nullptr : driver.playing();
 		if (const Event* section = lastSection(); section != nullptr && !stopped) {
 			in.sounding = true;
@@ -310,6 +316,61 @@ describe keyboard_page("The KEYBOARD page", $ {
 		expect(piece.column(kEnergyColumn)).to_equal(std::string("...#####"));
 		expect(piece.column(kPhraseColumn)).to_equal(std::string("    ...."));
 		expect(piece.text()).to_equal(std::string("E=5/- D=5/- C=5/- M=5/- phrase=- fill=0"));
+	});
+
+	context("with a part focused (Part bias, spec §3.3, §13.5)", _ {
+		it("fills each fader to the part's biased value, with the Recipe centre's level white, not the Arc's", _ {
+			Piece piece;
+			piece.decideBefore(4);
+			piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+			piece.runToStepLine(piece.phraseSteps() + 4);
+			piece.currentRecipe.bias.set(1, Macro::Energy, macroPoints(13)); // 25 + 13 = 38, level 6 of 8
+			piece.focused = 1;
+			expect(piece.column(kEnergyColumn)).to_equal(std::string("..#A####"));
+			expect(piece.text()).to_equal(std::string("E=6/5 D=5/5 C=5/5 M=5/5 phrase=1 fill=0 part=1"));
+		});
+
+		it("sets, with a tap, the bias that puts the part on the row, and 0 on the centre's row", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.focused = 2;
+			// Row 2 from the top, level 6 of 8: 36 points. From the centre 25 that is +11, in the curve's linear middle.
+			piece.pressFader(kEnergyColumn, 2, 0);
+			piece.releaseFader(kEnergyColumn, 2, 100);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(macroPoints(11));
+			expect(piece.text().substr(0, 6)).to_equal(std::string("E=6/5 "));
+			// The top row, 50: the knee holds a bias under +50 short of it, so only +50 puts the part there.
+			piece.pressFader(kEnergyColumn, 0, 200);
+			piece.releaseFader(kEnergyColumn, 0, 300);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(kMacroFull);
+			// The bottom row, 0, the same way down, where the curve rounds the cut up: a unit short of -50 reaches 0.
+			piece.pressFader(kEnergyColumn, 7, 400);
+			piece.releaseFader(kEnergyColumn, 7, 500);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(-kMacroFull + 1);
+			// The centre's row, 25 at level 5: back to 0.
+			piece.pressFader(kEnergyColumn, 3, 600);
+			piece.releaseFader(kEnergyColumn, 3, 700);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(0);
+			piece.decideMore(2);
+			expect(piece.driver.playing()->recipe().bias.of(2, Macro::Energy)).to_equal(0);
+			expect(piece.currentRecipe.macros == piece.currentRecipe.genre->defaults).to_be_true(); // centres untouched
+		});
+
+		it("plays a held row's bias while held, then springs back to the Recipe's", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.focused = 1;
+			piece.pressFader(kMotionColumn, 2, 0);
+			piece.decideMore(2);
+			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(macroPoints(11));
+			expect(piece.currentRecipe.bias.of(1, Macro::Motion)).to_equal(0);
+			expect(piece.text().substr(18, 7)).to_equal(std::string("M=6h/5 "));
+			piece.focused = -1; // the release goes to the part the press held, whatever is focused by then
+			piece.releaseFader(kMotionColumn, 2, 1000);
+			piece.decideMore(2);
+			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(0);
+			expect(piece.corePlays(Macro::Motion)).to_equal(macroPoints(25));
+		});
 	});
 
 	it("fits its longest text", _ {

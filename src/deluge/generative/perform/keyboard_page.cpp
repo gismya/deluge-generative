@@ -92,13 +92,19 @@ int32_t macroLevel(int32_t units) {
 void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 	out = {};
 	out.section = in.section;
+	out.focused = static_cast<int8_t>(in.focused);
 	for (int32_t m = 0; m < kNumMacros; m++) {
 		const auto macro = static_cast<Macro>(m);
 		// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now. Both
 		// stay on the fader's levels, so describeKeyboard() reads back from the cells what was put there.
+		// With a part focused, the part's biased value and the centre it is biased from (spec §13.5).
 		const bool held = in.holds != nullptr && in.holds->held(macro);
-		const int32_t value = faderLevel(held ? in.holds->units(macro) : in.centres[macro]);
-		const int32_t arc = in.piece != nullptr ? faderLevel(in.piece->effectiveMacro(macro)) : -1;
+		const bool part = in.focused >= 0;
+		const int32_t shown = part ? partBiased(in.centres[macro], in.bias.of(in.focused, macro)) : in.centres[macro];
+		const int32_t value = faderLevel(held ? in.holds->units(macro) : shown);
+		const int32_t arc = part                  ? faderLevel(in.centres[macro])
+		                    : in.piece != nullptr ? faderLevel(in.piece->effectiveMacro(macro))
+		                                          : -1;
 		for (int32_t level = 0; level < kMacroFaderLevels; level++) {
 			const KeyboardCell cell = {
 			    .look = level == arc ? Look::FaderArc : Look::Fader,
@@ -156,12 +162,16 @@ void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars +
 		text.add("-");
 	}
 	text.add(" fill=").add(page.cell[kFillFirstRow][kFillFirstColumn].lit ? "1" : "0");
+	if (page.focused >= 0) {
+		text.add(" part=").add(static_cast<int32_t>(page.focused));
+	}
 }
 
-void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t now) {
+void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t now, int32_t part) {
 	const int32_t i = index(macro);
 	if (pads_[i] == 0) {
 		pressedAt_[i] = now;
+		part_[i] = static_cast<int8_t>(part);
 	}
 	pads_[i] |= static_cast<uint16_t>(1U << pad);
 	units_[i] = static_cast<int16_t>(units);
