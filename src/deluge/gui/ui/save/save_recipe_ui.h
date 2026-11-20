@@ -34,12 +34,17 @@ public:
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
 	ActionResult padAction(int32_t x, int32_t y, int32_t velocity) override;
 	ActionResult timerCallback() override;
+	/// Over Perform the sidebar is transparent: Perform's shows, live (spec §16.4).
+	bool renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+	                   uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) override;
 	void graphicsRoutine() override;
 	UIType getUIType() override { return UIType::GENERATIVE_SAVE_RECIPE; }
 
 private:
 	/// The name open() suggested, kept so a save under it keeps its stem (adoptSavedName()).
 	deluge::generative::perform::RecipeName suggestion_;
+	/// No letter variation was free: suggestion_ names a file that exists, and saving under it asks to overwrite.
+	bool noneFree_ = false;
 };
 
 extern SaveRecipeUI saveRecipeUI;

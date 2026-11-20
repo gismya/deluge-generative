@@ -88,14 +88,23 @@ bool SaveRecipeUI::open(bool inCardRoutine) {
 		return false;
 	}
 	Error error = Error::NONE;
+	noneFree_ = false;
 	if (!gen::firmware::suggestRecipeName(suggestion_, error)) {
 		if (error != Error::NONE) {
 			display->displayError(error);
 			TEST_EVENT("gen_recipe_save full failed error=%d", static_cast<int>(error));
 			return false;
 		}
-		// No letter variation free: offer the remembered name; saving under it asks to overwrite.
-		suggestion_ = gen::firmware::currentRecipe.name;
+		// No letter variation free: offer the remembered name, or the default one if none is remembered. Its file
+		// exists, so saving under it asks to overwrite (spec §16.4).
+		const gen::firmware::CurrentRecipe& current = gen::firmware::currentRecipe;
+		if (!current.name.empty()) {
+			suggestion_ = current.name;
+		}
+		else {
+			gen::perform::defaultRecipeName(*current.recipe.genre, current.seed, suggestion_);
+		}
+		noneFree_ = true;
 	}
 	display->setNextTransitionDirection(1);
 	return openUI(this);
@@ -130,6 +139,11 @@ bool SaveRecipeUI::opened() {
 	if (error == Error::NONE) {
 		error = arrivedInNewFolder(0, searchName, kRecipeFolder);
 	}
+	if (error == Error::NONE && noneFree_) {
+		// The browser found the file and offered stock's numeric variation of it (`<name> 2`): offer the name itself,
+		// on the file it selected.
+		error = enteredText.set(suggestion_.text);
+	}
 	if (error != Error::NONE) {
 		display->displayError(error);
 		TEST_EVENT("gen_recipe_save full failed error=%d", static_cast<int>(error));
@@ -138,6 +152,10 @@ bool SaveRecipeUI::opened() {
 	}
 	focusRegained();
 	enteredTextEditPos = 0;
+	if (rootUIIsGenerativePerform()) {
+		// SaveUI::opened() blacked the sidebar out; Perform redraws only the rows that change, so ask for all of them.
+		uiNeedsRendering(this, 0, 0xFFFFFFFF);
+	}
 	TEST_EVENT("gen_recipe_save full opened name=%s", enteredText.get());
 	return true;
 }
@@ -183,6 +201,14 @@ ActionResult SaveRecipeUI::buttonAction(deluge::hid::Button b, bool on, bool inC
 	if (b == SYNTH || b == KIT || b == LOAD || b == MIDI || b == CV) {
 		return ActionResult::DEALT_WITH; // not stock's type switches or load
 	}
+	if (inCardRoutine && (b == SAVE || b == SELECT_ENC)) {
+		// A save inside a card wait (a preload's, over Perform) is refused, not deferred: stock's
+		// REMIND_ME_OUTSIDE_CARD_ROUTINE would hold every later press back until the wait ends (spec §12.10).
+		if (on) {
+			refusedBusy("full");
+		}
+		return ActionResult::DEALT_WITH;
+	}
 	if (on && b == BACK && !std::strcmp(currentDir.get(), kRecipeFolder)) {
 		TEST_EVENT("gen_recipe_save full closed");
 		close(); // BACK in RECIPES/ leaves with nothing saved
@@ -196,6 +222,14 @@ ActionResult SaveRecipeUI::padAction(int32_t x, int32_t y, int32_t velocity) {
 		return performView.padAction(x, y, velocity); // the sidebar stays Perform's (spec §13.5)
 	}
 	return SaveUI::padAction(x, y, velocity);
+}
+
+bool SaveRecipeUI::renderSidebar(uint32_t whichRows, RGB image[][kDisplayWidth + kSideBarWidth],
+                                 uint8_t occupancyMask[][kDisplayWidth + kSideBarWidth]) {
+	if (rootUIIsGenerativePerform()) {
+		return false;
+	}
+	return SaveUI::renderSidebar(whichRows, image, occupancyMask);
 }
 
 ActionResult SaveRecipeUI::timerCallback() {

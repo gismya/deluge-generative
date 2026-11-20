@@ -4,7 +4,8 @@
 # with the Perform page staying on top and the music playing; SHIFT+SAVE opens the full UI anyway, where picking an
 # existing file asks to overwrite. A save while a sound preload runs is refused (spec §12.10). Each saved file is read
 # back against the Current Recipe ("check recipe *": the name the Current Recipe remembers), so a saved Recipe
-# reloads to the same Recipe, seed, takes and sound picks.
+# reloads to the same Recipe, seed, takes and sound picks. Under the save UI the sidebar pads still show Perform's
+# ("report sidebar": pads_sidebar lit=<n>, from the frame sent to the pads).
 # gen_recipe_save quick|full opened|saved|refused|failed|closed|overwrite? name=...; gen_recipe_check name= read=
 # error= match= recipe= seed= takes= sounds=.
 # covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
@@ -27,6 +28,10 @@ wait 50
 button SAVE up
 expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}$/ within=10
 expect ui=generative_save_recipe
+# Perform's sidebar stays on the pads under the save UI (its mute pads are lit)
+wait 500
+report sidebar
+expect event /^pads_sidebar lit=([4-9]|1[0-6])$/ within=5
 button SAVE down
 wait 50
 button SAVE up

@@ -29,6 +29,8 @@
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
+#include "gui/colour/colour.h"
+#include "gui/colour/palette.h"
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
@@ -39,6 +41,7 @@
 #include "hid/button.h"
 #include "hid/buttons.h"
 #include "hid/encoders.h"
+#include "hid/led/pad_leds.h"
 #include "hid/matrix/pad.h"
 #include "io/debug/log.h"
 #include "io/debug/print.h"
@@ -82,6 +85,7 @@ enum class Kind : uint8_t {
 	CheckRecipe, ///< As SaveSong: its name waits in songPath
 	ReportInput,
 	ReportBootDma,
+	ReportSidebar,
 	ResetRecipe,
 	PickGenre,
 	Compose,
@@ -436,6 +440,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   compose <seconds> [<genre>] starts a Compose build of that LENGTH (10-3600 s) under the COMPOSING screen, of the
 ///                               Current Recipe, or of a fresh roll of <genre> (techno-dub), see startCompose()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
+///   report sidebar              pads_sidebar lit=<n>: how many of the 16 sidebar pads are lit in the frame sent to
+///                               the pads (PadLEDs::image)
 ///   report boot_dma             boot_dma events: the DMA channels that were still running, or had stopped on an
 ///                               error, when this firmware started (left by the firmware that chainloaded it, see
 ///                               dmaRecordBootStates() and reportBootDma())
@@ -535,6 +541,10 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
 			*entry = {Kind::ReportBootDma, 0, 0};
+			return true;
+		}
+		if (t.count == 2 && strcmp(t.token[1], "sidebar") == 0) {
+			*entry = {Kind::ReportSidebar, 0, 0};
 			return true;
 		}
 		return false;
@@ -992,6 +1002,18 @@ std::optional<HidEvent> takeHidEvent() {
 		case Kind::ReportBootDma:
 			reportBootDma();
 			break;
+
+		case Kind::ReportSidebar: {
+			// What the sidebar pads show: PadLEDs::image is the frame last sent to them.
+			int32_t lit = 0;
+			for (int32_t y = 0; y < kDisplayHeight; y++) {
+				for (int32_t x = kDisplayWidth; x < kDisplayWidth + kSideBarWidth; x++) {
+					lit += PadLEDs::image[y][x] != deluge::gui::colours::black ? 1 : 0;
+				}
+			}
+			event("pads_sidebar lit=%d", static_cast<int>(lit));
+			break;
+		}
 
 		case Kind::ReportInput: {
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
