@@ -395,6 +395,87 @@ describe dub_techno("Dub techno", $ {
 		expect(kept[-1]).to_be_greater_than(0);
 	});
 
+	context("its drop-out and delay Throws (spec §4.5, §8.8, §10.6, §11.4, #322)", _ {
+		it("drops the Stab out for 2 bars, thrown, at Dub's chance and gap", _ {
+			expect(dub.dropOuts.size()).to_equal(size_t{1});
+			const DropOutEntry& stab = dub.dropOuts[0];
+			expect(stab.mask == PartsAndLanes{.parts = partBit(kStabPart)}).to_be_true();
+			expect(stab.bars).to_equal(2);
+			expect(stab.throwTarget == PartsAndLanes{.parts = partBit(kStabPart)}).to_be_true();
+			expect(dub.dropOutChance).to_equal(120);
+			expect(dub.dropOutGapBars).to_equal(2);
+		});
+
+		it("gives the Stab alone a dotted-8th analog ping-pong delay setup, thrown at depth 8", _ {
+			const PartSpec& stab = dub.parts[kStabPart];
+			const DelaySetup echo{
+			    .on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true, .analog = true};
+			expect(stab.delay == echo).to_be_true();
+			expect(stab.throwDelayDepth).to_equal(uint8_t{8});
+			for (size_t p = 0; p < dub.parts.size(); p++) {
+				expect(dub.parts[p].delay.on).to_equal(p == kStabPart);
+			}
+		});
+
+		it("gives every Stab line, at every tier, an onset of importance 8 or more in each bar's last beat", _ {
+			// The drop-out's Throw spikes only on a hit in the beat before it (kThrowWindowSteps); a line with none
+			// there plays the drop-out dry, as Dub's throw targets never do (dub_spec). Below about Density 10 lower
+			// importances drop out.
+			for (const Pattern& pattern : dub.parts[kStabPart].pool) {
+				for (int32_t bar = 0; bar < pattern.length / kStepsPerBar; bar++) {
+					const int32_t from = (bar + 1) * kStepsPerBar - kThrowWindowSteps;
+					bool hit = false;
+					for (int32_t step = from; step < from + kThrowWindowSteps; step++) {
+						hit = hit || pattern.importance[step] >= 8;
+					}
+					expect(hit).to_be_true();
+				}
+			}
+		});
+
+		it("throws the Stab's delay on every drop-out, across seeds, entropies and Motion", _ {
+			// A drop-out is a Groove step the Stab starts being silenced while the Sub plays (the Gap silences
+			// both). Its Throw holds the delay from the drop-out's first step.
+			int32_t dropOuts = 0;
+			int32_t thrown = 0;
+			for (uint32_t entropy = 0; entropy <= 3; entropy++) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					for (int32_t motion : {25, 50}) {
+						Recipe recipe = newRecipe(dub, entropy);
+						recipe.macros.set(Macro::Motion, macroPoints(motion));
+						StepwisePiece<> piece{{.recipe = recipe, .seed = seed, .skipIntro = true}};
+						bool wasSilent = false;
+						std::vector<int32_t> starts;
+						for (int32_t s = 0; s < 112 * kStepsPerBar; s++) {
+							if (!piece.decideBefore(s + 1)) {
+								break;
+							}
+							const Generator& g = piece.generator;
+							const bool silent = g.partSilenced(kStabPart) && !g.partSilenced(kSubPart);
+							if (silent && !wasSilent && g.arc().section() == SectionKind::Groove) {
+								starts.push_back(s);
+							}
+							wasSilent = silent;
+						}
+						for (int32_t start : starts) {
+							int32_t delay = 0;
+							for (const Event& e : piece.sink.events) {
+								if (e.kind == EventKind::Control && e.part == kStabPart
+								    && e.control == SoundControl::Space && e.tick <= stepTick(start)) {
+									delay = e.throwDelay();
+								}
+							}
+							dropOuts++;
+							thrown += delay > 0 ? 1 : 0;
+						}
+					}
+				}
+			}
+			expect(dropOuts).to_be_greater_than(100);
+			expect(thrown).to_equal(dropOuts);
+		});
+	});
+
 	context("its palette (spec §10.1, §18.3)", _ {
 		it("gives the Sub, the Stab and the Pad at least 3 presets each, on the factory card, the Stab's led by 037 Echo Chord", _ {
 			FakeCard card = harness::factoryCardWithPack();

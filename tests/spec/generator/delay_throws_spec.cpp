@@ -206,10 +206,10 @@ describe delay_throws("Delay setups and the delay Throw", $ {
 			expect(PartSpec{}.throwDelayDepth).to_equal(uint8_t{12});
 		});
 
-		it("gives a delay setup only to Dub: Dub techno's Stab keeps its preset's own echo", _ {
+		it("gives a delay setup only to Dub and Dub techno, whose Stab echoes from its setup (#322)", _ {
 			for (const Genre* genre : allGenres()) {
-				// dub_spec checks Dub's setups.
-				expect(genreHasDelaySetup(*genre)).to_equal(genre == &genres::dub);
+				// dub_spec checks Dub's setups, dub_techno_spec Dub techno's.
+				expect(genreHasDelaySetup(*genre)).to_equal(genre == &genres::dub || genre == &genres::technoDub);
 			}
 		});
 	});

@@ -166,9 +166,11 @@ constexpr PaletteEntry kSubSounds[] = {
     {"SYNTHS/050 FM Basic Bass.XML", 2},
     {"SYNTHS/047 Basic Dirty Bass.XML", 1},
 };
-/// The Stab: chord presets that carry their own echo, until delay setups and delay Throws arrive with Dub (#130).
-/// 037's fifth on every note and its delay make the classic dub-techno chord (with one chord the stacked fifth does
-/// no harm); 082 is a short stab into its own delay; 072 an FM pluck with a delay tail.
+/// The Stab: chord presets with a delay of their own. The part's delay setup (techno.cpp) sets the echo's time and
+/// its Throws lift the feedback, from the home each preset saved (spec §10.6). #322 chose them without that home echo
+/// (feedback 0) and louder; until those copies exist they echo at their saved feedback. 037's fifth on every note
+/// makes the classic dub-techno chord (with one chord the stacked fifth does no harm); 082 is a short stab; 072 an FM
+/// pluck.
 constexpr PaletteEntry kDubStabSounds[] = {
     {"SYNTHS/037 Echo Chord.XML", 3},
     {"SYNTHS/082 Short Sharp Delay.XML", 2},

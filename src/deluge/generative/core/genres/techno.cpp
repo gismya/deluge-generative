@@ -473,14 +473,15 @@ constexpr Pattern kSub[] = {
 };
 
 /// The & and the 16th after it, its ghost (spec §4.5): an anchored & every bar, and ghosted repeats on later &s and
-/// a's, as the chord's echo would fall, more of them as Complexity rises.
+/// a's, as the chord's echo would fall, more of them as Complexity rises. Every line has a ghosted repeat of
+/// importance 8 on each bar's last &, so the drop-out's Throw has a hit to spike on (#322, as Dub's skank).
 constexpr Pattern kDubStab[] = {
-    {"......X8......5.", ".......g......g.", 0, 2},
-    {"..X8..........5.", "...g..........g.", 0},
-    {"......X8..6...47", ".......g..g...gg", 1},
-    {"..X8......X8....", "...g.......g....", 1},
-    {"..X8..6...X8..47", "...g..g....g..gg", 2},
-    {"......X8..6.......5.......X8..4.", ".......g..g.......g........g..g.", 2},
+    {"......X8......8.", ".......g......g.", 0, 2},
+    {"..X8..........8.", "...g..........g.", 0},
+    {"......X8..6...87", ".......g..g...gg", 1},
+    {"..X8......X8..8.", "...g.......g..g.", 1},
+    {"..X8..6...X8..87", "...g..g....g..gg", 2},
+    {"......X8..6...8...5.......X8..8.", ".......g..g...g...g........g..g.", 2},
 };
 // clang-format on
 
@@ -526,6 +527,10 @@ constexpr PartSpec kDubDrums = [] {
 
 constexpr LineWeight kSubDegrees[] = {{0, 1}};
 
+/// The Stab's echo, as Dub's skank has (spec §10.6): a dotted 8th, analog, ping-pong.
+constexpr DelaySetup kStabEcho{
+    .on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true, .analog = true};
+
 /// The root alone, now and then an octave down, never sliding, each note held for 6 steps (tuning): every kSub note
 /// ends before the next starts, so the sub plays one note at a time (loopNotesValid()).
 constexpr LoopSpec kSubLoop{
@@ -565,6 +570,8 @@ constexpr PartSpec kDubParts[] = {
         // The preset's volume knob (tuning): soft by itself, its stabs sat about 5 dB under the drums and sub
         // together (delugemu capture, seed 1).
         .volume = 100,
+        .delay = kStabEcho, // the Stab drop-out's throw target
+        .throwDelayDepth = 8,
     },
     {
         .role = Role::Pad,
@@ -582,6 +589,10 @@ constexpr PartSpec kDubParts[] = {
     kTechnoFx,
 };
 
+/// The Stab for 2 bars, thrown, as Dub's skank drop-out (spec §8.8): its last hits echo across the gap.
+constexpr PartsAndLanes kStabOnly{.parts = partBit(2)};
+constexpr DropOutEntry kDubDropOuts[] = {{.mask = kStabOnly, .bars = 2, .weight = 1, .throwTarget = kStabOnly}};
+
 constexpr Scale kDubScales[] = {Scale::Minor, Scale::Dorian};
 
 constexpr Genre kTechnoDub = [] {
@@ -589,7 +600,7 @@ constexpr Genre kTechnoDub = [] {
 	genre.name = "techno-dub";
 	genre.oledName = "DUB TECHNO";
 	genre.shortName = "DUB";
-	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 115;
 	genre.facts.tempoHighBpm = 125;
 	genre.facts.scales = kDubScales;
@@ -599,6 +610,10 @@ constexpr Genre kTechnoDub = [] {
 	genre.palette = &technoDubPalette;
 	// The breakdown is the Stab and the Pad over the rim.
 	genre.arc.breakKeeps = {.parts = partBit(2) | partBit(3), .lanes = laneBit(Lane::Rim)};
+	// Dub's drop-out chance and gap (spec §4.5).
+	genre.dropOuts = kDubDropOuts;
+	genre.dropOutChance = 120;
+	genre.dropOutGapBars = 2;
 	return genre;
 }();
 static_assert(technoRosterValid(kTechnoDub),
