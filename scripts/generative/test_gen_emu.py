@@ -322,6 +322,35 @@ def fake_elf(symbol=b"generative_capture_recipe", data=None, addr=0x20020000, be
     return bytes(body)
 
 
+class BuildCapture(unittest.TestCase):
+    def build(self, cache=None):
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        if cache is not None:
+            touch(os.path.join(tmp, "CMakeCache.txt"), cache.encode())
+        args = gen_emu.parser().parse_args(["capture", "--build-dir", tmp])
+        with mock.patch.object(gen_emu, "dbt") as dbt:
+            elf = gen_emu.build_capture(args)
+        self.assertEqual(elf, os.path.join(tmp, "Release", "deluge.elf"))
+        return [c.args[0].split()[:2] for c in dbt.call_args_list], dbt.call_args_list[
+            0
+        ].args[0]
+
+    def test_a_new_build_dir_is_configured_as_a_capture_build(self):
+        calls, first = self.build()
+        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=ON", first)
+
+    def test_a_capture_build_dir_only_builds(self):
+        calls, _ = self.build("FOO:BOOL=OFF\nGENERATIVE_CAPTURE:BOOL=ON\n")
+        self.assertEqual(calls, [["cmake", "--build"]])
+
+    def test_a_build_dir_from_before_the_patched_recipe_is_configured_again(self):
+        # it compiled the Recipe in from generative_capture.h: GENERATIVE_CAPTURE_DIR, and no GENERATIVE_CAPTURE
+        calls, first = self.build("GENERATIVE_CAPTURE_DIR:PATH=/x/generated\n")
+        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+        self.assertIn("-UGENERATIVE_CAPTURE_DIR", first)
+
+
 class PatchedElf(unittest.TestCase):
     def setUp(self):
         self.tmp = self.enterContext(tempfile.TemporaryDirectory())

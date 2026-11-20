@@ -23,6 +23,14 @@ otherwise.
   defaults into the code and the patch does nothing) and `used, externally_visible` (else LTO makes it local and may
   rename it, and gen_emu can't find it). A file on the card image was the other way: the image is shared and booted
   with `-snapshot`, so each capture would need its own 445 MB copy or a FAT write.
+- A capture's WAV is a function of its arguments *and the firmware's code*: delugemu's audio follows the instruction
+  count, so any code change gives different bytes for the same Recipe (a no-op 100-iteration loop in
+  `rollFromGenre` did). Compare captures from one build only. To check two builds play the same Recipe, compare
+  `currentRecipe` in RAM after entering Perform (QMP `xp`; pointers resolved by symbol), as #401 did.
+- What still relinks a capture build dir: a source change, a commit (the version string; `-dirty` too), and a build
+  in a new build dir of the same checkout (`./dbt sizediff`, a fresh `check_all`): it rewrites the l10n
+  `g_english.cpp` and `g_seven_segment.cpp` in the source tree, so every other build dir recompiles those and
+  relinks once.
 
 ## Theory review
 
