@@ -191,7 +191,7 @@ class Run:
     def wait_turn(self):
         """Waits while the pause file exists or the host would pass the cap, then counts this capture as active.
         Other sessions' emulators come from ps; this run's are counted by self._active from their turn on, since a
-        capture links for a minute before its qemu starts. Call end_turn() after the capture."""
+        variant's first capture links for a minute before its qemu starts. Call end_turn() after the capture."""
         pause = os.path.join(self.scratch, "pause")
         said = False
         while True:
