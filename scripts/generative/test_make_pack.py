@@ -150,6 +150,22 @@ class DerivedTest(unittest.TestCase):
         )
         self.assertEqual(out, expected)
 
+    def test_transpose_sets_one_oscillators_transpose_alone(self):
+        source = (
+            "<sound>\n\t<osc1>\n\t\t<transpose>0</transpose>\n\t</osc1>\n"
+            "\t<osc2>\n\t\t<transpose>-17</transpose>\n\t</osc2>\n</sound>\n"
+        )
+
+        out = make_pack.Transpose("osc2", -5).apply(source)
+
+        self.assertEqual(out, source.replace("-17", "-5"))
+
+    def test_transpose_refuses_an_element_with_no_transpose(self):
+        with self.assertRaisesRegex(ValueError, "0 matches"):
+            make_pack.Transpose("osc1", 12).apply(
+                "<sound>\n\t<osc1>\n\t</osc1>\n</sound>\n"
+            )
+
     def test_refuses_a_source_that_changed(self):
         derived = make_pack.Derived("SYNTHS/A.XML", "0" * 64)
 
