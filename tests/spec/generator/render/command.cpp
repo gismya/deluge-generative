@@ -26,7 +26,7 @@ const char* const kUsage =
     "usage: generator_render [--out PREFIX] [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
-    "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only]\n"
+    "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only] [--mute PART]...\n"
     "       generator_render --list-palettes\n"
     "       generator_render --list-risers\n"
     "\n"
@@ -37,7 +37,11 @@ const char* const kUsage =
     "~/source/delugemu-sd/sdcard).\n"
     "--bars is the most it plays (default 16). --end-after-drop arms End on the Drop's first step, so the piece plays\n"
     "one Arc cycle and ends after its Outro; it warns if no Drop came, and the WAV's hour limit then counts the\n"
-    "bars it played. --midi-only writes only PREFIX.mid. The MIDI file's last track, THEORY,\n"
+    "bars it played. --mute PART (a sidebar row, 1-6: the genre's part order, as gen_emu.py capture --mute; "
+    "repeatable)\n"
+    "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"
+    "MIDI file and piano roll keep every part. --midi-only writes only PREFIX.mid. The MIDI file's last track, "
+    "THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
@@ -210,7 +214,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
 		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy", "--bars", "--key", "--scale",
-		                                              "--tempo", "--swing", "--pack",    "--card", "--out"};
+		                                              "--tempo", "--swing", "--pack",    "--card", "--out", "--mute"};
 		if (macro < 0 && std::find(std::begin(kFlags), std::end(kFlags), flag) == std::end(kFlags)) {
 			return fail("unknown argument: " + std::string(flag));
 		}
@@ -273,6 +277,12 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			}
 			r.overrides.swing = static_cast<int8_t>(n);
 		}
+		else if (flag == "--mute") {
+			if (!parseInt(value, 1, kMaxParts, &n)) {
+				return fail("--mute takes a part, 1 to " + std::to_string(kMaxParts));
+			}
+			r.mutedParts |= 1U << (n - 1);
+		}
 		else if (flag == "--pack") {
 			pack = value;
 		}
@@ -284,8 +294,13 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		}
 		i++;
 	}
+	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
+	const auto parts = static_cast<int32_t>(genre->parts.size());
+	if ((r.mutedParts >> parts) != 0) {
+		return fail(std::string(genre->name) + " has " + std::to_string(parts) + " parts: --mute takes 1 to "
+		            + std::to_string(parts));
+	}
 	if (r.out.empty()) {
-		const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
 		r.out = std::string(GENERATOR_RENDER_REPO_ROOT "/build/renders/") + genre->name + "-seed"
 		        + std::to_string(r.overrides.seed);
 	}
@@ -347,6 +362,18 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	return rendering;
 }
 
+/// The rendering with each note-on of a part in `mutedParts` muted, as Perform's sidebar mutes it (spec §12.5): heard()
+/// leaves it out of the WAV, and its note-off still passes.
+Rendering withMutes(const Rendering& rendering, uint32_t mutedParts) {
+	Rendering muted = rendering;
+	for (Event& e : muted.events) {
+		if (e.kind == EventKind::NoteOn && e.part < 32 && ((mutedParts >> e.part) & 1U) != 0) {
+			e.muted = true;
+		}
+	}
+	return muted;
+}
+
 } // namespace
 
 Rendering playRequest(const Request& request, uint32_t* droppedEvents, bool* endArmed) {
@@ -383,7 +410,7 @@ Rendered render(const Request& request) {
 		const Genre& genre = *rendering.recipe.genre;
 		RootsLister lister(request.library);
 		const bool rolledAll = rollSounds(genre, *genre.palette, rendering.sounds, request.overrides.entropy, lister);
-		audio = renderAudio(rendering, request.library);
+		audio = renderAudio(withMutes(rendering, request.mutedParts), request.library);
 		roll = pianoRoll(rendering);
 		rendered.warnings.insert(rendered.warnings.end(), audio.warnings.begin(), audio.warnings.end());
 		if (!rolledAll) {
