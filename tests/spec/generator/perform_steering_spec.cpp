@@ -195,6 +195,70 @@ describe perform_steering("The Perform driver's steering", $ {
 		});
 	});
 
+	context("octave shifts (spec §7.3, §13.4, §13.6)", _ {
+		constexpr uint8_t kBass = 1;
+		it("steps on from a press the core hasn't drained, lands on the bar line, and the Recipe keeps it", _ {
+			Piece piece;
+			piece.runToStepLine(kStepsPerBar + 2);
+			PressOutcome outcome = PressOutcome::NothingToDo;
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(1);
+			expect(outcome == PressOutcome::Accepted).to_be_true();
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(2);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(2);
+			// Two octaves is as far as it goes.
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(kNoOctaveWaiting);
+			expect(outcome == PressOutcome::NothingToDo).to_be_true();
+			piece.decideMore(2);
+			expect(piece.steering.octave(kBass)).to_equal(0);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(2);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(2);
+			piece.decideBefore(2 * kStepsPerBar + 1);
+			expect(piece.steering.octave(kBass)).to_equal(2);
+			expect(static_cast<int32_t>(piece.currentRecipe.octave[kBass])).to_equal(2);
+		});
+
+		it("stepped back to the shift that plays, cancels the one waiting", _ {
+			Piece piece;
+			piece.runToStepLine(kStepsPerBar + 2);
+			PressOutcome outcome = PressOutcome::NothingToDo;
+			piece.steering.stepOctave(kBass, -1, &outcome);
+			piece.decideMore(2);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(-1);
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(0);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(0);
+			piece.decideBefore(2 * kStepsPerBar + 1);
+			expect(piece.steering.octave(kBass)).to_equal(0);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(kNoOctaveWaiting);
+		});
+
+		it("does nothing on Drums or FX", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			const auto fx = static_cast<uint8_t>(partCount(*piece.currentRecipe.genre) - 1);
+			for (uint8_t part : {uint8_t{0}, fx}) {
+				PressOutcome outcome = PressOutcome::Accepted;
+				expect(piece.steering.takesOctave(part)).to_be_false();
+				expect(piece.steering.stepOctave(part, 1, &outcome)).to_equal(kNoOctaveWaiting);
+				expect(outcome == PressOutcome::NothingToDo).to_be_true();
+				expect(piece.steering.pressOctave(part, 1) == PressOutcome::NothingToDo).to_be_true();
+			}
+			expect(piece.queue.size()).to_equal(0);
+		});
+
+		it("stopped, is the Recipe's at once, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.driver.stop(piece.sink);
+			piece.queue.clear();
+			expect(piece.steering.pressOctave(kBass, -1) == PressOutcome::Accepted).to_be_true();
+			expect(static_cast<int32_t>(piece.currentRecipe.octave[kBass])).to_equal(-1);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(-1);
+			piece.playFromRecipe(true);
+			piece.decideBefore(2);
+			expect(piece.generator.octave(kBass)).to_equal(-1);
+		});
+	});
+
 	context("stopped (spec §13.2, §13.5)", _ {
 		it("a take, a key and a tempo edit act at once, and the next start plays them", _ {
 			StepwisePiece<TimedSink> piece({.seed = 3, .skipIntro = true});

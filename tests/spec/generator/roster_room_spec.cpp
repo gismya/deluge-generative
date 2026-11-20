@@ -45,7 +45,7 @@ struct TestFlavour {
 		for (int32_t n = 0; n < notes; n++) {
 			const int32_t steps = 2 * n + onset % 2; // root, 3rd, 5th, 7th, then the scale steps between
 			g.express(partIndex, spec.expression, state, patternStep,
-			          {Lane::None, g.resolvePitch(spec, steps), pattern.level[patternStep], length, false}, step);
+			          {Lane::None, g.resolvePitch(partIndex, steps), pattern.level[patternStep], length, false}, step);
 		}
 	}
 };

@@ -154,7 +154,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		}
 	}
 #endif
-	steering_.recordTakes(*generator_);
+	steering_.recordLanded(*generator_);
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}

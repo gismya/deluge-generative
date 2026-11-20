@@ -80,6 +80,9 @@ enum class CommandKind : uint8_t {
 	/// Outro up to the start step, where that ends, or stops on the cut line itself, and decides nothing from the start
 	/// step on. It has a pending slot of its own, and once landed it can't be cancelled.
 	Transition,
+	/// target: part, a pitched one. value: its octave shift, -kMaxOctaveShift to kMaxOctaveShift. Lands at the next
+	/// bar line, as a mute does; pressing the shift that plays cancels the one waiting (spec §7.3, §13.4).
+	SetOctave,
 };
 
 /// How a transition plays (spec §9.7), chosen in the confirm.
@@ -96,6 +99,9 @@ constexpr int32_t kCancelTransition = -1;
 /// What a pad press sends as a SetMute, SetSolo, SetHold or SetFreeze value, before the core resolves it into 0 or 1.
 constexpr int32_t kPress = 2;    ///< at the action's line
 constexpr int32_t kPressNow = 3; ///< SHIFT: on the next undecided step
+
+/// What Generator::octaveWaiting() returns for a part with no octave shift waiting: SetOctave values run negative.
+constexpr int32_t kNoOctaveWaiting = -128;
 
 /// SetFill values.
 constexpr int32_t kFillReleased = 0;
@@ -117,7 +123,7 @@ constexpr bool isContinuous(CommandKind kind) {
 constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
 	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
-	       || kind == CommandKind::SetSound || kind == CommandKind::Transition;
+	       || kind == CommandKind::SetSound || kind == CommandKind::Transition || kind == CommandKind::SetOctave;
 }
 
 struct Command {
@@ -186,6 +192,16 @@ public:
 	[[nodiscard]] bool holdsFor(CommandKind kind, uint8_t target) const {
 		return holdsWhere([&](const Command& queued) { return queued.kind == kind && queued.target == target; });
 	}
+	/// The newest command of `kind` for `target` waiting in the queue, or nullptr.
+	[[nodiscard]] const Command* newest(CommandKind kind, uint8_t target) const {
+		for (int32_t i = count_; i-- > 0;) {
+			const Command& queued = entries_[(head_ + i) % kCapacity];
+			if (queued.kind == kind && queued.target == target) {
+				return &queued;
+			}
+		}
+		return nullptr;
+	}
 	/// Discrete commands that would still fit.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 	void clear() { head_ = count_ = 0; }
@@ -209,12 +225,12 @@ private:
 
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
 /// the key change, one per part's take, one for the force and one for a transition; a later command replaces the one in
-/// its slot, so turning the key editor detent by detent queues only where it stops. A part's mute, solo and sound have
-/// a slot each.
+/// its slot, so turning the key editor detent by detent queues only where it stops. A part's mute, solo, sound and
+/// octave shift have a slot each.
 class PendingList {
 public:
-	/// A key change, a force or End, a transition, and every part's take, mute, solo and sound.
-	static constexpr int32_t kCapacity = 27;
+	/// A key change, a force or End, a transition, and every part's take, mute, solo, sound and octave shift.
+	static constexpr int32_t kCapacity = 33;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.
