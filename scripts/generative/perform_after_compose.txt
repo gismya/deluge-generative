@@ -39,7 +39,7 @@ include perform_after_compose_groove.txt
 include perform_leave.txt
 
 # ---- 2. An entry after a 20:00 Compose song, saved and loaded back ----
-compose 1200 psytrance
+compose 1200 psytrance-classic
 expect event /^gen_compose done ran=1 / within=600
 expect ui=arranger within=10
 save song H388 PSYTRANCE

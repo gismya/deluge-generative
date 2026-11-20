@@ -44,14 +44,20 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -60,7 +66,7 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=2 result=0
+expect event gen_confirm psytrance-classic style=2 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_transition start style=2 within=90
 expect event gen_transition phase=idle within=40

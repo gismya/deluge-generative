@@ -125,6 +125,11 @@ otherwise.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- The Psytrance parent (`kPsytranceParent`, #319) is the other way round from Techno's: it holds the whole genre, and
+  Classic (`kPsytranceClassic`) is `subgenreOf` it with only its identity set, so its event stream is the old
+  `psytrance`'s. A subgenre's OLED name is the confirm title and the palette override's file name, capped at 14
+  characters (`genre_data_spec`): `CLASSIC PSYTRANCE` doesn't fit, so it is `CLASSIC PSY`. Picking it in a probe
+  script takes two picks (`row=PSYTRANCE`, SELECT, `row=CLASSIC`), as a Techno subgenre does.
 - The Techno parent (`kTechnoParent`) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
   fills, the Arc, Break keeps of Kick, Rim and Closed hat (a subgenre that names none breaks down to those, not
   a full Groove) and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
