@@ -15,6 +15,14 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
+- A capture build (`-DGENERATIVE_CAPTURE=ON`) holds no Recipe: it plays the `CaptureRecipe` in
+  `generative/firmware/current_recipe.cpp`, an `extern "C"` object `generative_capture_recipe` in `.data`, and
+  `gen_emu.py capture` writes the Recipe's bytes (`CAPTURE_LAYOUT`) into a copy of the ELF beside the WAV, found by that
+  symbol and checked by its magic, before it boots that copy. So a new Recipe builds nothing (#401). The two layouts
+  must agree: change both, and the test's `RECIPE_LAYOUT`. The object is `volatile` (else LTO folds the build's
+  defaults into the code and the patch does nothing) and `used, externally_visible` (else LTO makes it local and may
+  rename it, and gen_emu can't find it). A file on the card image was the other way: the image is shared and booted
+  with `-snapshot`, so each capture would need its own 445 MB copy or a FAT write.
 
 ## Theory review
 
