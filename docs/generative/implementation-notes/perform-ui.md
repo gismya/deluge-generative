@@ -48,7 +48,7 @@ otherwise.
   `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
-  across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
+  across openings, so probe scripts choose a row from the top (`encoder 3 -9` on the Perform menu, which has up to 8 rows with CANCEL CHANGE and RESET PART BIAS: -5 stopped short of the top once a script had left it on RESET PART BIAS, #303). The sound editor's `setLedStates()` and
   its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
   the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
   sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
