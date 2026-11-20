@@ -419,8 +419,8 @@ describe dub_techno("Dub techno", $ {
 
 		it("gives every Stab line, at every tier, an onset of importance 8 or more in each bar's last beat", _ {
 			// The drop-out's Throw spikes only on a hit in the beat before it (kThrowWindowSteps); a line with none
-			// there plays the drop-out dry, as Dub's throw targets never do (dub_spec). Below about Density 10 lower
-			// importances drop out.
+			// there plays the drop-out dry, as Dub's throw targets never do (dub_spec). Below about Density 14 an
+			// importance-8 hit thins out too, and a drop-out there can play dry.
 			for (const Pattern& pattern : dub.parts[kStabPart].pool) {
 				for (int32_t bar = 0; bar < pattern.length / kStepsPerBar; bar++) {
 					const int32_t from = (bar + 1) * kStepsPerBar - kThrowWindowSteps;
