@@ -256,8 +256,9 @@ describe arc("The Arc", $ {
 	});
 
 	it("plays offsets unchanged where the centre leaves room, and scales each side to fit where it doesn't", _ {
-		// Techno: the Build tops out at Energy +12, the Break dips Density to -20 (spec §9.4 headroom).
-		Genre genre = genres::technoAcid;
+		// Dub techno, with the parent's Arc: the Build tops out at Energy +12, the Break dips Density to -20 (spec §9.4
+		// headroom).
+		Genre genre = genres::technoDub;
 		genre.arc.groovePhrases = {1, 1};
 		genre.arc.breakPhrases = {1, 1};
 		auto offsets = [&](int32_t energy, int32_t density) {

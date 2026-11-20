@@ -32,14 +32,14 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - Dub's bass is `GEN Dub Sub`: a sine with a quiet triangle on it, a soft attack, sustain held while the note lasts and a quick release, and a velocity cable. Its melodica is `GEN Melodica`: a square reed and a saw detuned a few cents, a breath of noise, a soft attack, and velocity on volume and filter. `GEN Siren` is a square and a saw a fifth over it with a triangle LFO on pitch and a long release. `make_pack.py`'s `preset()` writes an unsynced LFO 1 for it.
   - House's chord stab is `GEN House Stab`: a plain saw and square at one pitch (no built-in interval, so a 7th or 9th voicing stays clean), no portamento, sustain 0 so each stab dies on its own, a filter pluck, and velocity on volume and filter.
   - Psytrance's tight bass is `GEN Psy Bass`: a saw and a square an octave under it into a resonant low-pass with a filter envelope, sustain 0 and a velocity cable. Its decay runs past the Loop's 20-tick gate, so the gate's release ends each 16th of the rolling bass.
-- **Not in the pack:** a 303 acid preset (165 Acid Arp works with its arp cleared, and the preset comes back only if 165 fails its ear check), a psy drum set (tags reach `SAMPLES/Artists/Dean Daughters/Psy`), pack falls and impacts, whole `.syx` banks, re-saved factory FM presets, and palette override files.
+- **Not in the pack:** a 303 acid preset (165 Acid Arp failed its ear check, and Acid techno's ACID plays 005 Sweet Mono Bass alone instead, #120), a psy drum set (tags reach `SAMPLES/Artists/Dean Daughters/Psy`), pack falls and impacts, whole `.syx` banks, re-saved factory FM presets, and palette override files.
 
 ### 18.3 Built-in palettes
 
 - The v1 palettes start from the [draft palettes](https://github.com/gismya/deluge-generative/blob/research/factory-card-content/docs/research/factory-card-content.md#6-draft-palettes) in [Factory card content per role][t34], with these changes: pack entries where the drafts say "Pack"; Riser lanes list only pack risers; Dub gets a Siren lane and a factory boom added to its Impact lane; Ambient drops its Impact lane.
 - Factory card facts: 103 subtractive, 54 FM and 14 ringmod synth presets, no wavetable or DX7. Bass, Pad and Lead are well covered and Chords thinly. Every drum lane has at least 3 samples. There's no `SAMPLES/FX`.
 - Avoid presets with off-key tuning (040, 164 and 060 among 8). Presets with a built-in interval (30 of them) suit Bass, Lead and drones but not Chords.
-- Every palette is starting data. A wrong pick is a data edit, and no ear check blocks implementation. The first check is 165 Acid Arp with its arp cleared, when Acid techno is first built.
+- Every palette is starting data. A wrong pick is a data edit, and no ear check blocks implementation. The first check was 165 Acid Arp with its arp cleared: it sat too low and was dropped (#120).
 - The pack grows genre by genre: each milestone ships the share its genres name ([§22](22-build-order.md#22-build-order-and-milestones)).
 
 Sources: [Generative pack contents][t42], [Factory card content per role][t34], [Porting policy][t23], [POC gaps][t52], [Sound generation][t13].

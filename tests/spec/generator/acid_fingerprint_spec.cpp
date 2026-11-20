@@ -1,31 +1,22 @@
-// Acid techno's event stream against Techno's from before the split (#226, #218). Its own fingerprint is pinned in its
-// golden (golden_spec, #121), with every Techno subgenre's.
+// Acid techno's event stream with and without its Drone (#218). Its own fingerprint is pinned in its golden
+// (golden_spec, #121), with every Techno subgenre's.
 //
-// Acid techno is today's Techno under its new name, with a Drone added (#218). Without its Drone, its table plays the
-// stream Techno played before the split, hash for hash: the split moved fields between tables and changed nothing.
-// With the Drone, the drums, the acid line and the Arc stay as they were; only the FX part moved up a row, and its
-// drift is drawn per part index, so its Control events are drawn afresh.
-//
-// The first check pins a stream from before the split. A retune of Acid's drums, acid line, Arc or FX breaks it: the
-// split is then history, so delete that check in the retune's commit. The second holds as long as the Drone plays
-// beside the other parts without changing them.
+// With the Drone, the drums, the acid line and the Arc play as without it; only the FX part moved up a row, and its
+// drift is drawn per part index, so its Control events are drawn afresh. The check holds as long as the Drone plays
+// beside the other parts without changing them. (A check that pinned Techno's stream from before the split went with
+// Acid's first retune, #120 round 1's soft Break dip.)
 
 #include "stream_fingerprint.h"
 
 #include "cppspec.hpp"
 
 #include <cstdint>
-#include <cstdio>
 #include <string>
 #include <vector>
 
 using namespace harness;
 
 namespace {
-
-/// Techno's stream before the split (Drums, Acid, FX), measured on 586687df0 (the base of #226).
-constexpr uint64_t kTechnoStream = 0x6c96b6b2967c7984ULL;
-constexpr uint64_t kTechnoEvents = 1342372;
 
 constexpr uint8_t kDronePart = 2;
 constexpr uint8_t kOldFxPart = 2; ///< The FX part's index in Techno's three-part roster, before the Drone.
@@ -71,17 +62,8 @@ bool withoutDroneOrFxDrift(Event& e) {
 
 // clang-format off
 describe acid_fingerprint("Acid techno's event stream", $ {
-	it("is Techno's from before the split, without the Drone: 60 pieces, random macros, scales, keys and seeds", _ {
+	it("plays the same drums, acid line, Arc and FX notes with the Drone in it: 60 pieces, random macros, scales, keys and seeds", _ {
 		expect(std::string(genres::technoAcid.parts[kDronePart].name)).to_equal(std::string("DRONE"));
-		const StreamFingerprint stream = fingerprintOf(kWithoutDrone, 60);
-		std::printf("acid stream without the Drone %016llx, %llu events\n", static_cast<unsigned long long>(stream.hash),
-		            static_cast<unsigned long long>(stream.events));
-		expect(stream.lost).to_equal(0U);
-		expect(stream.events).to_equal(kTechnoEvents);
-		expect(stream.hash).to_equal(kTechnoStream);
-	});
-
-	it("plays the same drums, acid line, Arc and FX notes with the Drone in it", _ {
 		const StreamFingerprint with = fingerprintOf(genres::technoAcid, 60, {.filter = withoutDroneOrFxDrift});
 		const StreamFingerprint without = fingerprintOf(kWithoutDrone, 60, {.filter = [](Event& e) { return !fxDrift(e); }});
 		expect(with.lost).to_equal(0U);

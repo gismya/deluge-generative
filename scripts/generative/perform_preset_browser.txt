@@ -14,8 +14,8 @@
 # gen_browser open part= pick=<the part's pick> at=<the selected file>; gen_browser at=<folder>/<file> on each move;
 # gen_browser chose part= path=; gen_browser closed. gen_press browser|chosen|sound part= previous= result=<0
 # preloading|1 cancelled|2 busy|5 change pending> working=. gen_sound_press and gen_sound_preload say
-# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|-> ... end=<q|->[+]: the sidebar's state (+: End's pad lit). ACID's palette: 165 Acid Arp, 015 Resonant Filter Bass, 097 Saturated Filter, 005 Sweet
-# Mono Bass.
+# source=roll|previous|chosen. gen_sidebar ... force=<G|B|U|-> ... end=<q|->[+]: the sidebar's state (+: End's pad lit). ACID's palette: 005 Sweet Mono Bass
+# alone.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/ui/browser/perform_preset_browser.cpp
@@ -268,7 +268,7 @@ pad 1 6 down
 wait 50
 pad 1 6 up
 expect event gen_press sound part=1 previous=0 result=0
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -390,7 +390,7 @@ wait 50
 button KIT up
 expect event gen_press sound part=1 previous=0 result=0
 expect no_event gen_browser open within=1
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=10
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=10
 expect event gen_sound_swap part=1 line=1 within=40
 expect event gen_outputs_freed outputs=1 within=40
 
@@ -451,7 +451,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition phase=preloading
-expect event /gen_sound ACID - pick .*SYNTHS\/(165 Acid Arp|015 Resonant Filter Bass|097 Saturated Filter|005 Sweet Mono Bass)\.XML/ within=15
+expect event /gen_sound ACID - pick .*SYNTHS\/005 Sweet Mono Bass\.XML/ within=15
 expect event gen_transition phase=queued within=15
 # ACID is still locked: the new roster hasn't started
 button SYNTH down
