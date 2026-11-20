@@ -139,9 +139,12 @@ describe psytrance("Psytrance", $ {
 			for (int32_t step = 0; step < 400 * kStepsPerBar; step++) {
 				if (arc.enterStep(psyGenre, seed, step, centre)) {
 					if (dropStart >= 0 && step - dropStart == kPhraseSteps) {
-						// Half the 2-phrase decay is left when the 1-phrase Groove ends.
-						expect(lastDensity).to_be_greater_than(0);
-						expect(arc.offset(psyGenre, Macro::Density, centre[Macro::Density])).to_be_less_than(1);
+						// Half the 2-phrase decay (+8) is left when the 1-phrase Groove ends: a 1-phrase decay would
+						// be under 1 point there.
+						expect(lastDensity >= macroPoints(3)).to_be_true();
+						// The Break takes over on its first step: its own Density dip (-5) exactly, no lift left.
+						expect(arc.section() == SectionKind::Break).to_be_true();
+						expect(arc.offset(psyGenre, Macro::Density, centre[Macro::Density])).to_equal(macroPoints(-5));
 						cut++;
 						break;
 					}
