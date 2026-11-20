@@ -22,6 +22,7 @@
 // starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/genre.h"
+#include "generative/core/genres/drum_machines.h"
 
 namespace deluge::generative::genres {
 
@@ -29,34 +30,31 @@ namespace {
 
 // ---- Synth parts ----
 
-/// The rolling bass: the pack's tight saw-and-square is the main pick, sustain 0, so the Loop's 16-tick gate ends each
-/// 16th. The factory basses all hold their sustain; the same short gate does that work for them. Not the draft's 048
-/// Thin Pulse Bass: its oscillators sit two and three octaves down (osc_octaves.py).
+/// The rolling bass: the pack's tight saw-and-square alone, sustain 0, so the Loop's 20-tick gate ends each 16th. The
+/// owner dropped the factory picks by ear (047, 050, 008, 095; #133's listening session, round 1), so this part has
+/// one entry (spec §10.1's exception). Not the draft's 048 Thin Pulse Bass: its oscillators sit two and three octaves
+/// down (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
-    {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3}, {"SYNTHS/047 Basic Dirty Bass.XML", 2},
-    {"SYNTHS/050 FM Basic Bass.XML", 2},       {"SYNTHS/008 FM Rich Distorted Bass.XML", 1},
-    {"SYNTHS/095 Harsh FM Feedback.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3},
 };
-/// The pedal tone under everything: dark and slow.
+/// The pedal tone under everything: dark and slow. Not 120 High Harsh Pad: dropped by ear (#133, round 1).
 constexpr PaletteEntry kDrone[] = {
     {"SYNTHS/126 Dark FM Pad.XML", 2},
     {"SYNTHS/149 Cold 5th Pad.XML", 2},
-    {"SYNTHS/120 High Harsh Pad.XML", 1},
 };
 /// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 098 has saturation saved.
 /// Not the draft's main pick 087 Define Leader: its oscillators sit an octave up and an octave down, none at the note
-/// (osc_octaves.py).
+/// (osc_octaves.py). Not 059 Distorted Lead Guitar: dropped by ear (#133, round 1).
 constexpr PaletteEntry kLead[] = {
     {"SYNTHS/057 FM Lead.XML", 3},
     {"SYNTHS/098 Saturated Sync.XML", 2},
     {"SYNTHS/045 Square Sync.XML", 1},
-    {"SYNTHS/059 Distorted Lead Guitar.XML", 1},
 };
 /// The Arp: arp-shaped sounds, each saved arp cleared at load (spec §10.6). Not the draft's 165 Acid Arp: its
 /// oscillators sit two and three octaves down, so it would sound under the Bass in the Arp's Register (osc_octaves.py
-/// allows it for Acid techno's ACID alone, whose Register is the Bass's).
+/// allows it for Acid techno's ACID alone, whose Register is the Bass's). Not 162 Busy Arp: dropped by ear (#133,
+/// round 1); 167 and 166 are asked about again in round 2.
 constexpr PaletteEntry kArp[] = {
-    {"SYNTHS/162 Busy Arp.XML", 2},
     {"SYNTHS/167 FM Metallic Bass Arp.XML", 2},
     {"SYNTHS/166 Harpsichord Cyborg.XML", 1},
 };
@@ -75,27 +73,36 @@ constexpr RoleSounds kRoles[] = {
 /// The lanes the Psy set holds look in its folder and in the lane's factory folder.
 constexpr const char* const kPsy = "SAMPLES/Artists/Dean Daughters/Psy";
 constexpr const char* const kKickFolders[] = {"SAMPLES/DRUMS/Kick", kPsy};
-constexpr TagWeight kKickTags[] = {{"KICK-", 3}, {"Deep Sky Kick HQ", 1}, {"XV5080 Kick", 1}};
+constexpr TagWeight kKickTags[] = {{"KICK-", 3}, {"Deep Sky Kick HQ", 1}};
 constexpr const char* const kSnareFolders[] = {"SAMPLES/DRUMS/Snare", kPsy};
 constexpr TagWeight kSnareTags[] = {{"SNARE-", 2}, {"909", 1}};
 /// The Psy set has one clap: the 909's and the pack's top it up.
 constexpr const char* const kClapFolders[] = {"SAMPLES/DRUMS/Clap", kPsy};
 constexpr TagWeight kClapTags[] = {{"CLAP-", 2}, {"909", 1}, {"GEN Clap", 1}};
-// The hats come from the Psy set alone (three of each). The Open hat first tries the tag the Closed hat rolled (spec
-// §10.3), by name, so the Psy set's CLHAT- and OPHAT- never pair that way: with the 909's in both lists, the Open hat
-// rolled its own weights against a Psy closed hat, and a 909 open hat played over a Psy closed hat in ~19% of pieces.
-constexpr const char* const kClosedHatFolders[] = {kPsy};
+// The hats' own lists hold the Psy set alone (three of each): the Open hat first tries the tag the Closed hat rolled
+// (spec §10.3), by name, so the Psy set's CLHAT- and OPHAT- never pair that way, and with the 909's in both lists a 909
+// open hat played over a Psy closed hat in ~19% of pieces. The factory hat folders are there for the 909 kit, whose
+// tag pairs the two (spec §10.2).
+constexpr const char* const kClosedHatFolders[] = {kPsy, "SAMPLES/DRUMS/HatC"};
 constexpr TagWeight kClosedHatTags[] = {{"CLHAT-", 1}};
-constexpr const char* const kOpenHatFolders[] = {kPsy};
+constexpr const char* const kOpenHatFolders[] = {kPsy, "SAMPLES/DRUMS/HatO"};
 constexpr TagWeight kOpenHatTags[] = {{"OPHAT-", 1}};
 constexpr const char* const kRideFolders[] = {"SAMPLES/DRUMS/Ride", kPsy};
 constexpr TagWeight kRideTags[] = {{"RIDE-", 2}, {"909", 1}, {"GEN Ride", 1}};
-/// The Drop's Crash: the Psy set has none.
-constexpr TagWeight kCrashTags[] = {{"909", 2}, {"XV5080", 1}, {"DDD1", 1}};
+/// The Drop's Crash: the Psy set has none. Not the XV5080 (owner, drum-kit session): the RX-5's crash keeps the lane
+/// at 3 files.
+constexpr TagWeight kCrashTags[] = {{"909", 2}, {"DDD1", 1}, {"RX-5", 1}};
 constexpr const char* const kPerc1Folders[] = {kPsy, "SAMPLES/DRUMS/Other"};
 constexpr TagWeight kPerc1Tags[] = {{"PERC-", 3}, {"Click", 1}};
 constexpr const char* const kPerc2Folders[] = {kPsy, "SAMPLES/DRUMS/Shaker"};
 constexpr TagWeight kPerc2Tags[] = {{"SHAKER-", 2}, {"Cabasa", 1}};
+
+// ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
+
+/// Each piece plays the Psy set or, less often, the 909, on every lane they have a file for. Not the XV5080 (owner).
+constexpr MachineWeight kMachines[] = {{&machines::kPsy, 3}, {&machines::k909, 1}};
+/// Psytrance's rides and crashes are classically the 909's; the Psy set has one ride and no crash.
+constexpr KitSwap kSwaps[] = {{Lane::Ride, "909 Ride"}, {Lane::Crash, "909 Crash"}};
 
 // ---- FX lanes (spec §10.5) ----
 
@@ -129,6 +136,7 @@ constexpr LaneSounds kLanes[] = {
 } // namespace
 
 /// Its Bass, Drone, Lead and Arp over the Psy set's drums and the Riser, Fall and Impact.
-const Palette psytrancePalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+const Palette psytrancePalette{
+    .parts = kParts, .roles = kRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 
 } // namespace deluge::generative::genres

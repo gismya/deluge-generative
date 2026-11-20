@@ -541,7 +541,9 @@ describe house("House", $ {
 
 		it("rolls the pack's claps and rides, only Risers of 6 s or less, the 909 crash or the descending kick as Impacts, the plain kicks, and 3 files or more on every ungated Drums lane", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			auto picks = harness::lanePicks(houseGenre, card, 400);
+			// The lanes' own lists, the kit aside (spec §10.2): with it, the pack's claps never play, as all three
+			// machines have a clap.
+			auto picks = harness::lanePicks(houseGenre, card, 400, {}, false);
 			expect(picks[Lane::Riser] == std::set<std::string>{"SAMPLES/FX/Riser/GEN Riser 2.wav", "SAMPLES/FX/Riser/GEN Riser 3.wav"})
 			    .to_be_true();
 			const auto picked = [&](Lane lane, const std::string& tag) {
