@@ -563,7 +563,8 @@ describe dub("Dub", $ {
 			for (const std::string& path : picks[Lane::Siren]) {
 				expect(path).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Siren.XML"));
 			}
-			// Every ungated Drums lane finds at least 3 files.
+			// Every ungated Drums lane's own list finds at least 3 files, the kit aside (spec §10.1, §10.2).
+			picks = harness::lanePicks(dubGenre, card, 400, {}, false);
 			for (const LaneSpec& lane : dubGenre.parts[kDrumsPart].lanes) {
 				if (lane.densityGate == 0) {
 					expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});

@@ -21,6 +21,7 @@
 // variation. Every entry is starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/genre.h"
+#include "generative/core/genres/drum_machines.h"
 
 namespace deluge::generative::genres {
 
@@ -77,6 +78,13 @@ constexpr const char* const kWoodFolders[] = {"SAMPLES/DRUMS/Block", "SAMPLES/DR
                                               "SAMPLES/DRUMS/ConH"};
 constexpr TagWeight kWoodTags[] = {{"GEN Wood", 2}, {"Woodblock", 1}, {"Conga", 1}};
 
+// ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
+
+/// Each piece plays the CR78 or, less often, the KR55, on every lane they have a file for.
+constexpr MachineWeight kMachines[] = {{&machines::kCR78, 2}, {&machines::kKR55, 1}};
+/// The pack's brush for a soft swish, not a backbeat, and its mallets and wood for non-tonal texture.
+constexpr KitSwap kSwaps[] = {{Lane::Snare, "GEN Brush 2"}, {Lane::Perc1, "GEN Mallet 1"}, {Lane::Perc2, "GEN Wood 1"}};
+
 // ---- FX lanes (spec §10.5) ----
 
 // Riser: only pack risers, from its default folder SAMPLES/FX/Riser; every one fits the 16-bar Build at 90 BPM.
@@ -99,6 +107,7 @@ constexpr LaneSounds kLanes[] = {
 } // namespace
 
 /// Its Bass, Pad, Drone and bells over soft drum lanes and the Riser and Fall.
-const Palette ambientPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+const Palette ambientPalette{
+    .parts = kParts, .roles = kRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 
 } // namespace deluge::generative::genres

@@ -461,8 +461,8 @@ PRESETS = {
     # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
     # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its
     # first tries (decay 2, filter 14, one saw at the preset volume 36) measured about 23 dB under the mix in delugemu
-    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 16-tick gate at
-    # 138-146 BPM (about 70 ms), so the gate's short release ends each note; the sub square and the full preset volume
+    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 20-tick gate at
+    # 138-146 BPM (about 88 ms), so the gate's short release ends each note; the sub square and the full preset volume
     # carry the level. Velocity moves its volume. No reverb.
     "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
         "saw",

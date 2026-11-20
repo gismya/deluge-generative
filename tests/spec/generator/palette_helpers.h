@@ -51,13 +51,19 @@ inline std::string mainPick(const Genre& genre, int32_t part) {
 }
 
 /// Every distinct file each lane picks over `rolls` fresh rolls of `genre`'s sounds from `card`, entropy 0 on.
-/// `each` sees every roll's picks.
+/// `each` sees every roll's picks. With `kits` false, each lane rolls from its own list alone, without the genre's
+/// drum kit (spec §10.2): the files its fallback chain has, which §10.1's minimum length counts.
 inline std::map<Lane, std::set<std::string>> lanePicks(const Genre& genre, FakeCard& card, uint32_t rolls,
-                                                       const std::function<void(const SoundPicks&)>& each = {}) {
+                                                       const std::function<void(const SoundPicks&)>& each = {},
+                                                       bool kits = true) {
 	std::map<Lane, std::set<std::string>> picks;
+	Palette palette = *genre.palette;
+	if (!kits) {
+		palette.kits = {};
+	}
 	for (uint32_t entropy = 0; entropy < rolls; entropy++) {
 		SoundPicks sounds;
-		rollSounds(genre, *genre.palette, sounds, entropy, card);
+		rollSounds(genre, palette, sounds, entropy, card);
 		if (each) {
 			each(sounds);
 		}

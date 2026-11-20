@@ -119,10 +119,41 @@ describe psytrance("Psytrance", $ {
 		expect(arc.roll.lane == Lane::Snare).to_be_true();
 		expect(arc.roll.top == RollStage::ThirtySecond).to_be_true();
 		expect(arc.dropLiftEnergy).to_equal(macroPoints(8));
-		expect(arc.dropDecayPhrases).to_equal(1);
+		expect(arc.dropDecayPhrases).to_equal(2);
 		expect(arc.accentLane == Lane::Crash).to_be_true();
 		expect(arc.accentChance).to_equal(0);
 		expect(arc.transitionEntry == TransitionEntry::Drop).to_be_true();
+	});
+
+	it("stops its 2-phrase Drop decay at the next Section when a Groove after a Drop lasts one phrase (Motion 50)", _ {
+		// Psytrance's decay runs past its shortest Groove at Motion 50 (spec §9.3's named exception, #349): the lift
+		// is still up when that Groove ends, and the Break's offsets take over on its first step.
+		Macros centre;
+		centre.set(Macro::Motion, kMacroFull);
+		int32_t cut = 0;
+		for (uint32_t seed = 1; seed <= 40 && cut == 0; seed++) {
+			Arc arc;
+			arc.start(psyGenre);
+			int32_t lastDensity = 0;
+			int32_t dropStart = -1;
+			for (int32_t step = 0; step < 400 * kStepsPerBar; step++) {
+				if (arc.enterStep(psyGenre, seed, step, centre)) {
+					if (dropStart >= 0 && step - dropStart == kPhraseSteps) {
+						// Half the 2-phrase decay (+8) is left when the 1-phrase Groove ends: a 1-phrase decay would
+						// be under 1 point there.
+						expect(lastDensity >= macroPoints(3)).to_be_true();
+						// The Break takes over on its first step: its own Density dip (-5) exactly, no lift left.
+						expect(arc.section() == SectionKind::Break).to_be_true();
+						expect(arc.offset(psyGenre, Macro::Density, centre[Macro::Density])).to_equal(macroPoints(-5));
+						cut++;
+						break;
+					}
+					dropStart = arc.dropStartsHere() ? step : -1;
+				}
+				lastDensity = arc.offset(psyGenre, Macro::Density, centre[Macro::Density]);
+			}
+		}
+		expect(cut).to_be_greater_than(0);
 	});
 
 	it("fills with a Rest on Kick and Bass (1–4 beats, weight 3, the held fill) and a Roll on Snare (1–2 beats, weight 2)", _ {
@@ -163,7 +194,34 @@ describe psytrance("Psytrance", $ {
 			expect(kick.fillPool.empty()).to_be_true();
 		});
 
-		it("gives the Bass Avoid Kick at strength 100, sensitivity 0, onsets on every 16th, the & anchored, Lean 0, no slides", _ {
+		it("plays the open hat every other bar, the hit in the second (#350)", _ {
+			const LaneSpec& openHat = laneOf(Lane::OpenHat);
+			for (const Pattern& pattern : openHat.pool) {
+				expect(pattern.length).to_equal(2 * kStepsPerBar);
+				for (int32_t i = 0; i < kStepsPerBar; i++) {
+					expect(pattern.importance[i]).to_equal(0);
+				}
+			}
+			int32_t bars = 0;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 96 * kStepsPerBar);
+				std::set<int32_t> hatBars;
+				for (const Event& e : walked.noteOns) {
+					if (e.part == kDrumsPart && e.lane == Lane::OpenHat) {
+						hatBars.insert(stepAt(e) / kStepsPerBar);
+					}
+				}
+				for (int32_t bar : hatBars) {
+					expect(bar % 2).to_equal(1);
+				}
+				bars += static_cast<int32_t>(hatBars.size());
+			}
+			expect(bars).to_be_greater_than(100);
+		});
+
+		it("gives the Bass Avoid Kick at strength 100, sensitivity 0, onsets on every 16th at even levels, the & anchored, a "
+		   "20-tick gate, Lean 0, no slides",
+		   _ {
 			const PartSpec& bass = psyGenre.parts[kBassPart];
 			expect(bass.rules.size()).to_equal(size_t{1});
 			for (const InterplayRule& rule : bass.rules) {
@@ -177,8 +235,12 @@ describe psytrance("Psytrance", $ {
 				for (int32_t i = 0; i < pattern.length; i++) {
 					expect(pattern.importance[i]).to_be_greater_than(0);
 					expect(pattern.importance[i] == kAnchor).to_equal(i % kStepsPerBeat == 2);
+					// An even roll (#353): no ghost levels.
+					expect(pattern.level[i] == VelocityLevel::Ghost).to_be_false();
 				}
 			}
+			// Each 16th held 20 ticks (#133's listening session, round 1).
+			expect(bass.loop.gateTicks).to_equal(20);
 			for (int8_t lean : bass.expression.lean) {
 				expect(lean).to_equal(0);
 			}
@@ -190,6 +252,7 @@ describe psytrance("Psytrance", $ {
 
 		it("never starts or sounds a Bass note on a kick step, over many pieces at every macro corner", _ {
 			int32_t bassNotes = 0;
+			int32_t fullGates = 0;
 			int32_t offBeats[kStepsPerBeat] = {};
 			auto check = [&](const Recipe& recipe, uint32_t entropy) {
 				const Walked walked = walk(recipe, entropy, 96 * kStepsPerBar);
@@ -206,6 +269,8 @@ describe psytrance("Psytrance", $ {
 					    (note.on / (kStepsPerBeat * kTicksPerStep) + 1) * kStepsPerBeat * kTicksPerStep;
 					if (note.off != INT32_MAX) {
 						expect(note.off).to_be_less_than(nextBeat + 1);
+						expect(note.off - note.on).to_be_less_than(21);
+						fullGates += note.off - note.on == 20 ? 1 : 0;
 					}
 				}
 			};
@@ -226,6 +291,7 @@ describe psytrance("Psytrance", $ {
 				check(recipe, entropy);
 			}
 			expect(bassNotes).to_be_greater_than(1000);
+			expect(fullGates).to_be_greater_than(1000);
 			// It rolls on the e, the & and the a.
 			expect(offBeats[0]).to_equal(0);
 			for (int32_t i = 1; i < kStepsPerBeat; i++) {
@@ -289,6 +355,7 @@ describe psytrance("Psytrance", $ {
 			expect(arp.densityGate).to_equal(0);
 			expect(arp.drift.sweepBars).to_equal(16);
 			int32_t onDrops = 0;
+			int32_t dropPhrases = 0;
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
@@ -303,6 +370,7 @@ describe psytrance("Psytrance", $ {
 				for (const Walked::Step& step : walked.steps) {
 					builds += step.section == SectionKind::Build ? 1 : 0;
 				}
+				std::set<int32_t> leadBars;
 				for (const Event& e : walked.noteOns) {
 					if (e.part != kLeadPart) {
 						continue;
@@ -313,13 +381,25 @@ describe psytrance("Psytrance", $ {
 					expect(walked.steps[step].section == SectionKind::Intro).to_be_false();
 					expect(walked.steps[step].section == SectionKind::Build).to_be_false();
 					onDrops += dropPhrase[step] ? 1 : 0;
+					leadBars.insert(step / kStepsPerBar);
+				}
+				// The Lead plays every bar of each Drop's first phrase (#349: its lift decays over two phrases).
+				for (int32_t end : buildEnds(walked)) {
+					if (end + 1 + kPhraseSteps > steps) {
+						continue;
+					}
+					dropPhrases++;
+					for (int32_t bar = (end + 1) / kStepsPerBar; bar < (end + 1 + kPhraseSteps) / kStepsPerBar; bar++) {
+						expect(leadBars.count(bar)).to_equal(size_t{1});
+					}
 				}
 			}
 			expect(builds).to_be_greater_than(0);
 			expect(onDrops).to_be_greater_than(0);
+			expect(dropPhrases).to_be_greater_than(0);
 		});
 
-		it("walks the Arp Up or Up-down over 1–2 octaves on 16ths", _ {
+		it("walks the Arp Up or Up-down over 1–2 octaves on 16ths, an onset on every 16th in every entry", _ {
 			const PartSpec& arp = psyGenre.parts[kArpPart];
 			expect(arp.arp.walks.size()).to_equal(arp.pool.size());
 			for (const ArpWalk& walk : arp.arp.walks) {
@@ -328,6 +408,10 @@ describe psytrance("Psytrance", $ {
 			}
 			for (const Pattern& pattern : arp.pool) {
 				expect(pattern.length).to_equal(kStepsPerBar);
+				// Straight 16ths, no gallop skipping the & (#354).
+				for (int32_t i = 0; i < pattern.length; i++) {
+					expect(pattern.importance[i]).to_be_greater_than(0);
+				}
 			}
 		});
 	});
@@ -413,23 +497,32 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
-		it("gives every synth part at least 3 presets, each on the factory card or in the pack, GEN Psy Bass the Bass's main pick", _ {
-			FakeCard card = harness::factoryCardWithPack();
-			expect(harness::fewestPartPresets(psyGenre)).to_be_greater_than(size_t{2});
-			expect(harness::partPresetsMissing(psyGenre, card).empty()).to_be_true();
-			expect(harness::mainPick(psyGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML x3"));
-		});
+		it("gives the Bass GEN Psy Bass alone, the Drone and the Arp 2 presets and the Lead 3, each on the factory card or "
+		   "in the pack (the rest dropped by ear in #133)",
+		   _ {
+			   FakeCard card = harness::factoryCardWithPack();
+			   auto presets = [](int32_t part) { return psyGenre.palette->partEntries(psyGenre.parts[part]).size(); };
+			   expect(presets(kBassPart)).to_equal(size_t{1});
+			   expect(presets(kDronePart)).to_equal(size_t{2});
+			   expect(presets(kLeadPart)).to_equal(size_t{3});
+			   expect(presets(kArpPart)).to_equal(size_t{2});
+			   expect(harness::partPresetsMissing(psyGenre, card).empty()).to_be_true();
+			   expect(harness::mainPick(psyGenre, kBassPart))
+			       .to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML x3"));
+		   });
 
 		it("finds at least 3 files for every ungated lane, the Psy set's among them, and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			constexpr const char* kPsyFolder = "SAMPLES/Artists/Dean Daughters/Psy/";
-			auto picks = harness::lanePicks(psyGenre, card, 800, [&](const SoundPicks& sounds) {
-				// The hats are always one set: the Psy set's pair.
-				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str()).rfind(kPsyFolder, 0))
-				    .to_equal(size_t{0});
-				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str()).rfind(kPsyFolder, 0))
-				    .to_equal(size_t{0});
+			auto withKits = harness::lanePicks(psyGenre, card, 800, [&](const SoundPicks& sounds) {
+				// The hats are always one set: the Psy set's pair, or the 909's under the 909 kit.
+				const std::string closed = sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str();
+				const std::string open = sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str();
+				expect(closed.rfind(kPsyFolder, 0) == 0).to_equal(open.rfind(kPsyFolder, 0) == 0);
+				expect(closed.rfind(kPsyFolder, 0) == 0 || closed == "SAMPLES/DRUMS/HatC/909 Closed hihat.wav").to_be_true();
 			});
+			// The lanes' own lists, the kit aside (spec §10.1, §10.2).
+			auto picks = harness::lanePicks(psyGenre, card, 800, {}, false);
 			for (const PartSpec& part : psyGenre.parts) {
 				for (const LaneSpec& lane : part.lanes) {
 					if (lane.densityGate == 0 && lane.lane != Lane::Riser && lane.lane != Lane::Fall
@@ -441,7 +534,7 @@ describe psytrance("Psytrance", $ {
 			}
 			for (Lane lane : {Lane::Kick, Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
 				bool psy = false;
-				for (const std::string& path : picks[lane]) {
+				for (const std::string& path : withKits[lane]) {
 					psy = psy || path.rfind(kPsyFolder, 0) == 0;
 				}
 				expect(psy).to_be_true();
