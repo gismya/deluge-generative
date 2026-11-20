@@ -27,6 +27,7 @@
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
@@ -77,7 +78,8 @@ enum class Kind : uint8_t {
 	Wait,
 	SetHold,
 	LoadSong,
-	SaveSong, ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
+	SaveSong,    ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
+	CheckRecipe, ///< As SaveSong: its name waits in songPath
 	ReportInput,
 	ReportBootDma,
 	ResetRecipe,
@@ -86,9 +88,9 @@ enum class Kind : uint8_t {
 	ComposeScreen
 };
 
-/// A "load song" or "save song" line: its path waits in songPath, one at a time.
+/// A "load song", "save song" or "check recipe" line: its path or name waits in songPath, one at a time.
 constexpr bool songFile(Kind kind) {
-	return kind == Kind::LoadSong || kind == Kind::SaveSong;
+	return kind == Kind::LoadSong || kind == Kind::SaveSong || kind == Kind::CheckRecipe;
 }
 
 struct Entry {
@@ -438,14 +440,17 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///                               error, when this firmware started (left by the firmware that chainloaded it, see
 ///                               dmaRecordBootStates() and reportBootDma())
 ///   save song <name>            saves the current song as SONGS/<name>.XML (the rest of the line), see saveSong()
-/// For a "load song" line, *path points at its path inside `line`; for "save song", at the name.
+///   check recipe <name>|*       reads RECIPES/<name>.XML back against the Current Recipe, see checkRecipe()
+/// For a "load song" line, *path points at its path inside `line`; for "save song" and "check recipe", at the name.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
 	constexpr char kSaveSong[] = "save song ";
+	constexpr char kCheckRecipe[] = "check recipe ";
 	static_assert(sizeof(kLoadSong) == sizeof(kSaveSong));
 	const bool save = strncmp(line, kSaveSong, sizeof(kSaveSong) - 1) == 0;
-	if (save || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
-		char* start = line + sizeof(kLoadSong) - 1;
+	const bool check = strncmp(line, kCheckRecipe, sizeof(kCheckRecipe) - 1) == 0;
+	if (save || check || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
+		char* start = line + (check ? sizeof(kCheckRecipe) : sizeof(kLoadSong)) - 1;
 		while (isSeparator(*start)) {
 			start++;
 		}
@@ -457,7 +462,7 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return false;
 		}
 		*path = start;
-		*entry = {save ? Kind::SaveSong : Kind::LoadSong, 0, 0};
+		*entry = {save ? Kind::SaveSong : check ? Kind::CheckRecipe : Kind::LoadSong, 0, 0};
 		return true;
 	}
 
@@ -891,6 +896,38 @@ void saveSong(const char* name) {
 	}
 }
 
+/// "check recipe <name>": reads RECIPES/<name>.XML as a Recipe LOAD would (spec §16.1) and compares it with the Current
+/// Recipe: gen_recipe_check name=... read=ok|other_version|unknown_genre|unreadable error=<card error> match=1|0
+/// recipe=1|0 seed=1|0 takes=1|0 sounds=1|0, each 1 when the file's equals the Current Recipe's. A saved Recipe
+/// reloads to the same Recipe, seed and takes (#138's Done-when). The name `*` is the one the Current Recipe remembers.
+void checkRecipe(const char* name) {
+	using namespace deluge::generative;
+	if (strcmp(name, "*") == 0) {
+		name = firmware::currentRecipe.name.text;
+	}
+	static PLACE_SDRAM_BSS RecipeFile file; // a set of sound picks: not on the stack
+	char path[perform::kMaxRecipeNameChars + 16];
+	snprintf(path, sizeof(path), "%s/%s.XML", firmware::kRecipeFolder, name);
+	Error error = Error::NONE;
+	const RecipeFileRead read = firmware::readRecipeFile(path, file, error);
+	constexpr const char* kReads[] = {"ok", "other_version", "unknown_genre", "unreadable"};
+	const firmware::CurrentRecipe& current = firmware::currentRecipe;
+	const bool loaded = read == RecipeFileRead::Ok || read == RecipeFileRead::OtherVersion;
+	const bool recipe = loaded && file.recipe == current.recipe;
+	const bool seed = loaded && file.seed == current.seed;
+	const bool takes = loaded && file.takes == current.takes;
+	bool sounds = loaded;
+	for (int32_t p = 0; sounds && p < kMaxParts; p++) {
+		sounds = strcmp(file.sounds.part[p].c_str(), current.sounds.part[p].c_str()) == 0;
+	}
+	for (int32_t l = 0; sounds && l < kNumLanes; l++) {
+		sounds = strcmp(file.sounds.lane[l].c_str(), current.sounds.lane[l].c_str()) == 0;
+	}
+	event("gen_recipe_check name=%s read=%s error=%d match=%d recipe=%d seed=%d takes=%d sounds=%d", name,
+	      kReads[static_cast<int32_t>(read)], static_cast<int>(error), recipe && seed && takes && sounds ? 1 : 0,
+	      recipe ? 1 : 0, seed ? 1 : 0, takes ? 1 : 0, sounds ? 1 : 0);
+}
+
 /// "compose <seconds> [<genre>]": a Compose build as BUILD starts it (spec §14.5), without the screen and DISCARD
 /// SONG?, and of any length or a fresh genre roll, for scripts that test the build itself: beginCompose() opens the
 /// COMPOSING screen over the view and starts the job; gen_compose refused why=perform|busy|recipe says why not (Perform
@@ -1004,6 +1041,11 @@ std::optional<HidEvent> takeHidEvent() {
 			saveSong(songPath);
 			songLoadQueued = false;
 			return std::nullopt; // as a load: let the main loop catch up after it
+
+		case Kind::CheckRecipe:
+			checkRecipe(songPath);
+			songLoadQueued = false;
+			return std::nullopt;
 
 		case Kind::Encoder:
 		case Kind::FastGold:

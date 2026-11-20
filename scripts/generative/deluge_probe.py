@@ -943,6 +943,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    blocks the test port while it loads
       save song NAME                               queued too: saves the current song as SONGS/NAME.XML through the
                                                    stock save UI, overwriting (event song_saved, or song_save_failed)
+      check recipe NAME|*                          queued too: reads RECIPES/NAME.XML (*: the Current Recipe's
+                                                   remembered name) against the Current Recipe (event
+                                                   gen_recipe_check ... match=1 when they're the same)
       compose screen                               queued too: opens the Compose screen over the current UI (event
                                                    gen_compose_screen opened, or refused)
       compose SECONDS [GENRE]                      queued too: a Compose build of that LENGTH under the COMPOSING
@@ -1148,6 +1151,7 @@ def _run_lines(
             "pick",
             "save",
             "compose",
+            "check",
         ):
             port.inject(line)
         elif word == "start_state":

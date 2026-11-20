@@ -36,6 +36,10 @@ extern Submenu& composeScreen;
 /// Opens the Compose screen over the current UI. False, with nothing opened, while Perform is the root UI.
 bool openComposeScreen();
 
+/// Whether the sound editor shows the Compose screen or a menu under it: SAVE there saves the Current Recipe (spec
+/// §14.4, §16.4).
+bool composeScreenShowing();
+
 /// DISCARD SONG?'s OK after BUILD (spec §14.5): starts the Compose build of the Current Recipe under COMPOSING.
 void buildComposeRecipe();
 

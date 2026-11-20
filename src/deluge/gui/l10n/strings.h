@@ -185,6 +185,8 @@ enum class String : size_t {
 	STRING_FOR_BUILD,
 	STRING_FOR_SOUNDS,
 	STRING_FOR_NEW_SEED,
+	STRING_FOR_SAVE_RECIPE,
+	STRING_FOR_NO_FREE_NAME,
 
 	// gui/context_menu/audio_input_selector.cpp
 	STRING_FOR_LEFT_INPUT,

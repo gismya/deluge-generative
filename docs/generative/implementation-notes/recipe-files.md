@@ -1,0 +1,32 @@
+# Implementation notes: Recipe files
+
+Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
+otherwise.
+
+- The format is portable: `generative/core/recipe_file.*` writes through `RecipeFileWriter` (the firmware's forwards
+  to the stock `XMLSerializer`, `firmware/recipe_files.cpp`; the harness's, `XmlText` in `recipe_file_spec.cpp`, lays
+  the text out as the serializer does) and parses text with the shared tag reader `generative/core/xml_tags.h`, which
+  palette override files use too. A new field is an attribute the parser reads with a default, so older files load.
+- The stock `XMLSerializer::writeAttribute()` writes a value as it is, with no escaping: the core entity-encodes card
+  paths before handing them over, and decodes them on read. Stock song files don't do this; Recipe files are only
+  read by the core's parser, so that's fine.
+- Names are portable too: `generative/perform/recipe_name.*` (beside `seedCode()`, which the default name uses). The
+  Current Recipe remembers a `RecipeName`: its text and the stem length the letters go after, so a seed code ending in
+  a letter is never mistaken for a variation. The firmware lists `RECIPES/` with `CardFolders` into a `NameFamily`.
+  Stock's `nextDefaultName()` gives letters only to `SONG<digits>` names (others get ` 2`), so it isn't used.
+- `CurrentRecipe::replaced()` clears the name: every genre pick, Regenerate (Compose's or Perform's, at its start step
+  in the tick) and `reset recipe`. A Recipe file's load (#139) calls `replaced()` and then sets the file's name.
+- A save copies the Current Recipe into `snapshot` (SDRAM) before its first card access: the tick runs in every card
+  wait, so a transition's start step or a steering press could otherwise land between the attributes. It adopts the
+  saved name only if `CurrentRecipe::generation` hasn't moved meanwhile.
+- SAVE writes from the button handler, as stock's saves do, not as a runner job. It is refused while
+  `runner.busy()`, inside a card routine or while `currentlyAccessingCard` (`recipeSaveAllowed()`). The full save UI
+  checks again at its SAVE: a queued transition's preload may have started while it was open.
+- The save UI (`gui/ui/save/save_recipe_ui.*`) is opened over Perform or the sound editor. Over Perform it runs
+  `performView.graphicsRoutine()` and hands the sidebar and SYNC-SCALING to Perform, as the preset browser does; without
+  that, swaps and transitions stall while it's open. It creates `RECIPES/` as it opens: the browser fails on a missing
+  folder. It nominates a name no file has (`enteredText` set before `arrivedInNewFolder()`), which the browser keeps;
+  a nominated name that exists would get stock's numeric variation instead.
+- `firmware/card_text.*` reads a small card file whole (`readCardText()`): palette overrides and Recipe files share it.
+- Test port: `check recipe <name>|*` reads a file back and compares it with the Current Recipe (`gen_recipe_check`);
+  `*` is the remembered name. Scripts: `perform_recipe_save.txt`, `compose_recipe_save.txt`.

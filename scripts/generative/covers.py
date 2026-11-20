@@ -148,6 +148,11 @@ BUILDERS = {
     "gen_perform_entered": _GENRE,
     "gen_press": _SECTIONS,  # "gen_press force GROOVE"
     "gen_recipe_roll": (),  # the roll's and the outcome's names
+    "gen_recipe_save": (
+        *_GENRE,
+        "src/deluge/generative/perform/clip_page.*",
+        "src/deluge/generative/perform/recipe_name.*",
+    ),  # quick|full, and name=<oledName> <seedCode()>[letter]
     "gen_retire_referenced": (),
     "gen_rings": (),
     "gen_row_level": _GENRE,  # part and lane names

@@ -20,6 +20,8 @@ that, split it by topic and list the parts here.
 - [Firmware adapter and the private song](implementation-notes/firmware.md): `generative/firmware/`, Outputs,
   clips, sounds and their settings.
 - [Perform UI](implementation-notes/perform-ui.md): `gui/views/perform_view.*`, pads, pages, menus.
+- [Recipe files](implementation-notes/recipe-files.md): `generative/core/recipe_file.*`, `perform/recipe_name.*`,
+  `firmware/recipe_files.*`, the save UI, SAVE in Perform and on the Compose screen.
 - [Extension points left open](implementation-notes/extension-points.md): seams later tickets extend.
 - [Build and the harness](implementation-notes/build-and-harness.md): the firmware build, CI's GCC, harness specs,
   goldens.

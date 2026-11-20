@@ -217,6 +217,13 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		holdFill(deluge::generative::perform::FillHolds::kButton, on);
 		return ActionResult::DEALT_WITH;
 	}
+	if (b == SAVE) {
+		// Quick save while playing, else the full save UI; SHIFT+SAVE always the full one (spec §16.4).
+		if (on) {
+			recipeSavePress(Buttons::isShiftButtonPressed(), inCardRoutine);
+		}
+		return ActionResult::DEALT_WITH;
+	}
 	if (b == TAP_TEMPO) {
 		// Stock's TAP handling (SHIFT+TAP = metronome, MIDI learn); the tap itself sets the Recipe tempo (F4).
 		return view.buttonAction(b, on, inCardRoutine);

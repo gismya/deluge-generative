@@ -14,6 +14,8 @@ A **Recipe file** holds the Current Recipe and nothing more:
 
 Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide setting stay out. A Recipe file holds no steering, so it doesn't replay a piece. A Capture song does that.
 
+No drum-kit tag is stored: a Kit part's lane picks are card paths, so they already hold the machine the piece plays ([§10.2](10-sounds.md#102-drums-assembled-per-lane)).
+
 ### 16.2 Genre versions
 
 - On a version mismatch the file still loads and the OLED shows a short notice (`OLDER ACID TECHNO`). Saving again writes the current version. Old genre tables are not kept.
@@ -23,19 +25,23 @@ Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide 
 
 ### 16.3 Format, folder and names
 
-- XML through the stock serializer, in a top-level `RECIPES/` folder, created on first save. A folder of its own keeps Recipe files out of the song browser.
-- A never-saved Recipe gets the default name `<GENRE> <seed code>` (`ACID TECHNO 1A2B3C4`). If that name is taken, the stock letter variation applies.
-- Every save suggests the next letter variation of the remembered name (`SONG001` → `SONG001A`, stock). Overwriting needs an explicit pick and a confirm, like a stock song save.
-- After any save, the Current Recipe takes the saved name.
+- XML through the stock serializer, in a top-level `RECIPES/` folder, created on first save (or when the full save UI first opens, since its browser lists the folder). A folder of its own keeps Recipe files out of the song browser.
+- The root tag `generativeRecipe` carries `genre` (the stable name), `genreVersion`, `tempo` (hundredths of a BPM), `swing`, `swingInterval`, `key` (pitch class, 0 = C), `scale` (a stable name: `minor`, `hungarianMinor`) and `seed`. Its children are `macros` (the four in full-resolution units, 64 a point), a `part` per part (its `name` from the genre table, its `take`, and `sound` when it has a pick) and a `lane` per lane with a pick (`name` as palette override files name lanes, and `sound`). Card paths are entity-encoded.
+- Reading: a value the file leaves out takes the genre's default (macros, swing) or the Recipe's; one out of range is clamped; parts, lanes, elements and attributes the firmware doesn't know are skipped, so a newer file still loads. A file that isn't a Recipe file, is cut short, or holds a value that isn't one (a number that isn't a number, an unknown scale) is unreadable.
+- A never-saved Recipe gets the default name `<GENRE> <seed code>` (`ACID TECHNO 1A2B3C4`). If that name is taken, the stock letter variation applies: the first free one, `ACID TECHNO 1A2B3C4A`. The letters always go after the seed code, even one that ends in a letter.
+- Every save suggests the next letter variation of the remembered name (`SONG001` → `SONG001A`, stock): the first free letter after the one it has, never the name itself. Overwriting needs an explicit pick and a confirm, like a stock song save.
+- After any save, the Current Recipe takes the saved name. Saved as suggested, its letters go on from the same stem (`…A` → `…B`); a name the player typed is a stem of its own (`NIGHT DRIVE` → `NIGHT DRIVEA`). A typed name longer than 96 characters is saved but not remembered.
 
 ### 16.4 SAVE
 
 - **In Perform while playing**, SAVE is a **quick save**: it saves at once under the suggested name, a popup shows the name, and the grid stays put. A quick save never overwrites. If no letter variation is free, it refuses with `NO FREE NAME`.
-- **In Perform while stopped**, and **on the Compose screen**, SAVE opens the full save UI: QWERTY on the pads, then the browser on `RECIPES/`.
+- **In Perform while stopped**, and **on the Compose screen** (or a menu under it), SAVE opens the full save UI: QWERTY on the pads, then the browser on `RECIPES/`, on the suggested name. SAVE there saves, a popup shows the name, and the UI closes; BACK in `RECIPES/` leaves with nothing saved. Over Perform, Perform plays on underneath and the sidebar stays its own, as under the preset browser. Stock's long-press options (collect media, create folder) aren't offered. If no letter variation is free, the UI offers the remembered name, and saving under it asks to overwrite.
 - SHIFT+SAVE in Perform always opens the full save UI.
 - During a transition, SAVE writes the playing Recipe, not the incoming one, until the new roster starts ([§12.9](12-runtime.md#129-instances-and-the-transition)).
 - Recipe files are written only by SAVE. Capture saves songs only.
-- **A failed save** (card full, a write error, the card pulled) shows the stock error popup and changes nothing else. The Current Recipe is still in RAM. A quick save in Perform keeps the music playing. There's no retry prompt.
+- While the runner is busy, or a card access is under way, SAVE is refused with BUSY ([§12.10](12-runtime.md#1210-long-running-work-and-input)), in the full save UI too.
+- A save writes the Current Recipe as it was at the press: a handover or a steering press during the card write doesn't reach the file, and if the Recipe was replaced meanwhile, the new one doesn't take the saved name.
+- **A failed save** (card full, a write error, the card pulled) shows the stock error popup and changes nothing else; a file it had just created is removed again. The Current Recipe is still in RAM. A quick save in Perform keeps the music playing. There's no retry prompt.
 
 ### 16.5 LOAD
 
