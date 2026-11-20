@@ -52,6 +52,80 @@ Run shiftedRun(const Genre& genre, int32_t part, int32_t shift) {
 	return run;
 }
 
+/// The re-voice case (spec §7.3): `part` of `genre` steered `shift` octaves a few steps before bar 4's line. No note
+/// of it rings over the line in the old Register, the voicing sounding from the line is the plain run's moved by the
+/// shift, struck there, and each note-on after the line is the plain run's moved by it. Each mismatch goes to
+/// `problems`.
+/// @return the note-ons the part played after the line, so a caller knows the case ran.
+size_t revoiceCase(const Genre& genre, int32_t p, int32_t shift, std::vector<std::string>& problems) {
+	const auto runFrom = [&genre] {
+		Run run = shiftedRun(genre, 0, 0);
+		run.skipIntro = true;
+		return run;
+	};
+	Run run = runFrom();
+	const int32_t landStep = 4 * kStepsPerBar; // the bar line after the press
+	run.steer = steerAt({{landStep - 5, octaveTo(static_cast<uint8_t>(p), shift)}});
+	const Result result = play(run, 8);
+	const Result plain = play(runFrom(), 8);
+	const int32_t line = landStep * kTicksPerStep;
+	const std::string where =
+	    std::string{genre.name} + " part " + std::to_string(p) + " shift " + std::to_string(shift) + ": ";
+	for (const Held& note : heldNotes(result.events, p)) {
+		if (note.on < line && note.off > line) {
+			problems.push_back(where + "a note rings over the line");
+		}
+	}
+	const auto soundingAt = [&](const std::vector<Event>& events, int32_t semitones) {
+		std::vector<int32_t> pitches;
+		for (const Held& note : heldNotes(events, p)) {
+			if (note.on <= line && note.off > line) {
+				pitches.push_back(note.pitch + semitones);
+			}
+		}
+		std::sort(pitches.begin(), pitches.end());
+		return pitches;
+	};
+	if (soundingAt(result.events, 0) != soundingAt(plain.events, 12 * shift)) {
+		problems.push_back(where + "the voicing on the line isn't the plain one moved");
+	}
+	const auto onsAfter = [&](const std::vector<Event>& events, int32_t semitones) {
+		std::vector<Event> ons;
+		for (const Event& event : only(events, EventKind::NoteOn)) {
+			if (event.part == p && event.tick > line) {
+				Event moved = event;
+				moved.pitch = static_cast<uint8_t>(moved.pitch + semitones);
+				ons.push_back(moved);
+			}
+		}
+		return ons;
+	};
+	const std::vector<Event> ons = onsAfter(result.events, 0);
+	const std::string difference = firstDifference(ons, onsAfter(plain.events, 12 * shift));
+	if (!difference.empty()) {
+		problems.push_back(where + difference);
+	}
+	return ons.size();
+}
+
+/// Runs revoiceCase() up and down an octave on every part of every genre that plays `flavour`. Up alone doesn't show
+/// a voicing left behind in a Stab, whose voicings sit low in its window: voice-led from below, the moved window
+/// takes the same notes. Down does. @return how many of the cases played after the line.
+int32_t revoiceEvery(Flavour flavour, std::vector<std::string>& problems) {
+	int32_t played = 0;
+	for (const Genre* genre : allGenres()) {
+		for (int32_t p = 0; p < partCount(*genre); p++) {
+			if (genre->parts[p].flavour != flavour) {
+				continue;
+			}
+			for (int32_t shift : {1, -1}) {
+				played += revoiceCase(*genre, p, shift, problems) > 0 ? 1 : 0;
+			}
+		}
+	}
+	return played;
+}
+
 } // namespace
 
 // clang-format off
@@ -155,62 +229,16 @@ describe octave("Octave shift", $ {
 		expect(heldNotes(landed.events, kAcid).size()).to_equal(heldNotes(plain.events, kAcid).size());
 	});
 
-	it("re-voices a held Pad at the bar line the shift lands on", _ {
-		for (const Genre* genre : allGenres()) {
-			for (int32_t p = 0; p < partCount(*genre); p++) {
-				if (genre->parts[p].role != Role::Pad) {
-					continue;
-				}
-				Run run = shiftedRun(*genre, 0, 0);
-				run.skipIntro = true;
-				const int32_t landStep = 4 * kStepsPerBar; // the bar line after the press
-				run.steer = steerAt({{landStep - 5, octaveTo(static_cast<uint8_t>(p), 1)}});
-				const Result result = play(run, 8);
-				const Run plainRun = [&] {
-					Run r = shiftedRun(*genre, 0, 0);
-					r.skipIntro = true;
-					return r;
-				}();
-				const Result plain = play(plainRun, 8);
-				const int32_t line = landStep * kTicksPerStep;
-				// No note of the part rings over the line in the old Register: the voicing sounding from the line is
-				// the plain run's an octave up, struck there, and each note-on after the line is the plain run's an
-				// octave up.
-				int32_t ringingOver = 0;
-				for (const Held& note : heldNotes(result.events, p)) {
-					if (note.on < line && note.off > line) {
-						ringingOver++;
-					}
-				}
-				expect(ringingOver).to_equal(0);
-				const auto soundingAt = [&](const std::vector<Event>& events, int32_t semitones) {
-					std::vector<int32_t> pitches;
-					for (const Held& note : heldNotes(events, p)) {
-						if (note.on <= line && note.off > line) {
-							pitches.push_back(note.pitch + semitones);
-						}
-					}
-					std::sort(pitches.begin(), pitches.end());
-					return pitches;
-				};
-				expect(soundingAt(result.events, 0) == soundingAt(plain.events, 12)).to_be_true();
-				std::vector<Event> movedOns;
-				for (const Event& event : only(plain.events, EventKind::NoteOn)) {
-					if (event.part == p && event.tick > line) {
-						Event moved = event;
-						moved.pitch = static_cast<uint8_t>(moved.pitch + 12);
-						movedOns.push_back(moved);
-					}
-				}
-				std::vector<Event> ons;
-				for (const Event& event : only(result.events, EventKind::NoteOn)) {
-					if (event.part == p && event.tick > line) {
-						ons.push_back(event);
-					}
-				}
-				expect(firstDifference(ons, movedOns)).to_equal(std::string{});
-			}
-		}
+	it("re-voices a held Sustain part (a Pad, a Drone) at the bar line the shift lands on", _ {
+		std::vector<std::string> problems;
+		expect(revoiceEvery(Flavour::Sustain, problems) > 0).to_be_true();
+		expect(problems.empty() ? std::string{} : problems.front()).to_equal(std::string{});
+	});
+
+	it("re-voices a Stab part's chords at the bar line the shift lands on", _ {
+		std::vector<std::string> problems;
+		expect(revoiceEvery(Flavour::Stab, problems) > 0).to_be_true();
+		expect(problems.empty() ? std::string{} : problems.front()).to_equal(std::string{});
 	});
 
 	it("cancels a waiting shift when the shift that plays is pressed, and logs nothing", _ {

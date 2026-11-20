@@ -181,4 +181,6 @@ otherwise.
   the shift, and `octave_spec` fails. A shift that lands moves the part's held voicing (`PartState::voicing`) with it
   in `apply()`, so voice leading goes on as a translation: without that, `leadVoicing()` places the new voicing near
   the old one's pitches inside the moved Register, not 12 apart. Notes past MIDI's 0–127 clamp (Dub techno's bass at
-  −2 reaches 0), so `octave_spec` compares against clamped pitches.
+  −2 reaches 0), so `octave_spec` compares against clamped pitches. A shift up alone doesn't show a voicing left
+  behind in a Stab: its voicings sit low in their window, and voice-led from below the moved window takes the same
+  notes. The re-voice spec runs each Sustain and Stab part down an octave too, which does.

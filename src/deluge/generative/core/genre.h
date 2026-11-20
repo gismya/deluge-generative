@@ -1478,6 +1478,21 @@ constexpr bool sirensValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether every pitched part's Register anchor stays a MIDI note under every octave shift (spec §7.3): its anchor
+/// ± 12 × kMaxOctaveShift within 0–127, so shiftedRegister()'s byte never wraps.
+constexpr bool registersShiftValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (!hasRegister(part.role)) {
+			continue;
+		}
+		const int32_t anchor = part.registerOrDefault().anchor;
+		if (anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2 or 4 bars long and no longer than the phrase,
 /// so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts and
 /// Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
