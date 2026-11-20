@@ -533,7 +533,7 @@ describe ambient("Ambient", $ {
 			}
 		});
 
-		it("plays sparse bells on its Lead: a Motif gated at 10, two-bar figures with empty bars, about 10 notes a minute", _ {
+		it("plays sparse bells on its Lead: a Motif gated at 8, two-bar figures with empty bars, about 10 notes a minute", _ {
 			const PartSpec& lead = ambientGenre.parts[kLeadPart];
 			expect(lead.densityGate).to_equal(macroPoints(8));
 			expect(lead.expression.spread).to_equal(10);
@@ -641,7 +641,7 @@ describe ambient("Ambient", $ {
 			}
 		});
 
-		it("staggers the soft percussion's gates from 28 to 47, mallets first and the kick last, the FX lanes at 35, with "
+		it("staggers the soft percussion's gates from 29 to 47, mallets first and the kick last, the FX lanes at 35, with "
 		   "no Ornaments and no Impact lane", _ {
 			std::vector<Lane> lanes;
 			std::vector<int16_t> gates;

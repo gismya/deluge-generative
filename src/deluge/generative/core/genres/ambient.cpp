@@ -214,7 +214,7 @@ constexpr PartSpec kParts[] = {
         .pool = kBells,
         .band = {0, 3},
         // Under the Break's Density at the default macros (25 − 15), so the Break keeps the bells down to a Density of
-        // 23 (owner, round 1's QBG, #340); the brief's "about 20" would close them there. They enter as the Intro's
+        // 22 (owner, round 1's QBG, #340); the brief's "about 20" would close them there. They enter as the Intro's
         // Density passes 8 (tuning).
         .densityGate = macroPoints(8),
         .motif = kBellsMotif,
