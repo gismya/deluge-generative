@@ -41,6 +41,13 @@ GEN_STEP_CODE VoicePlace voicePlace(const Chord& chord, int32_t i) {
 
 namespace {
 
+/// The 24 orders of 4 slots, in lexicographic order: note i takes slot [i] (openVoicing()).
+constexpr uint8_t kPairings[24][kMaxChordNotes] = {
+    {0, 1, 2, 3}, {0, 1, 3, 2}, {0, 2, 1, 3}, {0, 2, 3, 1}, {0, 3, 1, 2}, {0, 3, 2, 1}, {1, 0, 2, 3}, {1, 0, 3, 2},
+    {1, 2, 0, 3}, {1, 2, 3, 0}, {1, 3, 0, 2}, {1, 3, 2, 0}, {2, 0, 1, 3}, {2, 0, 3, 1}, {2, 1, 0, 3}, {2, 1, 3, 0},
+    {2, 3, 0, 1}, {2, 3, 1, 0}, {3, 0, 1, 2}, {3, 0, 2, 1}, {3, 1, 0, 2}, {3, 1, 2, 0}, {3, 2, 0, 1}, {3, 2, 1, 0}};
+static_assert(kMaxChordNotes == 4, "kPairings lists the orders of 4 slots");
+
 /// The instance of `note`'s pitch class inside [low, high] nearest any of `near`, a tie going down.
 GEN_STEP_CODE int32_t nearestInstance(int32_t note, int32_t low, int32_t high, std::span<const int32_t> near) {
 	int32_t candidate = low + pitchClass(note - low);
@@ -88,6 +95,71 @@ GEN_STEP_CODE Voicing leadVoicing(const Chord& chord, const Key& key, const Regi
 		out.pitch[out.size] = clampMidi(doubled);
 		out.place[out.size] = VoicePlace::Doubling;
 		out.size++;
+	}
+	return out;
+}
+
+GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Register& reg,
+                                  std::span<const uint8_t> previous) {
+	const int32_t tonic = tonicNote(reg, key.root);
+	const int32_t low = tonic + reg.spanLow;
+	const int32_t high = tonic + reg.spanHigh;
+	const int32_t notes = chord.size;
+	Voicing out;
+	out.size = chord.size;
+	int32_t note[kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		note[i] = tonic + semitonesOf(chord.steps[i], key.scale);
+		out.place[i] = voicePlace(chord, i);
+	}
+	// Where the first voicing puts each note: the root and the 5th near the tonic, the rest an octave up.
+	int32_t spot[kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		const bool under = out.place[i] == VoicePlace::Root || out.place[i] == VoicePlace::Fifth;
+		const int32_t near[1] = {under ? tonic : tonic + 12};
+		spot[i] = nearestInstance(note[i], low, high, near);
+	}
+	if (previous.empty()) {
+		for (int32_t i = 0; i < notes; i++) {
+			out.pitch[i] = clampMidi(spot[i]);
+		}
+		return out;
+	}
+	// Each note's instance nearest each voice, and how far the voice moves to it.
+	const int32_t voices = std::min<int32_t>(static_cast<int32_t>(previous.size()), kMaxChordNotes);
+	int32_t to[kMaxChordNotes][kMaxChordNotes] = {};
+	int32_t moves[kMaxChordNotes][kMaxChordNotes] = {};
+	for (int32_t i = 0; i < notes; i++) {
+		for (int32_t v = 0; v < voices; v++) {
+			const int32_t near[1] = {previous[v]};
+			to[i][v] = nearestInstance(note[i], low, high, near);
+			moves[i][v] = to[i][v] > previous[v] ? to[i][v] - previous[v] : previous[v] - to[i][v];
+		}
+	}
+	// Every pairing of notes with slots, a slot past the voices leaving its note over. A table, not codes decoded by
+	// division: the Cortex-A9 has no hardware divide. A pairing counts only when as many notes take a voice as can
+	// (a note left over moves nothing, so it must not stand in for a voice that is free).
+	const int32_t paired = std::min(notes, voices);
+	int32_t least = INT32_MAX;
+	for (const auto& slot : kPairings) {
+		int32_t taking = 0;
+		for (int32_t i = 0; i < notes; i++) {
+			taking += slot[i] < voices ? 1 : 0;
+		}
+		if (taking != paired) {
+			continue;
+		}
+		// A note left over moves no voice: it goes to its first-voicing spot.
+		int32_t moved = 0;
+		for (int32_t i = 0; i < notes; i++) {
+			moved += slot[i] < voices ? moves[i][slot[i]] : 0;
+		}
+		if (moved < least) {
+			least = moved;
+			for (int32_t i = 0; i < notes; i++) {
+				out.pitch[i] = clampMidi(slot[i] < voices ? to[i][slot[i]] : spot[i]);
+			}
+		}
 	}
 	return out;
 }

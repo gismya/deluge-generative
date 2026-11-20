@@ -483,6 +483,19 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "chords", .parts = chords})).to_be_true();
 	});
 
+	it("rejects an open voicing on a part that isn't a Sustain, on a pedal, which voices no chord, or with a doubled root", _ {
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+		const PartSpec pedal[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.pedal = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pedal", .parts = pedal})).to_be_false();
+		const PartSpec doubled[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.doubleRoot = true, .openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "doubled", .parts = doubled})).to_be_false();
+		const PartSpec pad[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.openVoicing = true}}};
+		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
+	});
+
 	it("rejects a hold across Section lines on a part that isn't a Sustain, which only decideSustain() honours", _ {
 		const PartSpec stab[] = {
 		    {.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsAcrossSections = true}}};
@@ -563,6 +576,17 @@ describe genre_data("Every built-in genre", $ {
 		expect(fits(6, 12)).to_be_true();
 		expect(fits(36, 12)).to_be_true();
 		expect(fits(8, 12)).to_be_false();
+	});
+
+	it("rejects an Extension order that doesn't try each Extension once, or tries the 6 before the 7 (spec §7.4)", _ {
+		auto valid = [](ExtensionOrder order) { return harmonyValid(Genre{.harmony = {.extensionOrder = order}}); };
+		using enum Extension;
+		expect(valid(ExtensionOrder{})).to_be_true();
+		expect(valid(kNinthFirst)).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Seventh, Sixth, Sus4}})).to_be_true();
+		expect(valid(ExtensionOrder{{Ninth, Ninth, Seventh, Sixth}})).to_be_false(); // the sus4 never tried
+		expect(valid(ExtensionOrder{{Sixth, Seventh, Ninth, Sus4}})).to_be_false();  // the 6 before the 7 never plays
+		expect(valid(ExtensionOrder{{Seventh, Ninth, Sus4, static_cast<Extension>(4)}})).to_be_false(); // the 5th
 	});
 
 	it("rejects a Chord graph with a move off the scale's 7 degrees, too many moves, or a cadence target off them", _ {

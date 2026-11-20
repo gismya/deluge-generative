@@ -19,6 +19,26 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
+- `gen_emu.py capture`'s default card (delugemu's `deluge_sd.img`) has no pack, and the capture passes its check
+  either way: a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
+  of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
+  `card.txt` of `copy pack -> /`.
+- A capture build (`-DGENERATIVE_CAPTURE=ON`) holds no Recipe: it plays the `CaptureRecipe` in
+  `generative/firmware/current_recipe.cpp`, an `extern "C"` object `generative_capture_recipe` in `.data`, and
+  `gen_emu.py capture` writes the Recipe's bytes (`CAPTURE_LAYOUT`) into a copy of the ELF beside the WAV, found by that
+  symbol and checked by its magic, before it boots that copy. So a new Recipe builds nothing (#401). The two layouts
+  must agree: change both, and the test's `RECIPE_LAYOUT`. The object is `volatile` (else LTO folds the build's
+  defaults into the code and the patch does nothing) and `used, externally_visible` (else LTO makes it local and may
+  rename it, and gen_emu can't find it). A file on the card image was the other way: the image is shared and booted
+  with `-snapshot`, so each capture would need its own 445 MB copy or a FAT write.
+- A capture's WAV is a function of its arguments *and the firmware's code*: delugemu's audio follows the instruction
+  count, so any code change gives different bytes for the same Recipe (a no-op 100-iteration loop in
+  `rollFromGenre` did). Compare captures from one build only. To check two builds play the same Recipe, compare
+  `currentRecipe` in RAM after entering Perform (QMP `xp`; pointers resolved by symbol), as #401 did.
+- What still relinks a capture build dir: a source change, a commit (the version string; `-dirty` too), and a build
+  in a new build dir of the same checkout (`./dbt sizediff`, a fresh `check_all`): it rewrites the l10n
+  `g_english.cpp` and `g_seven_segment.cpp` in the source tree, so every other build dir recompiles those and
+  relinks once.
 
 ## Theory review
 
@@ -51,3 +71,15 @@ lists them. The script judges nothing. Hand the summary to a fresh agent with th
 Where the findings go: each fault is fixed in the slice's PR (a retune if the genre has a golden already), and the
 review runs again; each judgement call becomes its own GitHub issue for the owner (label `needs-triage`), linked from
 the slice's PR. The PR's test plan lists the review's run and its findings. The review never blocks a merge.
+
+## Listening-session toolkit
+
+- `scripts/generative/listening/` (`listen.py`) builds listening sessions; its tests are `test_listening.py`. A job
+  line's comment is a whole line: never cut a line at `#`, since keys are spelled with it (`--key D#`). The Recipe
+  check (`listening/recipe.py`) compares each job's harness THEORY `recipe` and `key` lines with the job's own flags,
+  because `gen_emu.py check` renders the same arguments the capture got and so passes a mangled job.
+- Job args go through `gen_emu.add_recipe_args`, so a new gen_emu Recipe flag reaches jobs with no edit here; add it
+  to `jobs.RECIPE_FIELDS` and `recipe.mismatches` so the check and the merge see it.
+- The runner applies a variant once per claimed group and reverts after; ninja goes by mtime, so a revert followed by
+  the same apply still relinks. Merged captures are hard links in `raw/`: the cutter reads `raw/<name>.json` for the
+  tempo, so write one for any WAV you put there by hand.

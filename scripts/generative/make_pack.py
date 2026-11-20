@@ -791,6 +791,21 @@ class Cable:
         return replace_once(pattern, rf"\g<1>{cable(self.amount)}\g<2>", text, what)
 
 
+class Transpose:
+    """Set the transpose of `element` (osc1, osc2, modulator1, modulator2: exactly one in the file) to `semitones`."""
+
+    def __init__(self, element, semitones):
+        self.element, self.semitones = element, semitones
+
+    def apply(self, text):
+        pattern = re.compile(
+            rf"(<{self.element}>(?:(?!</{self.element}>).)*?<transpose>)[^<]*(</transpose>)",
+            re.DOTALL,
+        )
+        what = f"the {self.element} transpose"
+        return replace_once(pattern, rf"\g<1>{self.semitones}\g<2>", text, what)
+
+
 def replace_once(pattern, replacement, text, what):
     new, count = pattern.subn(replacement, text)
     if count != 1:
@@ -844,6 +859,17 @@ DERIVED = {
         "690716bab5fbe4835d3d7e925bf1d9b9cd666fc3ff8280e44815b2b70bb40c46",
         Field("delayFeedback", knob(0)),
         Field("volume", knob(28)),
+    ),
+    # Dub techno's Pad: 126 an octave up (the owner's Techno listening answers, DI3). The Pad plays an octave under
+    # the Pad Register's default, under the Stab's chord, where 126 (its second carrier already at -17) sounded an
+    # octave too low. Both carriers and both modulators move, so the FM ratios and the timbre stay.
+    "SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML": Derived(
+        "SYNTHS/126 Dark FM Pad.XML",
+        "f6aee81d39281b7393975f491f79cddc2abfeeb7b1d19b2ac8b73ce3afcceb0f",
+        Transpose("osc1", 12),
+        Transpose("osc2", -5),
+        Transpose("modulator1", -12),
+        Transpose("modulator2", 16),
     ),
 }
 

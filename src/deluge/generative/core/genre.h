@@ -357,6 +357,11 @@ struct SustainSpec {
 	/// and only the changed pitches end and strike (Ambient's Pad, spec §5.2). A Section line follows
 	/// holdsAcrossSections. Sustain only (sustainValid()).
 	bool holdsCommonTones = false;
+	/// An open voicing (openVoicing()): the first chord puts the root and the 5th near the tonic and the 3rd and the
+	/// Extensions an octave up, and each later one moves each voice the least, so the spread holds. Wants a Register
+	/// about two octaves wide (Ambient's Pad, spec §5.2). A Sustain voicing chords only, with no doubled root
+	/// (sustainValid()).
+	bool openVoicing = false;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -554,6 +559,9 @@ struct HarmonySpec {
 	const ChordGraph* graph = nullptr;
 	uint8_t extensionFloor = 0;
 	uint8_t extensionCeiling = 2;
+	/// The order chords try their Extensions in (spec §7.4): the Generator-wide 7, 9, sus4, 6 unless the genre sets
+	/// its own (Ambient's kNinthFirst).
+	ExtensionOrder extensionOrder{};
 	/// The chord guard's rule and factor (spec §7.4); the Generator-wide default unless the genre overrides it.
 	ChordGuard guard{};
 };
@@ -913,8 +921,12 @@ constexpr bool fitsPhrase(int32_t bars, int32_t phraseBars) {
 
 /// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that fits the
 /// phrase (fitsPhrase()), so a chord never straddles a phrase line; at most kMaxChordMoves moves, each between two
-/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid.
+/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid. Its Extension order
+/// tries each Extension once, the 6 after the 7 (extensionOrderValid()).
 constexpr bool harmonyValid(const Genre& genre) {
+	if (!extensionOrderValid(genre.harmony.extensionOrder)) {
+		return false;
+	}
 	const ChordGraph* graph = genre.harmony.graph;
 	if (graph == nullptr) {
 		return true;
@@ -1529,13 +1541,14 @@ constexpr bool dropOutsValid(const Genre& genre) {
 }
 
 /// Whether every Sustain part holds data the flavour plays (spec §5.2): a retrigger period, if any, that fits the
-/// phrase (fitsPhrase()), and no anchored Extension on a pedal, which voices none (pedalVoicing()). Only a Sustain
-/// holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes uncut, and only
-/// decideSustain() ends or extends them.
+/// phrase (fitsPhrase()), and no anchored Extension or open voicing on a pedal, which voices none (pedalVoicing()).
+/// Only a Sustain holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes
+/// uncut, and only decideSustain() ends or extends them. Only a Sustain voices open, and doubles no root there
+/// (openVoicing()).
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
-			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones) {
+			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing) {
 				return false;
 			}
 			continue;
@@ -1545,6 +1558,9 @@ constexpr bool sustainValid(const Genre& genre) {
 			return false;
 		}
 		if (sustain.pedal && sustain.anchorExtension) {
+			return false;
+		}
+		if (sustain.openVoicing && (sustain.pedal || sustain.doubleRoot)) {
 			return false;
 		}
 	}

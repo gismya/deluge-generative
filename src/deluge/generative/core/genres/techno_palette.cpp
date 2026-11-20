@@ -189,12 +189,17 @@ constexpr PaletteEntry kDubStabSounds[] = {
     {"SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML", 1}, {"SYNTHS/037 Echo Chord.XML", 0},
     {"SYNTHS/082 Short Sharp Delay.XML", 0},          {"SYNTHS/072 Kyoto Phono.XML", 0},
 };
-/// The pedal Pad, root and fifth held for whole Sections: slow, dark pads with no transpose. 131's strings swell in
-/// over 3 s, a wash; 139's detuned saws over 1.1 s; 126's dark FM stacks another fifth, harmless on a pedal.
+/// The pedal Pad, root and fifth held for whole Sections: slow, dark pads with no whole-sound transpose. 131's strings
+/// swell in over 3 s, a wash; 139's detuned saws over 1.1 s; 126's dark FM stacks another fifth, harmless on a pedal.
+/// 126 plays as the pack's copy an octave up (`GEN Dark FM Pad High`): under the Stab, an octave under the Pad
+/// Register's default, the factory 126 sounded an octave too low (owner, #120). The factory 126 leads at weight 0:
+/// never rolled and taking no share of the roll, it is the first entry the fallback chain (spec §10.1) tries when the
+/// pack's copy is missing, on a card without the pack.
 constexpr PaletteEntry kDubPadSounds[] = {
+    {"SYNTHS/126 Dark FM Pad.XML", 0},
     {"SYNTHS/131 Warm Strings.XML", 3},
     {"SYNTHS/139 Detuned Saw Pad.XML", 2},
-    {"SYNTHS/126 Dark FM Pad.XML", 2},
+    {"SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML", 2},
 };
 
 constexpr PartSounds kDubParts[] = {{"SUB", kSubSounds}, {"STAB", kDubStabSounds}, {"PAD", kDubPadSounds}};

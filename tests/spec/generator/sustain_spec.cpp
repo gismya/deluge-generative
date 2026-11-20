@@ -107,6 +107,13 @@ constexpr Genre kSlowPad = [] {
 constexpr PartSpec kPedalParts[] = {
     {.role = Role::Pad, .flavour = Flavour::Sustain, .name = "DRONE", .sustain = {.pedal = true}}};
 constexpr Genre kTurningPedal = withGraph(padGenre(kPedalParts));
+/// An open voicing over a Register two octaves wide, A minor's tonic at its foot: A3 (57), from G#3 (56) to E5 (76).
+constexpr PartSpec kOpenParts[] = {{.role = Role::Pad,
+                                    .flavour = Flavour::Sustain,
+                                    .name = "PAD",
+                                    .reg = {.anchor = 60, .spanLow = -4, .spanHigh = 19},
+                                    .sustain = {.openVoicing = true}}};
+constexpr Genre kTurningOpenPad = withGraph(padGenre(kOpenParts));
 
 Run runOf(const Genre& genre, int32_t density = 50) {
 	Run run;
@@ -259,6 +266,46 @@ describe sustain("The Sustain flavour", $ {
 	it("adds the root an octave up when the part doubles it", _ {
 		auto ons = pitched(play(runOf(kDoubledGenre), 2), EventKind::NoteOn);
 		expect(pitchesOf(ons) == std::set<int32_t>{52, 57, 60, 69}).to_be_true();
+	});
+
+	context("with an open voicing (spec §5.2)", _ {
+		it("puts the root and the 5th near the tonic, and the 3rd an octave up, then moves each voice the least", _ {
+			Result result = play(runOf(kTurningOpenPad), 5);
+			auto ons = pitched(result, EventKind::NoteOn);
+			// i: A3 and E4 near the tonic, C5 near the A an octave up. iv: A3 holds, E4 steps to F4, C5 to D5. i again:
+			// each voice steps back. A close voicing would be E3 A3 C4, then D3 F3 A3.
+			expect(pitchesAt(ons, 0) == std::set<int32_t>{57, 64, 72}).to_be_true();
+			expect(pitchesAt(ons, kBarTicks) == std::set<int32_t>{57, 65, 74}).to_be_true();
+			expect(pitchesAt(ons, 2 * kBarTicks) == std::set<int32_t>{57, 64, 72}).to_be_true();
+			expect(pitchesAt(ons, 3 * kBarTicks) == std::set<int32_t>{57, 65, 74}).to_be_true();
+			expect(result.evictedNotes).to_equal(0U);
+		});
+
+		it("drops the voice that would move most for a smaller chord, and puts an extra note where the first would", _ {
+			const Key key{.root = 9, .scale = Scale::Minor};
+			const Register reg = kOpenParts[0].reg;
+			const Chord triad = voiceChord(Scale::Minor, 0, 0);
+			const Chord seventh = voiceChord(Scale::Minor, 0, 1); // A C E G
+			const uint8_t four[] = {57, 64, 67, 72};
+			const Voicing fewer = openVoicing(triad, key, reg, four);
+			expect(std::set<int32_t>(fewer.pitch, fewer.pitch + fewer.size) == std::set<int32_t>{57, 64, 72}).to_be_true();
+			const uint8_t three[] = {57, 64, 72};
+			// The 7th the voices leave over goes where the first voicing puts an Extension: G4, near A4, not G3.
+			const Voicing more = openVoicing(seventh, key, reg, three);
+			expect(std::set<int32_t>(more.pitch, more.pitch + more.size) == std::set<int32_t>{57, 64, 67, 72}).to_be_true();
+			// Each note keeps its place in the chord, whichever voice took it.
+			for (int32_t i = 0; i < more.size; i++) {
+				expect(more.place[i] == voicePlace(seventh, i)).to_be_true();
+			}
+		});
+
+		it("opens the first voicing of a seventh chord: the 7th and the 3rd an octave over the root", _ {
+			const Key key{.root = 9, .scale = Scale::Minor};
+			const Voicing first = openVoicing(voiceChord(Scale::Minor, 0, 1), key, kOpenParts[0].reg, {});
+			// A3 and E4 near the tonic; C5 and G4 near A4.
+			expect(std::set<int32_t>(first.pitch, first.pitch + first.size) == std::set<int32_t>{57, 64, 67, 72})
+			    .to_be_true();
+		});
 	});
 
 	context("under Density (spec §8.1)", _ {
