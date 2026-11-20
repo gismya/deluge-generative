@@ -100,6 +100,19 @@ describe sound_settings("Load-time sound settings", $ {
 		}
 	});
 
+	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322)", _ {
+		for (const Genre* genre : allGenres()) {
+			if (genre == &genres::technoDub) {
+				continue;
+			}
+			for (const PartSpec& p : genre->parts) {
+				for (const LaneSpec& lane : p.lanes) {
+					expect(laneSoundSettings(p, lane.lane).volume).to_equal(uint8_t{100});
+				}
+			}
+		}
+	});
+
 	it("gives a Kit part's rows the part's volume, and the preset's when the part keeps it (spec §10.6)", _ {
 		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick}, {.lane = Lane::Snare}};
 		static constexpr PartSpec kKit{.role = Role::Drums, .lanes = kLanes, .volume = 70};

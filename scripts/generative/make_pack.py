@@ -634,6 +634,8 @@ class Derived:
 
     def make(self, factory):
         path = os.path.join(factory, self.source)
+        if not os.path.isfile(path):
+            raise ValueError(f"{path}: not on the factory card (--factory)")
         with open(path, "rb") as f:
             data = f.read()
         digest = hashlib.sha256(data).hexdigest()
@@ -768,7 +770,11 @@ def main(argv=None):
         if path not in files and not os.path.exists(os.path.join(args.pack, path)):
             stale.append(path)
     for path, make in files.items():
-        data = make()
+        try:
+            data = make()
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
         data = to_wav(data) if path.endswith(".wav") else data
         target = os.path.normpath(os.path.join(args.pack, path))
         current = None
