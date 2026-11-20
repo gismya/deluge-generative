@@ -14,10 +14,11 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  */
-// Psytrance (#127, spec §4.5): a genre of its own, with no parent, so a Techno retune never moves it. A four-on-the-
-// floor kick under a rolling 16th bass that Avoids it, a pedal Drone (an empty Harmony slot), a swept Lead that comes
-// in on Drops and a 16th Arp, in 16-bar phrases with long Builds into hard Drops. Its fills are a Rest on the kick and
-// bass and a Roll on the snare. Every value is starting data, tuned by ear in #133 (spec §21.5).
+// Psytrance (#127, spec §4.5): a parent genre of its own (#319), sharing no data with Techno, so a Techno retune never
+// moves it. Its one subgenre, Classic, plays the parent's table as it is: a four-on-the-floor kick under a rolling 16th
+// bass that Avoids it, a pedal Drone (an empty Harmony slot), a swept Lead that comes in on Drops and a 16th Arp, in
+// 16-bar phrases with long Builds into hard Drops. Its fills are a Rest on the kick and bass and a Roll on the snare.
+// Every value is starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/capacity.h"
 #include "generative/core/genre.h"
@@ -287,10 +288,13 @@ constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor
 
 constexpr WeightedBars kBuildBars[] = {{16, 2}, {32, 1}};
 
-constexpr Genre kPsytrance{
+/// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
+/// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres). It holds the whole of
+/// Psytrance; a subgenre overrides what it plays differently (#410 adds more).
+constexpr Genre kPsytranceParent{
     .name = "psytrance",
     .oledName = "PSYTRANCE",
-    .version = 1, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 0,
     .facts = {.tempoLowBpm = 138, .tempoHighBpm = 146, .scales = kScales, .swing = 0},
     .phraseBars = 16,
     .parts = kParts,
@@ -336,10 +340,21 @@ constexpr Genre kPsytrance{
             .accentChance = 0, // a Crash on Drops and after a fill that ends a phrase
         },
 };
-static_assert(genreValid(kPsytrance), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
+
+/// Classic psytrance (#319): Psytrance as #127 built it, with no overrides of its parent's table.
+constexpr Genre kPsytranceClassic = [] {
+	Genre genre = subgenreOf(kPsytranceParent);
+	genre.name = "psytrance-classic";
+	genre.oledName = "CLASSIC PSY";
+	genre.shortName = "CLASSIC";
+	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	return genre;
+}();
+static_assert(genreValid(kPsytranceClassic),
+              "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 
 } // namespace
 
-const Genre psytrance = kPsytrance;
+const Genre psytranceClassic = kPsytranceClassic;
 
 } // namespace deluge::generative::genres

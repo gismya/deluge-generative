@@ -57,11 +57,11 @@ const Genre& genreNamed(const char* name) {
 describe compose_screen("The Compose screen's text", $ {
 	it("titles the screen with genre, tempo, key and scale (spec §14.4)", _ {
 		Recipe recipe;
-		recipe.genre = &genreNamed("psytrance");
+		recipe.genre = &genreNamed("psytrance-classic");
 		recipe.tempo = 14600;
 		recipe.keyRoot = 10;
 		recipe.scale = Scale::HungarianMinor;
-		expect(title(recipe)).to_equal(std::string("PSYTRANCE 146 A# HUNGARIAN MINOR"));
+		expect(title(recipe)).to_equal(std::string("CLASSIC PSY 146 A# HUNGARIAN MINOR"));
 	});
 
 	it("shows the tempo in whole BPM, rounded", _ {
