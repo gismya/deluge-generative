@@ -27,7 +27,10 @@
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
+#include "gui/colour/colour.h"
+#include "gui/colour/palette.h"
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
@@ -38,6 +41,7 @@
 #include "hid/button.h"
 #include "hid/buttons.h"
 #include "hid/encoders.h"
+#include "hid/led/pad_leds.h"
 #include "hid/matrix/pad.h"
 #include "io/debug/log.h"
 #include "io/debug/print.h"
@@ -77,18 +81,20 @@ enum class Kind : uint8_t {
 	Wait,
 	SetHold,
 	LoadSong,
-	SaveSong, ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
+	SaveSong,    ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
+	CheckRecipe, ///< As SaveSong: its name waits in songPath
 	ReportInput,
 	ReportBootDma,
+	ReportSidebar,
 	ResetRecipe,
 	PickGenre,
 	Compose,
 	ComposeScreen
 };
 
-/// A "load song" or "save song" line: its path waits in songPath, one at a time.
+/// A "load song", "save song" or "check recipe" line: its path or name waits in songPath, one at a time.
 constexpr bool songFile(Kind kind) {
-	return kind == Kind::LoadSong || kind == Kind::SaveSong;
+	return kind == Kind::LoadSong || kind == Kind::SaveSong || kind == Kind::CheckRecipe;
 }
 
 struct Entry {
@@ -128,6 +134,7 @@ bool holdingRamps = false;          ///< See rampsHeld()
 bool holdingStress = false;         ///< See rampsStressed()
 bool holdingCardError = false;      ///< See cardErrorHeld()
 bool holdingPreload = false;        ///< See preloadHeld()
+bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
 bool holdingCommitted = false;      ///< See soundCommittedHeld()
 bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
@@ -241,6 +248,9 @@ constexpr Hold kHolds[] = {
     {"card_error", [](bool on) { holdingCardError = on; }},
     /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
+    /// Injected presses reach their handlers as inside a card wait (sdRoutineLock set, inCardRoutine true), or as
+    /// they come (see cardRoutineHeld())
+    {"card_routine", [](bool on) { holdingCardRoutine = on; }},
     /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
     {"sound_committed", [](bool on) { holdingCommitted = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
@@ -434,18 +444,23 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   compose <seconds> [<genre>] starts a Compose build of that LENGTH (10-3600 s) under the COMPOSING screen, of the
 ///                               Current Recipe, or of a fresh roll of <genre> (techno-dub), see startCompose()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
+///   report sidebar              pads_sidebar lit=<n>: how many of the 16 sidebar pads are lit in the frame sent to
+///                               the pads (PadLEDs::image)
 ///   report boot_dma             boot_dma events: the DMA channels that were still running, or had stopped on an
 ///                               error, when this firmware started (left by the firmware that chainloaded it, see
 ///                               dmaRecordBootStates() and reportBootDma())
 ///   save song <name>            saves the current song as SONGS/<name>.XML (the rest of the line), see saveSong()
-/// For a "load song" line, *path points at its path inside `line`; for "save song", at the name.
+///   check recipe <name>|*       reads RECIPES/<name>.XML back against the Current Recipe, see checkRecipe()
+/// For a "load song" line, *path points at its path inside `line`; for "save song" and "check recipe", at the name.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
 	constexpr char kSaveSong[] = "save song ";
+	constexpr char kCheckRecipe[] = "check recipe ";
 	static_assert(sizeof(kLoadSong) == sizeof(kSaveSong));
 	const bool save = strncmp(line, kSaveSong, sizeof(kSaveSong) - 1) == 0;
-	if (save || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
-		char* start = line + sizeof(kLoadSong) - 1;
+	const bool check = strncmp(line, kCheckRecipe, sizeof(kCheckRecipe) - 1) == 0;
+	if (save || check || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
+		char* start = line + (check ? sizeof(kCheckRecipe) : sizeof(kLoadSong)) - 1;
 		while (isSeparator(*start)) {
 			start++;
 		}
@@ -457,7 +472,7 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return false;
 		}
 		*path = start;
-		*entry = {save ? Kind::SaveSong : Kind::LoadSong, 0, 0};
+		*entry = {save ? Kind::SaveSong : check ? Kind::CheckRecipe : Kind::LoadSong, 0, 0};
 		return true;
 	}
 
@@ -530,6 +545,10 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
 			*entry = {Kind::ReportBootDma, 0, 0};
+			return true;
+		}
+		if (t.count == 2 && strcmp(t.token[1], "sidebar") == 0) {
+			*entry = {Kind::ReportSidebar, 0, 0};
 			return true;
 		}
 		return false;
@@ -891,6 +910,38 @@ void saveSong(const char* name) {
 	}
 }
 
+/// "check recipe <name>": reads RECIPES/<name>.XML as a Recipe LOAD would (spec §16.1) and compares it with the Current
+/// Recipe: gen_recipe_check name=... read=ok|other_version|unknown_genre|unreadable error=<card error> match=1|0
+/// recipe=1|0 seed=1|0 takes=1|0 sounds=1|0, each 1 when the file's equals the Current Recipe's. A saved Recipe
+/// reloads to the same Recipe, seed and takes (#138's Done-when). The name `*` is the one the Current Recipe remembers.
+void checkRecipe(const char* name) {
+	using namespace deluge::generative;
+	if (strcmp(name, "*") == 0) {
+		name = firmware::currentRecipe.name.text;
+	}
+	static PLACE_SDRAM_BSS RecipeFile file; // a set of sound picks: not on the stack
+	char path[perform::kMaxRecipeNameChars + 16];
+	snprintf(path, sizeof(path), "%s/%s.XML", firmware::kRecipeFolder, name);
+	Error error = Error::NONE;
+	const RecipeFileRead read = firmware::readRecipeFile(path, file, error);
+	constexpr const char* kReads[] = {"ok", "other_version", "unknown_genre", "unreadable"};
+	const firmware::CurrentRecipe& current = firmware::currentRecipe;
+	const bool loaded = read == RecipeFileRead::Ok || read == RecipeFileRead::OtherVersion;
+	const bool recipe = loaded && file.recipe == current.recipe;
+	const bool seed = loaded && file.seed == current.seed;
+	const bool takes = loaded && file.takes == current.takes;
+	bool sounds = loaded;
+	for (int32_t p = 0; sounds && p < kMaxParts; p++) {
+		sounds = strcmp(file.sounds.part[p].c_str(), current.sounds.part[p].c_str()) == 0;
+	}
+	for (int32_t l = 0; sounds && l < kNumLanes; l++) {
+		sounds = strcmp(file.sounds.lane[l].c_str(), current.sounds.lane[l].c_str()) == 0;
+	}
+	event("gen_recipe_check name=%s read=%s error=%d match=%d recipe=%d seed=%d takes=%d sounds=%d", name,
+	      kReads[static_cast<int32_t>(read)], static_cast<int>(error), recipe && seed && takes && sounds ? 1 : 0,
+	      recipe ? 1 : 0, seed ? 1 : 0, takes ? 1 : 0, sounds ? 1 : 0);
+}
+
 /// "compose <seconds> [<genre>]": a Compose build as BUILD starts it (spec §14.5), without the screen and DISCARD
 /// SONG?, and of any length or a fresh genre roll, for scripts that test the build itself: beginCompose() opens the
 /// COMPOSING screen over the view and starts the job; gen_compose refused why=perform|busy|recipe says why not (Perform
@@ -956,6 +1007,18 @@ std::optional<HidEvent> takeHidEvent() {
 			reportBootDma();
 			break;
 
+		case Kind::ReportSidebar: {
+			// What the sidebar pads show: PadLEDs::image is the frame last sent to them.
+			int32_t lit = 0;
+			for (int32_t y = 0; y < kDisplayHeight; y++) {
+				for (int32_t x = kDisplayWidth; x < kDisplayWidth + kSideBarWidth; x++) {
+					lit += PadLEDs::image[y][x] != deluge::gui::colours::black ? 1 : 0;
+				}
+			}
+			event("pads_sidebar lit=%d", static_cast<int>(lit));
+			break;
+		}
+
 		case Kind::ReportInput: {
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
 			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
@@ -1004,6 +1067,11 @@ std::optional<HidEvent> takeHidEvent() {
 			saveSong(songPath);
 			songLoadQueued = false;
 			return std::nullopt; // as a load: let the main loop catch up after it
+
+		case Kind::CheckRecipe:
+			checkRecipe(songPath);
+			songLoadQueued = false;
+			return std::nullopt;
 
 		case Kind::Encoder:
 		case Kind::FastGold:
@@ -1116,6 +1184,10 @@ bool composeReserveHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool cardRoutineHeld() {
+	return holdingCardRoutine;
 }
 
 bool soundCommittedHeld() {

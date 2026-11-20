@@ -212,6 +212,8 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_BUILD, "Build"},
         {STRING_FOR_SOUNDS, "Sounds"},
         {STRING_FOR_NEW_SEED, "New seed"},
+        {STRING_FOR_SAVE_RECIPE, "Save recipe"},
+        {STRING_FOR_NO_FREE_NAME, "No free name"},
         {STRING_FOR_OCTAVES, "Octaves"},
         {STRING_FOR_OCTAVE_LOWEST, "LOWEST"},
         {STRING_FOR_OCTAVE_HIGHEST, "HIGHEST"},

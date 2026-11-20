@@ -21,6 +21,7 @@
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/card_text.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
@@ -123,45 +124,18 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	std::memcpy(name + length, ".XML", 5);
 	SoundPath filePath;
 	filePath.set("GENERATIVE/PALETTES", name);
-	Error error = StorageManager::initSD();
-	if (error != Error::NONE) {
-		return error;
+	struct Parse final : CardTextReader {
+		Parse(PaletteOverride& target, const Genre& genre) : target(target), genre(genre) {}
+		void read(std::string_view text) override { parsed = target.parse(text, genre); }
+		PaletteOverride& target;
+		const Genre& genre;
+		bool parsed = false;
+	} parse{override, genre};
+	Error error = Error::NONE;
+	const CardText read = readCardText(filePath.c_str(), PaletteOverride::kMaxFileBytes, parse, error);
+	if (error == Error::NONE && read != CardText::Missing) {
+		TEST_EVENT("gen_palette_override %s %s", genre.name, parse.parsed ? "read" : "ignored");
 	}
-	auto opened = FatFS::File::open(filePath.c_str(), FA_READ);
-	if (!opened) {
-		// No file, or one FatFs can't open (a bad name, DENIED): no override. Only the card failing is an error.
-		const FatFS::Error openError = opened.error();
-		return cardFailed(openError) ? fatfsErrorToDelugeError(openError) : Error::NONE;
-	}
-	// One byte more than the largest file read, to tell a file that fills the buffer from one that overflows it.
-	constexpr int32_t kBufferBytes = PaletteOverride::kMaxFileBytes + 1;
-	auto* buffer = static_cast<std::byte*>(GeneralMemoryAllocator::get().allocLowSpeed(kBufferBytes));
-	if (buffer == nullptr) {
-		return Error::INSUFFICIENT_RAM;
-	}
-	length = 0;
-	bool unread = false;
-	while (length < static_cast<size_t>(kBufferBytes)) {
-		auto read = opened->read({buffer + length, static_cast<size_t>(kBufferBytes) - length});
-		if (!read) {
-			// As for the open: only the card failing is an error; a file FatFs can't read through is no override.
-			const FatFS::Error readError = read.error();
-			error = cardFailed(readError) ? fatfsErrorToDelugeError(readError) : Error::NONE;
-			unread = true;
-			break;
-		}
-		if (read->empty()) {
-			break;
-		}
-		length += read->size();
-		AudioEngine::routineWithClusterLoading();
-	}
-	if (error == Error::NONE) {
-		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
-		bool parsed = !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, genre);
-		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
-	}
-	delugeDealloc(buffer);
 	return error;
 }
 

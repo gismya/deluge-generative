@@ -24,6 +24,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette_file.h"
 #include "generative/core/recipe.h"
+#include "generative/perform/recipe_name.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
 
@@ -42,8 +43,16 @@ struct CurrentRecipe {
 	/// differs. A new way of replacing the Recipe (a Recipe file's load) calls replaced().
 	uint32_t generation = 0;
 
-	/// The Current Recipe was replaced by a whole new one: see `generation`.
-	void replaced() { generation++; }
+	/// The name of the Recipe file it was loaded from or last saved as (spec §14.2, §16.3), empty if none. A genre pick
+	/// and Regenerate clear it, here or in Perform, through replaced().
+	perform::RecipeName name;
+
+	/// The Current Recipe was replaced by a whole new one: see `generation`. It forgets its file name too; a Recipe
+	/// file's load sets the file's name after calling this.
+	void replaced() {
+		generation++;
+		name.clear();
+	}
 
 	/// Picking a genre rolls a fresh Recipe: rolled facts and sound picks, a new seed, takes at 0 and the genre's
 	/// default macros (spec §14.1). Facts, sound picks and the seed come from fresh hardware-timer entropy

@@ -5,6 +5,7 @@
 #include "gui/l10n/strings.h"
 #include "gui/menu_item/dx/param.h"
 #include "gui/menu_item/file_selector.h"
+#include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/horizontal_menu.h"
 #include "gui/menu_item/horizontal_menu_group.h"
 #include "gui/menu_item/menu_item.h"
@@ -17,6 +18,7 @@
 #include "gui/ui/rename/rename_drum_ui.h"
 #include "gui/ui/sample_marker_editor.h"
 #include "gui/ui/save/save_instrument_preset_ui.h"
+#include "gui/ui/save/save_recipe_ui.h"
 #include "gui/ui/ui.h"
 #include "gui/ui_timer_manager.h"
 #include "gui/views/arranger_view.h"
@@ -725,7 +727,13 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 
 	// Save button
 	else if (b == SAVE) {
-		if (on && (currentUIMode == UI_MODE_NONE) && !inSettingsMenu() && isUIInstrumentClipView) {
+		// Generative mode (F19, spec §14.4, §16.4): on the Compose screen SAVE saves the Current Recipe, full save UI.
+		if (deluge::gui::menu_item::generative::composeScreenShowing()) {
+			if (on && currentUIMode == UI_MODE_NONE) {
+				recipeSavePress(true, inCardRoutine);
+			}
+		}
+		else if (on && (currentUIMode == UI_MODE_NONE) && !inSettingsMenu() && isUIInstrumentClipView) {
 			if (inCardRoutine) {
 				return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 			}

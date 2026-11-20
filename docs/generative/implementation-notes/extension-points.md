@@ -93,7 +93,12 @@ otherwise.
   (`endsHere()`), and its muted notes are already dropped there.
 - The Compose screen (#137, `gui/menu_item/generative/compose_screen.*`): #140's COMPOSE opens it with
   `openComposeScreen()` (and COMPOSE FROM's CURRENT RECIPE does the same); #139's FILE... is a row to add to `fromMenu`;
-  #138's SAVE on the screen goes in the sound editor's SAVE handling while `composeScreen` (or an item under it) is open.
+  SAVE on the screen is the sound editor's SAVE branch (F19, `composeScreenShowing()`); LOAD can go beside it.
+- **Recipe LOAD (#139):** `firmware::readRecipeFile(path, RecipeFile&, Error&)` reads and parses a file
+  (`RecipeFileRead::OtherVersion` is the `OLDER <GENRE>` notice, `UnknownGenre` the refusal). After it replaces the
+  Current Recipe it calls `currentRecipe.replaced()` and then `currentRecipe.name.set(<file name>)`. A loaded name is a
+  stem of its own (`RecipeName::set(name)`); its next save offers `<name>A`. Its browser can follow `SaveRecipeUI`
+  (`gui/ui/save/save_recipe_ui.*`) for Perform's frame and sidebar under it.
   BUILD already asks DISCARD SONG? (`DiscardSong::setCompose()`).
 - **Recipe files' octave shifts (#397, waits on #138's format):** write and read `Recipe::octave` per pitched part,
   by part name as the takes are, in `core/recipe_file.cpp`; a file without it loads 0, out of range clamps to

@@ -122,3 +122,7 @@ otherwise.
 - A script that needs a song (`# needs: SONGS/...`) can still be tried in delugemu: copy it and its includes to a
   scratch folder without its `load song` and `song_loaded` lines, and run the copy on the blank song. What depends on
   the song differs: the blank song has no arrangement, so PLAY in the arranger stops at once (`playing=false`).
+- `hold card_routine` hands injected presses to their handlers with `sdRoutineLock` set (`inCardRoutine` true), as a
+  press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
+  that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
+  presses whose handler refuses instead (`perform_recipe_save.txt`).

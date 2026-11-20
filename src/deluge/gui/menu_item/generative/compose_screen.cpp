@@ -784,6 +784,10 @@ bool openComposeScreen() {
 	return openUI(&soundEditor);
 }
 
+bool composeScreenShowing() {
+	return getCurrentUI() == &soundEditor && soundEditor.menuItemNavigationRecord[0] == &composeScreen;
+}
+
 void buildComposeRecipe() {
 	using gen::firmware::ComposeStart;
 	const ComposeStart start = gen::firmware::beginCompose(nullptr, gen::firmware::composeLength(), nullptr);

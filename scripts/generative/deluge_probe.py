@@ -935,6 +935,8 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    row=LABEL, or refused): pick a genre by name, not by counting rows
       report input                                 queued too: event input_lag with the longest press lag and gold-knob
                                                    edge gap since the last report, ok=yes within spec §12.10's bounds
+      report sidebar                               queued too: event pads_sidebar lit=N, the sidebar pads lit in
+                                                   the frame sent to the pads
       report boot_dma                              queued too: event boot_dma running=N mask=0xMMMM, then a
                                                    boot_dma_channel line for each DMA channel the previous firmware
                                                    left running, or stopped on an error, when this one started (#166)
@@ -943,6 +945,9 @@ def run_script(port, lines, out=print, on_start_state=None):
                                                    blocks the test port while it loads
       save song NAME                               queued too: saves the current song as SONGS/NAME.XML through the
                                                    stock save UI, overwriting (event song_saved, or song_save_failed)
+      check recipe NAME|*                          queued too: reads RECIPES/NAME.XML (*: the Current Recipe's
+                                                   remembered name) against the Current Recipe (event
+                                                   gen_recipe_check ... match=1 when they're the same)
       compose screen                               queued too: opens the Compose screen over the current UI (event
                                                    gen_compose_screen opened, or refused)
       compose SECONDS [GENRE]                      queued too: a Compose build of that LENGTH under the COMPOSING
@@ -1148,6 +1153,7 @@ def _run_lines(
             "pick",
             "save",
             "compose",
+            "check",
         ):
             port.inject(line)
         elif word == "start_state":
