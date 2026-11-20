@@ -15,6 +15,8 @@
 # covers: src/deluge/generative/perform/perform_steering.h src/deluge/generative/perform/perform_driver.*
 # covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/menu_item/generative/compose_screen.*
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
 # covers: scripts/generative/fixtures/recipe_load/card.txt
 start_state
 include perform_open.txt

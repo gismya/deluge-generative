@@ -10,7 +10,7 @@
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/core/palette.*
 # covers: src/deluge/generative/core/recipe_file.* src/deluge/gui/menu_item/generative/compose_screen.*
 # covers: src/deluge/gui/ui/sound_editor.cpp src/deluge/io/midi/test_port.cpp
-# covers: scripts/generative/fixtures/recipe_load/card.txt
+# covers: src/deluge/generative/core/genres/techno.cpp scripts/generative/fixtures/recipe_load/card.txt
 start_state
 expect playing=false
 

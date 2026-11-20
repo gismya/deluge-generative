@@ -153,6 +153,7 @@ BUILDERS = {
     "gen_perform_entered": _GENRE,
     "gen_press": _SECTIONS,  # "gen_press force GROOVE"
     "gen_recipe_roll": (),  # the roll's and the outcome's names
+    "gen_recipe_load": _GENRE,  # file names from the card, genre=<stable name>, older|newer
     "gen_recipe_save": (
         *_GENRE,
         "src/deluge/generative/perform/clip_page.*",
