@@ -6,8 +6,8 @@
 #
 # gen_log_piece pieces= header= used= full= us=: a piece opened, its header's bytes and what writing it cost in the
 # tick. gen_log at=phrase|stop pieces= used= piece= header= records= end= cut= full=: the log's use at each phrase
-# line and at a stop. Busy steering: the macros on F8 (Energy on the upper gold knob, Density on the lower) turned a
-# knob step about every step, and the song's F1 filter knobs between them (song params, logged as SetParam).
+# line and at a stop. Busy steering: the macros on F8 (Energy on the upper gold knob, Density on the lower), each
+# turned a fast detent (4 knob steps) about every 16th, and the song's F1 filter knobs between them (song params, logged as SetParam).
 # For figures: --events 'gen_log|gen_h1|gen_macro_landed'.
 # covers: src/deluge/generative/core/steering_log.* src/deluge/generative/firmware/log_header.*
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/output_sink.cpp
@@ -23,576 +23,577 @@ wait 50
 button PLAY up
 expect playing=true
 # Acid techno's roster: the song, a synth part each for ACID and DRONE, two Kits and their rows.
-expect event gen_log_piece pieces=1 header=(?P<header>[0-9]{4,5}) used=[0-9]+ full=0 us=
+expect event /^gen_log_piece pieces=1 header=(?P<header>[0-9]{4,5}) used=[0-9]+ full=0 us=[0-9]+$/
 
 # ---- Busy steering for two phrases: a macro turn about every 16th, a song filter turn every bar ----
 button F8 down
 wait 50
 button F8 up
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
 expect event gen_macro_landed within=5
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
 button F1 down
 wait 50
 button F1 up
-encoder 4 1
+encoder 4 1 fast
 wait 50
 button F8 down
 wait 50
 button F8 up
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
 button F1 down
 wait 50
 button F1 up
-encoder 4 -1
+encoder 4 -1 fast
 wait 50
 button F8 down
 wait 50
 button F8 up
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
 button F1 down
 wait 50
 button F1 up
-encoder 4 1
+encoder 4 1 fast
 wait 50
 button F8 down
 wait 50
 button F8 up
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 1
-wait 55
-encoder 5 -1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
-encoder 4 -1
-wait 55
-encoder 5 1
-wait 55
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
+encoder 4 -1 fast
+wait 110
+encoder 5 1 fast
+wait 110
 button F1 down
 wait 50
 button F1 up
-encoder 4 -1
+encoder 4 -1 fast
 wait 50
 button F8 down
 wait 50
 button F8 up
-expect event gen_log at=phrase pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=-1 cut=-1 full=0 within=30
+expect event /^gen_log at=phrase pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=-1 cut=-1 full=0$/ within=30
 
 # ---- A stop ends the piece where it stopped; the next start throws it away and opens a new one ----
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=[0-9]+ cut=-1 full=0
+expect event /^gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=[0-9]+ cut=-1 full=0$/
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event gen_log_piece pieces=1 header=(?P=header) used=[0-9]+ full=0 us=
+# The stopped piece wasn't marked: it went, so the log holds the new piece's header alone.
+expect event /^gen_log_piece pieces=1 header=(?P=header) used=(?P=header) full=0 us=[0-9]+$/
 wait 2000
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]+ end=[0-9]+ cut=-1 full=0
+expect event /^gen_log at=stop pieces=1 used=(?P=header) piece=(?P=header) header=(?P=header) records=0 end=[0-9]+ cut=-1 full=0$/
 
 # ---- Leave ----
 include perform_leave.txt
