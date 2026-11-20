@@ -1,0 +1,110 @@
+# Dub techno's Stab echo (#322, spec §4.5, §20's "Delay Throw buffers" row, H1 and H16): Acid techno cuts to Dub
+# techno, whose Stab loads a dotted-8th analog ping-pong delay setup. Its Groove's drop-outs (the Stab out for 2 bars)
+# throw the Stab's delay, which the render allocates from SDRAM; a forced Break and a forced Groove a phrase later
+# read SDRAM at their lines (the Break keeps the Stab, so it throws nothing there). gen_h1 (step decisions) and
+# gen_h16 (culls, the last culled voice's part, voices, the slowest render) report every 4 bars. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
+# clip a synth or kit clip.
+#
+# gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=: the setup as it loaded (sync 5 is an 8th in
+# Perform's song, type 19 dotted; feedback the preset's home). gen_throw_delay part=2 lane=-1 level= feedback= home=
+# rest= over=: the Stab's delay Throw, at depth 8 (feedback home + 8 at level 100, capped); over=1 would be the
+# Throw's lift past both 23 and home, which it never may. gen_mem: SDRAM free before entry, at each Section line (the
+# genre has a delay setup), when Acid's Outputs are freed, after leaving.
+# Pinned rolls (hold entropy): the same Recipes and seeds every run, so the drop-outs fall the same.
+# needs: a Deluge for its timings, and about 4 minutes in delugemu, so check_all.py skips it
+# For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_mem|gen_sound_delay|gen_throw_delay'.
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/genres/techno_palette.cpp
+# covers: src/deluge/generative/core/generator_controls.cpp src/deluge/generative/core/generator_sections.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/card_sounds.*
+# covers: src/deluge/generative/firmware/perform_song.cpp src/deluge/generative/perform/sound_mapping.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/firmware/retirements.cpp src/deluge/generative/firmware/sound_swaps.cpp
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/core/types.h
+start_state
+hold entropy
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_mem before_entry internal=\d+ external=\d+/ since=mark
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- TECHNO ▸ DUB → HARD CUT AT PHRASE ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-dub
+expect event gen_genre_pick techno-dub row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-dub
+expect event gen_genre_pick techno-dub row=DUB from=ACID
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+mark now
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-dub style=2 result=0
+expect event gen_transition_preload done error=0 parts=5 within=20
+# The Stab's setup as it loads; feedback stays the preset's
+expect event /^gen_sound_delay STAB - sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
+expect event gen_transition start style=2 within=40
+mark now
+expect event /^gen_outputs_freed outputs=\d+ total=4$/ since=mark within=40
+expect event /^gen_mem after_free internal=\d+ external=\d+/ since=mark within=40
+expect event gen_transition phase=idle within=10
+
+# ---- The Groove: H1 and H16 every 4 bars (about 8 s), and a drop-out's Throw on the Stab, which falls home ----
+mark now
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+expect event /^gen_throw_delay part=2 lane=-1 level=100 feedback=\d+ home=\d+ rest=\d+ over=0$/ since=mark within=150
+expect event /^gen_throw_delay part=2 lane=-1 level=0 feedback=\d+ home=\d+ rest=\d+ over=0$/ within=20
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+
+# ---- A forced Break on the next phrase line, then a forced Groove: SDRAM at each line ----
+expect event gen_phrase bar= within=40
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event gen_section BREAK within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+pad 17 7 down
+wait 50
+pad 17 7 up
+expect event gen_press force GROOVE
+expect event gen_section GROOVE within=40
+expect event /^gen_mem section internal=\d+ external=\d+/
+expect event gen_h1 steps= within=20
+expect event /^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/ within=20
+expect playing=true
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+mark now
+include perform_leave.txt
+expect ui_mode=0
+expect event /^gen_mem after_leave internal=\d+ external=\d+/ since=mark within=10
+release entropy
