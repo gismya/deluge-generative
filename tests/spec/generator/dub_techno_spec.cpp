@@ -395,8 +395,89 @@ describe dub_techno("Dub techno", $ {
 		expect(kept[-1]).to_be_greater_than(0);
 	});
 
+	context("its drop-out and delay Throws (spec §4.5, §8.8, §10.6, §11.4, #322)", _ {
+		it("drops the Stab out for 2 bars, thrown, at Dub's chance and gap", _ {
+			expect(dub.dropOuts.size()).to_equal(size_t{1});
+			const DropOutEntry& stab = dub.dropOuts[0];
+			expect(stab.mask == PartsAndLanes{.parts = partBit(kStabPart)}).to_be_true();
+			expect(stab.bars).to_equal(2);
+			expect(stab.throwTarget == PartsAndLanes{.parts = partBit(kStabPart)}).to_be_true();
+			expect(dub.dropOutChance).to_equal(120);
+			expect(dub.dropOutGapBars).to_equal(2);
+		});
+
+		it("gives the Stab alone a dotted-8th analog ping-pong delay setup, thrown at depth 8", _ {
+			const PartSpec& stab = dub.parts[kStabPart];
+			const DelaySetup echo{
+			    .on = true, .note = DelayNote::Eighth, .feel = DelayFeel::Dotted, .pingPong = true, .analog = true};
+			expect(stab.delay == echo).to_be_true();
+			expect(stab.throwDelayDepth).to_equal(uint8_t{8});
+			for (size_t p = 0; p < dub.parts.size(); p++) {
+				expect(dub.parts[p].delay.on).to_equal(p == kStabPart);
+			}
+		});
+
+		it("gives every Stab line, at every tier, an onset of importance 8 or more in each bar's last beat", _ {
+			// The drop-out's Throw spikes only on a hit in the beat before it (kThrowWindowSteps); a line with none
+			// there plays the drop-out dry, as Dub's throw targets never do (dub_spec). Below about Density 14 an
+			// importance-8 hit thins out too, and a drop-out there can play dry.
+			for (const Pattern& pattern : dub.parts[kStabPart].pool) {
+				for (int32_t bar = 0; bar < pattern.length / kStepsPerBar; bar++) {
+					const int32_t from = (bar + 1) * kStepsPerBar - kThrowWindowSteps;
+					bool hit = false;
+					for (int32_t step = from; step < from + kThrowWindowSteps; step++) {
+						hit = hit || pattern.importance[step] >= 8;
+					}
+					expect(hit).to_be_true();
+				}
+			}
+		});
+
+		it("throws the Stab's delay on every drop-out, across seeds, entropies and Motion", _ {
+			// A drop-out is a Groove step the Stab starts being silenced while the Sub plays (the Gap silences
+			// both). Its Throw holds the delay from the drop-out's first step.
+			int32_t dropOuts = 0;
+			int32_t thrown = 0;
+			for (uint32_t entropy = 0; entropy <= 3; entropy++) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					for (int32_t motion : {25, 50}) {
+						Recipe recipe = newRecipe(dub, entropy);
+						recipe.macros.set(Macro::Motion, macroPoints(motion));
+						StepwisePiece<> piece{{.recipe = recipe, .seed = seed, .skipIntro = true}};
+						bool wasSilent = false;
+						std::vector<int32_t> starts;
+						for (int32_t s = 0; s < 112 * kStepsPerBar; s++) {
+							if (!piece.decideBefore(s + 1)) {
+								break;
+							}
+							const Generator& g = piece.generator;
+							const bool silent = g.partSilenced(kStabPart) && !g.partSilenced(kSubPart);
+							if (silent && !wasSilent && g.arc().section() == SectionKind::Groove) {
+								starts.push_back(s);
+							}
+							wasSilent = silent;
+						}
+						for (int32_t start : starts) {
+							int32_t delay = 0;
+							for (const Event& e : piece.sink.events) {
+								if (e.kind == EventKind::Control && e.part == kStabPart
+								    && e.control == SoundControl::Space && e.tick <= stepTick(start)) {
+									delay = e.throwDelay();
+								}
+							}
+							dropOuts++;
+							thrown += delay > 0 ? 1 : 0;
+						}
+					}
+				}
+			}
+			expect(dropOuts).to_be_greater_than(100);
+			expect(thrown).to_equal(dropOuts);
+		});
+	});
+
 	context("its palette (spec §10.1, §18.3)", _ {
-		it("gives the Sub, the Stab and the Pad at least 3 presets each, on the factory card, the Stab's led by 037 Echo Chord", _ {
+		it("gives the Sub, the Stab and the Pad presets on the factory card with the pack, the Sub trimmed to 2 by ear", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			expect(dub.palette != nullptr && dub.palette != genres::technoAcid.palette).to_be_true();
 			int32_t synthParts = 0;
@@ -405,18 +486,43 @@ describe dub_techno("Dub techno", $ {
 					continue;
 				}
 				synthParts++;
+				// At least 3 before the ear check trimmed them (spec §10.1, #120 round 1), never none.
 				auto entries = dub.palette->partEntries(part);
-				expect(entries.size()).to_be_greater_than(size_t{2});
+				expect(entries.size()).to_be_greater_than(size_t{0});
 				for (const PaletteEntry& entry : entries) {
 					expect(card.has(entry.path)).to_be_true();
 				}
 			}
 			expect(synthParts).to_equal(3);
+		});
+
+		it("rolls the Stab from the pack's dry copies, led by GEN Echo Chord Dry, never the factory originals (#322)", _ {
 			const auto stabs = dub.palette->partEntries(dub.parts[kStabPart]);
 			const auto main = std::max_element(stabs.begin(), stabs.end(), [](const PaletteEntry& a, const PaletteEntry& b) {
 				return a.weight < b.weight;
 			});
-			expect(std::string(main->path)).to_equal(std::string("SYNTHS/037 Echo Chord.XML"));
+			expect(std::string(main->path)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML"));
+			FakeCard card = harness::factoryCardWithPack();
+			std::set<std::string> rolled;
+			for (uint32_t entropy = 0; entropy < 200; entropy++) {
+				SoundPicks sounds;
+				expect(rollSounds(dub, *dub.palette, sounds, entropy, card)).to_be_true();
+				rolled.insert(sounds.part[kStabPart].c_str());
+			}
+			expect(rolled == std::set<std::string>{"SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML"})
+			    .to_be_true();
+		});
+
+		it("falls back to the factory originals, with their own echo, on a card without the pack (spec §10.1)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML", "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML",
+			                  "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML"};
+			SoundLoad load =
+			    loadPartSound(*dub.palette, dub.parts[kStabPart], "SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML", loader);
+			expect(load.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/037 Echo Chord.XML"));
 		});
 
 		it("takes Techno's lanes but a shaker alone on Perc 2", _ {

@@ -371,10 +371,104 @@ bool tagMatches(const char* name, const char* tag) {
 
 namespace {
 
+constexpr uint32_t kKitSlot = 0x300;
+
+/// Whether `pick` is a file `tag` (a tag or an exact path) names.
+bool pickMatches(const SoundPath& pick, const char* tag) {
+	if (pick.empty() || tag == nullptr) {
+		return false;
+	}
+	if (isExactPathTag(tag)) {
+		return equalsIgnoringCase(pick.c_str(), tag);
+	}
+	const char* slash = std::strrchr(pick.c_str(), '/');
+	return tagMatches(slash == nullptr ? pick.c_str() : slash + 1, tag);
+}
+
+/// A part's drum kit for one roll (spec §10.2): its main machine and which swaps are in.
+struct KitRoll {
+	const DrumMachine* machine = nullptr;
+	bool swapped[kMaxKitSwaps] = {};
+
+	/// `lane`'s swap if it is in, else nullptr.
+	[[nodiscard]] const char* swap(const DrumKits& kits, Lane lane) const {
+		for (int32_t s = 0; machine != nullptr && s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps;
+		     s++) {
+			if (swapped[s] && kits.swaps[s].lane == lane) {
+				return kits.swaps[s].tag;
+			}
+		}
+		return nullptr;
+	}
+};
+
+/// The machine whose tags name the most of `part`'s Drums picks in `sounds`, or -1: the kit a re-roll moves from.
+int32_t playingMachine(const DrumKits& kits, const PartSpec& part, const SoundPicks& sounds) {
+	int32_t best = -1;
+	int32_t bestCount = 0;
+	for (int32_t m = 0; m < static_cast<int32_t>(kits.machines.size()); m++) {
+		int32_t count = 0;
+		for (const LaneSpec& lane : part.lanes) {
+			count += !isFxLane(lane.lane)
+			                 && pickMatches(sounds.lane[static_cast<int32_t>(lane.lane)],
+			                                kits.machines[m].machine->laneTag(lane.lane))
+			             ? 1
+			             : 0;
+		}
+		if (count > bestCount) {
+			best = m;
+			bestCount = count;
+		}
+	}
+	return best;
+}
+
+/// Rolls part `p`'s kit: a machine by weight (away from `avoid` where another weighs anything), then each swap in or
+/// out. A part with no Drums lanes, or a palette with no machines, has none. The draws come from the part's own kit
+/// stream, so they never move a lane's.
+KitRoll rollKit(const DrumKits& kits, const PartSpec& part, int32_t p, uint32_t entropy, int32_t avoid) {
+	KitRoll kit;
+	bool drums = false;
+	for (const LaneSpec& lane : part.lanes) {
+		drums = drums || !isFxLane(lane.lane);
+	}
+	if (!drums || kits.machines.empty()) {
+		return kit;
+	}
+	EntropyStream draws = partDraws(entropy, kKitSlot + static_cast<uint32_t>(p));
+	const auto count = static_cast<int32_t>(kits.machines.size());
+	const auto below = [&](int32_t total) { return draws.below(total); };
+	int32_t machine =
+	    rollWeighted(count, [&](int32_t m) { return m == avoid ? 0 : int32_t{kits.machines[m].weight}; }, below);
+	if (machine < 0) {
+		machine = rollWeighted(count, [&](int32_t m) { return int32_t{kits.machines[m].weight}; }, below);
+	}
+	if (machine < 0) {
+		return kit;
+	}
+	kit.machine = kits.machines[machine].machine;
+	for (int32_t s = 0; s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps; s++) {
+		kit.swapped[s] = draws.below(100) < kits.swapPercent;
+	}
+	return kit;
+}
+
+/// Rolls `lane` from the one tag `tag` over the lane's folders, whatever its own list says. Leaves `out` empty when
+/// the tag matches no file. False on a card error.
+bool rollKitTag(const LaneSounds& sounds, const char* tag, FolderLister& lister, EntropyStream& draws,
+                const char* avoid, SoundPath& out) {
+	const TagWeight only[] = {{tag, 1}};
+	LaneSounds single = sounds;
+	single.tags = only;
+	int32_t rolled = 0;
+	return rollLane(single, lister, draws, nullptr, avoid, out, rolled);
+}
+
 /// Rolls part `p`'s picks into `sounds`. With `reroll`, each pick tries to move away from the one it replaces, where
-/// the palette offers another (a sound re-roll). False on a card error.
+/// the palette offers another (a sound re-roll). With `newMachine` too (NEW SOUND on the part), the kit moves to
+/// another machine; without it (Regenerate), the machine rolls by its weights and may stay. False on a card error.
 bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks& sounds, uint32_t entropy,
-              FolderLister& lister, bool reroll) {
+              FolderLister& lister, bool reroll, bool newMachine) {
 	const PartSpec& part = genre.parts[p];
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
 	EntropyStream draws = partDraws(entropy, kPartSlot + static_cast<uint32_t>(p));
@@ -383,9 +477,12 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 	if (entry >= 0) {
 		sounds.part[p].set(entries[entry].path);
 	}
-	// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled. Lanes come in the fixed
-	// order, so the Closed hat rolls first.
+	const KitRoll kit =
+	    rollKit(palette.kits, part, p, entropy, newMachine ? playingMachine(palette.kits, part, sounds) : -1);
+	// Hat pair (spec §10.3): the Open hat first tries the tag the Closed hat rolled, and the Closed hat's swap if it
+	// played one. Lanes come in the fixed order, so the Closed hat rolls first.
 	const char* closedHatTag = nullptr;
+	const char* closedHatSwap = nullptr;
 	for (const LaneSpec& lane : part.lanes) {
 		const LaneSounds* laneSounds = palette.laneSounds(lane.lane);
 		const auto index = static_cast<int32_t>(lane.lane);
@@ -394,12 +491,40 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 			continue;
 		}
 		EntropyStream laneDraws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane.lane));
-		int32_t tag = 0;
-		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
 		SoundPath old;
 		if (reroll) {
 			old = sounds.lane[index];
 		}
+		// The kit's tags first (spec §10.2): the Closed hat's swap for the Open hat, the lane's swap, its machine's
+		// tag. Not the Closed hat's machine tag: the Open hat's own names the same machine, and a set's closed-hat
+		// prefix (the Psy set's CLHAT-) could match closed hats in the Open hat's folders.
+		const char* kitTags[3] = {};
+		int32_t kitCount = 0;
+		const bool drums = kit.machine != nullptr && !isFxLane(lane.lane) && laneSounds->inKit;
+		if (drums && lane.lane == Lane::OpenHat && closedHatSwap != nullptr) {
+			kitTags[kitCount++] = closedHatSwap;
+		}
+		const char* swap = drums ? kit.swap(palette.kits, lane.lane) : nullptr;
+		if (swap != nullptr) {
+			kitTags[kitCount++] = swap;
+		}
+		if (const char* machineTag = drums ? kit.machine->laneTag(lane.lane) : nullptr; machineTag != nullptr) {
+			kitTags[kitCount++] = machineTag;
+		}
+		sounds.lane[index].clear();
+		for (int32_t t = 0; t < kitCount && sounds.lane[index].empty(); t++) {
+			if (!rollKitTag(*laneSounds, kitTags[t], lister, laneDraws, old.c_str(), sounds.lane[index])) {
+				return false;
+			}
+			if (lane.lane == Lane::ClosedHat && kitTags[t] == swap && !sounds.lane[index].empty()) {
+				closedHatSwap = swap;
+			}
+		}
+		if (!sounds.lane[index].empty()) {
+			continue;
+		}
+		int32_t tag = 0;
+		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
 		if (!rollLane(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
 			return false;
 		}
@@ -416,7 +541,7 @@ bool rollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, 
                 FolderLister& lister) {
 	sounds = SoundPicks{};
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		if (!rollPart(genre, palette, p, sounds, entropy, lister, false)) {
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, false, false)) {
 			return false;
 		}
 	}
@@ -428,7 +553,7 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 	if (part < 0 || part >= static_cast<int32_t>(genre.parts.size()) || part >= kMaxParts) {
 		return true;
 	}
-	return rollPart(genre, palette, part, sounds, entropy, lister, true);
+	return rollPart(genre, palette, part, sounds, entropy, lister, true, true);
 }
 
 bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
@@ -460,7 +585,8 @@ bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundP
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
-		if (!rollPart(genre, palette, p, sounds, entropy, lister, true)) {
+		// The drum machine rolls by its weights and may stay (owner, #395): only NEW SOUND forces another.
+		if (!rollPart(genre, palette, p, sounds, entropy, lister, true, false)) {
 			return false;
 		}
 	}

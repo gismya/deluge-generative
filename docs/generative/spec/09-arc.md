@@ -23,7 +23,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 - **Break length** is drawn from a per-genre range. Motion doesn't scale it.
 - **Build length** is in bars: 1, 2, 4, 8, 16 or 32. It must divide the phrase or be a whole multiple of it, so the Drop lands on a phrase line. It is drawn (seeded) from a weighted list in the genre when the Build is scheduled or forced. A list with one entry is a fixed length. Motion doesn't scale it. `buildBarsValid()` checks every length against both rules, and each genre table `static_assert`s it.
 - **Build placement.** A Build of a phrase or longer starts on a phrase line. A shorter one takes the last bars of the phrase before the Drop, so it shortens the Section before it: a 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break.
-- **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50.
+- **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50. **Named exception:** Psytrance's 2-phrase decay, so its Lead (gate 30) plays a Drop's whole first phrase (#349); its shortest Groove at Motion 50 is 1 phrase, where the lift stops at the next Section as above. A Psytrance spec shows that cut-off.
 - **Intro and Outro lengths** are fixed genre values in phrases, 1 by default.
 - Example Groove ranges (*tuning*): Techno 4–8, Psytrance 3–6, Ambient 6–12 phrases.
 - Example Build and length values (*tuning*). Build keeps is the same as Break keeps in every genre:
@@ -33,7 +33,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 | Techno | 8 ×2, 16 ×1 | Kick, last 1 bar | 32nds | 1 | 2 / 1 |
 | House | 4 ×1, 8 ×2 | none | 32nds | 1 | 1 / 1 |
 | Dub | 1 | none | 16ths | 1 | 1 / 1 |
-| Psytrance (16-bar phrase) | 16 ×2, 32 ×1 | Kick and Bass, last 2 bars | 32nds | 1 | 1 / 1 |
+| Psytrance (16-bar phrase) | 16 ×2, 32 ×1 | Kick and Bass, last 2 bars | 32nds | 2 | 1 / 1 |
 | Ambient | 16 | none | no roll | 2 | 2 / 2 |
 
 ### 9.4 What the Arc moves
@@ -105,7 +105,7 @@ A transition plays like this:
 **Rolling the incoming facts.**
 
 - A **genre change** resets the facts from the new genre (default or roll), rolls the sound picks for the new roster, draws a new seed and resets every take. It keeps the macros.
-- **Regenerate** is a genre change to the same genre: rolled facts, every sound pick and the seed are rolled again, every take resets to 0, and the macros are kept. It never picks a sound a part or lane already has, as long as its list has another entry.
+- **Regenerate** is a genre change to the same genre: rolled facts, every sound pick and the seed are rolled again, every take resets to 0, and the macros are kept. It never picks a sound a part or lane already has, as long as its list has another entry. The Drums kit's machine is rolled by its weights and may stay ([§10.2](10-sounds.md#102-drums-assembled-per-lane)).
 - **Key lean.** When a genre change or Regenerate rolls the key, the scale is rolled first from the genre's list. Then every root whose key would share 6 or 7 of its 7 notes with the playing key (the key playing when the preload rolls it) is a **related root**. The related roots split 65% of the root roll (*tuning*) evenly, and the rest is spread evenly over all 12 roots. So A Minor into Dub (Minor only) favours A, D and E Minor. If the genre has a fixed key, the lean doesn't apply. The lean uses the same fresh entropy as every fact roll ([§3.2](03-recipe.md#32-musical-facts)).
 - The tempo roll is plain, with no lean towards the playing tempo.
 - A **Recipe LOAD** mid-set uses the file's seed, takes, facts and macros instead of rolling, so no lean applies. It offers the same three styles, highlighting the file genre's transition entry, so the file starts at a Drop, an Intro or on a cut line ([§16.5](16-recipe-files.md#165-load)).

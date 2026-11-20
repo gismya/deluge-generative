@@ -150,6 +150,7 @@ BUILDERS = {
     "gen_recipe_roll": (),  # the roll's and the outcome's names
     "gen_retire_referenced": (),
     "gen_rings": (),
+    "gen_row_level": _GENRE,  # part and lane names
     "gen_scale_led": (),
     "gen_section": _SECTIONS,
     "gen_seed_popup": (

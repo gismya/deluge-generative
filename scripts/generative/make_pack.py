@@ -2,7 +2,9 @@
 
 Every file this writes is made here from code: synth presets written field by field, and samples rendered by small
 DSP routines with fixed random seeds, so the same script always writes the same bytes and the licence is ours
-(pack/LICENSES.md). Run it after changing a sound, then commit what changed under pack/:
+(pack/LICENSES.md), except the presets derived from factory ones (DERIVED): a factory file, checked by its hash, with
+recorded edits, read from the factory card's files (--factory). Run it after changing a sound, then commit what
+changed under pack/:
 
     python3 scripts/generative/make_pack.py            # writes into pack/
     python3 scripts/generative/make_pack.py --check    # exits 1 if pack/ differs from what it would write
@@ -16,10 +18,12 @@ Stdlib only.
 """
 
 import argparse
+import hashlib
 import io
 import math
 import os
 import random
+import re
 import struct
 import subprocess
 import sys
@@ -461,8 +465,8 @@ PRESETS = {
     # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
     # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its
     # first tries (decay 2, filter 14, one saw at the preset volume 36) measured about 23 dB under the mix in delugemu
-    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 16-tick gate at
-    # 138-146 BPM (about 70 ms), so the gate's short release ends each note; the sub square and the full preset volume
+    # (#127 levels): the rate-table estimate overstated the decay. Decay 16 runs past the Loop's 20-tick gate at
+    # 138-146 BPM (about 88 ms), so the gate's short release ends each note; the sub square and the full preset volume
     # carry the level. Velocity moves its volume. No reverb.
     "SYNTHS/GENERATIVE/GEN Psy Bass.XML": lambda: preset(
         "saw",
@@ -570,6 +574,130 @@ PRESETS = {
 }
 
 
+# ---- Presets derived from the factory card ----
+#
+# A pack preset close to a factory one is the factory file with a few recorded edits, never a hand-edited copy: the
+# script reads the source from the factory card's files (--factory), checks it is the file the edits were written
+# against (its SHA-256), applies the edits and writes the result. These files are derived from Synthstrom Audible's
+# factory content, so they are not CC0: pack/LICENSES.md lists each under "Derived from the factory presets", and
+# --check fails while one is missing there. To add one: a DERIVED entry (source, its hash, the edits), a row in that
+# section, then run the script.
+
+# The factory card's files, as delugemu's factory image holds them (~/source/delugemu-sd/sdcard, spec §21.3).
+FACTORY = os.environ.get(
+    "DELUGE_FACTORY_CARD",
+    os.path.join(os.path.expanduser("~"), "source", "delugemu-sd", "sdcard"),
+)
+LICENSES = "LICENSES.md"
+DERIVED_HEADING = "## Derived from the factory presets"
+
+
+class Field:
+    """Set the element <tag> (exactly one in the file) to `value`."""
+
+    def __init__(self, tag, value):
+        self.tag, self.value = tag, value
+
+    def apply(self, text):
+        pattern = re.compile(rf"(<{self.tag}>)[^<]*(</{self.tag}>)")
+        return replace_once(pattern, rf"\g<1>{self.value}\g<2>", text, f"<{self.tag}>")
+
+
+class Cable:
+    """Set the amount of the patch cable from `source` to `destination` (exactly one in the file) to a -50..50
+    amount."""
+
+    def __init__(self, source, destination, amount):
+        self.source, self.destination, self.amount = source, destination, amount
+
+    def apply(self, text):
+        pattern = re.compile(
+            rf"(<source>{self.source}</source>\s*<destination>{self.destination}</destination>\s*<amount>)"
+            r"[^<]*(</amount>)"
+        )
+        what = f"the {self.source} -> {self.destination} cable"
+        return replace_once(pattern, rf"\g<1>{cable(self.amount)}\g<2>", text, what)
+
+
+def replace_once(pattern, replacement, text, what):
+    new, count = pattern.subn(replacement, text)
+    if count != 1:
+        raise ValueError(f"{what}: {count} matches, expected 1")
+    return new
+
+
+class Derived:
+    """A pack preset made from factory file `source` (relative to the card root, with SHA-256 `sha256`) by `edits`."""
+
+    def __init__(self, source, sha256, *edits):
+        self.source, self.sha256, self.edits = source, sha256, edits
+
+    def make(self, factory):
+        path = os.path.join(factory, self.source)
+        if not os.path.isfile(path):
+            raise ValueError(f"{path}: not on the factory card (--factory)")
+        with open(path, "rb") as f:
+            data = f.read()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != self.sha256:
+            raise ValueError(
+                f"{path}: SHA-256 {digest}, the edits were written against {self.sha256}"
+            )
+        text = data.decode("utf-8")
+        for edit in self.edits:
+            text = edit.apply(text)
+        return text.encode("utf-8")
+
+
+# Dub techno's Stab (#322): the three factory chord presets with their own echo off (delay feedback 0), so the part's
+# delay setup and its Throws alone make the echo (spec §10.6). Their volume knobs set each where its original sat
+# against the rest of Dub techno, which plays at 76 percent of its presets' volume (techno.cpp's kDubRest, about
+# -3.9 dB): 037 at the knob's top is 3.9 dB under the original with its echo, 082 at 34 and 072 at 28 are about as
+# far under theirs (delugemu captures, the Stab alone, entropy 2, seed 1).
+DERIVED = {
+    "SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML": Derived(
+        "SYNTHS/037 Echo Chord.XML",
+        "4fbfc11f1977f933d7c8e3ff9cb02c399390769aa30ccae7569c43401be76143",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(50)),
+    ),
+    "SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML": Derived(
+        "SYNTHS/082 Short Sharp Delay.XML",
+        "6500c76753252c52a497d04139bf4dff9dbb01adf6b998a43375b866cc2bd4c2",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(34)),
+    ),
+    "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML": Derived(
+        "SYNTHS/072 Kyoto Phono.XML",
+        "690716bab5fbe4835d3d7e925bf1d9b9cd666fc3ff8280e44815b2b70bb40c46",
+        Field("delayFeedback", knob(0)),
+        Field("volume", knob(28)),
+    ),
+}
+
+
+def licence_gaps(pack):
+    """DERIVED files that pack/LICENSES.md's derived section doesn't list with their source, as messages."""
+    path = os.path.join(pack, LICENSES)
+    text = ""
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    section = (
+        text.split(DERIVED_HEADING, 1)[1].split("\n## ", 1)[0]
+        if DERIVED_HEADING in text
+        else ""
+    )
+    gaps = []
+    for target, derived in DERIVED.items():
+        rows = [line for line in section.splitlines() if f"`{target}`" in line]
+        if not any(f"`{derived.source}`" in row for row in rows):
+            gaps.append(
+                f'{target} (from {derived.source}): no row in {LICENSES}\'s "{DERIVED_HEADING[3:]}"'
+            )
+    return gaps
+
+
 def git_ignored(pack, paths):
     """Those of `paths` (absolute) that git ignores where they are; none outside a git work tree."""
     if not paths:
@@ -617,11 +745,36 @@ def main(argv=None):
         action="store_true",
         help="--pack is a commit's tree: every file counts, gitignored and ._* ones too",
     )
+    parser.add_argument(
+        "--factory",
+        default=FACTORY,
+        help="the factory card's files, the derived presets' sources (default: $DELUGE_FACTORY_CARD, else "
+        "~/source/delugemu-sd/sdcard); without them --check only checks those presets are there",
+    )
     args = parser.parse_args(argv)
     files = {**SAMPLES, **PRESETS}
+    if os.path.isdir(args.factory):
+        files.update(
+            {path: (lambda d=d: d.make(args.factory)) for path, d in DERIVED.items()}
+        )
+    elif not args.check:
+        print(f"no factory card at {args.factory}: give --factory", file=sys.stderr)
+        return 1
+    else:
+        print(
+            f"no factory card at {args.factory}: the derived presets are checked for presence only",
+            file=sys.stderr,
+        )
     stale = []
+    for path in DERIVED:
+        if path not in files and not os.path.exists(os.path.join(args.pack, path)):
+            stale.append(path)
     for path, make in files.items():
-        data = make()
+        try:
+            data = make()
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
         data = to_wav(data) if path.endswith(".wav") else data
         target = os.path.normpath(os.path.join(args.pack, path))
         current = None
@@ -638,15 +791,20 @@ def main(argv=None):
     for path in stale:
         print(("stale: " if args.check else "wrote: ") + path)
     unexpected = (
-        unexpected_files(args.pack, files, args.committed) if args.check else []
+        unexpected_files(args.pack, {**files, **DERIVED}, args.committed)
+        if args.check
+        else []
     )
+    gaps = licence_gaps(args.pack)
+    for gap in gaps:
+        print("unlisted: " + gap)
     for path in unexpected:
         print(
             "unexpected: "
             + path
             + " (the script doesn't write it: delete it, or make it in the script)"
         )
-    return 1 if args.check and (stale or unexpected) else 0
+    return 1 if (args.check and (stale or unexpected)) or gaps else 0
 
 
 if __name__ == "__main__":

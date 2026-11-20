@@ -339,6 +339,12 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 		applySoundSettings(*drum, paramManager, laneSoundSettings(part, lane), *song); // its delay setup after them
 		song->backUpParamManager(drum, nullptr, &paramManager, true);
 	}
+#if ENABLE_SYSEX_TEST
+	if (part.volume != 100) { // a Kit part's volume scales each row's knob (spec §10.6)
+		TEST_EVENT("gen_row_level %s %s volume=%d played=%ld", part.name, laneName(lane), static_cast<int>(part.volume),
+		           static_cast<long>(drum->paramFinalValues[params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL]));
+	}
+#endif
 	kit->addDrum(drum); // the Kit owns it from here
 	drum->drumName = laneName(lane);
 	if (lane == Lane::Kick) {

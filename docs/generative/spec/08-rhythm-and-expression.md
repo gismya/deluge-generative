@@ -58,7 +58,7 @@ The Build snare roll is a section rule that drives ratchets, not an Ornament of 
 - Flavours set a note's base velocity (accents included). Energy's velocity layer applies on top, scaled by the genre's weight.
 - **Velocity spread.** Each part and lane has a spread amount in genre data, default 0. It is a seeded nudge from the Generator's hash, applied after Energy's layer and before clamping. Ornament hits take their main note's spread.
 - **Spread mode**, per part and lane, default **Repeat**. Repeat keys the draw on the step's place in the part's pattern, so the nudge repeats with the pattern. Fresh keys it on the absolute Arc step, so every pass differs. There's no player control in v1.
-- Accents are mostly volume accents. Every factory synth preset routes velocity to volume, and only three Techno presets (000, 005, 015) also open the filter on velocity. Brightness belongs to the sound controls.
+- Accents are mostly volume accents. Every factory synth preset routes velocity to volume, and only two Techno presets (000, 005) also open the filter on velocity. Brightness belongs to the sound controls.
 
 ### 8.5 Lean
 

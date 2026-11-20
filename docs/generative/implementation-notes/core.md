@@ -169,6 +169,9 @@ otherwise.
   the Closed hat's set. Psytrance's hats take the Psy set alone.
 - A part gated over the default Density still plays late in a Build: the Build's Density ramp (+12 for Psytrance)
   passes the gate. Leave it out of `buildKeeps` if it should come in on the Drop (Psytrance's Lead).
+- A gated part leaves a Drop phrase early when the Drop's lift decays under its gate (Psytrance's Lead left after bar
+  10 at a 1-phrase decay). A longer `dropDecayPhrases` keeps it in, but `genre_data_spec` checks the decay fits the
+  shortest Groove at Motion 50; Psytrance is its named exception (spec §9.3), and `psytrance_spec` shows the cut-off.
 - A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
   ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
 - A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
@@ -183,6 +186,12 @@ otherwise.
   Impact tag "909", over the Crash and Kick folders, rolled a 909 kick 6 times in 7, and "909 Kick" took the
   distorted and dry kicks too. Name a single file by its path (`SAMPLES/DRUMS/Crash/909 Crash.wav`), and check a new
   palette's tags against `tests/spec/generator/fixtures/factory_card.txt`.
+- Drum kits (spec §10.2): `DrumKits` on the `Palette`, machines in `core/genres/drum_machines.h`, rolled in
+  `rollPart()` (`palette.cpp`) from the part's own kit stream (`kKitSlot`), so the lanes' draws don't move. A kit tag
+  is rolled as a one-tag copy of the lane (`rollKitTag()`), so it matches the lane's folders whatever its list says:
+  a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
+  the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
+  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
 - A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
   usually meant the mark had slid one step off the hit it was for.
 - Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the
