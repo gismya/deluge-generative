@@ -529,8 +529,8 @@ describe loop_lines("Loop lines", $ {
 			Run frozen = plain;
 			frozen.steer = steerAt({{kFreeze, {CommandKind::SetFreeze, 0, kPress}},
 			                        {kThaw, {CommandKind::SetFreeze, 0, kPress}}});
-			LogEntry entries[4];
-			SteeringLog log(entries, 4);
+			TestLog entries(4);
+			SteeringLog& log = entries.log;
 			frozen.log = &log;
 			auto a = barsOf(play(plain, kBars), kBars);
 			auto b = barsOf(play(frozen, kBars), kBars);

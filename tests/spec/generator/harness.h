@@ -13,6 +13,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
 
@@ -62,6 +63,22 @@ inline perform::GlideLength glideLasting(int32_t ticks, int32_t phraseSteps) {
 }
 
 class Hook;
+
+/// A steering log for a spec (spec §17.2): room for `entries` commands besides a piece's opening, with a piece open,
+/// so a spec that calls the Generator itself logs too. A Perform driver given it opens its own pieces over that one.
+struct TestLog {
+	explicit TestLog(int32_t entries)
+	    : bytes(static_cast<size_t>(entries * kMaxCommandBytes + kOpeningRoom)),
+	      log(bytes.data(), static_cast<int32_t>(bytes.size())) {
+		log.beginPiece({});
+	}
+	TestLog(const TestLog&) = delete;
+	TestLog& operator=(const TestLog&) = delete;
+	/// A piece's opening, and a header with the picks a spec's sink adds.
+	static constexpr int32_t kOpeningRoom = 1024;
+	std::vector<uint8_t> bytes;
+	SteeringLog log;
+};
 
 /// The Perform driver's steering with the harness as its adapter (perform/perform_steering.h): the driver, sink and
 /// Current Recipe are a piece's, a transition is pending when `pending` says so, a glide wakes the Hook as the
@@ -126,7 +143,9 @@ class Hook {
 public:
 	Hook(perform::PerformDriver& driver, SteeringQueue& queue, perform::NoteSink& sink,
 	     int32_t magnitude = kGeneratorTickMagnitude, SteeringLog* log = nullptr)
-	    : driver_(driver), queue_(queue), sink_(sink), log_(log), magnitude(magnitude) {}
+	    : driver_(driver), queue_(queue), sink_(sink), magnitude(magnitude) {
+		driver.setLog(log);
+	}
 
 	/// The song tick it is now, between calls: song ticks since the first call.
 	[[nodiscard]] int64_t now() const { return now_; }
@@ -206,7 +225,7 @@ private:
 		if (steering_ != nullptr && playing != nullptr) {
 			steering_->sampleFill(*fillDown_);
 		}
-		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
+		due_ = now_ + driver_.advance(delta, magnitude, queue_, sink_);
 		if (steering_ != nullptr && playing != nullptr) {
 			steering_->recordLanded(driver_.playing() != nullptr ? *driver_.playing() : *playing);
 		}
@@ -215,7 +234,6 @@ private:
 	perform::PerformDriver& driver_;
 	SteeringQueue& queue_;
 	perform::NoteSink& sink_;
-	SteeringLog* log_;
 	HarnessSteering* steering_ = nullptr;
 	const bool* fillDown_ = nullptr;
 	int64_t now_ = 0;
@@ -290,6 +308,7 @@ inline Result play(const Run& run, int32_t bars) {
 	perform::PerformDriver driver;
 
 	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);
+	driver.setLog(run.log);
 	driver.begin(generator);
 	driver.setTempo(run.recipe.tempo, sink); // as Perform's entry does: a sample Riser is timed from it
 
@@ -301,7 +320,7 @@ inline Result play(const Run& run, int32_t bars) {
 		if (run.steer) {
 			run.steer(generator.nextStep(), queue);
 		}
-		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
+		int32_t wait = driver.advance(delta, run.magnitude, queue, sink);
 		if (run.watch) {
 			run.watch(generator);
 		}
@@ -380,7 +399,7 @@ struct Start {
 	int32_t magnitude = kGeneratorTickMagnitude;
 	/// Where the master is at the start, in song ticks: past 0 for a Continue (spec §12.4).
 	int32_t songTick = 0;
-	/// Room in the piece's SteeringLog. With 0 the piece runs with no log.
+	/// Room in the piece's SteeringLog, in commands besides the piece's opening. With 0 the piece runs with no log.
 	int32_t logEntries = 0;
 };
 
@@ -423,9 +442,9 @@ struct StepwisePiece {
 	SteeringQueue& queue;
 	/// The song's fill mode: FILL held, by its button or a pad.
 	bool fillDown = false;
-	std::vector<LogEntry> logEntries;
-	/// What the core logged as steering landed. Empty, and not passed to the driver, unless Start::logEntries is set.
-	SteeringLog log;
+	TestLog logEntries;
+	/// What the core logged as steering landed. Not passed to the driver unless Start::logEntries is set.
+	SteeringLog& log;
 	/// The calls to the driver. Reach for it for a call the driver didn't ask for (call(), callAt()), a wake(), or
 	/// to wait for a kind of call (runUntil()).
 	Hook hook;
@@ -433,7 +452,7 @@ struct StepwisePiece {
 	explicit StepwisePiece(const Start& start = {})
 	    : currentRecipe(start.recipe), currentSeed(start.seed), currentTakes(start.takes),
 	      steering(driver, sink, currentRecipe, currentSeed, currentTakes), queue(steering.queue()),
-	      logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
+	      logEntries(start.logEntries), log(logEntries.log),
 	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr), start_(start) {
 		steering.hook = &hook;
 		hook.steerWith(steering, fillDown);
@@ -452,14 +471,13 @@ struct StepwisePiece {
 	StepwisePiece& operator=(const StepwisePiece&) = delete;
 
 	/// Stops the piece and starts another from `start` on the same Generator, as PLAY after a stop does: the steering
-	/// queue and the log are cleared. The sink keeps what it holds. The magnitude and the log's size stay as
-	/// constructed.
+	/// queue is cleared, and the log opens the next piece as the firmware's does. The sink keeps what it holds. The
+	/// magnitude and the log's size stay as constructed.
 	void restart(const Start& start) {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
 		queue.clear();
-		log.clear();
 		hook.reset();
 		start_ = start;
 		begin(start);
@@ -476,7 +494,6 @@ struct StepwisePiece {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
-		log.clear();
 		hook.reset();
 		Start start = start_;
 		start.recipe = currentRecipe;

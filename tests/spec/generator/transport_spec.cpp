@@ -169,8 +169,8 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 // clang-format off
 describe transport("The transport", $ {
 	it("plays the Outro from the phrase line after End, and stops where it ends", _ {
-		static LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run run = techno();
 		run.log = &log;
 		run.steer = at(kGroove0 + 40, end());
@@ -262,8 +262,8 @@ describe transport("The transport", $ {
 			g.arc.outroPhrases = 2;
 			return g;
 		}();
-		static LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run again = techno();
 		again.recipe.genre = &longOutro;
 		again.log = &log;

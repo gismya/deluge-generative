@@ -25,8 +25,8 @@ struct Played {
 
 Played playSteered(const Genre& genre, int32_t bars, std::vector<std::pair<int32_t, Command>> commands,
                    int32_t motion = macroPoints(25)) {
-	static LogEntry entries[64];
-	SteeringLog log(entries, 64);
+	TestLog entries(64);
+	SteeringLog& log = entries.log;
 	Run run;
 	run.recipe = acidRecipe();
 	run.recipe.genre = &genre;

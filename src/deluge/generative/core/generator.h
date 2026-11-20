@@ -300,6 +300,8 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	[[nodiscard]] uint32_t seed() const { return seed_; }
+	[[nodiscard]] const Takes& takes() const { return takes_; }
 	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
 	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser
 	/// from here (perform/riser_timing.h).

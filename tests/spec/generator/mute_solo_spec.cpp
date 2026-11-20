@@ -79,8 +79,8 @@ describe mute_solo("Part mute and solo", $ {
 	});
 
 	it("logs a mute or solo where it lands, as the state it set, and never a cancelled press", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		playSteered(4, {{5, mute(kAcid)}, {9, mute(kAcid)}, {10, solo(kDrums)}, {20, mute(kDrums, true)}}, &log);
 		expect(log.size()).to_equal(2);
 		expect(log.at(0).step).to_equal(kStepsPerBar);

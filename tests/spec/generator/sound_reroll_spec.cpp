@@ -77,8 +77,8 @@ describe sound_reroll("Sound re-rolls", $ {
 	});
 
 	it("waits in its part's pending slot, logged where it lands", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Result result = playSteered(phrase / kStepsPerBar + 1, {{3, newSound(kAcid, kToken)}}, &log);
 		expect(log.size()).to_equal(1);
 		expect(log.at(0).step).to_equal(phrase);
@@ -94,8 +94,8 @@ describe sound_reroll("Sound re-rolls", $ {
 	});
 
 	it("cancels the waiting one on kNoSound, and logs nothing", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Result result = playSteered(2 * phrase / kStepsPerBar,
 		                            {{3, newSound(kAcid, kToken)}, {5, newSound(kAcid, kNoSound)}}, &log);
 		expect(only(result.events, EventKind::Sound).empty()).to_be_true();

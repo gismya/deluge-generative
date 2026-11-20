@@ -262,8 +262,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 	});
 
 	it("keeps one pending key change: C, then D, then C before the line lands C once", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run run;
 		run.recipe = acidRecipe(); // A Minor
 		run.log = &log;
@@ -283,8 +283,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 	});
 
 	it("lands two key changes before a line as the second alone: one KeyScale, one log entry", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run run;
 		run.recipe = acidRecipe(); // A Minor
 		run.log = &log;
@@ -324,8 +324,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 	});
 
 	it("cancels a waiting key change when the key that plays is chosen again, logging nothing", _ {
-		LogEntry entries[4];
-		SteeringLog log(entries, 4);
+		TestLog entries(4);
+		SteeringLog& log = entries.log;
 		Run run;
 		run.recipe = acidRecipe(); // A Minor
 		run.log = &log;

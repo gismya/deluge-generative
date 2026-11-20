@@ -24,6 +24,7 @@
 #include "generative/core/event.h"
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/phrase_history.h"
 #include <cstdint>
@@ -73,6 +74,14 @@ public:
 	/// waits: a BACK tap cancelled it as the newest action (spec §13.5). Called once. The incoming instance still
 	/// waits, until the caller's cancelIncoming().
 	virtual void transitionDropped() {}
+
+	// ---- The steering log (spec §17.2) ----
+
+	/// A piece opens in `log` (beginPiece() has written its opening): the header's sound picks and param snapshot
+	/// (SteeringLog::addPick(), addSnapshot()), as the Outputs are now.
+	virtual void logPieceHeader(SteeringLog& /*log*/) {}
+	/// `part`'s new sound, `token`, landed on `step`: its picks, one SteeringLog::appendSoundPath() per slot.
+	virtual void logSoundPaths(SteeringLog& /*log*/, int32_t /*step*/, uint8_t /*part*/, uint8_t /*token*/) {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -102,7 +111,11 @@ public:
 	/// bar is a jump (spec §12.3), resuming at the master's next bar line as jumpTo() does.
 	/// @return Song ticks until the driver next needs a call, at least 1. Never early: an event plays at the first
 	/// call whose clock has reached it (spec §12.3).
-	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, NoteSink& sink);
+	/// Where pieces are logged (spec §17.2, §17.3), or nullptr for none. Each piece opens at its step 0's decision: a
+	/// start's, or a transition's start step, where the outgoing piece ends. A stop or the Outro's end ends it.
+	void setLog(SteeringLog* log) { log_ = log; }
+	[[nodiscard]] SteeringLog* log() const { return log_; }
 
 	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
 	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own
@@ -181,11 +194,16 @@ private:
 	/// The bar-line step at or after `step`.
 	[[nodiscard]] static int32_t barLineAtOrAfter(int32_t step);
 	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
-	void finish(NoteSink& sink);
+	void finish(NoteSink& sink, PieceEnd why);
 	/// Tells the sink, once, that the core dropped the incoming instance's command: it neither waits nor landed.
 	void reportDropIfGone(NoteSink& sink);
 	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
-	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	void decideDue(SteeringQueue& queue, NoteSink& sink);
+	/// The playing instance's piece opens in the log, before its step 0's decision.
+	void openPiece(NoteSink& sink);
+	/// Logs the picks of each sound that landed in the decision just made: `before` is each part's soundLanded()
+	/// before it.
+	void logLandedSounds(const int32_t (&before)[kMaxParts], NoteSink& sink);
 	/// Plays every buffered event due at or before `upTo`, in order.
 	void playDue(NoteSink& sink, int32_t upTo);
 	/// Plays the outgoing instance's events due by now, and lets it go once it is drained.
@@ -216,6 +234,7 @@ private:
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	SteeringLog* log_ = nullptr;
 	Generator* incoming_ = nullptr;
 	Generator* outgoing_ = nullptr;
 	/// The start step's tick in the outgoing instance's time: its events play at their tick less this.
@@ -245,6 +264,8 @@ private:
 	/// above, in their padding: the driver's size and later offsets stay as they were (PerformAdapter's
 	/// static_asserts).
 	bool incomingKeepsMacros_ = false;
+	/// The playing instance's piece opens at its next decision: step 0's.
+	bool pieceDue_ = false;
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.
 	int32_t drainedEndLine_ = -1;

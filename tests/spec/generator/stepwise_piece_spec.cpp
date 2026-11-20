@@ -192,7 +192,8 @@ describe stepwise_piece("The stepwise piece", $ {
 		}
 	});
 
-	it("starts again from nothing: the pending list and the log are gone, and step 0 is next", _ {
+	it("starts again from nothing: the pending list is gone, the log's last piece goes as the next opens, and step 0 is next",
+	   _ {
 		StepwisePiece<> piece{{.skipIntro = true, .logEntries = 4}};
 		piece.decideBefore(5);
 		piece.push(kMuteNow);
@@ -204,7 +205,10 @@ describe stepwise_piece("The stepwise piece", $ {
 		expect(piece.generator.nextStep()).to_equal(0);
 		expect(piece.generator.soloPending(0)).to_be_false();
 		expect(piece.generator.partMuted(kAcid)).to_be_false();
+		expect(piece.log.size()).to_equal(1); // kept until the next piece opens: the leave menu offers it (spec §17.7)
+		piece.decideBefore(1);
 		expect(piece.log.size()).to_equal(0);
+		expect(piece.log.pieces()).to_equal(1);
 		piece.runToStepLine(16);
 		expect(piece.driver.clock()).to_equal(stepTick(16));
 		expect(piece.generator.nextStep()).to_equal(17);

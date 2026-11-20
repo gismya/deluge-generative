@@ -16,6 +16,7 @@
  */
 
 #include "generative/core/generator.h"
+#include "generative/core/steering_log.h"
 #include <algorithm>
 #include <iterator>
 #ifdef GENERATOR_TEST_SEAMS

@@ -246,8 +246,8 @@ describe octave("Octave shift", $ {
 	});
 
 	it("waits for the next bar line, then plays the part an octave up and logs the change", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		// Watched mid-bar, after the press and before the line: the driver decides a step ahead of the song.
 		int32_t playingMidBar = -1;
 		int32_t waitingMidBar = -1;
@@ -308,8 +308,8 @@ describe octave("Octave shift", $ {
 	});
 
 	it("cancels a waiting shift when the shift that plays is pressed, and logs nothing", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Result result = playSteered(2, {{3, octaveTo(kAcid, 1)}, {5, octaveTo(kAcid, 0)}}, &log);
 		expect(result.generator->octave(kAcid)).to_equal(0);
 		expect(result.generator->octaveWaiting(kAcid)).to_equal(kNoOctaveWaiting);
@@ -324,8 +324,8 @@ describe octave("Octave shift", $ {
 	it("refuses a shift past the part's octave range, and starts a Recipe's at the nearest it takes", _ {
 		const Genre& genre = genres::technoDub;
 		const auto sub = static_cast<uint8_t>(partNamed(genre, "SUB"));
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run run = shiftedRun(genre, 0, 0);
 		run.skipIntro = true;
 		run.log = &log;
@@ -339,8 +339,8 @@ describe octave("Octave shift", $ {
 	});
 
 	it("refuses Drums and FX, parts past the roster and shifts past two octaves", _ {
-		LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		const uint8_t fx = static_cast<uint8_t>(partCount(genres::technoAcid) - 1);
 		Result result = playSteered(2,
 		                            {{3, octaveTo(kDrums, 1)},

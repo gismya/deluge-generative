@@ -321,8 +321,8 @@ describe patterns("Patterns", $ {
 			Run stepped = plain;
 			// One press each: the same take pressed again would cancel it (spec §13.5).
 			stepped.steer = steerAt({{kNewTake, {CommandKind::SetTake, 0, 1}}, {kStepBack, {CommandKind::SetTake, 0, 0}}});
-			LogEntry entries[8];
-			SteeringLog log(entries, 8);
+			TestLog entries(8);
+			SteeringLog& log = entries.log;
 			stepped.log = &log;
 
 			auto drums = [](const Result& result, int32_t fromStep, int32_t toStep) {
