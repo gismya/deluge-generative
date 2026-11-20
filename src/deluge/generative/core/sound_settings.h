@@ -124,9 +124,10 @@ constexpr SoundSettings laneSoundSettings(Lane lane) {
 	}
 	return settings;
 }
-/// The same for `part`'s lane, with the delay setup its LaneSpec gives the row (spec §10.6).
+/// The same for `part`'s lane, with the delay setup its LaneSpec gives the row and the part's volume (spec §10.6).
 constexpr SoundSettings laneSoundSettings(const PartSpec& part, Lane lane) {
 	SoundSettings settings = laneSoundSettings(lane);
+	settings.volume = part.volume;
 	settings.delay = delaySetupOf(part, lane);
 	return settings;
 }

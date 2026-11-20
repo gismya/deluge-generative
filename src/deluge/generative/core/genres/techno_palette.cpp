@@ -179,13 +179,15 @@ constexpr PaletteEntry kSubSounds[] = {
     {"SYNTHS/002 Basic Square Bass.XML", 3},
     {"SYNTHS/050 FM Basic Bass.XML", 2},
 };
-/// The Stab: chord presets that carry their own echo, until delay setups and delay Throws arrive with Dub (#130).
-/// 037's fifth on every note and its delay make the classic dub-techno chord (with one chord the stacked fifth does
-/// no harm); 082 is a short stab into its own delay; 072 an FM pluck with a delay tail.
+/// The Stab: the pack's dry copies of three factory chord presets (#322), with their own echo off (delay feedback 0)
+/// and louder, so the part's delay setup (techno.cpp) and its Throws alone make the echo. 037's fifth on every note
+/// makes the classic dub-techno chord (with one chord the stacked fifth does no harm); 082 is a short stab; 072 an FM
+/// pluck. The factory originals follow at weight 0: never rolled, they load only through the fallback chain (spec
+/// §10.1) on a card without the pack, with their own echo.
 constexpr PaletteEntry kDubStabSounds[] = {
-    {"SYNTHS/037 Echo Chord.XML", 3},
-    {"SYNTHS/082 Short Sharp Delay.XML", 2},
-    {"SYNTHS/072 Kyoto Phono.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML", 3},  {"SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML", 2},
+    {"SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML", 1}, {"SYNTHS/037 Echo Chord.XML", 0},
+    {"SYNTHS/082 Short Sharp Delay.XML", 0},          {"SYNTHS/072 Kyoto Phono.XML", 0},
 };
 /// The pedal Pad, root and fifth held for whole Sections: slow, dark pads with no transpose. 131's strings swell in
 /// over 3 s, a wash; 139's detuned saws over 1.1 s; 126's dark FM stacks another fifth, harmless on a pedal.
