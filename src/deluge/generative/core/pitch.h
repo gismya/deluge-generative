@@ -178,10 +178,13 @@ constexpr ExtensionOrder kNinthFirst{{Extension::Ninth, Extension::Sus4, Extensi
 constexpr bool extensionOrderValid(const ExtensionOrder& order) {
 	int32_t seen = 0;
 	for (Extension extension : order.tries) {
-		const int32_t bit = 1 << static_cast<int32_t>(extension);
 		const bool known = extension == Extension::Sus4 || extension == Extension::Sixth
 		                   || extension == Extension::Seventh || extension == Extension::Ninth;
-		if (!known || (seen & bit) != 0
+		if (!known) {
+			return false; // checked before the shift: an unknown value could be negative or past the int's width
+		}
+		const int32_t bit = 1 << static_cast<int32_t>(extension);
+		if ((seen & bit) != 0
 		    || (extension == Extension::Sixth && (seen & 1 << static_cast<int32_t>(Extension::Seventh)) == 0)) {
 			return false;
 		}

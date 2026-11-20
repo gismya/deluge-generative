@@ -41,6 +41,13 @@ GEN_STEP_CODE VoicePlace voicePlace(const Chord& chord, int32_t i) {
 
 namespace {
 
+/// The 24 orders of 4 slots, in lexicographic order: note i takes slot [i] (openVoicing()).
+constexpr uint8_t kPairings[24][kMaxChordNotes] = {
+    {0, 1, 2, 3}, {0, 1, 3, 2}, {0, 2, 1, 3}, {0, 2, 3, 1}, {0, 3, 1, 2}, {0, 3, 2, 1}, {1, 0, 2, 3}, {1, 0, 3, 2},
+    {1, 2, 0, 3}, {1, 2, 3, 0}, {1, 3, 0, 2}, {1, 3, 2, 0}, {2, 0, 1, 3}, {2, 0, 3, 1}, {2, 1, 0, 3}, {2, 1, 3, 0},
+    {2, 3, 0, 1}, {2, 3, 1, 0}, {3, 0, 1, 2}, {3, 0, 2, 1}, {3, 1, 0, 2}, {3, 1, 2, 0}, {3, 2, 0, 1}, {3, 2, 1, 0}};
+static_assert(kMaxChordNotes == 4, "kPairings lists the orders of 4 slots");
+
 /// The instance of `note`'s pitch class inside [low, high] nearest any of `near`, a tie going down.
 GEN_STEP_CODE int32_t nearestInstance(int32_t note, int32_t low, int32_t high, std::span<const int32_t> near) {
 	int32_t candidate = low + pitchClass(note - low);
@@ -129,24 +136,17 @@ GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Regi
 			moves[i][v] = to[i][v] > previous[v] ? to[i][v] - previous[v] : previous[v] - to[i][v];
 		}
 	}
-	// Every pairing of notes with slots, a slot past the voices leaving its note over: at most 4^4 codes, the
-	// repeats skipped.
-	const int32_t slots = std::max(notes, voices);
-	int32_t codes = 1;
-	for (int32_t i = 0; i < slots; i++) {
-		codes *= slots;
-	}
+	// Every pairing of notes with slots, a slot past the voices leaving its note over. A table, not codes decoded by
+	// division: the Cortex-A9 has no hardware divide. A pairing counts only when as many notes take a voice as can
+	// (a note left over moves nothing, so it must not stand in for a voice that is free).
+	const int32_t paired = std::min(notes, voices);
 	int32_t least = INT32_MAX;
-	for (int32_t code = 0; code < codes; code++) {
-		int32_t slot[kMaxChordNotes] = {};
-		int32_t used = 0;
-		bool repeats = false;
-		for (int32_t i = 0, rest = code; i < slots; i++, rest /= slots) {
-			slot[i] = rest % slots;
-			repeats |= (used & 1 << slot[i]) != 0;
-			used |= 1 << slot[i];
+	for (const auto& slot : kPairings) {
+		int32_t taking = 0;
+		for (int32_t i = 0; i < notes; i++) {
+			taking += slot[i] < voices ? 1 : 0;
 		}
-		if (repeats) {
+		if (taking != paired) {
 			continue;
 		}
 		// A note left over moves no voice: it goes to its first-voicing spot.

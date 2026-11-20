@@ -96,8 +96,11 @@ otherwise.
   `decideSustain()`. The voices are the previous voicing's pitches, `PartState::voicing`, so it needs no state of its
   own: the trap is that `leadVoicing()`'s nearest-any rule is per pitch class, not per voice, so a wide first voicing
   collapses into a cluster within a few chords (the rules review's sketch kept 67 % open). `openVoicing()` pairs notes
-  with voices by the least total move (at most 4^4 codes, repeats skipped: no `std::next_permutation`, whose
-  out-of-line copy would land outside the step section). `leadVoicing()` itself is untouched, so no other genre moves.
+  with voices by the least total move, over a table of the 24 orders of 4 slots (`kPairings`): no
+  `std::next_permutation`, whose out-of-line copy would land outside the step section, and no codes decoded with `%`
+  and `/` by a runtime divisor, each an `__aeabi_idivmod` call on the Cortex-A9 (about 1,000 a bar line). With slots
+  fixed at 4, a pairing counts only when min(notes, voices) notes take a voice: a leftover note costs nothing, so it
+  would otherwise stand in for a free voice. `leadVoicing()` itself is untouched, so no other genre moves.
 - The Extension order is `HarmonySpec::extensionOrder` (`ExtensionOrder`, `core/pitch.h`), passed to `voiceChord()` by
   `voiceChordAt()` only: specs that call `voiceChord()` to check a genre's chords must pass the genre's order
   (`ambient_spec` passes `kNinthFirst`). `harmonyValid()` checks it with `extensionOrderValid()`.
