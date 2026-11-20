@@ -21,19 +21,22 @@ leak     the memory check (spec §13.8: memory after leaving matches memory befo
          before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal and
          external free memory after leaving equal their values before entry exactly.
 
-capture  the tuning loop's main step: builds a capture firmware in build-capture/ whose Current Recipe and seed come
-         from the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots
-         it, plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
-         --no-play. Deterministic: the same arguments give the same WAV. --out is a folder (the WAV is named after
+capture  the tuning loop's main step: builds a capture firmware in build-capture/ (--build-dir; --elf: that one, built
+         before, and nothing builds), writes a copy of its ELF beside the WAV whose Current Recipe and seed come from
+         the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots it,
+         plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
+         --no-play. Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new
+         Recipe rebuilds nothing; a source change rebuilds and relinks. --out is a folder (the WAV is named after
          the arguments, never overwriting one) or a .wav path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
          --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
          level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
          on the first step.
-         Each capture keeps its raw dump and run log as <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so
-         captures sharing a --out folder never read each other's audio. The dumps are deleted after, the logs when
-         the audio is whole; a capture also deletes the dumps (and the empty WAV) of captures that were killed. It
+         Each capture keeps its patched ELF as <WAV stem>-pid<N>.elf and its raw dump and run log as
+         <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so captures sharing a --out folder or a --build-dir
+         never patch the same firmware or read each other's audio. The ELF and dumps are deleted after, the logs when
+         the audio is whole; a capture also deletes the ELFs, dumps (and the empty WAV) of captures that were killed. It
          then runs the check below on its WAV and exits 1 if the audio isn't whole: after the firmware it builds
          generator_render (only that target, in build/tests/) and renders the same Recipe, so the check reads what
          the firmware plays (--render: that one instead). --no-check skips it: the length and a corrupt run still
@@ -217,16 +220,16 @@ def bar_runs(bars, bar_seconds):
 WavVerdict = collections.namedtuple("WavVerdict", "failures warnings checked")
 
 
-def wav_failures(pcm, seconds, steps, step_seconds):
+def wav_failures(pcm, seconds, steps, step_seconds, quiet_bars=frozenset()):
     """Whether S32LE stereo audio is a whole capture of `seconds`, as a WavVerdict:
     - failures: short; silent in the beat after a step of `steps` (the onsets of the harness render's notes in parts
       the capture didn't mute; step 0 starts at PLAY), with the last beats clipped to the capture's end; or a run of
       CORRUPT_RUN full-scale samples. Silence anywhere else is fine: an isolated or sparse capture is silent where its
-      parts rest.
+      parts rest, and so are the bars in `quiet_bars` (--quiet-bars: a riser alone starts from silence).
       With `steps` given but none of them checked (an FX-alone capture before its first note), audio that is silent
       throughout fails too.
     - warnings: a run of FULL_SCALE_RUN full-scale samples (the mix clips); `steps` given but none checked, with
-      some sound.
+      some sound (naming `quiet_bars` when they held every step in it).
     - checked: how many steps' beats it checked.
     `steps` None: no harness render, so no step is checked."""
     failures, warnings = [], []
@@ -237,11 +240,14 @@ def wav_failures(pcm, seconds, steps, step_seconds):
     limit = min(frames, int(seconds * RATE))
     step_frames = step_seconds * RATE
     silent_bars = set()
-    checked = 0
+    checked = quiet = 0
     for step in sorted(steps or ()):
         start = int(step * step_frames)
         if start + step_frames > limit:
             continue  # less than a 16th before the capture's end (or where it stopped short): latency would fail it
+        if step // STEPS_PER_BAR in quiet_bars:
+            quiet += 1
+            continue
         end = min(limit, int((step + WINDOW_STEPS) * step_frames))
         chunk = samples[start * 2 : end * 2 : 11]
         rms = math.sqrt(sum(v * v for v in chunk) / max(1, len(chunk))) / 2**31
@@ -255,13 +261,19 @@ def wav_failures(pcm, seconds, steps, step_seconds):
         )
     if steps is not None and not checked:
         chunk = samples[: limit * 2 : 11]
+        # every note the harness has in it is in --quiet-bars: say so, it may be the bars named, not the music
+        why = f"the harness's {quiet} steps in it are all in quiet bars"
         if not any(abs(v) / 2**31 >= SILENCE_RMS for v in chunk):
             failures.append(
-                "silent throughout, and the harness has no note to check in it"
+                f"silent throughout, and --quiet-bars left no step to check ({why})"
+                if quiet
+                else "silent throughout, and the harness has no note to check in it"
             )
         else:
             warnings.append(
-                "the harness has no note to check in it: only its length and full-scale runs were checked"
+                f"--quiet-bars left no step to check: {why}; only its length and full-scale runs were checked"
+                if quiet
+                else "the harness has no note to check in it: only its length and full-scale runs were checked"
             )
     run = longest_full_scale_run(samples)
     if run and run[0] >= CORRUPT_RUN:
@@ -273,6 +285,28 @@ def wav_failures(pcm, seconds, steps, step_seconds):
             f"a run of {run[0]} full-scale samples at {run[1]:.1f} s: the mix clips"
         )
     return WavVerdict(failures, warnings, checked)
+
+
+def bar_set(text):
+    """--quiet-bars' value: bars from PLAY (bar 0), comma-separated, each a bar or a range: `47` or `3,40-42`."""
+    bars = set()
+    for item in text.split(","):
+        first, dash, last = item.strip().partition("-")
+        try:
+            a, b = int(first), int(last if dash else first)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"{text!r}: bars from 0, as 47 or 3,40-42"
+            ) from None
+        if a < 0 or b < a:
+            raise argparse.ArgumentTypeError(f"{text!r}: bars from 0, as 47 or 3,40-42")
+        bars.update(range(a, b + 1))
+    return frozenset(bars)
+
+
+def quiet_bars(args):
+    """Every bar the --quiet-bars flags name."""
+    return frozenset().union(*(getattr(args, "quiet_bars", None) or []))
 
 
 def active_steps(parts, muted):
@@ -468,8 +502,20 @@ def scale_names():
     return [re.sub(r"(?<!^)(?=[A-Z])", "-", n).lower() for n in names]
 
 
-def capture_header(args):
-    """generative_capture.h for a capture build: a RecipeOverrides initialiser (generative/core/recipe_overrides.h)."""
+# The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp): the Recipe it plays, which
+# write_capture_elf patches into a copy of its ELF. The two layouts must agree; the firmware static_asserts its own.
+CAPTURE_SYMBOL = b"generative_capture_recipe"
+CAPTURE_MAGIC = b"GENCAP1\0"
+CAPTURE_LAYOUT = struct.Struct(
+    "<8s32sIIi4bbbbx"
+)  # magic, genre, entropy, seed, tempo, macros, key, scale, swing
+CAPTURE_GENRE_BYTES = 32
+KEEP_SWING = -128  # RecipeOverrides::kKeepSwing
+
+
+def capture_recipe(args):
+    """The CaptureRecipe bytes for these arguments: a RecipeOverrides (generative/core/recipe_overrides.h) with the
+    genre's name inline. Exits on an unknown genre, key or scale."""
     if args.genre not in genre_names():
         sys.exit(
             "unknown genre: {} (have {})".format(args.genre, ", ".join(genre_names()))
@@ -488,24 +534,67 @@ def capture_header(args):
                 )
             )
         scale = scale_names().index(args.scale)
-    macros = ", ".join(
-        str(-1 if getattr(args, m) is None else getattr(args, m)) for m in MACROS
+    genre = args.genre.encode()
+    if len(genre) >= CAPTURE_GENRE_BYTES:  # the firmware needs its terminating NUL
+        sys.exit(f"genre name too long for a capture: {args.genre}")
+    return CAPTURE_LAYOUT.pack(
+        CAPTURE_MAGIC,
+        genre,
+        args.entropy,
+        args.seed,
+        0 if args.tempo is None else hundredths(args.tempo),
+        *(-1 if getattr(args, m) is None else getattr(args, m) for m in MACROS),
+        key,
+        scale,
+        KEEP_SWING if args.swing is None else args.swing,
     )
-    fields = [
-        f'.genre = "{args.genre}"',
-        f".entropy = {args.entropy}u",
-        f".seed = {args.seed}u",
-        f".macroPoints = {{{macros}}}",
-        f".tempo = {0 if args.tempo is None else hundredths(args.tempo)}",
-        f".keyRoot = {key}",
-        f".scale = {scale}",
-    ]
-    if args.swing is not None:
-        fields.append(f".swing = {args.swing}")
-    return (
-        "// Generated by scripts/generative/gen_emu.py capture. Not committed.\n"
-        "#define GENERATIVE_CAPTURE_OVERRIDES {{{}}}\n".format(", ".join(fields))
+
+
+def capture_recipe_offset(elf, path):
+    """The file offset of the CaptureRecipe in `elf` (an ELF32 file's bytes). Exits if it has none."""
+    if elf[:6] != b"\x7fELF\x01\x01":
+        sys.exit(f"{path}: not a little-endian 32-bit ELF")
+    shoff, shentsize, shnum = (
+        struct.unpack_from("<I", elf, 32)[0],
+        *struct.unpack_from("<HH", elf, 46),
     )
+    sections = [
+        struct.unpack_from("<10I", elf, shoff + i * shentsize) for i in range(shnum)
+    ]  # name, type, flags, addr, offset, size, link, info, addralign, entsize
+    for _, kind, _, _, offset, size, link, _, _, entsize in sections:
+        if kind != 2:  # SHT_SYMTAB
+            continue
+        strtab = sections[link][4]
+        for at in range(offset, offset + size, entsize):
+            name, value, sym_size, _, _, shndx = struct.unpack_from("<IIIBBH", elf, at)
+            end = elf.index(b"\0", strtab + name)
+            if elf[strtab + name : end] != CAPTURE_SYMBOL:
+                continue
+            if shndx >= len(
+                sections
+            ):  # SHN_ABS, SHN_COMMON or out of range: not a capture build's
+                break
+            home = sections[shndx]
+            if home[1] != 1 or sym_size != CAPTURE_LAYOUT.size:  # SHT_PROGBITS
+                break
+            start = home[4] + value - home[3]
+            if elf[start : start + len(CAPTURE_MAGIC)] != CAPTURE_MAGIC:
+                break
+            return start
+    sys.exit(
+        f"{path} has no {CAPTURE_LAYOUT.size}-byte {CAPTURE_SYMBOL.decode()} of this gen_emu's layout: not a capture "
+        "build (gen_emu.py capture builds one in --build-dir), or one from another gen_emu"
+    )
+
+
+def write_capture_elf(src, dst, recipe):
+    """Writes a copy of the capture firmware `src` to `dst` that plays `recipe` (capture_recipe's bytes)."""
+    with open(src, "rb") as fh:
+        elf = bytearray(fh.read())
+    start = capture_recipe_offset(elf, src)
+    elf[start : start + len(recipe)] = recipe
+    with open(dst, "wb") as fh:
+        fh.write(elf)
 
 
 def uint32(text):
@@ -579,6 +668,10 @@ BOOT_FILE = re.compile(
 )
 
 
+# A capture's copy of the firmware, patched with its Recipe: <capture_tag>.elf.
+CAPTURE_ELF = re.compile(r"^(?P<stem>.+)-pid(?P<pid>\d+)\.elf$")
+
+
 def boot_name(tag, attempt):
     """A boot attempt's files without their extension (BOOT_FILE)."""
     return f"{tag}-boot{attempt}"
@@ -610,11 +703,18 @@ def pid_running(pid):
 
 
 def clear_dead_captures(out):
-    """Removes what a killed capture left in `out`: its raw dumps (up to 100 MB each), and the WAV it claimed if
-    that is still empty. Only for captures whose process is gone; their run logs stay."""
+    """Removes what a killed capture left in `out`: its raw dumps (up to 100 MB each), its copy of the firmware, and
+    the WAV it claimed if that is still empty. Only for captures whose process is gone; their run logs stay."""
     for name in os.listdir(out):
         m = BOOT_FILE.match(name)
-        if not m or m["ext"] != "s32" or pid_running(int(m["pid"])):
+        if not m:
+            m = CAPTURE_ELF.match(name)
+            if m and not pid_running(int(m["pid"])):
+                log(f"removing {name}: its capture (pid {m['pid']}) was killed")
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(os.path.join(out, name))
+            continue
+        if m["ext"] != "s32" or pid_running(int(m["pid"])):
             continue
         log(f"removing {name}: its capture (pid {m['pid']}) was killed")
         with contextlib.suppress(FileNotFoundError):
@@ -788,23 +888,20 @@ def dbt(command):
 
 
 def build_capture(args):
-    """Builds the capture firmware for these arguments. Incremental: only current_recipe.cpp rebuilds."""
+    """Builds the capture firmware in --build-dir and returns its ELF. The Recipe isn't in the build (capture_one
+    patches it into a copy), so a new Recipe builds nothing: only a source change does."""
     build = os.path.abspath(args.build_dir)
-    gen = os.path.join(build, "generated")
-    os.makedirs(gen, exist_ok=True)
-    header = os.path.join(gen, "generative_capture.h")
-    text = capture_header(args)
-    old = None
-    if os.path.exists(header):
-        with open(header) as fh:
-            old = fh.read()
-    if old != text:
-        with open(header, "w") as fh:
-            fh.write(text)
-    if not os.path.exists(os.path.join(build, "CMakeCache.txt")):
+    cache = os.path.join(build, "CMakeCache.txt")
+    configured = False
+    if os.path.exists(cache):
+        with open(cache) as fh:
+            configured = "GENERATIVE_CAPTURE:BOOL=ON" in fh.read().splitlines()
+    if (
+        not configured
+    ):  # a new build dir, or one from before #401 (GENERATIVE_CAPTURE_DIR)
         dbt(
             f"cmake -B {shlex.quote(build)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' -DCMAKE_CROSS_CONFIGS:STRING=all "
-            f"'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DGENERATIVE_CAPTURE_DIR={shlex.quote(gen)}"
+            "'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DGENERATIVE_CAPTURE:BOOL=ON -UGENERATIVE_CAPTURE_DIR"
         )
     dbt(f"cmake --build {shlex.quote(build)} --config Release --target deluge")
     return os.path.join(build, "Release", "deluge.elf")
@@ -1121,6 +1218,8 @@ def check_capture_args(args):
             else f" (no --tempo, so checked at the fastest tempo a Recipe can have, {MAX_TEMPO} BPM)"
         )
         sys.exit(f"capture: {error}{fastest}; --no-check skips the check's render")
+    if getattr(args, "elf", None) and not os.path.isfile(args.elf):
+        sys.exit(f"capture: --elf {args.elf}: no such file")
     if args.ab and not args.mute:
         sys.exit("capture --ab needs a part to leave out: --mute PART")
     if args.ab and is_wav_path(args.out):
@@ -1136,10 +1235,13 @@ def capture_one(args, elf, mutes, harness=None):
     clear_dead_captures(out)
     wav = capture_path(args, args.out, mutes)
     tag = capture_tag(wav)
+    # Its own copy (the tag holds the pid), so captures from one build dir at once never patch the same file.
+    patched = os.path.join(out, tag + ".elf")
     warnings = []
     writing = False
     try:
-        emu = boot(args, elf, out, tag)
+        write_capture_elf(elf, patched, capture_recipe(args))
+        emu = boot(args, patched, out, tag)
         try:
             if not enter_perform(emu):
                 raise RuntimeError("Perform's song never finished loading")
@@ -1161,10 +1263,16 @@ def capture_one(args, elf, mutes, harness=None):
     finally:
         # every boot attempt's raw dump: up to 100 MB each, and nothing reads it again
         remove_boot_files(out, tag, "s32")
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(patched)
     if harness:
         parts, step_seconds = harness
         verdict = wav_failures(
-            pcm, args.seconds, active_steps(parts, set(mutes)), step_seconds
+            pcm,
+            args.seconds,
+            active_steps(parts, set(mutes)),
+            step_seconds,
+            quiet_bars(args),
         )
     else:
         verdict = wav_failures(pcm, args.seconds, None, 1.0)
@@ -1198,11 +1306,12 @@ def capture_one(args, elf, mutes, harness=None):
 
 def capture(args):
     check_capture_args(args)
+    capture_recipe(args)  # an unknown genre, key or scale stops before the build
     warn_pin(args)
     check = not args.no_check
     if check and args.render:
         require_render(args.render)  # before the minutes-long build
-    elf = build_capture(args)
+    elf = args.elf or build_capture(args)
     harness = None
     if check and args.render:
         log_render(args.render)
@@ -1235,7 +1344,9 @@ def check_wavs(args):
     bad = 0
     for path in args.wavs:
         try:
-            verdict = wav_failures(read_wav(path), args.seconds, steps, step_seconds)
+            verdict = wav_failures(
+                read_wav(path), args.seconds, steps, step_seconds, quiet_bars(args)
+            )
         except (OSError, EOFError, ValueError, wave.Error) as exc:
             verdict = WavVerdict([str(exc)], [], 0)
         for warning in verdict.warnings:
@@ -1297,6 +1408,14 @@ def add_recipe_args(p):
         choices=range(1, MUTE_ROWS + 1),
         metavar="PART",
         help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+    )
+    p.add_argument(
+        "--quiet-bars",
+        type=bar_set,
+        action="append",
+        metavar="BARS",
+        help="bars from PLAY (bar 0) where the check expects silence, as 47 or 3,40-42: an FX part alone, whose "
+        "riser starts from silence; repeatable",
     )
     p.add_argument(
         "--render",
@@ -1363,6 +1482,12 @@ def parser():
         "run are still checked, and silence is a WARNING",
     )
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
+    c.add_argument(
+        "--elf",
+        help="capture with this capture firmware (a --build-dir's Release/deluge.elf) and build nothing; "
+        "--build-dir is then ignored, and the check renders with the current checkout's harness, which may differ "
+        "from the one the ELF was built from (--no-check skips it)",
+    )
     c.add_argument(
         "--out",
         default=os.path.join(REPO, "build-capture", "captures"),

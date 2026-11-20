@@ -9,6 +9,10 @@ otherwise.
   sounding oscillators are all 12 semitones or more off, on a missing one, and on an `ALLOWED` entry whose genre and
   part no longer list the preset. The factory presets all write `<osc1><transpose>` as elements; the parser takes
   attributes too.
+- `generator_render --mute PART` mutes only the copy of the rendering the WAV is made from (`withMutes()` in
+  `render/command.cpp`): the MIDI file and piano roll must stay byte-identical, so `theory_review` and `gen_emu.py
+  check` read the same notes with or without it. A row past the genre's own parts fails (Acid techno has 4), where
+  `gen_emu.py capture` takes 1-6 for any genre.
 - `gen_emu.py capture` names its files after the WAV's stem, which holds the whole Recipe. Keep that stem out of
   the QMP socket's path: a UNIX socket path past 104 bytes (macOS) makes QEMU fail every boot. `qmp_socket()` hashes
   it. The capture's check must read a `generator_render` built from the source the firmware was built from: capture
@@ -21,6 +25,26 @@ otherwise.
   render doesn't say which kind a lane plays. A capture with no harness step to check fails if silent throughout.
   The default `--card`, the factory image, has none of the pack's Riser samples: a Riser there is silent and its
   capture fails the check. Capture on a pack card (listening-session `rendering.md`, **Pack card**).
+- `gen_emu.py capture`'s default card (delugemu's `deluge_sd.img`) has no pack, and a pitched part's capture passes
+  its check either way (a Riser's doesn't, above): a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
+  of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
+  `card.txt` of `copy pack -> /`.
+- A capture build (`-DGENERATIVE_CAPTURE=ON`) holds no Recipe: it plays the `CaptureRecipe` in
+  `generative/firmware/current_recipe.cpp`, an `extern "C"` object `generative_capture_recipe` in `.data`, and
+  `gen_emu.py capture` writes the Recipe's bytes (`CAPTURE_LAYOUT`) into a copy of the ELF beside the WAV, found by that
+  symbol and checked by its magic, before it boots that copy. So a new Recipe builds nothing (#401). The two layouts
+  must agree: change both, and the test's `RECIPE_LAYOUT`. The object is `volatile` (else LTO folds the build's
+  defaults into the code and the patch does nothing) and `used, externally_visible` (else LTO makes it local and may
+  rename it, and gen_emu can't find it). A file on the card image was the other way: the image is shared and booted
+  with `-snapshot`, so each capture would need its own 445 MB copy or a FAT write.
+- A capture's WAV is a function of its arguments *and the firmware's code*: delugemu's audio follows the instruction
+  count, so any code change gives different bytes for the same Recipe (a no-op 100-iteration loop in
+  `rollFromGenre` did). Compare captures from one build only. To check two builds play the same Recipe, compare
+  `currentRecipe` in RAM after entering Perform (QMP `xp`; pointers resolved by symbol), as #401 did.
+- What still relinks a capture build dir: a source change, a commit (the version string; `-dirty` too), and a build
+  in a new build dir of the same checkout (`./dbt sizediff`, a fresh `check_all`): it rewrites the l10n
+  `g_english.cpp` and `g_seven_segment.cpp` in the source tree, so every other build dir recompiles those and
+  relinks once.
 
 ## Theory review
 
@@ -53,3 +77,33 @@ lists them. The script judges nothing. Hand the summary to a fresh agent with th
 Where the findings go: each fault is fixed in the slice's PR (a retune if the genre has a golden already), and the
 review runs again; each judgement call becomes its own GitHub issue for the owner (label `needs-triage`), linked from
 the slice's PR. The PR's test plan lists the review's run and its findings. The review never blocks a merge.
+
+## Listening-session toolkit
+
+- `scripts/generative/listening/` (`listen.py`) builds listening sessions; its tests are `test_listening.py`. A job
+  line's comment is a whole line: never cut a line at `#`, since keys are spelled with it (`--key D#`). The Recipe
+  check (`listening/recipe.py`) compares each job's harness THEORY `recipe` and `key` lines with the job's own flags,
+  because `gen_emu.py check` renders the same arguments the capture got and so passes a mangled job.
+- Job args go through `gen_emu.add_recipe_args`, so a new gen_emu Recipe flag reaches jobs with no edit here; add it
+  to `jobs.RECIPE_FIELDS` and `recipe.mismatches` so the check and the merge see it.
+- The runner applies a variant once per claimed group and reverts after; ninja goes by mtime, so a revert followed by
+  the same apply still relinks. Merged captures are hard links in `raw/`: the cutter reads `raw/<name>.json` for the
+  tempo, so write one for any WAV you put there by hand.
+- A gen_emu flag that only steers the check (`--quiet-bars`) stays out of `Job.capture_flags()`: that list is the
+  stamp's `args`, so putting it there would make every WAV captured before stale. The runner adds it to the command
+  line itself (`Run.command`), and the `.failed` marker records it (`Run.failed_stamp`), so naming quiet bars after a
+  failure retries.
+- A runner holding two chunks of one variant (`base#1`, `base#2`) skips the revert and apply between them: it would
+  relink for nothing (ninja goes by mtime).
+- A job's genre is its own `--genre`: the job parser's genre default is None and `jobs.parse_args` fills in the
+  command's `--genre` after parsing (#426). Never put the command's genre on the job's argument list: it only won
+  by coming first (last wins), so a job's `--genre` beat it by accident. A variant's genre lives in
+  `diffs/genres.json` (`variants.genre_of`), a page card's in its `genre` field or its midi entry's args.
+- A WAV kept with its check failed (`info["check"]`) is current only for the quiet bars it was checked with
+  (`info["quiet"]`, `Run.done`); a clean WAV stays current whatever its job's `--quiet-bars` (#426).
+- `variants.build_renders` reuses `bin/<name>` when `bin/<name>.json` equals `render_stamp` now: the stamp is the
+  commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
+- The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
+  function and the page free of anything a Proxy stub can't stand in for at load.
+- The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
+  `pack/` alone prints `-` for every drum lane.

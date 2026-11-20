@@ -1,8 +1,8 @@
 # Ambient's hardware session (#125, spec §20 H1 and H16): Acid techno changes into Ambient by FADE THROUGH, the
 # highlighted style, then Ambient plays its Intro and six phrases of its first Groove, so its 8-bar chords change at
 # least once in all but a few pieces (a repeat weighs 40 of about 110 at each phrase line). Halfway, Density goes from
-# 25 to about 40, past the 35 gate of the soft percussion and of the Riser and Fall, for the heaviest voice load the
-# Groove plays. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest render)
+# 25 to the top, past every soft-percussion gate (28 to 47, the kick last) and the Riser's and Fall's 35, for the
+# heaviest voice load the Groove plays. gen_h1 (step decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest render)
 # report every 4 bars; the runner reads them, and stops if culled= ever names BASS or DRONE (#125 decision 9). Runs on
 # a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
 # current clip a synth or kit clip.
@@ -56,11 +56,11 @@ expect event gen_h16 culls= within=20
 expect event gen_phrase bar= within=40
 expect event gen_phrase bar= within=40
 
-# ---- Density up to about 40 (+40 knob steps of 25 units): the percussion, Riser and Fall come in ----
+# ---- Density to the top (+70 knob steps of 25 units, past 50): the percussion, the kick last, and Riser and Fall ----
 button F8 down
 wait 50
 button F8 up
-encoder 5 40
+encoder 5 70
 expect event gen_macro_landed within=20
 expect event gen_phrase bar= within=40
 expect event gen_h16 culls= within=20

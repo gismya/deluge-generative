@@ -62,9 +62,12 @@ GEN_STEP_CODE int32_t snap(int32_t steps, DegreeSet set, Scale scale, int32_t ch
 	return steps;
 }
 
-GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard) {
+GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel, ExtensionGuard guard,
+                               ExtensionOrder order) {
 	// Intervals in scale steps above the root.
-	enum Extension : int32_t { kSeventh = 6, kNinth = 8, kSus4 = 3, kSixth = 5 };
+	constexpr int32_t kSeventh = static_cast<int32_t>(Extension::Seventh);
+	constexpr int32_t kSus4 = static_cast<int32_t>(Extension::Sus4);
+	constexpr int32_t kSixth = static_cast<int32_t>(Extension::Sixth);
 
 	int32_t tones[kMaxChordNotes + 1] = {0, kChordThird, kChordFifth};
 	int32_t size = 3;
@@ -101,7 +104,8 @@ GEN_STEP_CODE Chord voiceChord(Scale scale, int32_t root, int32_t extensionLevel
 
 	bool seventhRejected = false;
 	int32_t added = 0;
-	for (int32_t extension : {kSeventh, kNinth, kSus4, kSixth}) {
+	for (Extension tried : order.tries) {
+		const int32_t extension = static_cast<int32_t>(tried);
 		if (added >= extensionLevel) {
 			break;
 		}

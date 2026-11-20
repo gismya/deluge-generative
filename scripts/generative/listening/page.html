@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Listening session</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f6f6f4, #17181a);
+  --card: light-dark(#ffffff, #212226);
+  --ink: light-dark(#1d1d1f, #e8e8ea);
+  --muted: light-dark(#5d5d66, #a3a3ad);
+  --line: light-dark(#dcdcd8, #34353b);
+  --accent: light-dark(#5b3cc4, #a99bff);
+  --warn-bg: light-dark(#fff3d6, #3a3020);
+  --warn-ink: light-dark(#6a4b00, #f2d48a);
+  --chosen: light-dark(#eee9ff, #2c2741);
+  accent-color: var(--accent);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+main { max-inline-size: 70rem; margin-inline: auto; padding: 1.5rem 1rem 6rem; }
+h1 { font-size: 1.6rem; margin: 0 0 .25rem; text-wrap: balance; }
+h2 { font-size: 1.2rem; margin: 2.5rem 0 .75rem; padding-block-end: .25rem; border-block-end: 1px solid var(--line); }
+h3 { font-size: 1.05rem; margin: 0; text-wrap: balance; }
+p { margin: .4rem 0; }
+.muted { color: var(--muted); }
+.lead { max-inline-size: 60rem; }
+nav { display: flex; flex-wrap: wrap; gap: .35rem; margin-block: 1rem; }
+nav a { font-size: .85rem; padding: .15rem .5rem; border: 1px solid var(--line); border-radius: 1rem; color: var(--ink); text-decoration: none; background: var(--card); }
+nav a[data-done] { border-color: var(--accent); color: var(--accent); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: .6rem; padding: 1rem 1.1rem; margin-block: 1rem; scroll-margin-block-start: 1rem; }
+.card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; margin-block-end: .4rem; }
+.id { font-weight: 700; color: var(--accent); }
+.ticket { font-size: .85rem; color: var(--muted); }
+.badge { font-size: .75rem; font-weight: 600; padding: .05rem .5rem; border-radius: 1rem; background: var(--warn-bg); color: var(--warn-ink); }
+.label { font-weight: 600; }
+.options { margin: .4rem 0; padding-inline-start: 1.2rem; }
+.options li { margin-block: .15rem; }
+.setup { font-size: .85rem; }
+.listen { padding: .4rem .6rem; border-inline-start: 3px solid var(--accent); background: var(--chosen); border-radius: .25rem; margin-block: .6rem; }
+.clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: .6rem; margin-block: .6rem; }
+.clip { border: 1px solid var(--line); border-radius: .4rem; padding: .5rem .6rem; }
+.clip .top { display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; font-size: .9rem; }
+.clip .kind { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+.clip audio { inline-size: 100%; margin-block: .3rem .1rem; }
+.clip .row { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; font-size: .85rem; }
+.clip select { font: inherit; }
+.midi { font-size: .85rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: baseline; margin-block: .3rem; }
+.midi a { color: var(--accent); }
+.question { padding: .4rem .6rem; border-inline-start: 3px solid var(--warn-ink); background: var(--warn-bg); border-radius: .25rem; margin-block: .6rem; }
+fieldset { border: 1px solid var(--line); border-radius: .4rem; margin: .7rem 0 .4rem; padding: .5rem .8rem .7rem; }
+legend { font-weight: 600; padding-inline: .3rem; }
+.choices { display: flex; flex-direction: column; gap: .2rem; }
+.choices label { display: flex; gap: .5rem; align-items: baseline; padding: .15rem .3rem; border-radius: .25rem; }
+.choices label:has(input:checked) { background: var(--chosen); }
+textarea { inline-size: 100%; font: inherit; padding: .4rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--bg); color: var(--ink); }
+.note { min-block-size: 3.2rem; resize: vertical; }
+ul.plain { padding-inline-start: 1.2rem; }
+.export { position: relative; }
+.export textarea { min-block-size: 18rem; font: .85rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.buttons { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-block: .5rem; }
+button { font: inherit; min-block-size: 2rem; min-inline-size: 2rem; padding: .25rem .9rem; border-radius: .35rem; border: 1px solid var(--accent); background: var(--accent); color: light-dark(#fff, #17181a); cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+.tip { font-size: .85rem; color: var(--accent); opacity: 0; transition: opacity .2s; }
+.tip:not(:empty) { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <div id="intro" class="lead"></div>
+  <p>Measurements, harness results, each option's exact change and the caveats are in <a href="variants.md">variants.md</a>.</p>
+  <p class="muted">Each card offers its options, plus "keep as is" and "can't tell", and a note. Loop a clip with its checkbox. Starting one clip stops the others. Answers save in this browser as you go. When you're done, press <strong>Export</strong> at the bottom and paste the block back to the orchestrator.</p>
+  <nav id="nav" aria-label="Cards"></nav>
+  <div id="sections"></div>
+  <section id="later"><h2>Later rounds</h2>
+    <p class="muted">Held for a later round: each depends on an answer from this round.</p>
+    <ul class="plain" id="later-list"></ul>
+  </section>
+  <section id="notrender"><h2>Not renderable here</h2><ul class="plain" id="nr-list"></ul></section>
+  <section id="export-section"><h2>Export</h2>
+    <div class="buttons">
+      <button type="button" id="export">Export</button>
+      <span class="copy"><button type="button" class="secondary" id="copy" aria-label="Copy the export block">Copy</button>
+      <span class="tip" role="status" id="copy-tip"></span></span>
+      <button type="button" class="secondary" id="clear">Clear all answers</button>
+    </div>
+    <div class="export"><textarea id="export-text" readonly aria-label="Export block" placeholder="Press Export"></textarea></div>
+  </section>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const KEY = 'listening-session:' + DATA.session;
+const answers = JSON.parse(localStorage.getItem(KEY) || '{}');
+const save = () => { localStorage.setItem(KEY, JSON.stringify(answers)); markNav(); };
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(k => k != null)); return e; };
+
+// A clip's answer under a card's verdicts: the default's one ("verdict") is saved under the stem, as before #426.
+const soundKey = (stem, name) => name === 'verdict' ? stem : stem + ':' + name;
+function soundsText(card, c, sounds) {
+  const names = Object.keys(card.verdicts);
+  if (names.length === 1 && names[0] === 'verdict') return sounds?.[c.stem] || '-';
+  return names.map(n => n + ' ' + (sounds?.[soundKey(c.stem, n)] || '-')).join(', ');
+}
+
+function renderCard(card) {
+  const a = answers[card.id] ||= { pick: '', note: '', sounds: {} };
+  const sec = el('article', { className: 'card', id: card.id });
+  const head = el('header', {}, el('span', { className: 'id', textContent: card.id }), el('h3', { textContent: card.title }),
+    el('span', { className: 'ticket', textContent: card.ticket }));
+  if (card.normal_mode) head.append(el('span', { className: 'badge', textContent: 'rendered in normal mode' }));
+  if (card.rough) head.append(el('span', { className: 'badge', textContent: 'rough render (stand-in sounds)' }));
+  sec.append(head, el('p', {}, el('span', { className: 'label', textContent: 'Now: ' }), card.now));
+  if (card.options.length) {
+    const ul = el('ul', { className: 'options' });
+    for (const o of card.options) ul.append(el('li', {}, el('strong', { textContent: o.key + ': ' }), o.label));
+    sec.append(el('div', {}, el('span', { className: 'label', textContent: 'Options' }), ul));
+  }
+  sec.append(el('p', { className: 'setup muted', textContent: card.setup }));
+  if (card.question) sec.append(el('p', { className: 'question' }, el('span', { className: 'label', textContent: 'For you: ' }), card.question));
+  sec.append(el('p', { className: 'listen' }, el('span', { className: 'label', textContent: 'Listen for: ' }), card.listen));
+  const grid = el('div', { className: 'clips' });
+  for (const c of card.clips) {
+    const audio = el('audio', { controls: true, preload: 'none', src: c.file });
+    const loop = el('input', { type: 'checkbox' });
+    loop.addEventListener('change', () => { audio.loop = loop.checked; });
+    const row = el('div', { className: 'row' }, el('label', {}, loop, ' loop'), el('span', { className: 'muted', textContent: c.seconds + ' s' + (c.level ? ' · ' + c.level : '') }));
+    if (card.picks && (!card.picks_only || card.picks_only.includes(c.stem))) {
+      for (const [name, choices] of Object.entries(card.verdicts)) {
+        const key = soundKey(c.stem, name);
+        const sel = el('select', { 'aria-label': name + ' of ' + c.label });
+        for (const [v, t] of [['', name + '…'], ...choices.map(x => [x, x])]) sel.append(el('option', { value: v, textContent: t }));
+        sel.value = a.sounds[key] || '';
+        sel.addEventListener('change', () => { a.sounds[key] = sel.value; save(); });
+        row.append(sel);
+      }
+    }
+    grid.append(el('div', { className: 'clip' },
+      el('div', { className: 'top' }, el('span', { textContent: c.label }), el('span', { className: 'kind', textContent: c.kind })),
+      audio, row));
+  }
+  if (card.clips.length) sec.append(grid);
+  if (card.midiFiles && card.midiFiles.length) {
+    const m = el('div', { className: 'midi' }, el('span', { className: 'label', textContent: 'MIDI (one track per part):' }));
+    for (const f of card.midiFiles) m.append(el('a', { href: f.file, download: f.file.split('/').pop(), textContent: f.label }));
+    sec.append(m);
+  }
+  const fs = el('fieldset', {}, el('legend', { textContent: 'Your answer' }));
+  const choices = el('div', { className: 'choices' });
+  const opts = [...card.options.map(o => [o.key, o.key + ': ' + o.label]), ['keep', 'Keep as is'], ['cant-tell', "Can't tell"]];
+  for (const [v, t] of opts) {
+    const r = el('input', { type: 'radio', name: 'pick-' + card.id, value: v, checked: a.pick === v });
+    r.addEventListener('change', () => { a.pick = v; save(); });
+    choices.append(el('label', {}, r, el('span', { textContent: t })));
+  }
+  const note = el('textarea', { className: 'note', value: a.note, placeholder: 'Note (optional)', 'aria-label': 'Note on ' + card.id });
+  note.addEventListener('input', () => { a.note = note.value; save(); });
+  fs.append(choices, note);
+  sec.append(fs);
+  document.getElementById('section-' + card.section).append(sec);
+  document.getElementById('nav').append(el('a', { href: '#' + card.id, textContent: card.id, title: card.title }));
+}
+
+function markNav() {
+  for (const a of document.querySelectorAll('#nav a')) {
+    const ans = answers[a.textContent];
+    a.toggleAttribute('data-done', !!(ans && (ans.pick || ans.note)));
+  }
+}
+
+document.title = DATA.title;
+document.getElementById('title').textContent = DATA.title;
+for (const p of DATA.intro) document.getElementById('intro').append(el('p', { textContent: p }));
+for (const s of DATA.sections) document.getElementById('sections').append(el('section', { id: 'section-' + s.id }, el('h2', { textContent: s.title })));
+DATA.cards.forEach(renderCard);
+if (!DATA.later.length) document.getElementById('later').hidden = true;
+if (!DATA.notRenderable.length) document.getElementById('notrender').hidden = true;
+for (const l of DATA.later) document.getElementById('later-list').append(el('li', {}, el('strong', { textContent: l.title }), ` (${l.ticket}). Waits on ${l.waits}`));
+for (const n of DATA.notRenderable) document.getElementById('nr-list').append(el('li', {}, el('strong', { textContent: n.title }), ` (${n.ticket}). ${n.why}`));
+markNav();
+
+// One clip at a time
+document.addEventListener('play', (e) => {
+  for (const a of document.querySelectorAll('audio')) if (a !== e.target) a.pause();
+}, true);
+
+function exportText() {
+  const L = [DATA.header, ''];
+  for (const card of DATA.cards) {
+    const a = answers[card.id] || { pick: '', note: '', sounds: {} };
+    L.push(`## ${card.id} ${card.title} (${card.ticket})${card.normal_mode ? ' [rendered in normal mode]' : ''}${card.rough ? ' [rough render]' : ''}`);
+    let pick = 'no answer';
+    if (a.pick === 'keep') pick = 'keep as is';
+    else if (a.pick === 'cant-tell') pick = "can't tell";
+    else if (a.pick) {
+      const o = card.options.find(o => o.key === a.pick);
+      pick = `${o.key}: ${o.label}` + (o.variant ? ` (variant \`${o.variant}\`, variants.md)` : '');
+    }
+    L.push(`- Pick: ${pick}`);
+    if (card.picks) {
+      const s = card.clips.filter(c => !card.picks_only || card.picks_only.includes(c.stem)).map(c => `${c.label}: ${soundsText(card, c, a.sounds)}`);
+      L.push('- Sounds: ' + s.join('; '));
+    }
+    L.push(`- Note: ${a.note.trim() ? a.note.trim().replace(/\n+/g, ' / ') : '-'}`);
+    L.push('- Clips compared: ' + (card.clips.length ? card.clips.map(c => c.file).join(', ') : 'none'));
+    L.push('');
+  }
+  L.push('## Later rounds');
+  for (const l of DATA.later) L.push(`- ${l.title} (${l.ticket}). Waits on ${l.waits}`);
+  L.push('', '## Not renderable');
+  for (const n of DATA.notRenderable) L.push(`- ${n.title} (${n.ticket}). ${n.why}`);
+  return L.join('\n');
+}
+
+const out = document.getElementById('export-text');
+document.getElementById('export').addEventListener('click', () => { out.value = exportText(); });
+document.getElementById('clear').addEventListener('click', () => {
+  if (!confirm('Clear every answer on this page?')) return;
+  localStorage.removeItem(KEY); location.reload();
+});
+
+// Copy: file:// may not be a secure context, so fall back to execCommand, synchronously inside the click.
+function legacyCopy(text) {
+  const field = Object.assign(document.createElement('textarea'), { value: text });
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset-block-start:0;opacity:0';
+  document.body.append(field);
+  field.select();
+  try { return document.execCommand('copy'); } finally { field.remove(); }
+}
+let tipTimer;
+function report(ok) {
+  const tip = document.getElementById('copy-tip');
+  clearTimeout(tipTimer);
+  tip.textContent = '';
+  requestAnimationFrame(() => { tip.textContent = ok ? 'Copied' : 'Copy failed: select the text and copy it'; });
+  tipTimer = setTimeout(() => { tip.textContent = ''; }, 2500);
+}
+document.getElementById('copy').addEventListener('click', () => {
+  if (!out.value) out.value = exportText();
+  const text = out.value;
+  if (window.isSecureContext && navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => report(true), () => report(legacyCopy(text)));
+  } else {
+    report(legacyCopy(text));
+  }
+});
+</script>
+</body>
+</html>

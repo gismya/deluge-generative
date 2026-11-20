@@ -27,4 +27,4 @@ that, split it by topic and list the parts here.
   goldens.
 - [Probe scripts and the test port](implementation-notes/probe-scripts.md): probe scripts, includes and the event
   search, test-port holds and events, covers lines, delugemu cards.
-- [Tools](implementation-notes/tools.md): `gen_emu.py capture`, `osc_octaves.py`, the theory review.
+- [Tools](implementation-notes/tools.md): `gen_emu.py capture`, `osc_octaves.py`, the theory review, the listening-session toolkit.
