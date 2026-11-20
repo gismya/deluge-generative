@@ -112,6 +112,9 @@ otherwise.
   doesn't depend on how the piece began. A walk or run with `skipIntro` starts there, so its step 0 is that line and
   a spec of the re-strike needs an Intro. `SustainSpec::holdsCommonTones` is the same hold on every other bar line,
   so a chord change strikes only the changed pitches; `cutSectionLine()` doesn't read it (no cut on those lines).
+  It composes with `openVoicing` by pitch: the voicing is chosen first and `extend()` holds only exact pitches it
+  kept, so the two never disagree on what sounds, but the open voicing's least-movement pairing moves about a
+  quarter of Ambient's common tones by an octave (they strike there).
 - Trap: a spec that counts a held Pad's note-ons per chord line, or reads "a note ending where the same pitch
   starts" as a re-strike, must allow the first Groove line's re-strike; a walk that starts in the Intro has one.
 - The Stab flavour (spec §5.2) is `Generator::decideStab()`: the pick and Density thinning are the Loop's
