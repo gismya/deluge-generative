@@ -196,6 +196,14 @@ void SoundSwaps::forgetSong() {
 	}
 }
 
+void SoundSwaps::swapDropped(int32_t part) {
+	performAdapter.driver().logSoundDropped(static_cast<uint8_t>(part));
+}
+
+const SoundPicks& SoundSwaps::waitingPicks() {
+	return incomingPicks;
+}
+
 bool SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
 	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so the
 	// part's incoming slot is free.

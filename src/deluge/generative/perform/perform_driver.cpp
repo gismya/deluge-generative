@@ -254,6 +254,12 @@ void PerformDriver::openPiece(NoteSink& sink) {
 	}
 }
 
+void PerformDriver::logSoundDropped(uint8_t part) {
+	if (log_ != nullptr && generator_ != nullptr && generator_->nextStep() > 0) {
+		log_->appendSoundDropped(generator_->nextStep() - 1, part);
+	}
+}
+
 void PerformDriver::logLandedSounds(const int32_t (&before)[kMaxParts], NoteSink& sink) {
 	if (log_ == nullptr || !log_->logging()) {
 		return;

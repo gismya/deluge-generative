@@ -114,24 +114,27 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	stepFrom_ = used_;
 }
 
-void SteeringLog::writeHeader(uint8_t tag, const void* data, int32_t length) {
+uint8_t* SteeringLog::writeHeader(uint8_t tag, const void* data, int32_t length) {
 	if (!open_ || cut_ || inRecords_ || length > 0xFFFF) {
-		return;
+		return nullptr;
 	}
 	if (used_ + 3 + length > capacity_) {
 		cut(0);
-		return;
+		return nullptr;
 	}
 	uint8_t* at = buffer_ + used_;
 	at[0] = tag;
 	at[1] = static_cast<uint8_t>(length);
 	at[2] = static_cast<uint8_t>(length >> 8);
-	std::memcpy(at + 3, data, static_cast<size_t>(length));
+	if (data != nullptr) {
+		std::memcpy(at + 3, data, static_cast<size_t>(length));
+	}
 	used_ += 3 + length;
 	PieceInfo& info = newest();
 	info.bytes = used_ - newest_;
 	info.headerBytes = static_cast<uint16_t>(info.bytes);
 	stepFrom_ = used_;
+	return at + 3;
 }
 
 void SteeringLog::addPick(int32_t slot, const char* path) {
@@ -147,6 +150,10 @@ void SteeringLog::addPick(int32_t slot, const char* path) {
 
 void SteeringLog::addSnapshot(const void* data, int32_t length) {
 	writeHeader(kSnapshotTag, data, length);
+}
+
+uint8_t* SteeringLog::snapshotSpace(int32_t length) {
+	return writeHeader(kSnapshotTag, nullptr, length);
 }
 
 void SteeringLog::endPiece(int32_t step, PieceEnd why) {

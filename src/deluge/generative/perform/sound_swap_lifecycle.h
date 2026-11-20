@@ -215,6 +215,10 @@ concept SoundSwapAdapter = requires(Adapter& adapter, const Adapter& reader, int
 	{ adapter.rebind(part) } -> std::same_as<void>;
 	/// `part`'s incoming Output never plays: it is retired to be freed at once.
 	{ adapter.dropIncoming(part) } -> std::same_as<void>;
+	/// In the tick: `part`'s sound landed, but a confirm dropped it before its Sound event, so the part plays on with
+	/// its old one. The core has logged the SetSound: the steering log says it never played
+	/// (PerformDriver::logSoundDropped(), spec §17.2).
+	{ adapter.swapDropped(part) } -> std::same_as<void>;
 	/// The steering queue had no room for a preloaded sound's SetSound: the QUEUE FULL popup.
 	{ adapter.showQueueFull() } -> std::same_as<void>;
 	/// A test event (compiled out of release firmware).
@@ -331,7 +335,8 @@ public:
 		}
 		Waiting& in = waiting_[event.part];
 		if (in.token == kNoSound || in.token != event.soundToken()) {
-			return; // cancelled since it landed: the part plays on with its old sound
+			adapter().swapDropped(event.part); // cancelled since it landed: the part plays on with its old sound
+			return;
 		}
 		trace({.trace = SoundTrace::Swap,
 		       .part = event.part,

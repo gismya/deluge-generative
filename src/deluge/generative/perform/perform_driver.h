@@ -116,6 +116,9 @@ public:
 	/// start's, or a transition's start step, where the outgoing piece ends. A stop or the Outro's end ends it.
 	void setLog(SteeringLog* log) { log_ = log; }
 	[[nodiscard]] SteeringLog* log() const { return log_; }
+	/// The newest SetSound logged on `part` never played: a confirm dropped its swap after it landed (spec §12.9).
+	/// Logged on the last step decided, which is at or after the one it landed on.
+	void logSoundDropped(uint8_t part);
 
 	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
 	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own

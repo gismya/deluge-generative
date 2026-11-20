@@ -82,6 +82,9 @@ struct LogEntry {
 	Command command;
 };
 
+/// Perform's log: one fixed buffer in SDRAM, allocated on Perform entry (spec §17.2, §20).
+constexpr int32_t kPerformLogBytes = 128 * 1024;
+
 /// The bytes a command takes in the log, at most (encodeCommand()).
 constexpr int32_t kMaxCommandBytes = 16;
 
@@ -105,6 +108,9 @@ public:
 	void addPick(int32_t slot, const char* path);
 	/// A block of the param snapshot (spec §17.2), in the driver's own layout. Up to 65,535 bytes.
 	void addSnapshot(const void* data, int32_t length);
+	/// As addSnapshot(), for a caller that writes the block in place: its `length` bytes, to fill before anything
+	/// else is logged, or nullptr where addSnapshot() would have cut the piece.
+	uint8_t* snapshotSpace(int32_t length);
 	/// The current piece ends before `step`: its first step not played.
 	void endPiece(int32_t step, PieceEnd why);
 	/// Marks the newest piece to keep, or unmarks it (spec §17.4).
@@ -213,8 +219,9 @@ private:
 	}
 	/// Writes `length` bytes of a record stamped `step` from `data`, or cuts the piece at that step.
 	bool write(int32_t step, const uint8_t* data, int32_t length);
-	/// Writes a header record, or cuts the piece at step 0.
-	void writeHeader(uint8_t tag, const void* data, int32_t length);
+	/// Writes a header record (its bytes from `data`, if not nullptr), or cuts the piece at step 0. @return where its
+	/// bytes are, or nullptr.
+	uint8_t* writeHeader(uint8_t tag, const void* data, int32_t length);
 	void cut(int32_t step);
 
 	uint8_t* buffer_;

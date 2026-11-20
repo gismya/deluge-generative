@@ -1,0 +1,598 @@
+# The steering log (#143, spec §17.2, §17.3, H13 in §20) over the sysex test port: Perform's piece opens in the log
+# at its first step with a header (the Recipe, the sound picks and the param snapshot), busy steering logs as it lands,
+# a stop ends the piece, and the next start throws the unmarked piece away and opens a new one. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip
+# a synth or kit clip.
+#
+# gen_log_piece pieces= header= used= full= us=: a piece opened, its header's bytes and what writing it cost in the
+# tick. gen_log at=phrase|stop pieces= used= piece= header= records= end= cut= full=: the log's use at each phrase
+# line and at a stop. Busy steering: the macros on F8 (Energy on the upper gold knob, Density on the lower) turned a
+# knob step about every step, and the song's F1 filter knobs between them (song params, logged as SetParam).
+# For figures: --events 'gen_log|gen_h1|gen_macro_landed'.
+# covers: src/deluge/generative/core/steering_log.* src/deluge/generative/firmware/log_header.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+# Acid techno's roster: the song, a synth part each for ACID and DRONE, two Kits and their rows.
+expect event gen_log_piece pieces=1 header=(?P<header>[0-9]{4,5}) used=[0-9]+ full=0 us=
+
+# ---- Busy steering for two phrases: a macro turn about every 16th, a song filter turn every bar ----
+button F8 down
+wait 50
+button F8 up
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+expect event gen_macro_landed within=5
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+button F1 down
+wait 50
+button F1 up
+encoder 4 1
+wait 50
+button F8 down
+wait 50
+button F8 up
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+button F1 down
+wait 50
+button F1 up
+encoder 4 -1
+wait 50
+button F8 down
+wait 50
+button F8 up
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+button F1 down
+wait 50
+button F1 up
+encoder 4 1
+wait 50
+button F8 down
+wait 50
+button F8 up
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 1
+wait 55
+encoder 5 -1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+encoder 4 -1
+wait 55
+encoder 5 1
+wait 55
+button F1 down
+wait 50
+button F1 up
+encoder 4 -1
+wait 50
+button F8 down
+wait 50
+button F8 up
+expect event gen_log at=phrase pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=-1 cut=-1 full=0 within=30
+
+# ---- A stop ends the piece where it stopped; the next start throws it away and opens a new one ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]{2,} end=[0-9]+ cut=-1 full=0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_log_piece pieces=1 header=(?P=header) used=[0-9]+ full=0 us=
+wait 2000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=[0-9]+ end=[0-9]+ cut=-1 full=0
+
+# ---- Leave ----
+include perform_leave.txt

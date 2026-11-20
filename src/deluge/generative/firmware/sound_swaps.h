@@ -51,6 +51,9 @@ public:
 	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
 	/// sound at once.
 	[[nodiscard]] uint32_t swaps() const { return swaps_; }
+	/// The picks of each part's sound waiting for its line, from its preload's end until it swaps in: what the
+	/// steering log keeps of a re-roll as its SetSound lands (spec §17.2).
+	[[nodiscard]] static const SoundPicks& waitingPicks();
 
 	// The adapter (perform::SoundSwapAdapter, which says what each does). Public so the concept sees them; only the
 	// lifecycle calls them.
@@ -68,6 +71,7 @@ public:
 	void swapIn(int32_t part);
 	void rebind(int32_t part);
 	void dropIncoming(int32_t part);
+	void swapDropped(int32_t part);
 	void showQueueFull();
 	void traced(const perform::SoundTraced& traced);
 

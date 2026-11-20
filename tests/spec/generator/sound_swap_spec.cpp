@@ -7,6 +7,8 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
+
 #include <string>
 #include <vector>
 
@@ -340,8 +342,10 @@ describe sound_swap("Sound swaps", $ {
 		});
 
 		it("is dropped by a confirm between its landing and its Sound event: the part plays on (decision 2, #261)", _ {
-			// The core has logged the SetSound, which never plays: M4's steering log settles this.
+			// The core has logged the SetSound, which never plays: the steering log says so after it (spec §17.2).
 			Playing t;
+			TestLog entries(64);
+			t.driver.setLog(&entries.log);
 			const int32_t phrase = t.phraseSteps();
 			waitingSound(t, kAcid);
 			t.runToStepLine(phrase, -1);
@@ -351,6 +355,19 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.out->soundLanded(kAcid)).to_equal(1);
 			expect(t.sounds.playing[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+			std::vector<LogRecord> logged;
+			entries.log.piece(entries.log.pieces() - 1).forEachRecord([&](const LogRecord& r) { logged.push_back(r); });
+			const auto landed = std::find_if(logged.begin(), logged.end(), [](const LogRecord& r) {
+				return r.kind == RecordKind::Command && r.command.kind == CommandKind::SetSound;
+			});
+			const auto dropped = std::find_if(logged.begin(), logged.end(),
+			                                  [](const LogRecord& r) { return r.kind == RecordKind::SoundDropped; });
+			expect(landed != logged.end()).to_be_true();
+			expect(dropped != logged.end()).to_be_true();
+			expect(dropped > landed).to_be_true();
+			expect(landed->step).to_equal(phrase);
+			expect(dropped->command.target).to_equal(kAcid);
+			expect(dropped->step >= phrase).to_be_true();
 		});
 	});
 
