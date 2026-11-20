@@ -23,6 +23,7 @@
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
@@ -59,6 +60,16 @@ static_assert((offsetof(CurrentRecipe, sounds) - offsetof(PendingRecipe, sounds)
 alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;
+/// The name a LOAD's file has, which the Current Recipe takes with the pending Recipe (spec §16.3); empty for a genre
+/// change or Regenerate. Set by the preload, with the pending Recipe.
+PLACE_SDRAM_BSS perform::RecipeName pendingName;
+/// A LOAD's file and its name, one per TransitionJob: submitPreload() copies them in when the request goes ahead, so a
+/// refused request, or one for a job still waiting in the runner's next slot, never changes what another job reads.
+struct LoadSlot {
+	RecipeFile file;
+	perform::RecipeName name;
+};
+PLACE_SDRAM_BSS LoadSlot loadSlots[2];
 } // namespace
 
 /// A transition's preload (spec §12.9, §12.10): live, so the playing roster plays on and the Perform page works under
@@ -69,11 +80,14 @@ class TransitionJob final : public Job {
 public:
 	TransitionJob() : Job(Kind::Live) {}
 
-	void prepare(uint32_t request, const Genre* genre) {
+	/// `load`: a LOAD's file and name (this job's own copy), or nullptr for a genre change or Regenerate.
+	void prepare(uint32_t request, const Genre* genre, const LoadSlot* load) {
 		request_ = request;
 		genre_ = genre;
+		load_ = load;
 		error_ = Error::NONE;
 		missing_ = 0;
+		replaced_ = 0;
 		submitted_ = getSystemTicks();
 	}
 
@@ -95,32 +109,35 @@ public:
 			}
 		}
 #endif
-		// A genre change or Regenerate (spec §9.7): facts rolled from the incoming genre, leaning towards the key
-		// that plays, a new seed and every take at 0. A genre change rolls the new roster's sound picks from its
-		// palette, with its card override read into the Current Recipe's spare one; a Regenerate rolls every pick
-		// away from the one playing. The macros are the live ones, copied at the start step.
-		const bool change = genre != playing;
-		if (change) {
+		if (load_ != nullptr) {
+			// A LOAD (spec §16.5, §16.6): the file's facts, seed, takes and macros, with its genre's palette read as a
+			// genre change reads it (so a LOAD of the playing genre reads its override again), and each missing sound
+			// re-rolled from that palette. Its macros replace the live ones at the start step.
 			error_ = currentRecipe.stagePalette(*genre);
 			if (error_ != Error::NONE) {
 				return JobOutcome::Failed;
 			}
-		}
-		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
-		pendingRecipe.recipe =
-		    newRecipe(*genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
-		pendingRecipe.stagedPalette = change;
-		pendingRecipe.seed = freshEntropy();
-		pendingRecipe.takes = Takes{};
-		pendingRecipe.sounds = currentRecipe.sounds;
-		CardFolders folders(&chunks);
-		if (!rollIncomingSounds(*genre, *playing, palette, pendingRecipe.sounds, freshEntropy(), folders)) {
-			if (folders.cancelled()) {
+			pendingRecipe.recipe = load_->file.recipe;
+			pendingRecipe.stagedPalette = true;
+			pendingRecipe.macros = perform::HandoverMacros::Pending;
+			pendingRecipe.seed = load_->file.seed;
+			pendingRecipe.takes = load_->file.takes;
+			pendingRecipe.sounds = load_->file.sounds;
+			pendingName = load_->name;
+			error_ = replaceMissingCardSounds(*genre, currentRecipe.stagedPalette(), pendingRecipe.sounds, replaced_,
+			                                  &chunks);
+			if (error_ == Error::ABORTED_BY_USER) {
+				error_ = Error::NONE;
 				return JobOutcome::Cancelled;
 			}
-			error_ = Error::SD_CARD;
-			return JobOutcome::Failed;
+			if (error_ != Error::NONE) {
+				return JobOutcome::Failed;
+			}
 		}
+		else if (!rollPending(chunks, *genre, *playing)) {
+			return error_ == Error::NONE ? JobOutcome::Cancelled : JobOutcome::Failed;
+		}
+		const Palette& palette = pendingRecipe.stagedPalette ? currentRecipe.stagedPalette() : currentRecipe.palette();
 		transitions.rolled_ = transitions.newest(request_);
 		for (int32_t p = 0; p < partCount(*genre); p++) {
 			if (chunks.boundary()) {
@@ -160,8 +177,13 @@ public:
 				           static_cast<int>(pendingRecipe.recipe.keyRoot),
 				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
 			}
-			if (missing_ > 0) {
+			if (replaced_ > 0 && transitions.newest(request_)) {
+				showSoundsReplaced(replaced_); // spec §16.6
+			}
+			else if (missing_ > 0) {
 				display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
+			}
+			if (missing_ > 0) {
 				TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(missing_));
 			}
 			transitions.preloaded(request_);
@@ -172,6 +194,36 @@ public:
 	}
 
 private:
+	/// A genre change or Regenerate (spec §9.7): facts rolled from the incoming genre, leaning towards the key that
+	/// plays, a new seed and every take at 0. A genre change rolls the new roster's sound picks from its palette, with
+	/// its card override read into the Current Recipe's spare one; a Regenerate rolls every pick away from the one
+	/// playing. The macros are the live ones, copied at the start step. False on a cancel, or on a card error (then
+	/// error_ is set).
+	bool rollPending(Chunks& chunks, const Genre& genre, const Genre& playing) {
+		const bool change = &genre != &playing;
+		if (change) {
+			error_ = currentRecipe.stagePalette(genre);
+			if (error_ != Error::NONE) {
+				return false;
+			}
+		}
+		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
+		pendingRecipe.recipe =
+		    newRecipe(genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
+		pendingRecipe.stagedPalette = change;
+		pendingRecipe.macros = perform::HandoverMacros::Live;
+		pendingRecipe.seed = freshEntropy();
+		pendingRecipe.takes = Takes{};
+		pendingRecipe.sounds = currentRecipe.sounds;
+		pendingName.clear();
+		CardFolders folders(&chunks);
+		if (!rollIncomingSounds(genre, playing, palette, pendingRecipe.sounds, freshEntropy(), folders)) {
+			error_ = folders.cancelled() ? Error::NONE : Error::SD_CARD;
+			return false;
+		}
+		return true;
+	}
+
 	/// Frees what was built (each Output a chunk), unless Perform is being left.
 	JobOutcome unwind(Song* song, Error error) {
 		if (!performAdapter.leaving()) {
@@ -197,8 +249,10 @@ private:
 
 	uint32_t request_ = 0;
 	const Genre* genre_ = nullptr; ///< The incoming genre
+	const LoadSlot* load_ = nullptr;
 	Error error_ = Error::NONE;
 	int32_t missing_ = 0;
+	int32_t replaced_ = 0; ///< A LOAD's missing sounds, re-rolled (spec §16.6)
 	uint32_t submitted_ = 0;
 };
 
@@ -242,12 +296,23 @@ Transitions::Request Transitions::change(const Genre& genre, TransitionStyle sty
 		return Request::QueueFull;
 	}
 #endif
-	return request(style, genre); // a refused request leaves the preload running, and what it rolls from, alone
+	// A refused request leaves the preload running, and what it rolls from, alone.
+	return request(style, Incoming{.genre = &genre});
+}
+
+Transitions::Request Transitions::load(const RecipeFile& file, const perform::RecipeName& name, TransitionStyle style) {
+#if ENABLE_SYSEX_TEST
+	if (TestPort::queueFullHeld()) {
+		traced(Trace::RequestQueueFull, style);
+		return Request::QueueFull;
+	}
+#endif
+	return request(style, Incoming{.genre = file.recipe.genre, .file = &file, .name = &name});
 }
 
 // ---- The preload ----
 
-bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
+bool Transitions::submitPreload(uint32_t request, const Incoming& incoming) {
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_transition");
 #endif
@@ -257,7 +322,14 @@ bool Transitions::submitPreload(uint32_t request, const Genre& genre) {
 	// ends inside the submit, which the lifecycle notices.
 	const bool first = runner.active() != &jobs[0];
 	TransitionJob& job = first ? jobs[0] : jobs[1];
-	job.prepare(request, &genre);
+	// A LOAD's file goes to this job's own slot: the other job may still run, reading its own.
+	LoadSlot* load = nullptr;
+	if (incoming.file != nullptr) {
+		load = &loadSlots[first ? 0 : 1];
+		load->file = *incoming.file;
+		load->name = *incoming.name;
+	}
+	job.prepare(request, incoming.genre, load);
 	if (runner.next() != &job && !runner.submitReplacing(job, first ? jobs[1] : jobs[0])) {
 		return false;
 	}
@@ -336,7 +408,10 @@ void Transitions::commitPending(HandOver handOver) {
 
 void Transitions::adoptPending() {
 	currentRecipe.sounds = pendingRecipe.sounds;
-	currentRecipe.replaced();    // the Compose screen's previous picks were the old Recipe's (spec §14.4)
+	currentRecipe.replaced(); // the Compose screen's previous picks were the old Recipe's (spec §14.4)
+	if (!pendingName.empty()) {
+		currentRecipe.name = pendingName; // a LOAD's file's name (spec §16.3)
+	}
 	soundSwaps.forgetPrevious(); // the new roster has no previous sound (spec §12.9)
 }
 

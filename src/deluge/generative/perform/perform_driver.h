@@ -222,8 +222,6 @@ private:
 	int32_t outgoingBase_ = 0;
 	/// A hard cut's glide length (the Perform Glide setting), at least 1 tick so an Instant one jumps on the line.
 	int32_t cutGlideTicks_ = 1;
-	/// The incoming instance keeps its own macros at the start step: a LOAD's file's (spec §12.9).
-	bool incomingKeepsMacros_ = false;
 	/// The step the playing instance's transition landed on, once it has, or -1.
 	int32_t transitionFrom_ = -1;
 	/// The transition's tempo glide into the incoming Recipe's tempo (spec §9.7).
@@ -243,6 +241,10 @@ private:
 	TransitionTempo transitionTempo_;
 	bool ended_ = false;
 	bool dropReported_ = false; ///< The sink was told the core dropped the incoming instance's command.
+	/// The incoming instance keeps its own macros at the start step: a LOAD's file's (spec §12.9). Beside the flags
+	/// above, in their padding: the driver's size and later offsets stay as they were (PerformAdapter's
+	/// static_asserts).
+	bool incomingKeepsMacros_ = false;
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.
 	int32_t drainedEndLine_ = -1;

@@ -158,17 +158,19 @@ bool LeavePerform::acceptCurrentOption() {
 // ---- REGENERATE?, or the genre changed to ----
 
 bool TransitionConfirm::regenerates() const {
-	return genre_ == generative::firmware::currentRecipe.recipe.genre;
+	return file_ == nullptr && genre_ == generative::firmware::currentRecipe.recipe.genre;
 }
 
 char const* TransitionConfirm::getTitle() {
 	if (regenerates()) {
 		return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
 	}
-	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`). The `?` is punctuation, as in
-	// STRING_FOR_REGENERATE_QMARK's text: no language this firmware ships puts the name anywhere else.
-	const size_t length = std::min(std::strlen(genre_->oledName), sizeof(title_) - 2);
-	std::memcpy(title_, genre_->oledName, length);
+	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`); a LOAD: the file's name (one too long
+	// to remember has none, and shows its genre's). The `?` is punctuation, as in STRING_FOR_REGENERATE_QMARK's text:
+	// no language this firmware ships puts the name anywhere else.
+	const char* name = file_ != nullptr && !name_->empty() ? name_->text : genre_->oledName;
+	const size_t length = std::min(std::strlen(name), sizeof(title_) - 2);
+	std::memcpy(title_, name, length);
 	title_[length] = '?';
 	title_[length + 1] = 0;
 	return title_;
@@ -198,12 +200,23 @@ bool TransitionConfirm::acceptCurrentOption() {
 	using generative::firmware::Transitions;
 	const auto style = static_cast<generative::TransitionStyle>(currentOption);
 	const bool regenerate = regenerates();
-	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10).
-	soundEditor.exitCompletely();
-	const Transitions::Request request = generative::firmware::pressShowingWork(
-	    [&] { return generative::firmware::transitions.change(*genre_, style); });
+	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10): out of
+	// the Perform menu, or (a LOAD's, opened from the load browser) straight over Perform.
+	if (isUIOpen(&soundEditor)) {
+		soundEditor.exitCompletely();
+	}
+	else {
+		close();
+	}
+	const Transitions::Request request = generative::firmware::pressShowingWork([&] {
+		return file_ != nullptr ? generative::firmware::transitions.load(*file_, *name_, style)
+		                        : generative::firmware::transitions.change(*genre_, style);
+	});
 	refusedWithPopup(generative::perform::pressOutcome(request));
-	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d", regenerate ? "regenerate" : genre_->name,
+	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d",
+	           file_ != nullptr ? "load"
+	           : regenerate     ? "regenerate"
+	                            : genre_->name,
 	           static_cast<int>(style), static_cast<int>(request),
 	           generative::firmware::workingAnimationShown() ? 1 : 0);
 	return true;

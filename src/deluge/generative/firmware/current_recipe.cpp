@@ -186,6 +186,49 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	return Error::NONE;
 }
 
+Error replaceMissingCardSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, int32_t& soundsReplaced,
+                               Chunks* chunks) {
+	CardFolders folders(chunks);
+	CardFiles files(chunks);
+	soundsReplaced = replaceMissingSounds(genre, palette, sounds, freshEntropy(), folders, files);
+	if (soundsReplaced >= 0) {
+		return Error::NONE;
+	}
+	soundsReplaced = 0;
+	if (folders.cancelled() || files.cancelled()) {
+		return Error::ABORTED_BY_USER;
+	}
+	const Error error = StorageManager::initSD();
+	return error != Error::NONE ? error : Error::SD_CARD;
+}
+
+Error CurrentRecipe::load(const RecipeFile& file, const perform::RecipeName& fileName, int32_t& soundsReplaced,
+                          Chunks* chunks) {
+	soundsReplaced = 0;
+	const Genre& genre = *file.recipe.genre;
+	// Staged, as a genre pick: nothing changes until the palette and every pick are in.
+	PaletteOverride& staged = overrides_[1 - activeOverride_];
+	Error error = readPaletteOverride(genre, staged);
+	if (error != Error::NONE) {
+		return error;
+	}
+	stagedSounds_ = file.sounds;
+	error = replaceMissingCardSounds(genre, staged.palette(), stagedSounds_, soundsReplaced, chunks);
+	if (error != Error::NONE) {
+		return error;
+	}
+	activeOverride_ = 1 - activeOverride_;
+	overrideGenre_ = &genre;
+	recipe = file.recipe;
+	sounds = stagedSounds_;
+	seed = file.seed;
+	takes = file.takes;
+	exists = true;
+	replaced();
+	name = fileName; // a loaded name is its own stem: the next save offers `<name>A` (spec §16.3)
+	return Error::NONE;
+}
+
 Error CurrentRecipe::rerollPart(int32_t part, Chunks* chunks) {
 	if (!exists || recipe.genre == nullptr) {
 		return Error::NONE;

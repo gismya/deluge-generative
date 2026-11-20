@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include "generative/core/recipe_file.h"
+#include "generative/perform/recipe_name.h"
 #include "gui/menu_item/submenu.h"
 
 namespace deluge::gui::menu_item::generative {
@@ -45,5 +47,8 @@ void buildComposeRecipe();
 
 /// REGENERATE?'s OK (spec §14.4): rolls the Current Recipe again as a modal job over the screen.
 void regenerateComposeRecipe();
+/// A Recipe file chosen in the load browser (spec §16.5): it replaces the Current Recipe as a modal job over the
+/// screen, ready for BUILD. BUSY while the runner is busy.
+void loadComposeRecipe(const deluge::generative::RecipeFile& file, const deluge::generative::perform::RecipeName& name);
 
 } // namespace deluge::gui::menu_item::generative

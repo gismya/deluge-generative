@@ -817,4 +817,19 @@ void regenerateComposeRecipe() {
 	}
 }
 
+void loadComposeRecipe(const gen::RecipeFile& file, const gen::perform::RecipeName& name) {
+	auto ended = [](JobOutcome outcome) {
+		if (outcome == JobOutcome::Done) {
+			reportRecipe("loaded");
+		}
+		if (isUIOpen(&soundEditor)) {
+			renderUIsForOled();
+		}
+	};
+	if (!gen::firmware::beginRecipeLoad(file, name, ended)) {
+		refusedBusy();
+		TEST_EVENT("gen_recipe_load refused why=busy");
+	}
+}
+
 } // namespace deluge::gui::menu_item::generative

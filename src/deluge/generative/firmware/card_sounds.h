@@ -50,6 +50,21 @@ private:
 	bool cancelled_ = false;
 };
 
+/// Says whether card files are there, over FatFs (a Recipe file's load checks its sound picks, spec §16.6). Runs in
+/// task context: it reads the card.
+class CardFiles final : public FileChecker {
+public:
+	/// With a runner job's `chunks`, each check is a chunk boundary. Without, audio gets a turn before each.
+	explicit CardFiles(Chunks* chunks = nullptr) : chunks_(chunks) {}
+	/// CardError on a card error, and when the job was cancelled at a check (cancelled() says which).
+	LoadOutcome exists(const char* path) override;
+	[[nodiscard]] bool cancelled() const { return cancelled_; }
+
+private:
+	Chunks* chunks_;
+	bool cancelled_ = false;
+};
+
 /// Test builds: whether the test port holds a card error ("hold card_error"), so Perform's loads fail as a pulled
 /// card's would. Always false otherwise.
 bool cardErrorInjected();

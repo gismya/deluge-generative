@@ -25,8 +25,10 @@
 #pragma once
 
 #include "generative/core/recipe.h"
+#include "generative/core/recipe_file.h"
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/perform/recipe_name.h"
 #include "generative/perform/transition_lifecycle.h"
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +64,10 @@ public:
 	/// GENRE ▸ on `genre`, confirmed with `style` (spec §9.7, §13.6): a genre change, or on the genre playing (and
 	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`.
 	Request change(const Genre& genre, TransitionStyle style);
+	/// A Recipe file's LOAD (spec §16.5): confirmed with `style` while playing, or at once while stopped (it commits
+	/// when loaded). The preload takes `file` as the pending Recipe, macros included, with its missing sounds re-rolled
+	/// (spec §16.6), and the Current Recipe takes `name` with it. Both are copied: the caller's may change at once.
+	Request load(const RecipeFile& file, const perform::RecipeName& name, TransitionStyle style);
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
 	/// Where the incoming roster lies in Transitions: the start step's copy (PerformAdapter::incomingStarts()) needs
@@ -89,7 +95,13 @@ private:
 	[[nodiscard]] bool transportRunning() const;
 	void startPlayback(bool groove);
 	[[nodiscard]] int32_t cutGlideTicks() const;
-	bool submitPreload(uint32_t request, const Genre& genre);
+	/// What a preload loads: a genre to roll from, or a LOAD's file (`file` and `name` set, `genre` its genre).
+	struct Incoming {
+		const Genre* genre = nullptr;
+		const RecipeFile* file = nullptr;
+		const perform::RecipeName* name = nullptr;
+	};
+	bool submitPreload(uint32_t request, const Incoming& incoming);
 	void cancelPreload();
 	void preloadEnded();
 	[[nodiscard]] int32_t waitingSounds() const;

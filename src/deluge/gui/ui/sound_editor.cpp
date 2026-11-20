@@ -14,6 +14,7 @@
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/browser/sample_browser.h"
 #include "gui/ui/keyboard/keyboard_screen.h"
+#include "gui/ui/load/load_recipe_ui.h"
 #include "gui/ui/menus.h"
 #include "gui/ui/rename/rename_drum_ui.h"
 #include "gui/ui/sample_marker_editor.h"
@@ -745,6 +746,13 @@ ActionResult SoundEditor::buttonAction(deluge::hid::Button b, bool on, bool inCa
 			else {
 				openUI(&saveInstrumentPresetUI);
 			}
+		}
+	}
+
+	// Load button: on the Compose screen (or a menu under it), the Recipe load browser (spec §14.4, §16.5)
+	else if (b == LOAD && deluge::gui::menu_item::generative::composeScreenShowing()) {
+		if (on && currentUIMode == UI_MODE_NONE && !Buttons::isShiftButtonPressed()) {
+			loadRecipeUI.open(inCardRoutine);
 		}
 	}
 

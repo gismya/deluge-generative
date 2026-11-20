@@ -54,8 +54,14 @@ Error saveCurrentRecipe(const char* path, std::string_view name, const perform::
 enum class QuickSave : uint8_t { Saved, NoFreeName, Failed };
 QuickSave quickSaveRecipe(perform::RecipeName& saved, Error& error);
 
-/// Reads the Recipe file at `path` into `out` (Recipe LOAD, #139, and the test port's check). A missing or oversized
-/// file, or a card error (then `error` is set), reads as Unreadable.
+/// Reads the Recipe file at `path` into `out` (Recipe LOAD and the test port's check). A missing or oversized file, or
+/// a card error (then `error` is set), reads as Unreadable.
 RecipeFileRead readRecipeFile(const char* path, RecipeFile& out, Error& error);
+
+/// A LOAD's notice for a file of another genre version (spec §16.2): `OLDER ACID TECHNO`, or NEWER for a file from a
+/// later firmware. Nothing for the genre's own version.
+void showVersionNotice(const RecipeFile& file);
+/// A LOAD's warning for its missing sounds, re-rolled (spec §16.6): `2 SOUNDS REPLACED`. Nothing for none.
+void showSoundsReplaced(int32_t count);
 
 } // namespace deluge::generative::firmware
