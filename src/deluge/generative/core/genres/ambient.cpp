@@ -162,12 +162,14 @@ constexpr PartSpec kParts[] = {
         .role = Role::Pad,
         .flavour = Flavour::Sustain,
         .name = "PAD",
-        // Each chord with its Extensions, no doubled root, held with no retrigger. Over the Pad Register's default,
-        // whose −12 voiced close clusters down to G#2 and into the Drone. −4, not −5: a 5th under the tonic would meet
-        // the Drone's 5th in unison where the Pad's tonic is an octave over the Drone's. Lowest note G3–F#4 by key.
-        .reg = {.anchor = 64, .spanLow = -4, .spanHigh = 12},
+        // Each chord with its Extensions, no doubled root, held with no retrigger, voiced open: the root and the 5th
+        // near the tonic, the 3rd and the Extensions an octave up, each voice then moving the least (rules review S9).
+        // Over the Pad Register's default, whose −12 voiced close clusters down to G#2 and into the Drone. −4, not −5:
+        // a 5th under the tonic would meet the Drone's 5th in unison where the Pad's tonic is an octave over the
+        // Drone's. Lowest note G3–F#4 by key; +19 gives the upper voices their octave, the top reaching the bells'.
+        .reg = {.anchor = 64, .spanLow = -4, .spanHigh = 19},
         // Held across Section lines, the Drop's included: only a changed pitch strikes there (spec §5.2, §9.5).
-        .sustain = {.holdsAcrossSections = true},
+        .sustain = {.holdsAcrossSections = true, .openVoicing = true},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift, .sweepBars = 16},
         // With the Drone at its preset's level, 145 Eerie High Pad clipped the mix (tuning, spec §4.5).
@@ -244,7 +246,12 @@ constexpr Genre kAmbient{
     // No fills, so FILL does nothing; no drop-outs.
     // Guard factor 0: Lydian's IV is #iv°, its Bass a tritone from the Drone, so I–IV and vi–IV never land
     // there; Dorian's vi is vi°, so I–vi and vi–IV never play in Dorian either (spec §7.4).
-    .harmony = {.graph = &kGraph, .extensionFloor = 1, .extensionCeiling = 2, .guard = {.factor = 0}},
+    // add9 and sus4 before the 7th: no dominant 7th over the Drone, V's leading tone gone at level 2 (rules review S8).
+    .harmony = {.graph = &kGraph,
+                .extensionFloor = 1,
+                .extensionCeiling = 2,
+                .extensionOrder = kNinthFirst,
+                .guard = {.factor = 0}},
     .palette = &ambientPalette,
     .arc =
         {

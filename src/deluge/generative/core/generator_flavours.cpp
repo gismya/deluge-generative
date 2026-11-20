@@ -317,8 +317,9 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	PartState& part = parts_[partIndex];
 	PartState::Sustain& state = part.sustain;
 	const Register reg = spec.registerOrDefault();
-	const Voicing voicing = spec.sustain.pedal
-	                            ? pedalVoicing(key(), reg)
+	const Voicing voicing = spec.sustain.pedal ? pedalVoicing(key(), reg)
+	                        : spec.sustain.openVoicing
+	                            ? openVoicing(chord(), key(), reg, part.voicing.notes())
 	                            : leadVoicing(chord(), key(), reg, part.voicing.notes(), spec.sustain.doubleRoot);
 
 	// Density thins the voicing by each note's importance, read again on every bar line with the gate hysteresis
