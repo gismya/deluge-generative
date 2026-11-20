@@ -379,6 +379,7 @@ private:
 			    .folders = {out_.folders_ + foldersStart_, static_cast<size_t>(out_.foldersUsed_ - foldersStart_)},
 			    .tags = {out_.tags_ + tagsStart_, static_cast<size_t>(out_.tagsUsed_ - tagsStart_)},
 			    .synths = entries,
+			    .inKit = false,
 			};
 			break;
 		case Section::None:
@@ -513,6 +514,7 @@ bool PaletteOverride::parse(std::string_view text, const Genre& genre) {
 	    .parts = {parts_, static_cast<size_t>(partsUsed_)},
 	    .roles = {roles_, static_cast<size_t>(rolesUsed_)},
 	    .lanes = {lanes_, static_cast<size_t>(lanesUsed_)},
+	    .kits = builtIn.kits, // the lanes the file doesn't replace still play the kit
 	};
 	return true;
 }

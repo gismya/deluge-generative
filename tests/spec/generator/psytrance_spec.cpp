@@ -423,13 +423,15 @@ describe psytrance("Psytrance", $ {
 		it("finds at least 3 files for every ungated lane, the Psy set's among them, and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			constexpr const char* kPsyFolder = "SAMPLES/Artists/Dean Daughters/Psy/";
-			auto picks = harness::lanePicks(psyGenre, card, 800, [&](const SoundPicks& sounds) {
-				// The hats are always one set: the Psy set's pair.
-				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str()).rfind(kPsyFolder, 0))
-				    .to_equal(size_t{0});
-				expect(std::string(sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str()).rfind(kPsyFolder, 0))
-				    .to_equal(size_t{0});
+			auto withKits = harness::lanePicks(psyGenre, card, 800, [&](const SoundPicks& sounds) {
+				// The hats are always one set: the Psy set's pair, or the 909's under the 909 kit.
+				const std::string closed = sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].c_str();
+				const std::string open = sounds.lane[static_cast<int32_t>(Lane::OpenHat)].c_str();
+				expect(closed.rfind(kPsyFolder, 0) == 0).to_equal(open.rfind(kPsyFolder, 0) == 0);
+				expect(closed.rfind(kPsyFolder, 0) == 0 || closed == "SAMPLES/DRUMS/HatC/909 Closed hihat.wav").to_be_true();
 			});
+			// The lanes' own lists, the kit aside (spec §10.1, §10.2).
+			auto picks = harness::lanePicks(psyGenre, card, 800, {}, false);
 			for (const PartSpec& part : psyGenre.parts) {
 				for (const LaneSpec& lane : part.lanes) {
 					if (lane.densityGate == 0 && lane.lane != Lane::Riser && lane.lane != Lane::Fall
@@ -441,7 +443,7 @@ describe psytrance("Psytrance", $ {
 			}
 			for (Lane lane : {Lane::Kick, Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
 				bool psy = false;
-				for (const std::string& path : picks[lane]) {
+				for (const std::string& path : withKits[lane]) {
 					psy = psy || path.rfind(kPsyFolder, 0) == 0;
 				}
 				expect(psy).to_be_true();

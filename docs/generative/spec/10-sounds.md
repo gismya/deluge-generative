@@ -39,13 +39,29 @@ The Generator builds its own Drums Kit, one sample per lane. Each palette lane e
 - No folder-name aliases and no recursion into subfolders. Case doesn't matter, because FatFs looks paths up case-insensitively. The scan skips non-audio files such as the `.reapeaks` files in `Clap`.
 - A lane with nothing loadable stays silent and shows one warning. There's no synth fallback for drums.
 
+**Drum kits.** A genre's palette lists its **drum machines**, weighted, and its **idiomatic swaps**. Each piece rolls one main machine by weight, and every Drums lane plays that machine's file; each swap rolls in or out on its own at the genre's swap chance (50% in every genre), so some pieces are a pure one-machine kit. These picks are rolled with the rest (§10.1), so a Recipe stores nothing more than its lanes' picks.
+
+- A machine names, per lane, the tag that plays it: a filename prefix (`909`, `CR78`) for every lane, or a lane's own tag or exact path where the prefix names more than the machine's plain sound (the 909's and 808's kicks, by path; Techno's 808 kick is `808 Kick distorted`). The Psy set (`SAMPLES/Artists/Dean Daughters/Psy`) is a machine whose files have no machine prefix, so it names a prefix per lane (`KICK-`, `CLHAT-`, …) and is reached only by lanes whose folders include its own.
+- A kit tag matches the lane's files ([§10.3](#103-tags)) whatever the lane's own list says. A lane the machine has no file for (the 909's percussion, the 808's ride) rolls its own list, as a lane does with no kit.
+- A swap names a lane and a tag or exact path. When it is in, the lane tries it before the machine's tag. The Open hat follows a Closed hat swap (the hat pair), so a hat swap names the bare machine tag.
+- A NEW SOUND on the Drums part re-rolls the kit away from the machine playing now. A lane a card override replaces leaves the kit.
+- The lists still matter: they are what a lane without the machine plays, and every load's fallback chain, so §10.1's minimum of 3 files counts a lane's own list.
+
+| Genre | Machines (weight) | Swaps |
+|---|---|---|
+| Techno (all four) | 909 (3), 808 (1); never the DDD1 | Acid: Kick `909 Kick distorted`, Rim `808 Rim`. Melodic: Kick `Deep Sky Kick HQ9094`, Crash `XV5080 Crash`. Dub: Rim `808 Rim`, Closed hat `808` (the Open hat follows), Perc 2 `808 Maraca`. Detroit: Kick the plain `808 Kick` |
+| Psytrance | Psy set (3), 909 (1); no XV5080 anywhere | Ride `909 Ride`, Crash `909 Crash` |
+| Dub | 808 (2), CR78 (1); no Linndrum anywhere | Tom `SDS5 Tom medium`, Snare `DDD1 Snare wet`, Perc 2 `RX-5 Bongo low` |
+| House | 909 (3), 808 (2), Linndrum (1) | Rim `808 Rim`, Perc 2 `808 Conga low`, Perc 1 `Linndrum Tambourine` |
+| Ambient | CR78 (2), KR55 (1) | Snare `GEN Brush 2`, Perc 1 `GEN Mallet 1`, Perc 2 `GEN Wood 1` |
+
 ### 10.3 Tags
 
 - A tag matches case-insensitively anywhere in the filename, without the extension.
 - A lane rolls a tag by weight, then picks one matching file at random.
 - When a lane lists tags, only files matching one of them can be picked. With no tags, any file in the lane's folders can be picked.
-- A lane entry can name an exact file path instead. That's how a palette picks the plain `808 Kick` alone, since that name is contained in longer ones.
-- **Hat pair.** The Open hat's roll first tries the tag the Closed hat rolled. It falls back to its own weights when that tag isn't in its list or matches no file. This is a fixed Generator rule for the hat pair only.
+- A lane entry can name an exact file path instead. That's how a palette picks the plain `808 Kick` alone, since that name is contained in longer ones, and the plain `909 Kick`, not `909 Kick distorted` or `909 Kick dry`.
+- **Hat pair.** The Open hat's roll first tries the tag the Closed hat rolled. It falls back to its own weights when that tag isn't in its list or matches no file. This is a fixed Generator rule for the hat pair only. Under a drum kit ([§10.2](#102-drums-assembled-per-lane)) the Open hat first tries the Closed hat's swap, when it played one, then its own swap and the machine's tag.
 
 ### 10.4 Building a Kit in code
 

@@ -21,6 +21,7 @@
 // starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/genre.h"
+#include "generative/core/genres/drum_machines.h"
 
 namespace deluge::generative::genres {
 
@@ -62,15 +63,16 @@ constexpr RoleSounds kRoles[] = {
 // ---- Drums lanes: the draft's machines by tag ----
 
 /// A round, short one-drop kick: the plain 808 kick by its path, not its distorted or sustained ones.
-constexpr TagWeight kKickTags[] = {{"SAMPLES/DRUMS/Kick/808 Kick.wav", 2}, {"CR78", 1}, {"Linndrum", 1}, {"R100", 1}};
+constexpr TagWeight kKickTags[] = {{"SAMPLES/DRUMS/Kick/808 Kick.wav", 2}, {"CR78", 1}, {"R100", 1}};
 /// The cross-stick backbeat.
-constexpr TagWeight kRimTags[] = {{"808", 2}, {"CR78", 2}, {"Linndrum", 1}, {"XV5080", 1}};
+constexpr TagWeight kRimTags[] = {{"808", 2}, {"CR78", 2}, {"XV5080", 1}};
 /// Snares that carry their own room, and a dry one.
 constexpr TagWeight kSnareTags[] = {{"wet", 2}, {"XV5080 Snare dry", 1}};
-constexpr TagWeight kClosedHatTags[] = {{"CR78", 2}, {"808", 2}, {"Linndrum", 1}};
-/// The Closed hat's machines, so the Open hat pairs with the closed one it rolled (spec §10.3): the draft's two and
-/// Linndrum, so the lane has 3 files.
-constexpr TagWeight kOpenHatTags[] = {{"CR78", 2}, {"808", 1}, {"Linndrum", 1}};
+/// The kit's two machines and the XV5080 (already the Rim's and the Crash's), so the lane has 3 files. Not the
+/// Linndrum (owner, drum-kit session).
+constexpr TagWeight kClosedHatTags[] = {{"CR78", 2}, {"808", 2}, {"XV5080", 1}};
+/// The Closed hat's machines, so the Open hat pairs with the closed one it rolled (spec §10.3).
+constexpr TagWeight kOpenHatTags[] = {{"CR78", 2}, {"808", 1}, {"XV5080", 1}};
 /// The Drop's Crash: the draft lists none, so the machines the hats come from.
 constexpr TagWeight kCrashTags[] = {{"808", 2}, {"CR78", 1}, {"XV5080", 1}};
 /// Simmons toms, the nearest to a syndrum.
@@ -81,6 +83,14 @@ constexpr TagWeight kPerc1Tags[] = {{"Cabasa", 2}, {"Claves", 1}};
 constexpr const char* const kPerc2Folders[] = {"SAMPLES/DRUMS/Block", "SAMPLES/DRUMS/ConL", "SAMPLES/DRUMS/ConM",
                                                "SAMPLES/DRUMS/ConH"};
 constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"Conga", 1}};
+
+// ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
+
+/// Each piece plays the 808 or, less often, the CR78, on every lane they have a file for. Not the Linndrum (owner).
+constexpr MachineWeight kMachines[] = {{&machines::k808, 2}, {&machines::kCR78, 1}};
+/// The Simmons tom for fills, a snare with its own room, and the RX-5's bongos for roots hand drums.
+constexpr KitSwap kSwaps[] = {
+    {Lane::Tom, "SDS5 Tom medium"}, {Lane::Snare, "DDD1 Snare wet"}, {Lane::Perc2, "RX-5 Bongo low"}};
 
 // ---- FX lanes (spec §10.5) ----
 
@@ -120,6 +130,7 @@ constexpr LaneSounds kLanes[] = {
 } // namespace
 
 /// Its Bass, Skank and Melodica over the one-drop drums and the Riser, Fall, Impact and Siren.
-const Palette dubPalette{.parts = kParts, .roles = kRoles, .lanes = kLanes};
+const Palette dubPalette{
+    .parts = kParts, .roles = kRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 
 } // namespace deluge::generative::genres

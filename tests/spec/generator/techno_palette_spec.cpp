@@ -30,9 +30,9 @@ describe techno_palette("Acid techno's palette", $ {
 		expect(harness::partPresetsMissing(techno, card).empty()).to_be_true();
 	});
 
-	it("gives every lane Techno plays at least 3 files after tag filtering", _ {
+	it("gives every lane Techno plays at least 3 files after tag filtering, its kit aside", _ {
 		FakeCard card = harness::factoryCardWithPack();
-		auto picks = harness::lanePicks(techno, card, 800);
+		auto picks = harness::lanePicks(techno, card, 800, {}, false);
 		for (const PartSpec& part : techno.parts) {
 			for (const LaneSpec& lane : part.lanes) {
 				expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});

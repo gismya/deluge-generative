@@ -621,9 +621,10 @@ describe ambient("Ambient", $ {
 			}
 		});
 
-		it("finds files for every lane, the pack's brushes alone on the Snare and pack risers alone on the Riser", _ {
+		it("finds files for every lane, the pack's brushes alone on the Snare's list and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			auto picks = harness::lanePicks(ambientGenre, card, 600);
+			// The lanes' own lists, the kit aside: the kit's machine plays the Snare, the brush only as a swap (spec §10.2).
+			auto picks = harness::lanePicks(ambientGenre, card, 600, {}, false);
 			for (const PartSpec& part : ambientGenre.parts) {
 				for (const LaneSpec& lane : part.lanes) {
 					// Kick, Rim and Closed hat have only the CR78's and the KR55's (#313).
