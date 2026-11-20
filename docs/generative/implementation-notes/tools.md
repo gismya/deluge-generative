@@ -95,5 +95,15 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   failure retries.
 - A runner holding two chunks of one variant (`base#1`, `base#2`) skips the revert and apply between them: it would
   relink for nothing (ninja goes by mtime).
+- A job's genre is its own `--genre`: the job parser's genre default is None and `jobs.parse_args` fills in the
+  command's `--genre` after parsing (#426). Never put the command's genre on the job's argument list: it only won
+  by coming first (last wins), so a job's `--genre` beat it by accident. A variant's genre lives in
+  `diffs/genres.json` (`variants.genre_of`), a page card's in its `genre` field or its midi entry's args.
+- A WAV kept with its check failed (`info["check"]`) is current only for the quiet bars it was checked with
+  (`info["quiet"]`, `Run.done`); a clean WAV stays current whatever its job's `--quiet-bars` (#426).
+- `variants.build_renders` reuses `bin/<name>` when `bin/<name>.json` equals `render_stamp` now: the stamp is the
+  commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
+- The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
+  function and the page free of anything a Proxy stub can't stand in for at load.
 - The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
   `pack/` alone prints `-` for every drum lane.

@@ -5,8 +5,10 @@
 - card: the card image <scratch>/card_<card>.img, or a path ending in .img;
 - bars: how many bars from PLAY (bar 0) the clips need; the seconds come from the harness render's tempo;
 - args: gen_emu.py capture's Recipe flags, --mute and --quiet-bars, split with shlex and parsed by gen_emu's own
-  parser, so a bad flag fails when the file loads. --quiet-bars names bars where gen_emu's check expects silence (an
-  FX part alone: its riser starts from silence); it isn't part of the audio, so it never makes a WAV stale.
+  parser, so a bad flag fails when the file loads. A job's --genre is its genre; a job without one takes the
+  command's --genre (#426), so one session can capture several genres. --quiet-bars names bars where gen_emu's check
+  expects silence (an FX part alone: its riser starts from silence); it isn't part of the audio, so it never makes a
+  WAV stale.
 
 A comment is a whole line starting with `#`. Never cut a line at `#`: keys are spelled with it (`--key D#`).
 """
@@ -129,13 +131,15 @@ def _recipe_parser():
         # allow_abbrev=False: argparse would read --sec as --seconds and --rend as --render, which the runner drops
         p = argparse.ArgumentParser(prog="job args", add_help=False, allow_abbrev=False)
         gen_emu.add_recipe_args(p)
+        # A job's genre is its own --genre, else the command's (parse_args).
+        p.set_defaults(genre=None)
         _PARSER = p
     return _PARSER
 
 
-def parse_args(args, genre):
-    """(Recipe, mutes, quiet bars) from a job's args. Raises JobError on a flag gen_emu's capture would refuse, or one the runner
-    sets itself."""
+def parse_args(args, genre=None):
+    """(Recipe, mutes, quiet bars) from a job's args. Its genre is its own --genre, else `genre` (the command's
+    --genre). Raises JobError on a flag gen_emu's capture would refuse, one the runner sets itself, or no genre."""
     try:
         words = shlex.split(args)
     except ValueError as e:
@@ -146,9 +150,12 @@ def parse_args(args, genre):
     err = io.StringIO()
     try:
         with contextlib.redirect_stderr(err):
-            ns = _recipe_parser().parse_args(["--genre", genre, *words])
+            ns = _recipe_parser().parse_args(words)
     except SystemExit:
         raise JobError(err.getvalue().strip().splitlines()[-1]) from None
+    ns.genre = ns.genre or genre
+    if not ns.genre:
+        raise JobError("no genre: give the job --genre, or the command --genre")
     if ns.key is not None and ns.key not in gen_emu.KEYS:
         raise JobError(f"--key {ns.key}: unknown key")
     if ns.scale is not None and ns.scale not in _names("scales", gen_emu.scale_names):
@@ -167,8 +174,9 @@ def parse_args(args, genre):
     )
 
 
-def parse_jobs(text, genre, source="jobs"):
-    """The Jobs of a job file's text. Raises JobError naming the line on any bad line or a repeated name."""
+def parse_jobs(text, genre=None, source="jobs"):
+    """The Jobs of a job file's text; `genre` is the default for a job giving no --genre. Raises JobError naming the
+    line on any bad line or a repeated name."""
     out, seen = [], set()
     for n, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
@@ -197,7 +205,7 @@ def parse_jobs(text, genre, source="jobs"):
     return out
 
 
-def load_jobs(paths, genre):
+def load_jobs(paths, genre=None):
     out = []
     for path in paths:
         with open(path) as fh:

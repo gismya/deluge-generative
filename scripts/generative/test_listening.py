@@ -391,7 +391,7 @@ class PaletteCard(unittest.TestCase):
         return path
 
     def test_the_genres_oled_names_are_read_from_their_tables(self):
-        self.assertTrue({"AMBIENT", "ACID TECHNO", "PSYTRANCE"} <= cli.oled_names())
+        self.assertTrue({"AMBIENT", "ACID TECHNO", "CLASSIC PSY"} <= cli.oled_names())
 
     def test_an_override_must_be_named_after_a_genre(self):
         names = {"AMBIENT"}
@@ -485,14 +485,14 @@ class Retry(unittest.TestCase):
         os.makedirs(self.run_.raw)
         self.attempt = 0
 
-    def capture_with(self, outputs):
+    def capture_with(self, outputs, rc=1):
         def fake(cmd, **kw):
             out = cmd[cmd.index("--out") + 1]
             with open(out, "wb") as fh:
                 fh.write(outputs[self.attempt])
             self.attempt += 1
             kw["stdout"].write("FAIL silent in 1 bar(s)\n")
-            return subprocess.CompletedProcess(cmd, 1)
+            return subprocess.CompletedProcess(cmd, rc)
 
         with (
             mock.patch.object(runner.subprocess, "run", fake),
@@ -525,6 +525,44 @@ class Retry(unittest.TestCase):
         self.assertIn(
             "I5 clip fx-a: fx was kept with its check failed: FAIL silent", warning
         )
+
+    def requeue(self, args):
+        """The run with the job's args now `args`, over the same scratch folder."""
+        js = jobs.parse_jobs(f"fx | base | pack | 8 | {args}", genre="dub")
+        r = runner.Run("dub", self.scratch, self.scratch, js, 1)
+        r.tempos, r.head = {"fx": 120.0}, "abc"
+        return r, r.captures[0]
+
+    def test_a_kept_capture_is_taken_again_once_the_job_names_other_quiet_bars(self):
+        # #426: the right --quiet-bars may make the check pass now; a clean WAV stays current whatever they are
+        self.capture_with([b"same", b"same"])
+        r, c = self.requeue("--mute 1 --quiet-bars 1")
+        self.assertFalse(r.done(c))
+        self.assertTrue(self.run_.done(self.run_.captures[0]))
+
+    def test_a_clean_capture_stays_current_when_the_job_names_quiet_bars(self):
+        stamp = self.run_.stamp(self.run_.captures[0])
+        with open(os.path.join(self.run_.raw, "fx.wav"), "wb") as fh:
+            fh.write(b"ok")
+        runner.write_info(
+            self.run_.raw, self.run_.captures[0], 120.0, 17.0, "delugemu", stamp
+        )
+        r, c = self.requeue("--mute 1 --quiet-bars 1")
+        self.assertTrue(r.done(c))
+
+    def test_a_byte_identical_retry_that_crashed_still_fails(self):
+        # rc 2: gen_emu itself failed, not the check; the same bytes twice say nothing about the audio
+        ok, _ = self.capture_with([b"same", b"same"], rc=2)
+        self.assertFalse(ok)
+        self.assertFalse(os.path.exists(os.path.join(self.run_.raw, "fx.wav")))
+        self.assertTrue(self.run_.failed(self.run_.captures[0]))
+
+    def test_naming_quiet_bars_after_a_failure_tries_again(self):
+        self.capture_with([b"one", b"two"])
+        self.assertTrue(self.run_.failed(self.run_.captures[0]))
+        r, c = self.requeue("--mute 1 --quiet-bars 1")
+        self.assertFalse(r.failed(c))
+        self.assertEqual(r.pending(), [c])
 
     def test_a_retry_that_differs_fails(self):
         ok, _ = self.capture_with([b"one", b"two"])
@@ -600,6 +638,28 @@ class Splitting(unittest.TestCase):
             self.assertTrue(r.claim("base#1"))
             self.assertFalse(r.claim("base#1"))
             self.assertTrue(r.claim("base#2"))
+
+    def test_a_runner_holding_two_chunks_of_a_variant_applies_it_once(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            js = jobs.parse_jobs(many(4), "psytrance-classic")
+            r = runner.Run("psytrance-classic", scratch, scratch, js, 1)
+            os.makedirs(r.raw)
+            caps = r.captures
+            calls = []
+            with (
+                mock.patch.object(runner.Run, "worktree", lambda self, i: "/wt"),
+                mock.patch.object(runner.Run, "done", lambda self, c: False),
+                mock.patch.object(runner.Run, "capture", lambda self, i, wt, c: True),
+                mock.patch.object(
+                    runner._variants, "apply", lambda *a: calls.append("apply")
+                ),
+                mock.patch.object(
+                    runner._variants, "revert", lambda *a: calls.append("revert")
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                r.runner(1, [("base#1", caps[:2]), ("base#2", caps[2:])])
+            self.assertEqual(calls, ["revert", "apply", "revert"])
 
 
 def fake_render(folder, name, notes):
@@ -784,6 +844,20 @@ class VariantCard(unittest.TestCase):
     def test_a_variant_card_carries_the_variants_pack(self):
         self.card("--variant", "fast", "--session", self.session, "fast")
         self.assertEqual(self.read("fast", "SYNTHS/SIREN.XML"), b"<rate>fast</rate>\n")
+        # #426: the scratch worktree the variant was applied in is clean again
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                os.path.join(self.scratch, "wt", "card"),
+                "status",
+                "--porcelain",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertEqual(status, "")
         self.card("plain")
         self.assertEqual(self.read("plain", "SYNTHS/SIREN.XML"), b"<rate>slow</rate>\n")
 
@@ -860,6 +934,424 @@ class DelugemuPin(unittest.TestCase):
                     ]
                 )
         self.assertEqual(out.getvalue().count("WARNING old"), 1)
+
+
+def fake_midi_render(folder, name, notes):
+    """fake_render, with the --genre it was given in scope as `genre`."""
+    return fake_render(
+        folder, name, f"(lambda genre: {notes})(a[a.index('--genre') + 1])"
+    )
+
+
+class GenrePerJob(unittest.TestCase):
+    """#426: a job's genre is its own; the command's --genre is only the default for jobs that give none."""
+
+    def test_a_jobs_own_genre_wins_and_the_rest_take_the_default(self):
+        js = jobs.parse_jobs(
+            "a | base | pack | 8 | --seed 1\nb | base | pack | 8 | --genre dub --seed 1\n",
+            genre="house",
+        )
+        self.assertEqual([j.recipe.genre for j in js], ["house", "dub"])
+
+    def test_without_a_default_every_job_names_its_genre(self):
+        (j,) = jobs.parse_jobs("a | base | pack | 8 | --genre dub\n", genre=None)
+        self.assertEqual(j.recipe.genre, "dub")
+        with self.assertRaisesRegex(jobs.JobError, "jobs:2: no genre"):
+            jobs.parse_jobs(
+                "a | base | pack | 8 | --genre dub\nb | base | pack | 8 | --seed 2\n",
+                genre=None,
+            )
+
+    def test_two_genres_of_one_recipe_never_share_a_capture(self):
+        js = jobs.parse_jobs(
+            "h | base | pack | 8 | --genre house --seed 1\n"
+            "d | base | pack | 4 | --genre dub --seed 1\n",
+            genre=None,
+        )
+        r = runner.Run(None, "/s", "/x", js, 1)
+        self.assertEqual(len(r.captures), 2)
+        genres = [
+            cmd[cmd.index("--genre") + 1]
+            for cmd in (r.command(1, "/wt", c, "/o.wav", 9.0) for c in r.captures)
+        ]
+        self.assertEqual(genres, ["house", "dub"])
+
+
+class TwoGenreSession(unittest.TestCase):
+    """#426: one session's jobs in two genres, through `run --dry-run` and `clips`, with no --genre on the command."""
+
+    JOBS = (
+        "h1 | base | pack | 8 | --genre house --seed 1\n"
+        "d1 | base | pack | 8 | --genre dub --seed 1\n"
+        "d2 | base | pack | 8 | --genre dub --seed 2\n"
+    )
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = tmp.name
+        self.jf = os.path.join(self.tmp, "jobs.txt")
+        with open(self.jf, "w") as fh:
+            fh.write(self.JOBS)
+        open(os.path.join(self.tmp, "card_pack.img"), "w").close()
+        self.checked = []
+
+        def check(job_list, render):
+            self.checked += [(j.name, j.recipe.genre) for j in job_list]
+            return {j.name: 120.0 for j in job_list}
+
+        self.enterContext(mock.patch.object(recipe, "check", check))
+
+    def cli(self, *args):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = cli.main(list(args))
+        return code, out.getvalue()
+
+    def test_the_dry_run_checks_each_job_in_its_genre_and_plans_only_what_is_left(
+        self,
+    ):
+        # d1 captured already with these arguments: the plan holds h1 and d2 only
+        js = jobs.load_jobs([self.jf], None)
+        r = runner.Run(None, self.tmp, self.tmp, js, 1, render="/r")
+        r.tempos = {j.name: 120.0 for j in js}
+        os.makedirs(r.raw)
+        d1 = next(c for c in r.captures if c.name == "d1")
+        with open(os.path.join(r.raw, "d1.wav"), "w") as fh:
+            fh.write("x")
+        runner.write_info(r.raw, d1, 120.0, 30.0, "delugemu", r.stamp(d1))
+        code, out = self.cli(
+            "run",
+            "--session",
+            self.tmp,
+            "--scratch",
+            self.tmp,
+            "--render",
+            "/r",
+            "--runners",
+            "1",
+            "--dry-run",
+            self.jf,
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            sorted(self.checked), [("d1", "dub"), ("d2", "dub"), ("h1", "house")]
+        )
+        self.assertIn("1 of 3 captures are current or failed already", out)
+        self.assertIn("total: 2 captures", out)
+        self.assertNotIn("  d1:", out)
+
+    def test_clips_render_each_job_in_its_genre(self):
+        bins = os.path.join(self.tmp, "bin")
+        os.makedirs(bins)
+        log = os.path.join(self.tmp, "genres.txt")
+        render = os.path.join(bins, "base")
+        with open(render, "w") as fh:
+            fh.write(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "a = sys.argv\n"
+                f"open({log!r}, 'a').write(a[a.index('--genre') + 1] + '\\n')\n"
+                "open(a[a.index('--out') + 1] + '.wav', 'w').write('x')\n"
+            )
+        os.chmod(render, 0o755)
+        with open(render + ".json", "w") as fh:
+            fh.write("{}")
+        with mock.patch.object(variants, "render_stamp", lambda *a: {}):
+            code, _ = self.cli(
+                "clips", "--session", self.tmp, "--scratch", self.tmp, self.jf
+            )
+        self.assertEqual(code, 0)
+        with open(log) as fh:
+            self.assertEqual(sorted(fh.read().split()), ["dub", "dub", "house"])
+
+    def test_a_job_with_no_genre_and_none_on_the_command_fails_at_load(self):
+        with open(self.jf, "a") as fh:
+            fh.write("x | base | pack | 8 | --seed 3\n")
+        with (
+            self.assertRaises(SystemExit) as e,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.cli("clips", "--session", self.tmp, "--scratch", self.tmp, self.jf)
+        self.assertIn("no genre", str(e.exception.code))
+
+
+class GenrePerVariant(unittest.TestCase):
+    """#426: prove renders each variant in its own genre (Variant.genre, else --genre), and reuses a current bin/."""
+
+    def test_make_records_each_variants_genre(self):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            variants.make(
+                repo,
+                session,
+                {
+                    "h": variants.Variant(
+                        edits=[("src/a.txt", "one", "two")], genre="house"
+                    ),
+                    "x": variants.Variant(edits=[("src/a.txt", "one", "3")]),
+                },
+            )
+            self.assertEqual(variants.genres(session), {"h": "house"})
+
+    def test_make_refuses_an_unknown_genre(self):
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+        ):
+            git_repo(repo)
+            with self.assertRaisesRegex(ValueError, "h: unknown genre polka"):
+                variants.make(
+                    repo,
+                    session,
+                    {
+                        "h": variants.Variant(
+                            edits=[("src/a.txt", "one", "2")], genre="polka"
+                        )
+                    },
+                )
+
+    def test_each_variant_is_proved_in_its_genre(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            renders = {
+                "base": fake_midi_render(scratch, "base", "'base'"),
+                # each changes the notes in house only
+                "h": fake_midi_render(
+                    scratch, "h", "'h' if genre == 'house' else 'base'"
+                ),
+                "d": fake_midi_render(
+                    scratch, "d", "'d' if genre == 'house' else 'base'"
+                ),
+            }
+            lines = variants.compare(
+                renders,
+                ["h", "d"],
+                {},
+                {"h": "house", "d": "dub"},
+                range(1, 3),
+                4,
+                [],
+                scratch,
+            )
+        self.assertEqual(
+            lines,
+            [
+                "h: changes the notes at 2/2 seeds (house)",
+                "d: changes the notes at 0/2 seeds (dub); nothing at seeds 1, 2",
+            ],
+        )
+
+    def test_one_genre_for_all_keeps_the_old_lines(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            renders = {
+                "base": fake_midi_render(scratch, "base", "'base'"),
+                "h": fake_midi_render(scratch, "h", "'h'"),
+            }
+            lines = variants.compare(
+                renders, ["h"], {}, "house", range(1, 3), 4, [], scratch
+            )
+        self.assertEqual(lines, ["h: changes the notes at 2/2 seeds"])
+
+    def test_the_genre_of_each_variant(self):
+        self.assertEqual(
+            variants.genre_of(["h", "d"], {"h": "house"}, "dub"),
+            {"h": "house", "d": "dub"},
+        )
+        with self.assertRaisesRegex(ValueError, "d: no genre"):
+            variants.genre_of(["h", "d"], {"h": "house"}, None)
+
+    def test_build_renders_reuses_a_render_built_from_the_same_commit_and_diff(self):
+        built = []
+
+        def build(wt, dest):
+            built.append(os.path.basename(dest))
+            open(dest, "w").close()
+            return dest
+
+        stamp = {"head": "abc"}
+        with (
+            tempfile.TemporaryDirectory() as repo,
+            tempfile.TemporaryDirectory() as session,
+            tempfile.TemporaryDirectory() as bin_dir,
+        ):
+            git_repo(repo)
+            applied = []
+            with (
+                mock.patch.object(variants, "build_render", build),
+                mock.patch.object(
+                    variants, "apply", lambda wt, s, n: applied.append(n)
+                ),
+                mock.patch.object(
+                    variants, "render_stamp", lambda wt, s, n: dict(stamp, v=n)
+                ),
+            ):
+                variants.build_renders(repo, session, ["s1"], bin_dir)
+                renders, _ = variants.build_renders(
+                    repo, session, ["s1", "s2"], bin_dir
+                )
+                self.assertEqual(sorted(renders), ["base", "s1", "s2"])
+                stamp["head"] = "def"  # a new commit: every render is built again
+                variants.build_renders(repo, session, ["s1"], bin_dir)
+        self.assertEqual(built, ["base", "s1", "s2", "base", "s1"])
+        self.assertEqual(applied, built)
+
+
+class PageMidiGenre(unittest.TestCase):
+    """#426: a card's MIDI renders in the card's genre (its own `genre`, or --genre in a midi entry's args)."""
+
+    def genres(self, card, session_genre="dub"):
+        seen = []
+
+        def run(cmd, **kw):
+            seen.append([cmd[i + 1] for i, w in enumerate(cmd) if w == "--genre"])
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with (
+            tempfile.TemporaryDirectory() as out,
+            mock.patch.object(page.subprocess, "run", run),
+        ):
+            page.render_midi(card, "/x", out, session_genre)
+        return seen
+
+    def test_the_session_genre_the_cards_or_the_entrys(self):
+        midi = [
+            {"label": "a", "args": "--seed 1"},
+            {"label": "b", "args": "--genre techno-detroit --seed 1"},
+        ]
+        self.assertEqual(
+            self.genres({"id": "S1", "midi": midi}), [["dub"], ["techno-detroit"]]
+        )
+        self.assertEqual(
+            self.genres({"id": "S1", "genre": "house", "midi": midi}),
+            [["house"], ["techno-detroit"]],
+        )
+
+    def test_a_cards_unknown_genre_is_a_problem(self):
+        self.assertIn(
+            "S1: unknown genre polka", page.problems(content(genre="polka"), {"s1_e5"})
+        )
+
+
+class Verdicts(unittest.TestCase):
+    """#426: a card's per-clip answers are its own (`verdicts`), keep/unsure/drop by default."""
+
+    def session(self, **kw):
+        return content(picks=True, **kw)
+
+    def data(self, session):
+        (c,) = page.page_data(session, {})["cards"]
+        return c["verdicts"]
+
+    def test_keep_unsure_drop_by_default(self):
+        self.assertEqual(
+            self.data(self.session()), {"verdict": ["keep", "unsure", "drop"]}
+        )
+
+    def test_a_card_names_its_own(self):
+        own = {"level": ["louder", "fine", "quieter"], "weight": ["0", "1", "2"]}
+        self.assertEqual(self.data(self.session(verdicts=own)), own)
+        self.assertEqual(page.problems(self.session(verdicts=own), {"s1_e5"}), [])
+
+    def test_empty_or_repeated_answers_are_a_problem(self):
+        for bad in ({"level": []}, {"level": ["a", "a"]}, ["keep"], {}):
+            found = page.problems(self.session(verdicts=bad), {"s1_e5"})
+            self.assertIn("S1: verdicts", "\n".join(found))
+
+    def test_the_page_exports_them(self):
+        # Runs the page's own script in node, with a stub DOM, and reads its Export.
+        own = {"level": ["louder", "fine"], "weight": ["1", "2"]}
+        data = page.page_data(self.session(verdicts=own), {})
+        sounds = {"s1-a:level": "louder", "s1-a:weight": "2"}
+        text = page_export(data, {"S1": {"pick": "", "note": "", "sounds": sounds}})
+        self.assertIn("- Sounds: A: level louder, weight 2", text)
+        # The default keeps the old answers' shape: one verdict per clip, under its stem
+        data = page.page_data(self.session(), {})
+        text = page_export(
+            data, {"S1": {"pick": "", "note": "", "sounds": {"s1-a": "drop"}}}
+        )
+        self.assertIn("- Sounds: A: drop", text)
+
+
+def page_export(data, answers):
+    """The Export text of the page for `data`, with `answers` saved: page.html's script run in node on a stub DOM."""
+    import json
+    import re
+    import shutil
+
+    node = shutil.which("node")
+    if not node:
+        raise unittest.SkipTest("no node")
+    script = re.search(r"<script>(.*)</script>", page.html(data), re.DOTALL).group(1)
+    prelude = (
+        "const stub = new Proxy(function () {}, { get: (t, k) => k === Symbol.toPrimitive ? () => '' : "
+        "k === Symbol.iterator ? function* () {} : stub, set: () => true, apply: () => stub });\n"
+        "globalThis.document = stub; globalThis.window = stub; globalThis.navigator = stub;\n"
+        f"globalThis.localStorage = {{ getItem: () => {json.dumps(json.dumps(answers))}, setItem() {{}} }};\n"
+    )
+    done = subprocess.run(
+        [node, "-e", prelude + script + "\nprocess.stdout.write(exportText());"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return done.stdout
+
+
+class OledNames(unittest.TestCase):
+    def test_parents_are_not_palette_names(self):
+        # #426: a parent (version 0) is never played, so the firmware never reads its palette file
+        names = cli.oled_names()
+        self.assertTrue({"AMBIENT", "ACID TECHNO", "CLASSIC PSY"} <= names)
+        self.assertFalse({"PSYTRANCE", "TECHNO"} & names)
+
+
+class ToolkitNits(unittest.TestCase):
+    """#426: the NITs from PR #425's review."""
+
+    def test_no_line_past_120(self):
+        folder = os.path.dirname(cli.__file__)
+        long = []
+        for name in sorted(os.listdir(folder)):
+            if name.endswith(".py"):
+                with open(os.path.join(folder, name)) as fh:
+                    long += [
+                        f"{name}:{n}"
+                        for n, line in enumerate(fh, 1)
+                        if len(line.rstrip("\n")) > 120
+                    ]
+        self.assertEqual(long, [])
+
+    def test_variants_prove_exits_1_when_a_variant_doesnt_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for lines, failed, code in (
+                (["s1: changes"], {"s2": "/x"}, 1),
+                (["s1: doesn't build: no, it changes"], {}, 0),
+            ):
+                with (
+                    mock.patch.object(cli.variants, "scratch_worktree", lambda *a: tmp),
+                    mock.patch.object(
+                        cli.variants, "prove", lambda *a, out=(lines, failed), **k: out
+                    ),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    self.assertEqual(
+                        cli.main(
+                            [
+                                "variants",
+                                "prove",
+                                "--session",
+                                tmp,
+                                "--scratch",
+                                tmp,
+                                "--genre",
+                                "dub",
+                                "s1",
+                            ]
+                        ),
+                        code,
+                    )
 
 
 if __name__ == "__main__":

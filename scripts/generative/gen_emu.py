@@ -229,7 +229,7 @@ def wav_failures(pcm, seconds, steps, step_seconds, quiet_bars=frozenset()):
       With `steps` given but none of them checked (an FX-alone capture before its first note), audio that is silent
       throughout fails too.
     - warnings: a run of FULL_SCALE_RUN full-scale samples (the mix clips); `steps` given but none checked, with
-      some sound.
+      some sound (naming `quiet_bars` when they held every step in it).
     - checked: how many steps' beats it checked.
     `steps` None: no harness render, so no step is checked."""
     failures, warnings = [], []
@@ -240,13 +240,14 @@ def wav_failures(pcm, seconds, steps, step_seconds, quiet_bars=frozenset()):
     limit = min(frames, int(seconds * RATE))
     step_frames = step_seconds * RATE
     silent_bars = set()
-    checked = 0
+    checked = quiet = 0
     for step in sorted(steps or ()):
-        if step // STEPS_PER_BAR in quiet_bars:
-            continue
         start = int(step * step_frames)
         if start + step_frames > limit:
             continue  # less than a 16th before the capture's end (or where it stopped short): latency would fail it
+        if step // STEPS_PER_BAR in quiet_bars:
+            quiet += 1
+            continue
         end = min(limit, int((step + WINDOW_STEPS) * step_frames))
         chunk = samples[start * 2 : end * 2 : 11]
         rms = math.sqrt(sum(v * v for v in chunk) / max(1, len(chunk))) / 2**31
@@ -260,13 +261,19 @@ def wav_failures(pcm, seconds, steps, step_seconds, quiet_bars=frozenset()):
         )
     if steps is not None and not checked:
         chunk = samples[: limit * 2 : 11]
+        # every note the harness has in it is in --quiet-bars: say so, it may be the bars named, not the music
+        why = f"the harness's {quiet} steps in it are all in quiet bars"
         if not any(abs(v) / 2**31 >= SILENCE_RMS for v in chunk):
             failures.append(
-                "silent throughout, and the harness has no note to check in it"
+                f"silent throughout, and --quiet-bars left no step to check ({why})"
+                if quiet
+                else "silent throughout, and the harness has no note to check in it"
             )
         else:
             warnings.append(
-                "the harness has no note to check in it: only its length and full-scale runs were checked"
+                f"--quiet-bars left no step to check: {why}; only its length and full-scale runs were checked"
+                if quiet
+                else "the harness has no note to check in it: only its length and full-scale runs were checked"
             )
     run = longest_full_scale_run(samples)
     if run and run[0] >= CORRUPT_RUN:

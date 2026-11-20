@@ -5,8 +5,8 @@ next capture relinks the firmware (about 55 s under LTO). A Recipe change builds
 into a copy of the built ELF (#401); nor do mutes and length. So a variant's Captures go to one runner, and the
 runner applies the variant once for them. They still run in Recipe order, so the plan reads in that order.
 
-A variant costing more than a runner's share of the work (the base, as a rule) is split into chunks, `base#1`, `base#2` ..., each claimed
-like a variant, when the extra links cost less than the wall time the split saves (#422).
+A variant costing more than a runner's share of the work (the base, as a rule) is split into chunks, `base#1`,
+`base#2` ..., each claimed like a variant, when the extra links cost less than the wall time the split saves (#422).
 """
 
 import math
@@ -82,7 +82,8 @@ class Plan:
         for r in self.runners:
             variants = list(dict.fromkeys(c.variant for c in r.captures))
             lines.append(
-                f"runner {r.index}: {len(r.captures)} captures, {r.links} link{'s' * (r.links != 1)}, {r.audio_seconds:.1f} s of audio, "
+                f"runner {r.index}: {len(r.captures)} captures, {r.links} link{'s' * (r.links != 1)}, "
+                f"{r.audio_seconds:.1f} s of audio, "
                 f"~{r.estimate_s / 60:.0f} min; variants: {', '.join(variants) or '-'}"
             )
             for c in r.captures:
@@ -133,8 +134,8 @@ def wall(costs, runners):
 def groups(captures, secs, runners=1):
     """[(unit, its Captures in order)], the costliest first. A unit is a variant's name, or `<variant>#<n>` for a chunk
     of a variant split across runners: a variant costing more than a runner's share of the work is split, costliest
-    first, into the number of chunks (up to `runners`) that gives the shortest wall time, so a split is only made when the time it saves passes its extra links. `secs`
-    maps a capture's name to its seconds."""
+    first, into the number of chunks (up to `runners`) that gives the shortest wall time, so a split is only made when
+    the time it saves passes its extra links. `secs` maps a capture's name to its seconds."""
     by_variant = {}
     for c in order(captures):
         by_variant.setdefault(c.variant, []).append(c)

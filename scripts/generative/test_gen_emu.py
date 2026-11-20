@@ -736,6 +736,34 @@ class WavCheck(unittest.TestCase):
             ],
         )
 
+    def test_quiet_bars_that_leave_no_step_to_check_say_so(self):
+        # #426: the harness has notes in the capture, but every one is in a quiet bar: nothing was checked.
+        pcm = bars_pcm([0.3, 0, 0, 0.3])
+        verdict = gen_emu.wav_failures(
+            pcm, 2.0, steps_of(1, 2), STEP_S, quiet_bars={1, 2}
+        )
+        self.assertEqual(verdict.failures, [])
+        self.assertEqual(verdict.checked, 0)
+        self.assertEqual(
+            verdict.warnings,
+            [
+                (
+                    "--quiet-bars left no step to check: the harness's 32 steps in it are all in quiet bars; "
+                    "only its length and full-scale runs were checked"
+                )
+            ],
+        )
+        # Silent throughout, every step quiet: still a failure, naming the quiet bars
+        self.assertEqual(
+            failures(bars_pcm([0] * 4), 2.0, steps_of(1, 2), STEP_S, {1, 2}),
+            [
+                (
+                    "silent throughout, and --quiet-bars left no step to check (the harness's 32 steps in it are "
+                    "all in quiet bars)"
+                )
+            ],
+        )
+
     def test_quiet_bars_are_bars_and_ranges(self):
         self.assertEqual(gen_emu.bar_set("47"), frozenset({47}))
         self.assertEqual(gen_emu.bar_set("3,40-42"), frozenset({3, 40, 41, 42}))
