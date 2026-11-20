@@ -79,6 +79,29 @@ struct Macros {
 	constexpr bool operator==(const Macros&) const = default;
 };
 
+/// Each part's Part bias (spec §3.3): a signed offset per Macro that the part plays at around the Recipe value, after
+/// the Arc, through partBiased() (core/part_bias.h). In macro units, -kMacroFull..kMacroFull, by roster index. 0
+/// plays the Recipe value.
+struct PartBiases {
+	int16_t value[kMaxParts][kNumMacros] = {};
+
+	[[nodiscard]] constexpr int32_t of(int32_t part, Macro macro) const {
+		return value[part][static_cast<int32_t>(macro)];
+	}
+	constexpr void set(int32_t part, Macro macro, int32_t units) {
+		value[part][static_cast<int32_t>(macro)] = static_cast<int16_t>(units < -kMacroFull  ? -kMacroFull
+		                                                                : units > kMacroFull ? kMacroFull
+		                                                                                     : units);
+	}
+	/// Whether `part` has a bias on any macro.
+	[[nodiscard]] constexpr bool any(int32_t part) const {
+		const int16_t* bias = value[part];
+		return (bias[0] | bias[1] | bias[2] | bias[3]) != 0;
+	}
+	constexpr bool operator==(const PartBiases&) const = default;
+};
+static_assert(kNumMacros == 4, "PartBiases::any() reads four macros");
+
 // ---- Sound picks (spec §3.1, §10.1) ----
 
 /// The longest card path a sound pick holds, with its terminator. Longer paths are never picked.
@@ -127,6 +150,8 @@ struct Recipe {
 	/// Each pitched part's octave shift, -kMaxOctaveShift..kMaxOctaveShift, by roster index: its Register moves by
 	/// 12 semitones an octave (spec §3.1, §7.3). 0 for Drums and FX, which have no Register.
 	int8_t octave[kMaxParts] = {};
+	/// Each part's Part bias (spec §3.3). Regenerate keeps it, as it keeps the macros; a genre change sets it to 0.
+	PartBiases bias;
 
 	constexpr bool operator==(const Recipe&) const = default;
 };
