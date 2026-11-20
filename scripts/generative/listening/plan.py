@@ -78,7 +78,7 @@ class Plan:
         for r in self.runners:
             variants = list(dict.fromkeys(c.variant for c in r.captures))
             lines.append(
-                f"runner {r.index}: {len(r.captures)} captures, {r.links} links, {r.audio_seconds:.1f} s of audio, "
+                f"runner {r.index}: {len(r.captures)} captures, {r.links} link{'s' * (r.links != 1)}, {r.audio_seconds:.1f} s of audio, "
                 f"~{r.estimate_s / 60:.0f} min; variants: {', '.join(variants) or '-'}"
             )
             for c in r.captures:

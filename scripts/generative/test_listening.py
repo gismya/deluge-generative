@@ -83,6 +83,14 @@ class Ordering(unittest.TestCase):
         )
         self.assertEqual(sum(r.links for r in p.runners), 4)
 
+    def test_the_dry_run_prints_links_per_runner_and_the_seconds_captured(self):
+        captures = jobs.merge(jobs.parse_jobs(ORDER_JOBS, genre="psytrance"))
+        text = plan.plan(captures, runners=2, tempo_of=lambda c: 120.0).text()
+        # base: 4 captures of 17 s, 3 links; s1: 2 captures, 1 link. 6 captures of 8 bars at 120 BPM: 6 x 17 s.
+        self.assertRegex(text, r"runner 1: 4 captures, 3 links, 68.0 s of audio")
+        self.assertRegex(text, r"runner 2: 2 captures, 1 link, 34.0 s of audio")
+        self.assertIn("total: 6 captures, 4 links, 102.0 s captured", text)
+
     def test_seconds_come_from_bars_at_the_harness_tempo_plus_a_second(self):
         # 8 bars at 120 BPM: 16 s, and a second to spare
         self.assertEqual(plan.seconds(8, 120.0), 17.0)
