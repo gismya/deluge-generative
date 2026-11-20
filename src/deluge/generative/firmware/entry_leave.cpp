@@ -37,6 +37,7 @@
 #include "playback/playback_handler.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <cassert>
 #include <iterator>
 #include <new>
 #include <span>
@@ -97,9 +98,7 @@ public:
 		else if (source_.file != nullptr) {
 			error_ = currentRecipe.load(*source_.file, *source_.name, soundsReplaced_, &chunks);
 		}
-		else if (!currentRecipe.exists) {
-			error_ = Error::UNSPECIFIED; // beginEntry() refuses it: nothing to build
-		}
+		assert(source_.buildable(currentRecipe.exists)); // beginEntry() refuses one with nothing to build
 		if (error_ == Error::ABORTED_BY_USER) {
 			return JobOutcome::Cancelled;
 		}
@@ -311,7 +310,7 @@ bool PerformAdapter::beginEntry(const EntrySource& source, EntryEnded ended) {
 	if (active() || runner.busy()) {
 		return false;
 	}
-	if (source.genre == nullptr && source.file == nullptr && !currentRecipe.exists) {
+	if (!source.buildable(currentRecipe.exists)) {
 		return false;
 	}
 #if ENABLE_SYSEX_TEST

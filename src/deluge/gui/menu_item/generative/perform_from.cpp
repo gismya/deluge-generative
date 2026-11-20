@@ -45,12 +45,9 @@ bool GenreItem::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*
 }
 
 MenuItem* GenreItem::selectButtonPress() {
-	const deluge::generative::Genre* genre = genreAt(slot_);
-	if (genre == nullptr) {
-		display->displayError(Error::UNSPECIFIED); // can't happen: a slot with no genre hides
-		return NO_NAVIGATION;
+	if (const deluge::generative::Genre* genre = genreOrError(slot_)) {
+		askDiscardSong(EntrySource::of(*genre));
 	}
-	askDiscardSong(EntrySource::of(*genre));
 	return NO_NAVIGATION;
 }
 
@@ -68,7 +65,7 @@ PLACE_SDRAM_BSS SourceMenu performFromItem{l10n::String::STRING_FOR_PERFORM_FROM
 Submenu& performFromMenu = performFromItem;
 
 bool performFromShowing() {
-	return getCurrentUI() == &soundEditor && soundEditor.menuItemNavigationRecord[0] == &performFromMenu;
+	return soundEditorShows(performFromMenu);
 }
 
 void performFromFile(const deluge::generative::RecipeFile& file, const deluge::generative::perform::RecipeName& name) {

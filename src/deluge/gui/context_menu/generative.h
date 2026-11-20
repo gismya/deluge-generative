@@ -66,10 +66,7 @@ public:
 		compose_ = false;
 	}
 	/// BUILD on the Compose screen (spec §14.5): OK builds the Current Recipe at the Compose screen's LENGTH.
-	void setCompose() {
-		source_ = {};
-		compose_ = true;
-	}
+	void setCompose() { compose_ = true; }
 	char const* getTitle() override;
 	std::span<char const*> getOptions() override;
 	bool acceptCurrentOption() override;

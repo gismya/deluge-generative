@@ -18,11 +18,17 @@
 #include "definitions.h"
 #include "generative/firmware/current_recipe.h"
 #include "gui/ui/load/load_recipe_ui.h"
+#include "gui/ui/sound_editor.h"
+#include "gui/ui/ui.h"
 #include "io/midi/test_port.h"
 
 namespace deluge::gui::menu_item::generative {
 
 using deluge::generative::firmware::currentRecipe;
+
+bool soundEditorShows(const MenuItem& root) {
+	return getCurrentUI() == &soundEditor && soundEditor.menuItemNavigationRecord[0] == &root;
+}
 
 bool CurrentRecipeRow::isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const {
 	return currentRecipe.exists;

@@ -37,6 +37,10 @@ struct EntrySource {
 	const perform::RecipeName* name = nullptr;
 
 	static EntrySource current() { return {}; }
+	/// Whether entry has a Recipe to build: a genre or a file, or else a Current Recipe (`currentExists`).
+	[[nodiscard]] bool buildable(bool currentExists) const {
+		return genre != nullptr || file != nullptr || currentExists;
+	}
 	static EntrySource of(const Genre& genre) { return {.genre = &genre}; }
 	static EntrySource of(const RecipeFile& file, const perform::RecipeName& name) {
 		return {.file = &file, .name = &name};

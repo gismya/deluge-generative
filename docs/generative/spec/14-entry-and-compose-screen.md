@@ -17,7 +17,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   genre or a file reads the card first, with the working animation over the list (BACK cancels it, and the list stays
   open with the Recipe as it was); then the screen opens in the list's place. The screen's FROM has GENRE ▸ and
   FILE..., which work the same way and go back up to the screen.
-- A list opens on the row it was on last, as a stock submenu does, or on its first row when that one is hidden.
+- PERFORM FROM, COMPOSE FROM and FROM open on the row they were on last, as a stock submenu does, or on their first
+  row when that one is hidden. GENRE ▸ opens on the Current Recipe's genre, as above.
 - The fonts have no "…" or "▸": write FILE..., and use the stock submenu arrow icon.
 
 ### 14.2 The Current Recipe

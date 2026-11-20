@@ -103,6 +103,7 @@ void reportPick(const char* row, const gen::SoundPath& path) {
 /// How far below a row's y the selected row's highlight reaches: Submenu::drawSubmenuItemsForOled() inverts yPixel to
 /// yPixel + 8. InPlaceRow redraws its value's box inside that highlight, so the two must agree.
 constexpr int32_t kRowHighlightBottom = 8;
+static_assert(kRowHighlightBottom == kTextSpacingY - 1, "a row's highlight is one text row high");
 
 /// The value rows' room: what's left of a row after its name (`name`), in characters.
 int32_t charsAfter(std::string_view name) {
@@ -188,11 +189,11 @@ void backToScreen() {
 /// After a genre pick or a file's load from a source list: the Compose screen, showing the new Recipe. From the
 /// screen's FROM it goes back up to the screen; from COMPOSE FROM the screen opens in its place.
 void showComposeScreen() {
-	if (isUIOpen(&soundEditor) && soundEditor.menuItemNavigationRecord[0] == &composeScreen) {
+	if (soundEditorShows(composeScreen)) {
 		backToScreen();
 		return;
 	}
-	if (isUIOpen(&soundEditor)) {
+	if (soundEditorShows(composeFromMenu)) {
 		soundEditor.exitCompletely();
 	}
 	openComposeScreen();
@@ -231,11 +232,8 @@ public:
 			}
 			rollEnded(outcome);
 		};
-		const gen::Genre* genre = genreAt(slot_);
-		if (genre == nullptr) {
-			display->displayError(Error::UNSPECIFIED); // can't happen: a slot with no genre hides
-		}
-		else if (!gen::firmware::beginGenreRoll(*genre, ended)) {
+		const gen::Genre* genre = genreOrError(slot_);
+		if (genre != nullptr && !gen::firmware::beginGenreRoll(*genre, ended)) {
 			refusedBusy();
 		}
 		return NO_NAVIGATION;
@@ -818,7 +816,7 @@ bool openComposeScreen() {
 }
 
 bool composeScreenShowing() {
-	return getCurrentUI() == &soundEditor && soundEditor.menuItemNavigationRecord[0] == &composeScreen;
+	return soundEditorShows(composeScreen);
 }
 
 void buildComposeRecipe() {

@@ -18,6 +18,7 @@
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
@@ -104,6 +105,9 @@ bool DiscardSong::acceptCurrentOption() {
 		close();
 		menu_item::generative::buildComposeRecipe();
 		return true;
+	}
+	if (source_.file != nullptr) {
+		generative::firmware::showVersionNotice(*source_.file); // PERFORM FROM's FILE... (spec §16.2)
 	}
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();

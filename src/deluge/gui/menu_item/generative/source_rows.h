@@ -26,6 +26,9 @@
 
 namespace deluge::gui::menu_item::generative {
 
+/// Whether the sound editor is the current UI and shows `root` or a menu under it.
+bool soundEditorShows(const MenuItem& root);
+
 /// CURRENT RECIPE: shown once a Current Recipe exists; a push calls `picked`.
 class CurrentRecipeRow final : public MenuItem {
 public:
