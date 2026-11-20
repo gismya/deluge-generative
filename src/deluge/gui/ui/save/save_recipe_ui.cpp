@@ -22,6 +22,7 @@
 #include "gui/context_menu/overwrite_file.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
+#include "gui/ui_timer_manager.h"
 #include "gui/views/perform_view.h"
 #include "hid/button.h"
 #include "hid/display/display.h"
@@ -203,8 +204,15 @@ ActionResult SaveRecipeUI::buttonAction(deluge::hid::Button b, bool on, bool inC
 	}
 	if (inCardRoutine && (b == SAVE || b == SELECT_ENC)) {
 		// A save inside a card wait (a preload's, over Perform) is refused, not deferred: stock's
-		// REMIND_ME_OUTSIDE_CARD_ROUTINE would hold every later press back until the wait ends (spec §12.10).
+		// REMIND_ME_OUTSIDE_CARD_ROUTINE would hold every later press back until the wait ends (spec §12.10). A press
+		// made outside the wait set the long-press mode and its timer (Browser::mainButtonAction()): a release inside
+		// it ends them too, or the file list wouldn't scroll and the next press would do nothing.
 		if (on) {
+			refusedBusy("full");
+		}
+		else if (currentUIMode == UI_MODE_HOLDING_BUTTON_POTENTIAL_LONG_PRESS) {
+			currentUIMode = UI_MODE_NONE;
+			uiTimerManager.unsetTimer(TimerName::UI_SPECIFIC);
 			refusedBusy("full");
 		}
 		return ActionResult::DEALT_WITH;

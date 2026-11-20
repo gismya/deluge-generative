@@ -5,7 +5,9 @@
 # existing file asks to overwrite. A save while a sound preload runs is refused (spec §12.10). Each saved file is read
 # back against the Current Recipe ("check recipe *": the name the Current Recipe remembers), so a saved Recipe
 # reloads to the same Recipe, seed, takes and sound picks. Under the save UI the sidebar pads still show Perform's
-# ("report sidebar": pads_sidebar lit=<n>, from the frame sent to the pads).
+# ("report sidebar": pads_sidebar lit=<n>, from the frame sent to the pads). ACID is shifted an octave down first, so
+# the files carry a non-zero octave shift; a SAVE or SELECT released inside a card wait ("hold card_routine") is
+# refused with BUSY and leaves no long press behind.
 # gen_recipe_save quick|full opened|saved|refused|failed|closed|overwrite? name=...; gen_recipe_check name= read=
 # error= match= recipe= seed= takes= sounds=.
 # covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
@@ -17,10 +19,32 @@
 # covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/generative/firmware/transitions.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*
 # covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/core/types.h
-# covers: src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/deluge.cpp src/deluge/io/midi/test_port.h
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
+
+# ---- Stopped: ACID an octave down first (SHIFT + Y on the locked part), so a file carries a non-zero shift ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SHIFT down
+wait 50
+encoder 0 -1
+expect event gen_press octave part=1 shift=-1 y=-1
+button SHIFT up
+wait 200
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event /^gen_focus part=-?\d+ locked=-1$/
 
 # ---- Stopped: SAVE opens the full save UI on the default name, and SAVE there saves it ----
 button SAVE down
@@ -45,6 +69,33 @@ button SAVE down
 wait 50
 button SAVE up
 expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}A$/ within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_save full closed
+expect ui=generative_perform
+
+# ---- A SAVE or SELECT pressed in the save UI and released inside a card wait ("hold card_routine"): refused with
+# BUSY, and the press's long-press mode ends with it, so the UI acts as before the press ----
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}A$/ within=10
+button SAVE down
+wait 50
+hold card_routine
+button SAVE up
+expect event gen_recipe_save full refused why=busy within=5
+release card_routine
+expect ui_mode=0
+button SELECT_ENC down
+wait 50
+hold card_routine
+button SELECT_ENC up
+expect event gen_recipe_save full refused why=busy within=5
+release card_routine
+expect ui_mode=0
+expect ui=generative_save_recipe
 button BACK down
 wait 50
 button BACK up

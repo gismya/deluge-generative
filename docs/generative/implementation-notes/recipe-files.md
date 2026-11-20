@@ -30,3 +30,7 @@ otherwise.
 - `firmware/card_text.*` reads a small card file whole (`readCardText()`): palette overrides and Recipe files share it.
 - Test port: `check recipe <name>|*` reads a file back and compares it with the Current Recipe (`gen_recipe_check`);
   `*` is the remembered name. Scripts: `perform_recipe_save.txt`, `compose_recipe_save.txt`.
+- A UI that refuses a press inside a card wait instead of deferring it (no REMIND_ME_OUTSIDE_CARD_ROUTINE) has to
+  handle the release too: stock's `Browser::mainButtonAction()` sets `UI_MODE_HOLDING_BUTTON_POTENTIAL_LONG_PRESS` and
+  the UI_SPECIFIC timer on a press made outside the wait, and only its release clears them. A release swallowed inside
+  the wait left the mode set: the list wouldn't scroll and the next press did nothing (#416 R2).

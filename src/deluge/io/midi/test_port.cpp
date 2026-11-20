@@ -134,6 +134,7 @@ bool holdingRamps = false;          ///< See rampsHeld()
 bool holdingStress = false;         ///< See rampsStressed()
 bool holdingCardError = false;      ///< See cardErrorHeld()
 bool holdingPreload = false;        ///< See preloadHeld()
+bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
 bool holdingCommitted = false;      ///< See soundCommittedHeld()
 bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
@@ -247,6 +248,9 @@ constexpr Hold kHolds[] = {
     {"card_error", [](bool on) { holdingCardError = on; }},
     /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
+    /// Injected presses reach their handlers as inside a card wait (sdRoutineLock set, inCardRoutine true), or as
+    /// they come (see cardRoutineHeld())
+    {"card_routine", [](bool on) { holdingCardRoutine = on; }},
     /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
     {"sound_committed", [](bool on) { holdingCommitted = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
@@ -1180,6 +1184,10 @@ bool composeReserveHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool cardRoutineHeld() {
+	return holdingCardRoutine;
 }
 
 bool soundCommittedHeld() {

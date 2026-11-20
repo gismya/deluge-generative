@@ -104,6 +104,11 @@ bool cardErrorHeld();
 /// of racing it.
 bool preloadHeld();
 void releasePreload();
+/// Test hook for presses that land inside a card wait: true from a "hold card_routine" line until "release
+/// card_routine". Injected presses then reach their handlers with sdRoutineLock set, as a press read inside
+/// routineForSD() does, so a script can put a release inside a card wait instead of racing a load. A handler that
+/// returns REMIND_ME_OUTSIDE_CARD_ROUTINE meanwhile waits until the hold is released.
+bool cardRoutineHeld();
 /// A preload job's wait at its start while the preload hold is on: it yields at `chunks`' boundaries until the hold
 /// is released or the job is cancelled, then turns the hold off, so the next preload runs straight through.
 template <typename Chunks>
