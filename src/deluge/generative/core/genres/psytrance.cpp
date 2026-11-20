@@ -52,10 +52,11 @@ constexpr Pattern kClosedHat[] = {
     {"4796479647964797", "gg.ggg.ggg.ggg.g", 2},
 };
 
-/// An open hat on the & now and then: not on every &, where it would replace every closed hat (spec §5.7).
+/// An open hat on the & now and then: every other bar, the hit in the second (#350), never on every &, where it would
+/// replace every closed hat (spec §5.7).
 constexpr Pattern kOpenHat[] = {
-    {"..............7.", "................", 0, 2},
-    {"......6.......7.", "................", 1},
+    {"..............................7.", "................................", 0, 2},
+    {"......................6.......7.", "................................", 1},
 };
 
 /// The ride on the &s, behind its gate: a raised Density brings it in.
@@ -78,12 +79,12 @@ constexpr Pattern kShaker[] = {
 
 /// The rolling bass: an onset on every 16th, the & anchored. The beat steps carry onsets too: Avoid Kick drops them,
 /// since the kick plays every beat, so the bass rolls on the e, & and a with the kick alone on the beat. Density thins
-/// the e and the a as it falls.
+/// the e and the a as it falls. Even levels, no ghosts: a psy bass rolls evenly (#353).
 constexpr Pattern kRollingBass[] = {
     {"88X888X888X888X8", "................", 0, 2},
     {"78X878X878X878X8", "................", 0},
     {"89X889X889X889X9", "................", 1},
-    {"79X979X979X979X9", ".g...g...g...g..", 1},
+    {"79X979X979X979X9", "................", 1},
     {"99X999X999X999X9", "................", 2},
 };
 
@@ -99,12 +100,13 @@ constexpr Pattern kLeadRiffs[] = {
 };
 
 /// The Arp's 16ths, the 1 anchored so the Break's dip never thins it to nothing; each entry with its own walk
-/// (kArpWalks). At the default Density the 8s and 9s play; more Density fills in the rest.
+/// (kArpWalks). At the default Density the 8s and 9s play; more Density fills in the rest. Every entry has an onset on
+/// every 16th: none skips the & (#354).
 constexpr Pattern kArpLine[] = {
     {"X787978797879787", "a.......a.......", 0, 2}, // 8ths, filling in to 16ths
     {"X878X878X878X878", "a...a...a...a...", 0},
     {"X898789878987898", "a.......a.......", 1},
-    {"X8.8X8.8X8.8X8.8", "a...a...a...a...", 1}, // gallops
+    {"X888X888X888X888", "a...a...a...a...", 1},
     {"X989898989898989", "a.......a.......", 2},
     {"X998999899989998", "a...a...a...a...", 2},
 };
@@ -172,7 +174,7 @@ constexpr LoopSpec kBassLoop{
     .draws = {.leap = 0, .octaveUp = {60, 200}, .octaveDown = 0, .accent = 120},
     .slide = 0,
     .mutation = 60,
-    .gateTicks = 16,
+    .gateTicks = 20,
 };
 
 /// Scale steps from the root: mostly the root and the 5th, the 2nd (Phrygian's ♭2) and the 3rd, the 7th now and then.
@@ -307,7 +309,8 @@ constexpr Genre kPsytrance{
             .breakPhrases = {1, 1},
             .buildBars = kBuildBars,
             .grooveToBuild = 0,
-            .dropDecayPhrases = 1,
+            // The Drop's lift decays over two phrases, so the Lead (gate 30) plays all 16 bars of the first (#349).
+            .dropDecayPhrases = 2,
             .dropLiftEnergy = macroPoints(8),
             .offsets =
                 {
