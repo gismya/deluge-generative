@@ -26,7 +26,7 @@ Command octaveTo(uint8_t part, int32_t value) {
 std::vector<Event> movedBy(std::vector<Event> events, int32_t part, int32_t semitones) {
 	for (Event& event : events) {
 		if ((event.kind == EventKind::NoteOn || event.kind == EventKind::NoteOff) && event.part == part) {
-			event.pitch = static_cast<uint8_t>(std::clamp(event.pitch + semitones, 0, 127));
+			event.pitch = static_cast<uint8_t>(std::clamp<int32_t>(event.pitch + semitones, 0, 127));
 		}
 	}
 	return events;
