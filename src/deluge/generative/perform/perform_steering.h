@@ -577,7 +577,7 @@ OctaveRange PerformSteering<Adapter>::octavesOf(int32_t part) const {
 
 template <typename Adapter>
 bool PerformSteering<Adapter>::octaveAtEdge(int32_t part, int32_t direction) const {
-	return direction != 0 && takesOctave(part)
+	return !leaving_ && direction != 0 && takesOctave(part)
 	       && !octavesOf(part).contains(octaveAhead(part) + (direction > 0 ? 1 : -1));
 }
 

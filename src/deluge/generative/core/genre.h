@@ -1525,8 +1525,11 @@ constexpr bool registersShiftValid(const Genre& genre) {
 		}
 		const int32_t anchor = part.registerOrDefault().anchor;
 		const PitchReach reach = pitchReach(part);
-		if (anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127 || reach.lowest < 0
-		    || reach.highest > 127) {
+		// pitchReach() bounds the notes only for a span of at least 11 semitones: a narrower one lets noteFor()'s
+		// upward fold land past spanHigh.
+		const Register reg = part.registerOrDefault();
+		if (reg.spanHigh - reg.spanLow < 11 || anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127
+		    || reach.lowest < 0 || reach.highest > 127) {
 			return false;
 		}
 	}
