@@ -243,8 +243,9 @@ public:
 	/// the outgoing instance stops.
 	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style);
 	/// At the start step, before the first decision: the new roster plays the live macros, as a genre change and
-	/// Regenerate keep them (spec §12.9), and a held Arc stays held from its first Groove (spec §9.7).
-	void carryOver(const Macros& macros, bool held);
+	/// Regenerate keep them (spec §12.9), and the Part biases `bias` (a Regenerate's live ones, spec §3.3), and a held
+	/// Arc stays held from its first Groove (spec §9.7).
+	void carryOver(const Macros& macros, const PartBiases& bias, bool held);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.

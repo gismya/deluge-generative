@@ -228,6 +228,7 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	const Genre& genre = *recipe.genre;
 	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
 	rolled.macros = recipe.macros;
+	rolled.bias = recipe.bias; // the same roster: each part keeps its bias (spec §3.3)
 	stagedSounds_ = sounds;
 	CardFolders folders(chunks);
 	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {

@@ -706,12 +706,15 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(currentIs(t, next)).to_be_true();
 		});
 
-		it("takes a LOAD's macros from the file, at the start step and at a stop's commit", _ {
+		it("takes a LOAD's macros and Part biases from the file, at the start step and at a stop's commit", _ {
 			for (const bool stop : {false, true}) {
 				TransitionPiece t;
 				Start next = distinctPending(t);
 				t.lifecycle.pendingRecipe.macros = perform::HandoverMacros::Pending;
 				next.recipe.macros = t.lifecycle.pendingRecipe.recipe.macros;
+				t.currentRecipe.bias.set(1, Macro::Energy, macroPoints(7)); // the live one, which the file's replaces
+				t.lifecycle.pendingRecipe.recipe.bias.set(2, Macro::Motion, -macroPoints(4));
+				next.recipe.bias = t.lifecycle.pendingRecipe.recipe.bias;
 				t.confirmAt(3, stop ? TransitionStyle::BuildIntoDrop : TransitionStyle::Cut);
 				if (stop) {
 					t.stop();
@@ -720,6 +723,30 @@ describe transition_lifecycle("Transition lifecycle", $ {
 					t.hook.runUntil([&] { return t.sink.starts == 1; });
 				}
 				expect(currentIs(t, next)).to_be_true();
+			}
+		});
+
+		it("keeps the live Part biases at a Regenerate and sets them to 0 at a genre change (spec §3.3)", _ {
+			for (const Genre* incoming : {&genres::technoAcid, &genres::technoDub}) {
+				for (const bool stop : {false, true}) {
+					TransitionPiece t(&genres::technoAcid, incoming);
+					Command bias{CommandKind::SetBias, 1, macroPoints(7)};
+					bias.length = static_cast<uint16_t>(Macro::Energy);
+					t.currentRecipe.bias.set(1, Macro::Energy, macroPoints(7)); // as the press sets it
+					t.push(bias);
+					t.confirmAt(3, stop ? TransitionStyle::BuildIntoDrop : TransitionStyle::Cut);
+					if (stop) {
+						t.stop();
+					}
+					else {
+						t.hook.runUntil([&] { return t.sink.starts == 1; });
+					}
+					const int32_t kept = incoming == &genres::technoAcid ? macroPoints(7) : 0;
+					expect(t.currentRecipe.bias.of(1, Macro::Energy)).to_equal(kept);
+					if (!stop) {
+						expect(t.driver.playing()->recipe().bias.of(1, Macro::Energy)).to_equal(kept);
+					}
+				}
 			}
 		});
 

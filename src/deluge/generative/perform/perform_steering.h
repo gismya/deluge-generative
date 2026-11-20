@@ -381,9 +381,14 @@ template <typename Adapter>
 void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	Recipe& recipe = adapter().recipe();
 	const Macros live = recipe.macros;
+	const PartBiases liveBias = recipe.bias;
+	const bool regenerate = pending.recipe.genre == recipe.genre;
 	recipe = pending.recipe;
 	if (pending.macros == HandoverMacros::Live) {
 		recipe.macros = live;
+		if (regenerate) {
+			recipe.bias = liveBias; // the same roster: a Regenerate keeps each part's bias, a genre change doesn't
+		}
 	}
 	else {
 		macroSteering_.startFrom(recipe.macros); // the incoming instance plays the file's (spec §12.9)

@@ -111,8 +111,9 @@ void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& 
 	      style == TransitionStyle::BuildIntoDrop);
 }
 
-void Generator::carryOver(const Macros& macros, bool held) {
+void Generator::carryOver(const Macros& macros, const PartBiases& bias, bool held) {
 	recipe_.macros = macros;
+	recipe_.bias = bias;
 	arc_.carryHold(held);
 }
 
