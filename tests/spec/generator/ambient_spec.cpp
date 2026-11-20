@@ -361,14 +361,14 @@ describe ambient("Ambient", $ {
 			expect(bass.loop.answers.empty()).to_be_true();
 			expect(bass.loop.slide.atZero == 0 && bass.loop.slide.atFull == 0).to_be_true();
 			expect(bass.expression.spread).to_equal(0);
-			// The key's root between F#1 and F2, an octave under the Drone's, every chord root at or over it.
-			expect(bass.reg.anchor).to_equal(36);
+			// The key's root between F#2 and F3, the Drone's own (bass-up), every chord root at or over it.
+			expect(bass.reg.anchor).to_equal(48);
 			expect(bass.reg.spanLow).to_equal(-1);
 			expect(bass.reg.spanHigh).to_equal(11);
 			for (uint8_t key = 0; key < 12; key++) {
 				const int32_t tonic = tonicNote(bass.reg, key);
-				expect(tonic >= 30 && tonic <= 41).to_be_true();
-				expect(tonicNote(ambientGenre.parts[kDronePart].reg, key)).to_equal(tonic + 12);
+				expect(tonic >= 42 && tonic <= 53).to_be_true();
+				expect(tonicNote(ambientGenre.parts[kDronePart].reg, key)).to_equal(tonic);
 			}
 			int32_t notes = 0;
 			for (uint32_t seed = 1; seed <= 3; seed++) {
@@ -389,8 +389,8 @@ describe ambient("Ambient", $ {
 			expect(notes).to_be_greater_than(40);
 		});
 
-		it("keeps the Bass out of the lowest octave: no note under F#1 (about 46 Hz) or the key's root, none up to the "
-		   "Drone, at Complexity 50 too", _ {
+		it("keeps the Bass out of the lowest octaves: no note under F#2 (about 92 Hz) or the key's root, at Complexity "
+		   "50 too", _ {
 			const PartSpec& bass = ambientGenre.parts[kBassPart];
 			expect(bass.loop.draws.octaveDown.atZero == 0 && bass.loop.draws.octaveDown.atFull == 0).to_be_true();
 			int32_t aboveRoot = 0;
@@ -403,7 +403,7 @@ describe ambient("Ambient", $ {
 					if (e.part != kBassPart) {
 						continue;
 					}
-					expect(e.pitch).to_be_greater_than(29);
+					expect(e.pitch).to_be_greater_than(41);
 					expect(e.pitch >= tonic && e.pitch < tonic + 12).to_be_true();
 					aboveRoot += e.pitch > tonic ? 1 : 0;
 				}
@@ -668,19 +668,52 @@ describe ambient("Ambient", $ {
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
-		it("gives every synth part at least 3 presets but the Drone, which the owner trimmed to 2, each on the factory card "
-		   "or in the pack, its role listing them", _ {
+		it("gives every synth part at least 3 presets, each on the factory card or in the pack, its role listing them", _ {
 			FakeCard card = harness::factoryCardWithPack();
-			for (int32_t part : {kBassPart, kPadPart, kLeadPart}) {
-				expect(ambientGenre.palette->partEntries(ambientGenre.parts[part]).size()).to_be_greater_than(size_t{2});
-			}
-			expect(ambientGenre.palette->partEntries(ambientGenre.parts[kDronePart]).size()).to_equal(size_t{2});
+			expect(harness::fewestPartPresets(ambientGenre)).to_be_greater_than(size_t{2});
 			expect(harness::partPresetsMissing(ambientGenre, card).empty()).to_be_true();
-			// The pack's sine sub is the Bass's main pick.
-			expect(harness::mainPick(ambientGenre, kBassPart)).to_equal(std::string("SYNTHS/GENERATIVE/GEN Sine Sub.XML x3"));
 			for (const RoleSounds& role : ambientGenre.palette->roles) {
 				expect(role.role == Role::Bass || role.role == Role::Pad || role.role == Role::Lead).to_be_true();
 			}
+		});
+
+		it("rolls the pack's three basses for the Bass, and the pack's drones before the factory ones for the Drone "
+		   "(owner, Ambient sounds round 1)", _ {
+			FakeCard card = harness::factoryCardWithPack();
+			std::set<std::string> basses;
+			std::set<std::string> drones;
+			for (uint32_t entropy = 0; entropy < 200; entropy++) {
+				SoundPicks sounds;
+				expect(rollSounds(ambientGenre, *ambientGenre.palette, sounds, entropy, card)).to_be_true();
+				basses.insert(sounds.part[kBassPart].c_str());
+				drones.insert(sounds.part[kDronePart].c_str());
+			}
+			expect(basses == std::set<std::string>{"SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML"})
+			    .to_be_true();
+			expect(drones == std::set<std::string>{"SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML",
+			                                       "SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML",
+			                                       "SYNTHS/125 Evolving Pad.XML", "SYNTHS/148 Warm 5th Pad.XML"})
+			    .to_be_true();
+			const auto droneEntries = ambientGenre.palette->partEntries(ambientGenre.parts[kDronePart]);
+			expect(std::string(droneEntries.back().path).rfind("SYNTHS/GENERATIVE/", 0)).to_equal(std::string::npos);
+		});
+
+		it("falls back to a factory bass, and to a factory drone, on a card without the pack (spec §10.1)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML", "SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML",
+			                  "SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML", "SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML",
+			                  "SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML", "SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML"};
+			SoundLoad bass = loadPartSound(*ambientGenre.palette, ambientGenre.parts[kBassPart],
+			                               "SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML", loader);
+			expect(bass.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/002 Basic Square Bass.XML"));
+			SoundLoad drone = loadPartSound(*ambientGenre.palette, ambientGenre.parts[kDronePart],
+			                                "SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML", loader);
+			expect(drone.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/125 Evolving Pad.XML"));
 		});
 
 		it("finds files for every lane, the pack's brushes alone on the Snare's list and pack risers alone on the Riser", _ {

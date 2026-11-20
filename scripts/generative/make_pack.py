@@ -341,9 +341,19 @@ def preset(
     volume=36,
     lfo1_type=None,
     lfo1_rate=None,
+    lfo2_type=None,
+    lfo2_rate=None,
+    unison=None,
+    mod_fx=None,
+    lpf_mode="24dB",
+    hpf=None,
+    fold=None,
+    pulse_width=None,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
-    and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults."""
+    and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults; `lfo2_type` and `lfo2_rate`
+    LFO 2 (per voice) the same way. `unison` is (voices, detune, stereo spread); `mod_fx` is (type, rate knob, depth
+    knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -365,10 +375,25 @@ def preset(
             "\t\t<syncLevel>0</syncLevel>",
             "\t</lfo1>",
         ]
+    if lfo2_type is not None:
+        lines += ["\t<lfo2>", f"\t\t<type>{lfo2_type}</type>", "\t</lfo2>"]
     lines += [
         "\t<mode>subtractive</mode>",
         f"\t<transpose>{transpose}</transpose>",
-        "\t<lpfMode>24dB</lpfMode>",
+    ]
+    if unison is not None:
+        voices, detune, spread = unison
+        lines += [
+            "\t<unison>",
+            f"\t\t<num>{voices}</num>",
+            f"\t\t<detune>{detune}</detune>",
+            f"\t\t<spread>{spread}</spread>",
+            "\t</unison>",
+        ]
+    lines.append(f"\t<lpfMode>{lpf_mode}</lpfMode>")
+    if mod_fx is not None:
+        lines.append(f"\t<modFXType>{mod_fx[0]}</modFXType>")
+    lines += [
         "\t<defaultParams>",
         "\t\t<portamento>0x80000000</portamento>",
         "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
@@ -378,10 +403,20 @@ def preset(
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(lpf)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(resonance)}</lpfResonance>",
-        "\t\t<hpfFrequency>0x80000000</hpfFrequency>",
+        f"\t\t<hpfFrequency>{knob(hpf) if hpf is not None else '0x80000000'}</hpfFrequency>",
     ]
+    if fold is not None:
+        lines.append(f"\t\t<waveFold>{knob(fold)}</waveFold>")
+    if pulse_width is not None:
+        lines.append(f"\t\t<oscAPulseWidth>{knob(pulse_width)}</oscAPulseWidth>")
+        lines.append(f"\t\t<oscBPulseWidth>{knob(pulse_width)}</oscBPulseWidth>")
     if lfo1_rate is not None:
         lines.append(f"\t\t<lfo1Rate>{knob(lfo1_rate)}</lfo1Rate>")
+    if lfo2_rate is not None:
+        lines.append(f"\t\t<lfo2Rate>{knob(lfo2_rate)}</lfo2Rate>")
+    if mod_fx is not None:
+        lines.append(f"\t\t<modFXRate>{knob(mod_fx[1])}</modFXRate>")
+        lines.append(f"\t\t<modFXDepth>{knob(mod_fx[2])}</modFXDepth>")
     for name, (attack, decay, sustain, release) in (
         ("envelope1", env1),
         ("envelope2", env2),
@@ -570,6 +605,143 @@ PRESETS = {
         cables=[("velocity", "volume", 30)],
         osc2_volume=0,
         reverb=0,
+    ),
+    # ---- Ambient's Drone and Bass (#313; the owner's picks, sounds round 1) ----
+    # The Drone holds the key's root and fifth (Register anchor C3) under the Pad. Each one: a slow attack and a long
+    # release, the high-pass a little up and no oscillator under the note, so nothing much sounds under ~60 Hz, and
+    # velocity moves the volume. LFO rates are knobs: 25 is about 1.25 Hz, each step about 1.25x.
+    # Drone 1, tape strings: two saws a few cents apart, three unison voices spread wide, a soft 12 dB low-pass, a
+    # breath of noise and a slow wow on the pitch. Static.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML": lambda: preset(
+        "saw",
+        "saw",
+        noise=5,
+        lpf=28,
+        resonance=4,
+        env1=(40, 20, 50, 38),
+        env2=(0, 20, 50, 38),
+        cables=[("velocity", "volume", 25), ("lfo1", "pitch", 3)],
+        osc2_cents=8,
+        osc2_volume=30,
+        reverb=26,
+        volume=44,
+        lfo1_type="triangle",
+        lfo1_rate=22,
+        unison=(3, 10, 30),
+        lpf_mode="12dB",
+        hpf=12,
+    ),
+    # Drone 2, breathing filter: a square and a saw an octave up into a resonant 12 dB low-pass that a slow sine LFO
+    # opens and closes over about half a minute, while a per-voice LFO moves the square's pulse width. Evolving.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=0,
+        lpf=20,
+        resonance=14,
+        env1=(42, 20, 50, 40),
+        env2=(0, 20, 50, 40),
+        cables=[
+            ("velocity", "volume", 25),
+            ("velocity", "lpfFrequency", 8),
+            ("lfo1", "lpfFrequency", 14),
+            ("lfo2", "oscAPhaseWidth", 15),
+        ],
+        osc2_transpose=12,
+        osc2_volume=22,
+        reverb=28,
+        lfo1_type="sine",
+        lfo1_rate=9,
+        lfo2_type="triangle",
+        lfo2_rate=12,
+        unison=(2, 6, 40),
+        lpf_mode="12dB",
+        hpf=10,
+    ),
+    # Drone 3, glass fifth: a sine with a quiet sine an octave and a fifth over it, which a slow LFO fades in and out;
+    # two unison voices spread fully apart, more reverb. Evolving, the purest of the four.
+    "SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML": lambda: preset(
+        "sine",
+        "sine",
+        noise=0,
+        lpf=40,
+        resonance=0,
+        env1=(40, 20, 50, 40),
+        env2=(0, 20, 50, 40),
+        cables=[("velocity", "volume", 25), ("lfo1", "oscBVolume", -16)],
+        osc2_transpose=19,
+        osc2_volume=26,
+        reverb=30,
+        volume=44,
+        lfo1_type="sine",
+        lfo1_rate=11,
+        unison=(2, 5, 50),
+        hpf=12,
+    ),
+    # The Bass plays the chord root (the key's root F#2-F3, the Drone's octave) held for two bars. Each one: a soft attack, full-ish
+    # sustain, a release under a second, no reverb to speak of, and harmonics over the root so a small speaker plays
+    # it. Velocity moves the volume.
+    # Bass 2, felt pulse: a square with a slightly detuned second square into a 12 dB low-pass, the second envelope
+    # blooming the filter over the first half second and settling; velocity opens the filter too.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML": lambda: preset(
+        "square",
+        "square",
+        noise=2,
+        lpf=24,
+        resonance=6,
+        env1=(31, 30, 46, 27),
+        env2=(24, 34, 18, 28),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 8),
+            ("envelope2", "lpfFrequency", 14),
+        ],
+        osc2_cents=5,
+        osc2_volume=28,
+        reverb=4,
+        volume=48,
+        lpf_mode="12dB",
+    ),
+    # Bass 3, folded sine: a sine with a quiet saw an octave up through a soft low-pass and the wavefolder, which adds
+    # odd harmonics; velocity folds it further, so harder notes read brighter.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML": lambda: preset(
+        "sine",
+        "saw",
+        noise=0,
+        lpf=30,
+        resonance=0,
+        env1=(30, 30, 48, 27),
+        env2=(0, 20, 50, 27),
+        cables=[("velocity", "volume", 30), ("velocity", "waveFold", 10)],
+        osc2_transpose=12,
+        osc2_volume=22,
+        reverb=0,
+        volume=48,
+        lpf_mode="12dB",
+        fold=20,
+    ),
+    # Bass 4, tape bass: a saw and a triangle into a darker 24 dB low-pass with a slow filter bloom, a little noise and
+    # a slow wobble on the pitch.
+    "SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML": lambda: preset(
+        "saw",
+        "triangle",
+        noise=6,
+        lpf=21,
+        resonance=8,
+        env1=(30, 30, 46, 27),
+        env2=(28, 36, 24, 30),
+        cables=[
+            ("velocity", "volume", 30),
+            ("velocity", "lpfFrequency", 6),
+            ("envelope2", "lpfFrequency", 12),
+            ("lfo1", "pitch", 2),
+        ],
+        osc2_volume=40,
+        reverb=4,
+        volume=48,
+        lfo1_type="triangle",
+        lfo1_rate=20,
+        hpf=8,
     ),
 }
 

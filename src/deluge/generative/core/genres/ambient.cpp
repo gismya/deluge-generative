@@ -136,8 +136,8 @@ constexpr int16_t kSlowDrift = 1500;
 
 constexpr LineWeight kRootOnly[] = {{0, 1}};
 
-/// The root alone, never sliding and with no octave down (owner, round 1's I2: under F#1 it is mud); each note held two
-/// bars, to the pattern's end, ending before the next pick may start (loopNotesValid()).
+/// The root alone, never sliding and with no octave down (owner, round 1's I2: the lowest octave is mud); each note
+/// held two bars, to the pattern's end, ending before the next pick may start (loopNotesValid()).
 constexpr LoopSpec kSubLoop{
     .degrees = kRootOnly,
     .draws = {.leap = 0, .octaveUp = 0, .octaveDown = 0, .accent = 0},
@@ -168,10 +168,11 @@ constexpr PartSpec kParts[] = {
         .band = {0, 0},
         // Over the Intro floor (the Drone's 0), so it enters as the Intro's Density rises (tuning).
         .densityGate = macroPoints(15),
-        // The key's root between F#1 and F2, an octave under the Drone's (anchor C3) in every key, and every chord root
-        // at or over it, up to a 7th: never under F#1 (about 46 Hz; owner, round 1's I2) and never up to the Drone. The
-        // semitone under the root makes the Register 12 wide; it is the 7th degree, no Ambient chord's root.
-        .reg = {.anchor = 36, .spanLow = -1, .spanHigh = 11},
+        // The key's root between F#2 and F3, the Drone's own (anchor C3: owner, Ambient sounds round 1's bass-up), and
+        // every chord root at or over it, up to a 7th, so the Bass never sounds under F#2 (about 92 Hz; round 1's I2:
+        // the octave down, under 45 Hz, was mud). The semitone under the root makes the Register 12 wide; it is the 7th
+        // degree, no Ambient chord's root.
+        .reg = {.anchor = 48, .spanLow = -1, .spanHigh = 11},
         .loop = kSubLoop,
         .expression = {.spread = 0},
         .gestures = kNoGestures,

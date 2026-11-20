@@ -36,13 +36,18 @@ constexpr PaletteEntry kPad[] = {
     {"SYNTHS/131 Warm Strings.XML", 2}, {"SYNTHS/118 Small Bridge Pad.XML", 2}, {"SYNTHS/151 Radiant FM Pad.XML", 2},
     {"SYNTHS/157 Rich FM Pad 4.XML"},   {"SYNTHS/145 Eerie High Pad.XML"},
 };
-/// The Drone (the key's root and fifth, held for whole Sections): 125's ringmod drone is the main pick; 148 stacks an
-/// open fifth on each note, harmless on a pedal. The owner dropped 126 Dark FM Pad by ear, too rumbly (#133, round 1),
-/// so the Drone has 2 entries until a pack drone comes (#313). Not the draft's 056 FM Bell Modulation: its oscillators
-/// sit an octave up, so it would drone over the Pad (osc_octaves.py).
+/// The Drone (the key's root and fifth, held for whole Sections): the pack's three drones (owner, Ambient sounds round
+/// 1, #313: tape strings, a breathing filter, a glass fifth), then 125's ringmod drone and 148, which stacks an open
+/// fifth on each note, harmless on a pedal; equal weights until a later round weighs them. The pack's come first, so
+/// the fallback chain (spec §10.1) reaches the factory ones on a card without the pack. The owner dropped 126 Dark FM
+/// Pad by ear, too rumbly (#133, round 1). Not the draft's 056 FM Bell Modulation: its oscillators sit an octave up, so
+/// it would drone over the Pad (osc_octaves.py).
 constexpr PaletteEntry kDrone[] = {
-    {"SYNTHS/125 Evolving Pad.XML", 3},
-    {"SYNTHS/148 Warm 5th Pad.XML", 2},
+    {"SYNTHS/GENERATIVE/GEN Ambient Drone 1.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Ambient Drone 2.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Ambient Drone 3.XML", 1},
+    {"SYNTHS/125 Evolving Pad.XML", 1},
+    {"SYNTHS/148 Warm 5th Pad.XML", 1},
 };
 /// The bells: struck sounds whose long tails are welcome here. The owner dropped 054 Ghostly Sines and 121 Tiny Lights
 /// by ear (#133, round 1). Not 068 FM Bells 1: its oscillator sits an octave up, so it plays an octave over the
@@ -53,12 +58,15 @@ constexpr PaletteEntry kBells[] = {
     {"SYNTHS/168 Hang Drum.XML", 2},
     {"SYNTHS/069 FM Bells 2.XML", 1},
 };
-/// The Bass: the pack's soft sine sub (spec §18.2) is the main pick; 169's double bass and 002's round square vary it.
-/// The owner dropped all three by ear (#133, round 1); they stay until a sound search finds others (round 2).
+/// The Bass: the pack's three Ambient basses (owner, Ambient sounds round 1, #313: a felt pulse, a folded sine, a tape
+/// bass), equal weights, in place of GEN Sine Sub, 169 and 002, which the owner dropped by ear (#133, round 1). 002
+/// Basic Square Bass follows at weight 0: never rolled, it loads only through the fallback chain (spec §10.1) on a card
+/// without the pack.
 constexpr PaletteEntry kBass[] = {
-    {"SYNTHS/GENERATIVE/GEN Sine Sub.XML", 3},
-    {"SYNTHS/169 Double Bass.XML", 2},
-    {"SYNTHS/002 Basic Square Bass.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML", 1},
+    {"SYNTHS/002 Basic Square Bass.XML", 0},
 };
 
 constexpr PartSounds kParts[] = {{"BASS", kBass}, {"PAD", kPad}, {"DRONE", kDrone}, {"BELLS", kBells}};
