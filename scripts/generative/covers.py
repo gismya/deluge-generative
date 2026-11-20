@@ -137,6 +137,7 @@ BUILDERS = {
     "gen_press": _SECTIONS,  # "gen_press force GROOVE"
     "gen_retire_referenced": (),
     "gen_rings": (),
+    "gen_row_level": _GENRE,  # part and lane names
     "gen_scale_led": (),
     "gen_section": _SECTIONS,
     "gen_seed_popup": (

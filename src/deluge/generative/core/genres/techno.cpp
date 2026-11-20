@@ -519,10 +519,23 @@ constexpr LaneSpec kDubDrumLanes[] = {
     {.lane = Lane::Perc2, .pool = kShaker, .band = {0, 1}, .expression = {.lean = {0, 2, 0, 2}, .spread = 14}},
 };
 
+/// Every part but the Stab plays at 80 percent of its preset's volume knob (each row's, on the Drums and FX), about
+/// 3.9 dB down (tuning, #322): the Stab's dry presets can't play louder (037's knob is at its top), so the rest comes
+/// down to keep the Stab where it sat with its presets' own echo (delugemu captures, the Stab alone and the rest,
+/// entropy 2, seed 1).
+constexpr uint8_t kDubRest = 80;
+
 constexpr PartSpec kDubDrums = [] {
 	PartSpec drums = kTechnoDrums;
 	drums.lanes = kDubDrumLanes;
+	drums.volume = kDubRest;
 	return drums;
+}();
+
+constexpr PartSpec kDubFx = [] {
+	PartSpec fx = kTechnoFx;
+	fx.volume = kDubRest;
+	return fx;
 }();
 
 constexpr LineWeight kSubDegrees[] = {{0, 1}};
@@ -557,6 +570,7 @@ constexpr PartSpec kDubParts[] = {
         .loop = kSubLoop,
         .expression = {.spread = 4},
         .gestures = kGestures,
+        .volume = kDubRest,
     },
     {
         .role = Role::Chords,
@@ -567,8 +581,8 @@ constexpr PartSpec kDubParts[] = {
         .expression = {.spread = 8},
         .gestures = kGestures,
         .drift = {.sweepBars = 16},
-        // The preset's volume knob (tuning): soft by itself, its stabs sat about 5 dB under the drums and sub
-        // together (delugemu capture, seed 1).
+        // The preset's volume knob: the pack's dry copies set its level (make_pack.py's DERIVED), and the rest of
+        // the parts come down to it (kDubRest).
         .volume = 100,
         .delay = kStabEcho, // the Stab drop-out's throw target
         .throwDelayDepth = 8,
@@ -582,11 +596,12 @@ constexpr PartSpec kDubParts[] = {
         .sustain = {.pedal = true},
         .gestures = kGestures,
         .drift = {.sweepBars = 8},
-        // Volume 50 (tuning), the knob at half the preset's position, is about -12 dB as played: at the preset's level
-        // the held root and fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1).
-        .volume = 50,
+        // Half the preset's knob position (tuning), about -12 dB as played: at the preset's level the held root and
+        // fifth sat about 2 dB over the rest of the mix together (delugemu capture, seed 1). Then 80 percent of that,
+        // as every part but the Stab (kDubRest).
+        .volume = 50 * kDubRest / 100,
     },
-    kTechnoFx,
+    kDubFx,
 };
 
 /// The Stab for 2 bars, thrown, as Dub's skank drop-out (spec §8.8): its last hits echo across the gap.

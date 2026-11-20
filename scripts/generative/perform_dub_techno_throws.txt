@@ -10,7 +10,8 @@
 # Perform's song, type 19 dotted; feedback the preset's home). gen_throw_delay part=2 lane=-1 level= feedback= home=
 # rest= over=: the Stab's delay Throw, at depth 8 (feedback home + 8 at level 100, capped); over=1 would be the
 # Throw's lift past both 23 and home, which it never may. gen_mem: SDRAM free before entry, at each Section line (the
-# genre has a delay setup), when Acid's Outputs are freed, after leaving.
+# genre has a delay setup), when Acid's Outputs are freed, after leaving. gen_sound_level and gen_row_level: the parts'
+# and the Drums rows' volume at load (spec §10.6).
 # Pinned rolls (hold entropy): the same Recipes and seeds every run, so the drop-outs fall the same.
 # needs: a Deluge for its timings, and about 4 minutes in delugemu, so check_all.py skips it
 # For figures: --events 'gen_confirm|gen_transition|gen_section|gen_h1|gen_h16|gen_mem|gen_sound_delay|gen_throw_delay'.
@@ -64,6 +65,11 @@ expect event gen_confirm techno-dub style=2 result=0
 expect event gen_transition_preload done error=0 parts=5 within=20
 # The Stab's setup as it loads; feedback stays the preset's
 expect event /^gen_sound_delay STAB - sync=5 type=19 pingpong=1 analog=1 feedback=\d+/ since=mark
+# Every part but the Stab at 80 percent of its preset's volume knob, the Pad at 40, each Drums row too (#322)
+expect event gen_sound_level SUB volume=80 lower since=mark
+expect event gen_sound_level STAB volume=100 same since=mark
+expect event gen_sound_level PAD volume=40 lower since=mark
+expect event /^gen_row_level DRUMS KICK volume=80 played=-?\d+$/ since=mark
 expect event gen_transition start style=2 within=40
 mark now
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ since=mark within=40

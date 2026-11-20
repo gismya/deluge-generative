@@ -44,7 +44,7 @@
 		<oscBVolume>0x7FFFFFD2</oscBVolume>
 		<oscBPulseWidth>0x0CCCCCC8</oscBPulseWidth>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x7FFFFFD2</volume>
+		<volume>0x4CCCCCA8</volume>
 		<pan>0x00000000</pan>
 		<lpfFrequency>0x00000000</lpfFrequency>
 		<lpfResonance>0xBC000000</lpfResonance>

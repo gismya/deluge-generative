@@ -648,7 +648,10 @@ class Derived:
 
 
 # Dub techno's Stab (#322): the three factory chord presets with their own echo off (delay feedback 0), so the part's
-# delay setup and its Throws alone make the echo (spec §10.6), and the volume knob at its top.
+# delay setup and its Throws alone make the echo (spec §10.6). Their volume knobs set each where its original sat
+# against the rest of Dub techno, which plays at 80 percent of its presets' volume (techno.cpp's kDubRest, about
+# -3.9 dB): 037 at the knob's top is 3.9 dB under the original with its echo, 082 at 40 and 072 at 28 are about as
+# far under theirs (delugemu captures, the Stab alone, entropy 2, seed 1).
 DERIVED = {
     "SYNTHS/GENERATIVE/GEN Echo Chord Dry.XML": Derived(
         "SYNTHS/037 Echo Chord.XML",
@@ -660,13 +663,13 @@ DERIVED = {
         "SYNTHS/082 Short Sharp Delay.XML",
         "6500c76753252c52a497d04139bf4dff9dbb01adf6b998a43375b866cc2bd4c2",
         Field("delayFeedback", knob(0)),
-        Field("volume", knob(50)),
+        Field("volume", knob(40)),
     ),
     "SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML": Derived(
         "SYNTHS/072 Kyoto Phono.XML",
         "690716bab5fbe4835d3d7e925bf1d9b9cd666fc3ff8280e44815b2b70bb40c46",
         Field("delayFeedback", knob(0)),
-        Field("volume", knob(50)),
+        Field("volume", knob(28)),
     ),
 }
 
