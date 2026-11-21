@@ -57,6 +57,18 @@ public:
 	/// The task's step: at most one card operation of note (spec §17.2).
 	void step(bool finishing);
 
+#if ENABLE_SYSEX_TEST
+	/// Test port: the log takes every byte and writes nothing (no file is opened): the card log off, for an on/off
+	/// comparison. Set before Perform's entry.
+	void setOff(bool on) { off_ = on; }
+	/// Test port: every 2 s the task holds the card for `ms` without touching it, as a card that stays busy does
+	/// (currentlyAccessingCard set, the scheduler yielded to: no Cluster loads meanwhile). 0: off.
+	void setStall(uint32_t ms) { stallMs_ = ms; }
+	/// gen_card_log_ops, gen_stream and gen_gaps for the window since the last (with gen_h16, every 4 bars), then a
+	/// new window. Before ControlTiming resets the render timing.
+	void report();
+#endif
+
 private:
 	void openFor(int32_t slot, uint32_t id);
 	void closeWriting();
@@ -84,6 +96,25 @@ private:
 	bool closed_[kMaxLogPieces] = {};      ///< Its file is closed, every byte in it.
 	uint32_t version_[kMaxLogPieces] = {}; ///< The info version its file holds.
 	bool errorShown_ = false;
+#if ENABLE_SYSEX_TEST
+	bool off_ = false;
+	uint32_t stallMs_ = 0;
+	double lastStall_ = 0;
+	struct Window {
+		uint32_t writes = 0;
+		uint32_t writeTotal = 0; ///< ticks
+		uint32_t writeMax = 0;
+		uint32_t syncs = 0;
+		uint32_t syncMax = 0;
+		uint32_t opens = 0;
+		uint32_t openMax = 0;
+		uint32_t closeMax = 0;
+		uint32_t stepMax = 0; ///< the longest step: the main loop blocked
+		int32_t ringMax = 0;
+		uint32_t stalls = 0;
+	} window_;
+	void stallNow();
+#endif
 };
 
 extern CardLog cardLog;

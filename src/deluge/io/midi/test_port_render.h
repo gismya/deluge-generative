@@ -35,11 +35,23 @@ struct RenderTiming {
 	uint32_t maxCounts = 0;            ///< The slowest render.
 	uint32_t culls = 0;                ///< Voices culled for CPU: killed, terminated or force-released (H16).
 	const Sound* lastCulled = nullptr; ///< The Sound of the last voice culled, for its part's name; null once freed.
+	// #448 (the card log on vs off, spec §17.2): the renders' distribution, the longest wait between two
+	// renders, the most samples the output buffer had drained when a render began, and sample-streaming misses.
+	uint32_t hist[7] = {};       ///< Renders under 250, 500, 750, 1000, 1250, 1500 µs, and the rest
+	uint32_t gapMaxCounts = 0;   ///< The longest span from one render's start to the next's
+	uint32_t gaps[6] = {};       ///< Spans between renders under 1, 2, 2.9 (the TX buffer), 5, 10 ms, and the rest
+	uint32_t drainedMax = 0;     ///< The most samples waiting in the routine (of the 128-sample TX buffer)
+	uint32_t lateClusters = 0;   ///< A playing voice's next Cluster wasn't loaded in time (the sound cuts)
+	uint32_t unloadedStarts = 0; ///< A voice's first Cluster wasn't loaded when it started or jumped
 };
 extern RenderTiming renderTiming;
 
 /// The audio engine's render of `numSamples`, which started at `start` (getSystemTicks()), has ended.
 void recordRender(uint32_t start, size_t numSamples);
+/// #448: the routine found `drained` samples waiting before it doubled them.
+void recordDrained(size_t drained);
+/// #448: a Cluster a voice needed wasn't loaded: `playing` (mid-sound, it cuts) or at the voice's start.
+void clusterMissed(bool playing);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

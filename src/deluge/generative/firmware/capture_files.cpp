@@ -23,6 +23,11 @@
 #include "memory/general_memory_allocator.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
+#if ENABLE_SYSEX_TEST
+#include "deluge.h"
+#include "extern.h"
+#include "io/midi/test_port_render.h"
+#endif
 #include <algorithm>
 #include <cstring>
 
@@ -93,11 +98,44 @@ void taskEntry() {
 	cardLog.step(false);
 }
 
+#if ENABLE_SYSEX_TEST
+constexpr uint32_t kTicksPerUs = DELUGE_CLOCKS_PER / 1'000'000;
+/// Runs `call`, its ticks into `max` (and `total`, `count`).
+template <typename Call>
+auto timed(uint32_t& max, Call call, uint32_t* total = nullptr, uint32_t* count = nullptr) {
+	const uint32_t started = getSystemTicks();
+	const auto result = call();
+	const uint32_t ticks = getSystemTicks() - started;
+	max = std::max(max, ticks);
+	if (total != nullptr) {
+		*total += ticks;
+		(*count)++;
+	}
+	return result;
+}
+#define CARD_TIMED(field, call) timed(window_.field, [&] { return call; })
+#define CARD_WRITE_TIMED(call) timed(window_.writeMax, [&] { return call; }, &window_.writeTotal, &window_.writes)
+bool neverDone() {
+	return false;
+}
+#else
+#define CARD_TIMED(field, call) (call)
+#define CARD_WRITE_TIMED(call) (call)
+#endif
+
 } // namespace
 
 Error CardLog::enter(SteeringLog& log) {
+#if ENABLE_SYSEX_TEST
+	const bool off = off_;
+	const uint32_t stallMs = stallMs_;
+#endif
 	*this = CardLog{};
 	log_ = &log;
+#if ENABLE_SYSEX_TEST
+	off_ = off;
+	stallMs_ = stallMs;
+#endif
 	Error error = StorageManager::initSD();
 	if (error == Error::NONE) {
 		f_mkdir("GENERATIVE"); // it may be there already
@@ -192,13 +230,14 @@ void CardLog::forget() {
 void CardLog::openFor(int32_t slot, uint32_t id) {
 	char path[40];
 	pathOf(id, path);
-	if (spare_ >= 0 && spareId_ == id) {
+	const bool usedSpare = spare_ >= 0 && spareId_ == id;
+	if (usedSpare) {
 		writing_ = spare_; // made ahead: no file creation at the piece change (spec §17.2)
 		spare_ = -1;
 	}
 	else {
 		writing_ = spare_ == 0 ? 1 : 0;
-		const FRESULT result = f_open(&files_[writing_], path, FA_WRITE | FA_CREATE_ALWAYS);
+		const FRESULT result = CARD_TIMED(openMax, f_open(&files_[writing_], path, FA_WRITE | FA_CREATE_ALWAYS));
 		if (result != FR_OK) {
 			writing_ = -1;
 			fail(slot, result);
@@ -209,6 +248,7 @@ void CardLog::openFor(int32_t slot, uint32_t id) {
 	closed_[slot] = false;
 	version_[slot] = log_->infoVersion(slot) - 1;
 	lastSync_ = getSystemTime();
+	TEST_EVENT("gen_card_log open piece=%lu spare=%d", static_cast<unsigned long>(id), usedSpare ? 1 : 0);
 }
 
 bool CardLog::writeInfo(FIL& file, int32_t slot) {
@@ -234,7 +274,7 @@ void CardLog::closeWriting() {
 	if (!log_->dropped(slot) && !failed_[slot]) {
 		ok = writeInfo(file, slot); // the piece's end, its mark and its cut (spec §17.4)
 	}
-	const FRESULT closed = f_close(&file); // f_close syncs
+	const FRESULT closed = CARD_TIMED(closeMax, f_close(&file)); // f_close syncs
 	writing_ = -1;
 	writingSlot_ = -1;
 	if (!ok || closed != FR_OK) {
@@ -242,6 +282,8 @@ void CardLog::closeWriting() {
 		return;
 	}
 	closed_[slot] = true;
+	TEST_EVENT("gen_card_log closed piece=%lu bytes=%ld dropped=%d", static_cast<unsigned long>(log_->idOf(slot)),
+	           static_cast<long>(log_->taken(slot)), log_->dropped(slot) ? 1 : 0);
 }
 
 void CardLog::fail(int32_t slot, FRESULT result) {
@@ -268,7 +310,7 @@ void CardLog::makeSpare() {
 	char path[40];
 	pathOf(id, path);
 	const int32_t index = writing_ == 0 ? 1 : 0;
-	if (f_open(&files_[index], path, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK) {
+	if (CARD_TIMED(openMax, f_open(&files_[index], path, FA_WRITE | FA_CREATE_ALWAYS)) == FR_OK) {
 		spare_ = index;
 		spareId_ = id;
 	}
@@ -290,6 +332,31 @@ void CardLog::step(bool finishing) {
 	if (log_ == nullptr) {
 		return;
 	}
+#if ENABLE_SYSEX_TEST
+	const uint32_t stepStarted = getSystemTicks();
+	window_.ringMax = std::max(window_.ringMax, log_->used());
+	if (off_) {
+		// The card log off: every byte taken, nothing written (an on/off comparison).
+		LogChunk chunk;
+		while (log_->nextChunk(chunk, INT32_MAX)) {
+			log_->took(chunk);
+		}
+		for (int32_t s = 0; s < kMaxLogPieces; s++) {
+			if (log_->used(s) && log_->dropped(s) && log_->allTaken(s)) {
+				log_->released(s);
+			}
+		}
+		return;
+	}
+	if (stallMs_ != 0 && !finishing && getSystemTime() - lastStall_ >= 2.0) {
+		stallNow();
+	}
+	struct StepTimer {
+		Window& window;
+		uint32_t started;
+		~StepTimer() { window.stepMax = std::max(window.stepMax, getSystemTicks() - started); }
+	} stepTimer{window_, stepStarted};
+#endif
 	const double now = getSystemTime();
 	if (log_->opened() != seenOpened_) {
 		seenOpened_ = log_->opened();
@@ -329,11 +396,12 @@ void CardLog::step(bool finishing) {
 			if (chunk.offset == 0) {
 				PieceInfo info;
 				log_->imageInfo(slot, info); // the opening as the image holds it (the genre as its index)
-				result = f_write(&files_[writing_], &info, sizeof info, &written);
+				result = CARD_WRITE_TIMED(f_write(&files_[writing_], &info, sizeof info, &written));
 				written = written == sizeof info ? static_cast<UINT>(chunk.length) : 0;
 			}
 			else {
-				result = f_write(&files_[writing_], chunk.data, static_cast<UINT>(chunk.length), &written);
+				result =
+				    CARD_WRITE_TIMED(f_write(&files_[writing_], chunk.data, static_cast<UINT>(chunk.length), &written));
 			}
 			if (result != FR_OK || static_cast<int32_t>(written) != chunk.length) {
 				fail(slot, result != FR_OK ? result : FR_DENIED); // a full card writes short
@@ -363,7 +431,12 @@ void CardLog::step(bool finishing) {
 				fail(slot, FR_DISK_ERR);
 				return;
 			}
-			const FRESULT synced = f_sync(&files_[writing_]);
+			const FRESULT synced = CARD_TIMED(syncMax, f_sync(&files_[writing_]));
+			TEST_EVENT("gen_card_log flush piece=%lu bytes=%ld", static_cast<unsigned long>(log_->idOf(slot)),
+			           static_cast<long>(log_->taken(slot)));
+#if ENABLE_SYSEX_TEST
+			window_.syncs++;
+#endif
 			if (synced != FR_OK) {
 				fail(slot, synced);
 			}
@@ -393,10 +466,51 @@ void CardLog::step(bool finishing) {
 	}
 }
 
+#if ENABLE_SYSEX_TEST
+void CardLog::stallNow() {
+	lastStall_ = getSystemTime();
+	const uint32_t late = TestPort::renderTiming.lateClusters;
+	const uint32_t started = getSystemTicks();
+	currentlyAccessingCard = 1;
+	yieldingRoutineWithTimeoutForSD(neverDone, stallMs_ / 1000.);
+	currentlyAccessingCard = 0;
+	window_.stalls++;
+	TEST_EVENT("gen_card_stall ms=%lu us=%lu late=%lu", static_cast<unsigned long>(stallMs_),
+	           static_cast<unsigned long>((getSystemTicks() - started) / kTicksPerUs),
+	           static_cast<unsigned long>(TestPort::renderTiming.lateClusters - late));
+}
+
+void CardLog::report() {
+	const TestPort::RenderTiming& r = TestPort::renderTiming;
+	auto us = [](uint32_t ticks) { return static_cast<unsigned long>(ticks / kTicksPerUs); };
+	TEST_EVENT("gen_stream late=%lu unloaded=%lu drained_max=%lu gap_max_us=%lu render=%lu/%lu/%lu/%lu/%lu/%lu/%lu",
+	           static_cast<unsigned long>(r.lateClusters), static_cast<unsigned long>(r.unloadedStarts),
+	           static_cast<unsigned long>(r.drainedMax), us(r.gapMaxCounts), static_cast<unsigned long>(r.hist[0]),
+	           static_cast<unsigned long>(r.hist[1]), static_cast<unsigned long>(r.hist[2]),
+	           static_cast<unsigned long>(r.hist[3]), static_cast<unsigned long>(r.hist[4]),
+	           static_cast<unsigned long>(r.hist[5]), static_cast<unsigned long>(r.hist[6]));
+	TEST_EVENT("gen_gaps %lu/%lu/%lu/%lu/%lu/%lu", static_cast<unsigned long>(r.gaps[0]),
+	           static_cast<unsigned long>(r.gaps[1]), static_cast<unsigned long>(r.gaps[2]),
+	           static_cast<unsigned long>(r.gaps[3]), static_cast<unsigned long>(r.gaps[4]),
+	           static_cast<unsigned long>(r.gaps[5]));
+	if (log_ != nullptr && !off_) {
+		TEST_EVENT("gen_card_log_ops writes=%lu mean_us=%lu max_us=%lu syncs=%lu sync_us=%lu open_us=%lu close_us=%lu "
+		           "step_us=%lu ring_max=%ld stalls=%lu",
+		           static_cast<unsigned long>(window_.writes),
+		           window_.writes > 0 ? us(window_.writeTotal / window_.writes) : 0UL, us(window_.writeMax),
+		           static_cast<unsigned long>(window_.syncs), us(window_.syncMax), us(window_.openMax),
+		           us(window_.closeMax), us(window_.stepMax), static_cast<long>(window_.ringMax),
+		           static_cast<unsigned long>(window_.stalls));
+	}
+	window_ = {};
+}
+#endif
+
 void CardLog::remove(uint32_t id) {
 	char path[40];
 	pathOf(id, path);
-	f_unlink(path);
+	const FRESULT result = f_unlink(path);
+	TEST_EVENT("gen_card_log removed piece=%lu result=%d", static_cast<unsigned long>(id), static_cast<int>(result));
 }
 
 void CardLog::clean(bool keepMarked) {

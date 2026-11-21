@@ -24,6 +24,7 @@
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/capture_files.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
@@ -284,6 +285,14 @@ constexpr Hold kHolds[] = {
 		     currentSong->changeFillMode(on);
 	     }
      }},
+    /// The card log off: the steering log's bytes are taken and nothing goes to the card (#448's on/off comparison).
+    /// Before Perform's entry.
+    {"card_log_off", [](bool on) { deluge::generative::firmware::cardLog.setOff(on); }},
+    /// Every 2 s the card log's task holds the card for this long without touching it, as a card that stalls (#448)
+    {"card_stall_100", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 100 : 0); }},
+    {"card_stall_200", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 200 : 0); }},
+    {"card_stall_400", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 400 : 0); }},
+    {"card_stall_800", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 800 : 0); }},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
     /// Perform's fresh entropy (each Recipe, seed and sound roll) comes from a fixed sequence that starts again here,
