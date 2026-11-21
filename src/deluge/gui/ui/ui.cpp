@@ -500,7 +500,7 @@ EnumStringMap<UIType, util::to_underlying(UIType::UI_TYPE_COUNT)> uiTypeMap = {
       {UIType::DX_BROWSER, "dx_browser"},
       {UIType::GENERATIVE_MODAL, "generative_modal"},
       {UIType::GENERATIVE_PERFORM, "generative_perform"},
-      {UIType::GENERATIVE_PRESET_BROWSER, "generative_preset_browser"},
+      {UIType::GENERATIVE_SOUND_BROWSER, "generative_sound_browser"},
       {UIType::GENERATIVE_LOAD_RECIPE, "generative_load_recipe"},
       {UIType::GENERATIVE_SAVE_RECIPE, "generative_save_recipe"},
       {UIType::INSTRUMENT_CLIP, "instrument_clip"},

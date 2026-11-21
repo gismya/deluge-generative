@@ -108,7 +108,7 @@ otherwise.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
-- The preset browser (`gui/ui/browser/perform_preset_browser.*`, §13.5) is its own `SlotBrowser`, not stock's
+- The sound browser (`gui/ui/browser/perform_sound_browser.*`, §13.5: the preset browser and the lane browser) is its own `SlotBrowser`, not stock's
   `LoadInstrumentPresetUI`, whose `currentFileChanged()` loads and swaps the instrument on every scroll step. Its
   `outputTypeToLoad` is NONE, as the sample and DX browsers' are: stock otherwise adds the current song's Instruments
   to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
@@ -118,6 +118,20 @@ otherwise.
   End's pad acts only while Perform is on top (`endPadActs()`), as under every overlay (§13.5). Its choice goes to
   `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
   SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
+- The lane list (`gui/menu_item/generative/perform_lanes.*`) is a Perform menu opened by `openMenu()`, and a lane's
+  browser opens over it with `openUI()` (as stock's sample browser opens over the sound editor), so the browser's
+  `close()` lands back on the list. A choice closes the list too (`soundEditor.exitCompletely()`) before
+  `chooseSound()`, so Perform is on top for the press's popup. Where a browser opens is `perform::browserStart()`
+  (`generative/perform/sound_browser.h`): the pick's folder, the palette's, then SYNTHS or SAMPLES.
+- Trap: a leaf row in the sound editor (`shouldEnterSubmenu()` false) has its `selectButtonPress()` called, and what
+  it returns is dropped (`SoundEditor::buttonAction()`). A row that leads to a submenu enters it itself with
+  `soundEditor.enterSubmenu()` (the lane list's FX rows, `perform_lanes.cpp`).
+- Trap: `Browser::arrivedInNewFolder()`'s `defaultDirToAlsoTry` is **created** (`f_mkdir`) when it is missing too.
+  Pass only a top folder (SYNTHS, SAMPLES) there: a palette folder (`SYNTHS/GENERATIVE/FX`) would be made on a card
+  without the pack. The lane browser tries the palette folder with no default first, then the top folder.
+- The lane browser previews through stock's preview voice (`AudioEngine::previewSample()`), at the lane's volume from
+  `previewVolumeFor()` (F20, shared with stock's sample browser), reading the row's NoteRow param manager and the
+  Kit clip's. `AudioEngine::stopAnyPreviewing()` on every move, folder change and close.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.

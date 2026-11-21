@@ -40,6 +40,16 @@ namespace deluge::gui::menu_item {
 class HorizontalMenu;
 }
 
+class ParamManagerForTimeline;
+namespace AudioEngine {
+struct PreviewVolume;
+}
+
+/// Generative mode (F20, spec §13.5): the volume a sample previews at, so it sounds as it will once loaded into the
+/// Sound `target` is the param manager of (a synth, or a kit row with `kit` its kit clip's), at the song's volume
+/// (issue #1591). Neutral with no `target`. Stock's sample browser and Perform's lane browser use it.
+AudioEngine::PreviewVolume previewVolumeFor(ParamManagerForTimeline* target, ParamManagerForTimeline* kit);
+
 class SampleBrowser final : public Browser {
 public:
 	SampleBrowser();

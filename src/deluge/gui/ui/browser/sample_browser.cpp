@@ -565,6 +565,60 @@ PatchCable* targetVelocityToVolumeCable(ParamManagerForTimeline* paramManager) {
 }
 } // namespace
 
+AudioEngine::PreviewVolume previewVolumeFor(ParamManagerForTimeline* target, ParamManagerForTimeline* kit) {
+	// Work out the volume the sample will play at once it's loaded into the current instrument / kit-row, so the
+	// preview can match it (issue #1591). That's the target Sound's own volume, plus the output stages the preview
+	// skips by rendering outside the song: the song's volume stage in Song::renderAudio() and, for a kit, the kit's
+	// output volume and the fixed gain of its output stage. Master FX in renderSongFX() apply to both.
+	//
+	// Not modelled: the kit's filter resonance, which setupFilterSetConfig() folds into its post-FX volume in
+	// GlobalEffectableForClip::renderOutput(). A resonant kit will still preview slightly off.
+	AudioEngine::PreviewVolume previewVolume = AudioEngine::PreviewVolume::neutral();
+	if (target == nullptr || !target->containsAnyMainParamCollections()) {
+		return previewVolume;
+	}
+	// The output stages' combined gain, in the pos domain of util/volume_param_gain.h. The song's volume stage
+	// halves its volume - about -6 dB at neutral song volume.
+	int32_t outputGainPos = kVolumeParamUnityPos;
+	if (currentSong != nullptr) {
+		int32_t songVolumeParam = currentSong->paramManager.getUnpatchedParamSet()->getValue(params::UNPATCHED_VOLUME);
+		outputGainPos = multiplyGainPos(volumeParamToGainPos(songVolumeParam), songOutputStageGainPos());
+	}
+
+	PatchedParamSet* targetParams = target->getPatchedParamSet();
+	previewVolume.volumePostFX = targetParams->getValue(params::GLOBAL_VOLUME_POST_FX);
+	previewVolume.localVolume = targetParams->getValue(params::LOCAL_VOLUME);
+
+	// The preview drum always notes on at velocity 64, so matching both the depth and the polarity of this
+	// cable makes the preview's final per-voice volume match the target's. The polarity matters as much as
+	// the depth: at velocity 64 a bipolar cable contributes nothing, while a unipolar one contributes about
+	// half its depth.
+	PatchCable* velocityCable = targetVelocityToVolumeCable(target);
+	if (velocityCable != nullptr) {
+		previewVolume.velocityCableDepth = velocityCable->param.getCurrentValue();
+		previewVolume.velocityCablePolarity = velocityCable->polarity;
+	}
+	else {
+		previewVolume.velocityCableDepth = 0;
+	}
+
+	if (kit != nullptr && kit->containsAnyParamCollectionsIncludingExpression()) {
+		int32_t kitVolumeParam = kit->getUnpatchedParamSet()->getValue(params::UNPATCHED_VOLUME);
+		// The kit's output stage halves its volume, adds a baseline and passes through the filter set's
+		// gain adjustment - about -6 dB at neutral kit volume.
+		outputGainPos = multiplyGainPos(outputGainPos,
+		                                multiplyGainPos(volumeParamToGainPos(kitVolumeParam), kitOutputStageGainPos()));
+	}
+
+	// Fold the output gain into LOCAL_VOLUME first: it sits at neutral by default, so it has more than the
+	// headroom the maximum output gain demands. Anything that doesn't fit - only possible when the Sound's own
+	// local volume is already boosted - spills into GLOBAL_VOLUME_POST_FX.
+	VolumeParamGain local = applyGainToVolumeParam(previewVolume.localVolume, outputGainPos);
+	previewVolume.localVolume = local.param;
+	previewVolume.volumePostFX = applyGainToVolumeParam(previewVolume.volumePostFX, local.remainingGainPos).param;
+	return previewVolume;
+}
+
 void SampleBrowser::previewIfPossible(int32_t movementDirection) {
 
 	/*
@@ -608,64 +662,16 @@ void SampleBrowser::previewIfPossible(int32_t movementDirection) {
 			}
 		}
 
-		// Work out the volume the sample will play at once it's loaded into the current instrument / kit-row, so the
-		// preview can match it (issue #1591). That's the target Sound's own volume, plus the output stages the preview
-		// skips by rendering outside the song: the song's volume stage in Song::renderAudio() and, for a kit, the kit's
-		// output volume and the fixed gain of its output stage. Master FX in renderSongFX() apply to both.
-		//
-		// Not modelled: the kit's filter resonance, which setupFilterSetConfig() folds into its post-FX volume in
-		// GlobalEffectableForClip::renderOutput(). A resonant kit will still preview slightly off.
-		AudioEngine::PreviewVolume previewVolume = AudioEngine::PreviewVolume::neutral();
-
 		// Only a target Sound - a synth or kit row - is modelled. With none, e.g. when browsing for an audio clip, the
 		// preview keeps its neutral volume: an AudioOutput's own volume stage isn't modelled, so applying the song's
 		// alone wouldn't bring it any closer.
-		if (shouldActuallySound && soundEditor.currentSound != nullptr && soundEditor.currentParamManager != nullptr
-		    && soundEditor.currentParamManager->containsAnyMainParamCollections()) {
-			// The output stages' combined gain, in the pos domain of util/volume_param_gain.h. The song's volume stage
-			// halves its volume - about -6 dB at neutral song volume.
-			int32_t outputGainPos = kVolumeParamUnityPos;
-			if (currentSong != nullptr) {
-				int32_t songVolumeParam =
-				    currentSong->paramManager.getUnpatchedParamSet()->getValue(params::UNPATCHED_VOLUME);
-				outputGainPos = multiplyGainPos(volumeParamToGainPos(songVolumeParam), songOutputStageGainPos());
-			}
-
-			PatchedParamSet* targetParams = soundEditor.currentParamManager->getPatchedParamSet();
-			previewVolume.volumePostFX = targetParams->getValue(params::GLOBAL_VOLUME_POST_FX);
-			previewVolume.localVolume = targetParams->getValue(params::LOCAL_VOLUME);
-
-			// The preview drum always notes on at velocity 64, so matching both the depth and the polarity of this
-			// cable makes the preview's final per-voice volume match the target's. The polarity matters as much as
-			// the depth: at velocity 64 a bipolar cable contributes nothing, while a unipolar one contributes about
-			// half its depth.
-			PatchCable* velocityCable = targetVelocityToVolumeCable(soundEditor.currentParamManager);
-			if (velocityCable != nullptr) {
-				previewVolume.velocityCableDepth = velocityCable->param.getCurrentValue();
-				previewVolume.velocityCablePolarity = velocityCable->polarity;
-			}
-			else {
-				previewVolume.velocityCableDepth = 0;
-			}
-
-			if (getCurrentOutputType() == OutputType::KIT) {
-				ParamManagerForTimeline& kitParamManager = getCurrentInstrumentClip()->paramManager;
-				if (kitParamManager.containsAnyParamCollectionsIncludingExpression()) {
-					int32_t kitVolumeParam = kitParamManager.getUnpatchedParamSet()->getValue(params::UNPATCHED_VOLUME);
-					// The kit's output stage halves its volume, adds a baseline and passes through the filter set's
-					// gain adjustment - about -6 dB at neutral kit volume.
-					outputGainPos = multiplyGainPos(
-					    outputGainPos, multiplyGainPos(volumeParamToGainPos(kitVolumeParam), kitOutputStageGainPos()));
-				}
-			}
-
-			// Fold the output gain into LOCAL_VOLUME first: it sits at neutral by default, so it has more than the
-			// headroom the maximum output gain demands. Anything that doesn't fit - only possible when the Sound's own
-			// local volume is already boosted - spills into GLOBAL_VOLUME_POST_FX.
-			VolumeParamGain local = applyGainToVolumeParam(previewVolume.localVolume, outputGainPos);
-			previewVolume.localVolume = local.param;
-			previewVolume.volumePostFX =
-			    applyGainToVolumeParam(previewVolume.volumePostFX, local.remainingGainPos).param;
+		AudioEngine::PreviewVolume previewVolume = AudioEngine::PreviewVolume::neutral();
+		if (shouldActuallySound && soundEditor.currentSound != nullptr && soundEditor.currentParamManager != nullptr) {
+			// Generative mode (F20, spec §13.5): the volume's working-out is previewVolumeFor(), which Perform's lane
+			// browser shares.
+			previewVolume = previewVolumeFor(
+			    soundEditor.currentParamManager,
+			    getCurrentOutputType() == OutputType::KIT ? &getCurrentInstrumentClip()->paramManager : nullptr);
 		}
 
 		AudioEngine::previewSample(&filePath, &currentFileItem->filePointer, shouldActuallySound, previewVolume);

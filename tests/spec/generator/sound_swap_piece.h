@@ -38,7 +38,8 @@ struct HarnessSoundSwaps : perform::SoundSwapLifecycle<HarnessSoundSwaps> {
 		int32_t part = 0;
 		perform::SoundSource source = perform::SoundSource::Roll;
 		uint8_t token = kNoSound;
-		std::string chosen; ///< A Chosen source's path.
+		std::string chosen;     ///< A Chosen source's path.
+		Lane lane = Lane::None; ///< A Chosen source's lane: None for a synth part's preset.
 	};
 
 	/// `recipe` is the Current Recipe, whose genre the swaps read.
@@ -98,11 +99,12 @@ struct HarnessSoundSwaps : perform::SoundSwapLifecycle<HarnessSoundSwaps> {
 	[[nodiscard]] bool queueHeldFull() const { return queueHeld; }
 	[[nodiscard]] bool runnerBusy() const { return jobAhead || running; }
 	[[nodiscard]] bool preloadRunning() const { return running; }
-	bool submitPreload(int32_t part, perform::SoundSource source, uint8_t token, const SoundPath* chosen) {
+	bool submitPreload(int32_t part, perform::SoundSource source, uint8_t token, const SoundChoice* chosen) {
 		if (submitRefused) {
 			return false;
 		}
-		preloads.push_back({part, source, token, chosen != nullptr ? std::string(chosen->c_str()) : std::string()});
+		preloads.push_back({part, source, token, chosen != nullptr ? std::string(chosen->path.c_str()) : std::string(),
+		                    chosen != nullptr ? chosen->lane : Lane::None});
 		running = true;
 		return true;
 	}

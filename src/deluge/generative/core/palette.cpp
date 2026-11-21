@@ -654,11 +654,43 @@ bool synthPart(const Genre& genre, int32_t part) {
 	return part >= 0 && part < partCount(genre) && genre.parts[part].synth();
 }
 
-bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds) {
-	if (!synthPart(genre, part) || path.empty()) {
+bool partPlaysLane(const Genre& genre, int32_t part, Lane lane) {
+	if (part < 0 || part >= partCount(genre) || lane == Lane::None) {
 		return false;
 	}
-	sounds.part[part] = path;
+	for (const LaneSpec& spec : genre.parts[part].lanes) {
+		if (spec.lane == lane) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool laneTakesPreset(const Palette& palette, Lane lane) {
+	if (!isFxLane(lane)) {
+		return false;
+	}
+	const LaneSounds* sounds = palette.laneSounds(lane);
+	return sounds != nullptr && !sounds->synths.empty();
+}
+
+bool choiceFits(const Genre& genre, int32_t part, const SoundChoice& choice) {
+	if (choice.path.empty()) {
+		return false;
+	}
+	return choice.lane == Lane::None ? synthPart(genre, part) : partPlaysLane(genre, part, choice.lane);
+}
+
+bool chooseSound(const Genre& genre, int32_t part, const SoundChoice& choice, SoundPicks& sounds) {
+	if (!choiceFits(genre, part, choice)) {
+		return false;
+	}
+	if (choice.lane == Lane::None) {
+		sounds.part[part] = choice.path;
+	}
+	else {
+		sounds.lane[static_cast<int32_t>(choice.lane)] = choice.path;
+	}
 	return true;
 }
 
@@ -694,13 +726,27 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, FolderLister& lister,
                         SoundLoader& loader) {
 	bool picked = pick != nullptr && pick[0] != 0;
-	if (picked) {
+	const LaneSounds* sounds = palette.laneSounds(lane);
+	if (picked && isFxLane(lane) && !isAudioFile(pick)) {
+		// A preset the player chose for the lane (spec §13.5): its palette entry's ranges if it lists it.
+		LoadOutcome outcome = loader.loadPreset(pick);
+		if (outcome != LoadOutcome::Missing) {
+			ControlRanges ranges{};
+			for (const PaletteEntry& entry : sounds != nullptr ? sounds->synths : std::span<const PaletteEntry>{}) {
+				if (equalsIgnoringCase(entry.path, pick)) {
+					ranges = entry.ranges;
+					break;
+				}
+			}
+			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError, true, ranges};
+		}
+	}
+	else if (picked) {
 		LoadOutcome outcome = loader.loadSample(pick);
 		if (outcome != LoadOutcome::Missing) {
 			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
 		}
 	}
-	const LaneSounds* sounds = palette.laneSounds(lane);
 	if (sounds == nullptr) {
 		return {SoundSource::Silent};
 	}
