@@ -23,6 +23,7 @@
 #if ENABLE_SYSEX_TEST
 
 #include "OSLikeStuff/scheduler_api.h"
+#include "generative/firmware/card_log_spike.h"
 #include "generative/perform/perform_driver.h"
 #include "io/midi/test_port.h"
 #include <algorithm>
@@ -44,6 +45,7 @@ public:
 	void decisionsEnd(int32_t decided) override {
 		uint32_t counts = getSystemTicks() - started_;
 		steps_ += decided;
+		card_log_spike::stepsDecided(decided); // SPIKE (measurement only)
 		totalCounts_ += counts;
 		uint32_t perStep = counts / decided;
 		maxCounts_ = perStep > maxCounts_ ? perStep : maxCounts_;

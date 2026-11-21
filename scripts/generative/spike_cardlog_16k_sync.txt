@@ -1,0 +1,9 @@
+# SPIKE (measurement only): spike_cardlog_body.txt with the card log held: cardlog_16k, cardlog_sync.
+start_state
+hold entropy
+hold cardlog_16k
+hold cardlog_sync
+include spike_cardlog_body.txt
+# Off: the task closes and deletes its files
+release cardlog_16k
+expect event gen_cardlog cleaned within=10

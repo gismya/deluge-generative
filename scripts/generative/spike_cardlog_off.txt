@@ -1,0 +1,4 @@
+# SPIKE (measurement only): spike_cardlog_body.txt with the card log off (the baseline).
+start_state
+hold entropy
+include spike_cardlog_body.txt

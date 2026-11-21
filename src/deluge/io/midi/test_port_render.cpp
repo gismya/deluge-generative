@@ -34,6 +34,21 @@ void recordRender(uint32_t start, size_t numSamples) {
 	renderTiming.counts += counts;
 	renderTiming.samples += numSamples;
 	renderTiming.maxCounts = std::max(renderTiming.maxCounts, counts);
+	const uint32_t us = counts / (DELUGE_CLOCKS_PER / 1'000'000);
+	renderTiming.hist[std::min<uint32_t>(us / 250, 6)]++;
+	static uint32_t lastStart = 0;
+	if (lastStart != 0) {
+		renderTiming.gapMaxCounts = std::max(renderTiming.gapMaxCounts, start - lastStart);
+	}
+	lastStart = start;
+}
+
+void recordDrained(size_t drained) {
+	renderTiming.drainedMax = std::max<uint32_t>(renderTiming.drainedMax, drained);
+}
+
+void clusterMissed(bool playing) {
+	(playing ? renderTiming.lateClusters : renderTiming.unloadedStarts)++;
 }
 
 void voiceCulled(const Sound& sound) {

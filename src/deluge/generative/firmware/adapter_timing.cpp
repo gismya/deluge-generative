@@ -35,6 +35,7 @@ ControlTiming controlTiming;
 
 void ControlTiming::report(const char* ramps) {
 	closeStep();
+	card_log_spike::report(); // SPIKE (measurement only): before the reset below
 	TestPort::RenderTiming render = TestPort::renderTiming;
 	TestPort::renderTiming = {};
 	const auto renderMean =
