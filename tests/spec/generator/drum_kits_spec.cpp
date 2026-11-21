@@ -59,6 +59,10 @@ constexpr Palette kWeighted{.lanes = kLanes, .kits = {.machines = kWeightedMachi
 constexpr Palette kHalfSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps}};
 constexpr Palette kAlwaysSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps, .swapPercent = 100}};
 constexpr Palette kNeverSwaps{.lanes = kLanes, .kits = {.machines = kMachines, .swaps = kSwaps, .swapPercent = 0}};
+/// The 909 takes swaps, the 808 always plays pure (swaps = false).
+constexpr MachineWeight kOnePureMachine[] = {{&k909, 1}, {&k808, 1, false}};
+constexpr Palette kPureOn808{.lanes = kLanes,
+                             .kits = {.machines = kOnePureMachine, .swaps = kSwaps, .swapPercent = 100}};
 
 constexpr Genre genreWith(const Palette& palette) {
 	return Genre{.name = "kits", .parts = kParts, .palette = &palette};
@@ -376,6 +380,53 @@ describe drum_kits("Drum kits", $ {
 				}
 			}
 		}
+	});
+	it("plays a machine with swaps off pure while other machines still take swaps (spec §10.2)", _ {
+		FakeCard card = kitCard();
+		const Genre genre = genreWith(kPureOn808);
+		int32_t on909 = 0;
+		int32_t on808 = 0;
+		for (uint32_t entropy = 0; entropy < 200; entropy++) {
+			SoundPicks sounds = rolled(genre, entropy, card);
+			const std::string kick = fileName(sounds.lane[at(Lane::Kick)]);
+			const std::string snare = fileName(sounds.lane[at(Lane::Snare)]);
+			if (startsWith(kick, "909")) {
+				on909++;
+				expect(snare).to_equal(std::string("DDD1 Snare.wav"));
+			}
+			else {
+				on808++;
+				expect(snare).to_equal(std::string("808 Snare.wav"));
+			}
+		}
+		expect(on909).to_be_greater_than(50);
+		expect(on808).to_be_greater_than(50);
+	});
+
+	it("never applies Dub's kit swaps to the CR78 kit (listening round 2, I7)", _ {
+		FakeCard card = harness::factoryCardWithPack();
+		const Genre& dub = *findGenre("dub");
+		int32_t cr78 = 0;
+		int32_t on808 = 0;
+		int32_t on808Swapped = 0;
+		for (uint32_t entropy = 0; entropy < 300; entropy++) {
+			const RolledKit kit = rolledKit(*dub.palette, dub.parts[0], 0, entropy);
+			expect(kit.machine != nullptr).to_be_true();
+			const SoundPicks sounds = rolled(dub, entropy, card);
+			if (std::string(kit.machine->name) == "CR78") {
+				cr78++;
+				expect(kit.swaps).to_equal(uint32_t{0});
+				expect(startsWith(fileName(sounds.lane[at(Lane::Snare)]), "CR78")).to_be_true();
+				expect(startsWith(fileName(sounds.lane[at(Lane::Perc2)]), "CR78")).to_be_true();
+			}
+			else {
+				on808++;
+				on808Swapped += kit.swaps != 0 ? 1 : 0;
+			}
+		}
+		expect(cr78).to_be_greater_than(50);
+		expect(on808).to_be_greater_than(100);
+		expect(on808Swapped).to_be_greater_than(50);
 	});
 });
 

@@ -51,7 +51,7 @@
 			<patchCable>
 				<source>lfo1</source>
 				<destination>pitch</destination>
-				<amount>0x1C28F5B8</amount>
+				<amount>0x2CCCCCBC</amount>
 			</patchCable>
 		</patchCables>
 	</defaultParams>

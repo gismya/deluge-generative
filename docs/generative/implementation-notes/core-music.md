@@ -33,12 +33,12 @@ otherwise.
   on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
   once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
   Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
-- A looping graph (`ChordGraph::loopChance` ≥ 0, House) takes `Generator::walkLoop()` instead of the walk's place
+- A looping graph (`ChordGraph::loopChance` ≥ 0, House and Dub) takes `Generator::walkLoop()` instead of the walk's place
   rules: the loop playing is a stored byte (`chordLoop_`), moved only on a Drop's chord line and keyed on the
   Groove's occurrence there, so a Break, a Build and the Outro hold the Groove's loop with no recount. Each chord is
   keyed on the loop's index and the bar in it (`Purpose::ChordLoop`), so every pass replays it chord for chord: the
-  walk's other inputs agree because a loop always starts on home, but only while `abaAllowed` is true (House's case): with it false, a 2-chord half loop (home, A) would exclude A on its second pass, since `previousChord_` carries over from the pass before. A genre turning both on must handle that first. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
-  rhythm's grid draws no chord there, so the loop stays on the phrase grid.
+  walk's other inputs agree because a loop always starts on home, but only while `abaAllowed` is true (House's and Dub's case): with it false, a 2-chord half loop (home, A) would exclude A on its second pass, since `previousChord_` carries over from the pass before. A genre turning both on must handle that first. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
+  rhythm's grid draws no chord there, so the loop stays on the phrase grid. `LoopSpec::rootOnAnchors` (Dub's Bass) pins anchor steps to `(degree 0, octave 0)` in `rollLine()` using a step counter instead of `% pattern.length` (no `__aeabi_idivmod` on Cortex-A9); `mutateLine()` already skips anchors.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its

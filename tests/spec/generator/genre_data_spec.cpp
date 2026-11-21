@@ -400,6 +400,10 @@ describe genre_data("Every built-in genre", $ {
 		// Without ratchets, an e leaned −12 after a 1 leaned +12 starts a tick after it, at −11.
 		expect(loopValid(sliding(23), {.lean = {12, -12, 12, -12}})).to_be_true();
 		expect(loopValid(sliding(24), {.lean = {12, -12, 12, -12}})).to_be_false();
+		// rootOnAnchors belongs only on a Loop part.
+		static constexpr PartSpec kBadRootOnAnchors[] = {
+		    {.role = Role::Lead, .flavour = Flavour::Motif, .loop = {.rootOnAnchors = true}}};
+		expect(loopNotesValid(Genre{.name = "bad-root-anchor", .parts = kBadRootOnAnchors})).to_be_false();
 	});
 
 	it("gives each Arp part a walk per pool entry, a Register that holds its widest, and the note bound (spec §5.2, §7.3)", _ {

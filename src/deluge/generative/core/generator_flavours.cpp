@@ -79,11 +79,24 @@ GEN_STEP_CODE void Generator::rollLine(int32_t partIndex, int32_t complexity) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];
 	part.passes = 0;
+	const Pattern* pattern = spec.flavour == Flavour::Loop && spec.loop.rootOnAnchors && part.lanes[0].entry >= 0
+	                             ? &spec.pool[part.lanes[0].entry]
+	                             : nullptr;
+	int32_t patternStep = 0;
 	for (int32_t i = 0; i < kMaxPatternSteps; i++) {
 		part.line[i] = rollLineStep(spec,
 		                            lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
 		                                    Purpose::LineRoll, part.lanes[0], 0, i, 0),
 		                            complexity);
+		if (pattern != nullptr) {
+			if (pattern->importance[patternStep] == kAnchor) {
+				part.line[i].degree = 0;
+				part.line[i].octave = 0;
+			}
+			if (++patternStep == pattern->length) {
+				patternStep = 0;
+			}
+		}
 	}
 }
 
