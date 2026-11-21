@@ -23,7 +23,8 @@
 // The CLIP grid page shows the last part focused (spec §13.5): its takes on row 1, FREEZE and NEW SOUND on row 2, and
 // its six sound controls as faders on rows 3–8, with the OLED's PART page showing its sound, take and controls. A
 // focused part's F7 pressed again puts Thin / Drive on the gold knobs. SYNTH or KIT re-rolls the focused part's sound
-// (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
+// (SHIFT: its previous one), SYNTH on a synth part opening the preset browser and KIT on a Drums or FX part the lane
+// list instead, CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
 // SELECT push opens the Perform menu and SCALE its key and scale editor (spec §13.6), stock menus over Perform; SCALE
 // blinks while a key change waits. The KEYBOARD grid page has the four macros as faders (tap = new centre, hold =
 // a value that springs back), the phrase position and FILL pads, with the OLED's MACROS page. SHIFT + a main pad, or
@@ -41,6 +42,7 @@
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/oled_page.h"
+#include "generative/perform/sound_browser.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -113,6 +115,11 @@ public:
 	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
 	/// or is refused with a popup.
 	void chooseSound(int32_t part, const deluge::generative::SoundChoice& choice);
+	/// The lane list's RE-ROLL ALL: `part`'s new sound, as NEW SOUND (spec §13.5).
+	void reRollPart(int32_t part) { soundPress(part, false); }
+	/// A lane of the lane list, or its SAMPLE / SYNTH PRESET (spec §13.5): opens the lane browser of `kind` over the
+	/// list, on `part`'s `lane`, refused with a re-roll's popups as the preset browser is.
+	void openLaneBrowser(int32_t part, deluge::generative::Lane lane, deluge::generative::perform::BrowseKind kind);
 
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
@@ -176,6 +183,9 @@ private:
 	/// SYNTH on a synth part (spec §13.5): cancels its sound still preloading or waiting, as NEW SOUND does, or else
 	/// opens the preset browser on its pick, refused with a re-roll's popups.
 	void openPresetBrowser(int32_t part);
+	/// KIT on a Drums or FX part (spec §13.5): cancels its sound still preloading or waiting, as NEW SOUND does, or
+	/// else opens the lane list, refused with a re-roll's popups.
+	void openLaneList(int32_t part);
 	/// FREEZE or CROSS-SCREEN on `part`: it freezes or thaws on the next undecided step (spec §6.7).
 	void freezePress(int32_t part);
 	/// Y push: the key, scale and seed code as a popup (spec §6.5).
