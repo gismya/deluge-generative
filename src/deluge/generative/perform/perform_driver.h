@@ -82,6 +82,13 @@ public:
 	virtual void logPieceHeader(SteeringLog& /*log*/) {}
 	/// `part`'s new sound, `token`, landed on `step`: its picks, one SteeringLog::appendSoundPath() per slot.
 	virtual void logSoundPaths(SteeringLog& /*log*/, int32_t /*step*/, uint8_t /*part*/, uint8_t /*token*/) {}
+	// ---- A restart (spec §13.2) ----
+
+	/// A restart reached its bar line: every note of the piece has ended there. Starts `generator` again for the new
+	/// piece, from bar 1 with its Intro, as start() does: the firmware from the Current Recipe as it is now (AS IT IS).
+	/// The driver then decides its step 0 on the line, at the new piece's tempo and swing. Only Perform's adapters
+	/// queue a restart; a sink that doesn't start the Generator leaves the piece silent from the line.
+	virtual void restartPiece(Generator& /*generator*/) {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -214,6 +221,11 @@ private:
 	void flushOutgoing(Generator::FlushFor why, NoteSink& sink);
 	/// The incoming instance's first decision is due: it takes over at the start step.
 	void switchToIncoming(NoteSink& sink);
+	/// The restart's line (spec §13.2): the piece's last notes end there, the sink starts the Generator again, and the
+	/// clock counts from the line as the new piece's step 0.
+	void restartOnLine(NoteSink& sink);
+	/// What begin() and a restart's line reset: no transition, no Riser held, the phrase history and the end.
+	void freshPiece();
 	/// Starts the transition's tempo glide once the clock reaches it.
 	void glideIntoTransition(NoteSink& sink);
 	/// Logs a tempo glide the driver started itself, to `tempo`, ending at the playing instance's tick `endTick`, on

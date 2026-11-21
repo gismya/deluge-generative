@@ -23,10 +23,15 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
+#include "gui/l10n/l10n.h"
+#include "gui/ui/generative_popups.h"
+#include "hid/buttons.h"
+#include "hid/display/display.h"
 #include "io/midi/test_port.h"
 #include "model/model_stack.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
+#include "storage/flash_storage.h"
 #include <algorithm>
 
 namespace deluge::generative::firmware {
@@ -38,11 +43,8 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	const bool groove = startInGroove_;
 	startInGroove_ = false;
 	pieceEnded_ = false;
-	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
-	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
-	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
-	steering_.pieceStarts(generator_->recipe().macros);
-	sink_.sectionKnown = false;
+	steering_.startFromCurrentRecipe(*generator_, groove);
+	pieceBegins();
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
 	// lands on its next bar line (spec §12.4).
 	const int32_t master = playbackHandler.metronomeOffset + swungTick;
@@ -57,12 +59,36 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	magnitude_ = magnitude;
 	positionPending_ = false;
 	instanceStarts();
+	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
+	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
+}
+
+void PerformAdapter::pieceBegins() {
+	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
+	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
+	sink_.sectionKnown = false;
 #if ENABLE_SYSEX_TEST
 	macrosShown_ = generator_->recipe().macros;
 	biasShown_ = generator_->recipe().bias;
 #endif
-	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
-	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
+}
+
+void PerformAdapter::restartPiece(Generator& generator) {
+	// The safety net after the flush, as at a stop or the piece's end (spec §12.5).
+	sink_.allNotesOff();
+	// The first run's sounds go back home, a Throw's Space too, before the new piece reads them as home (spec §11.6),
+	// as a stop puts them back. Its waiting sounds go with the core's pending list.
+	soundControls.restoreHomes();
+	soundSwaps.pieceRestarts();
+	steering_.restartAsItIs(generator);
+	pieceBegins();
+	instanceStarts();
+	restarts_++;
+	TEST_EVENT("gen_restart as_it_is tempo=%ld", static_cast<long>(currentRecipe.recipe.tempo));
+}
+
+void OutputSink::restartPiece(Generator& generator) {
+	performAdapter.restartPiece(generator);
 }
 
 void PerformAdapter::stopPiece() {
@@ -274,6 +300,17 @@ void PerformAdapter::playbackEnded() {
 }
 
 void PerformAdapter::pressPlay(bool groove) {
+	const bool restartShortcut = FlashStorage::accessibilityShortcuts
+	                                 ? Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT)
+	                                 : Buttons::isButtonPressed(deluge::hid::button::X_ENC);
+	if (restartShortcut) {
+		pressRestart();
+		return;
+	}
+	playOrStop(groove);
+}
+
+void PerformAdapter::playOrStop(bool groove) {
 	if (playbackHandler.playbackState) {
 		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
 		return;
@@ -282,6 +319,32 @@ void PerformAdapter::pressPlay(bool groove) {
 		return; // it starts when the incoming roster has loaded
 	}
 	startPlayback(groove);
+}
+
+void PerformAdapter::pressRestart() {
+	using perform::PressOutcome;
+	if (!active() || leaving()) {
+		return;
+	}
+	if (!playbackHandler.playbackState) {
+		// Stopped, AS IT IS is PLAY: the Current Recipe from bar 1 (spec §13.2). A PLAY already waiting for a
+		// transition's preload is cancelled by this one, as PLAY's would be: no RESTART popup then.
+		const bool cancelsWait = transitions.playWaits();
+		TEST_EVENT("gen_restart_press %s", cancelsWait ? "stopped_cancels_wait" : "stopped");
+		playOrStop(false);
+		if (!cancelsWait) {
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART));
+		}
+		return;
+	}
+	const bool cancels = steering_.restartAhead();
+	const PressOutcome outcome = steering_.pressRestart();
+	TEST_EVENT("gen_restart_press %s", perform::refused(outcome) ? "refused" : cancels ? "cancelled" : "queued");
+	if (gui::refusedWithPopup(outcome) || outcome != PressOutcome::Accepted) {
+		return;
+	}
+	display->displayPopup(
+	    l10n::get(cancels ? l10n::String::STRING_FOR_RESTART_CANCELLED : l10n::String::STRING_FOR_RESTART));
 }
 
 void PerformAdapter::startPlayback(bool groove) {

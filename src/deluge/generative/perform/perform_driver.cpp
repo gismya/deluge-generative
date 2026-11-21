@@ -56,15 +56,20 @@ void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnit
 	generator_ = &generator;
 	incoming_ = nullptr;
 	outgoing_ = nullptr;
-	transitionFrom_ = -1;
-	transitionTempo_.reset();
-	dropRiser();
-	history_.begin(generator.recipe().genre->phraseSteps());
-	ended_ = false;
-	drainedEndLine_ = -1;
+	freshPiece();
 	magnitude_ = magnitude;
 	pieceDue_ = true;
 	placeBefore(0, toBarLine(songTick, magnitude));
+}
+
+void PerformDriver::freshPiece() {
+	// Every start is fresh (spec §13.2): a begin() and a restart's line.
+	transitionFrom_ = -1;
+	transitionTempo_.reset();
+	dropRiser();
+	history_.begin(generator_->recipe().genre->phraseSteps());
+	ended_ = false;
+	drainedEndLine_ = -1;
 }
 
 void PerformDriver::placeBefore(int32_t step, int64_t songTicks) {
@@ -178,6 +183,14 @@ void PerformDriver::decideDue(SteeringQueue& queue, NoteSink& sink) {
 	// events into the buffer, and they play in the order they would have on time.
 	while (decisionTick(generator_->nextStep()) <= clock_) {
 		if (generator_->stoppedDeciding()) {
+			if (generator_->restartLanded()) {
+				// The restart's line: the new piece decides its step 0 there, late as a Start from 0 does (spec §13.2).
+				if (clock_ < stepTick(generator_->nextStep())) {
+					break;
+				}
+				restartOnLine(sink);
+				continue;
+			}
 			// The transition's start step: the incoming instance decides it (spec §12.9).
 			if (incoming_ == nullptr) {
 				break;
@@ -290,7 +303,8 @@ int32_t PerformDriver::nextWait(int32_t magnitude) const {
 	// driver wait for the line itself, where the piece stops.
 	const int32_t next = generator_->nextStep();
 	const bool drained = generator_->ended() && drainedEndLine_ == next;
-	int32_t nextDue = drained ? stepTick(next) : decisionTick(next);
+	// A landed restart waits for its line itself, where the new piece starts.
+	int32_t nextDue = drained || generator_->restartLanded() ? stepTick(next) : decisionTick(next);
 	int32_t nextEvent = generator_->nextEventTick();
 	if (nextEvent < nextDue) {
 		nextDue = nextEvent;
@@ -514,6 +528,27 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	sink.transitionStarts(startTick);
 	// Swing switches on the start step, in one step: never a glide under a Build roll (spec §9.7).
 	glideSwing(generator_->recipe().swing, 0, sink);
+}
+
+void PerformDriver::restartOnLine(NoteSink& sink) {
+	const int32_t line = stepTick(generator_->nextStep());
+	// The core ended its notes on the line, as on a Section line. A late call plays them now; a hit leaning past the
+	// line goes, as at a stop: nothing of the first run sounds in the new piece.
+	playDue(sink, line);
+	generator_->flush(line, Generator::FlushFor::Stop);
+	playDue(sink, clock_);
+	flushOutgoing(Generator::FlushFor::Stop, sink);
+	clock_ -= line; // a whole number of bars: the clock's bar lines stay the master's
+	if (log_ != nullptr) {
+		// The piece ends on the line: the restarted one counts its steps from 0, so nothing more goes in this one.
+		// The new piece's opening is #413's second part.
+		log_->endPiece(generator_->nextStep(), PieceEnd::Stopped);
+	}
+	sink.restartPiece(*generator_);
+	freshPiece();
+	setTempo(generator_->recipe().tempo, sink);
+	setSwing(generator_->recipe().swing, sink);
+	swingLine_ = nextStepLine();
 }
 
 void PerformDriver::drainOutgoing(NoteSink& sink) {

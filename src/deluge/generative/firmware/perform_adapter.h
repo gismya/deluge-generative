@@ -81,6 +81,8 @@ public:
 	void logPieceHeader(SteeringLog& log) override;
 	/// A re-roll's new picks, from its waiting sound (spec §17.2).
 	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
+	/// A restart reached its line (spec §13.2): the adapter starts the piece again (PerformAdapter::restartPiece()).
+	void restartPiece(Generator& generator) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -188,7 +190,14 @@ public:
 	/// F14: the panel's PLAY under Perform, with SHIFT as `groove`. From stop it starts the next piece, in Groove with
 	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
 	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
+	/// X held (CROSS SCREEN with accessibility shortcuts, as stock's restart shortcut) makes it pressRestart().
 	void pressPlay(bool groove);
+	/// X+PLAY, or RESTART ▸ AS IT IS (spec §13.2): playing, the piece starts again at the next bar line from the
+	/// Current Recipe as it is then (pressed again while it waits, it cancels); stopped, it is PLAY. Shows its popup:
+	/// RESTART, RESTART CANCELLED, or why it was refused (CHANGE PENDING while a transition is pending).
+	void pressRestart();
+	/// Counts the restarts that reached their line: the view returns the Arc map to now when it changes.
+	[[nodiscard]] uint32_t restarts() const { return restarts_; }
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 
@@ -251,7 +260,14 @@ private:
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
+	/// pressPlay() without the restart shortcut.
+	void playOrStop(bool groove);
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// What every new piece reads once its Generator has started: the controls' homes, the Section shown.
+	void pieceBegins();
+	/// A restart's line, from the sink (spec §13.2): every voice is released, the first run's sounds go home and its
+	/// waiting swaps are dropped, then `generator` starts again from the Current Recipe (AS IT IS).
+	void restartPiece(Generator& generator);
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();
@@ -309,6 +325,7 @@ private:
 	/// The steering log, over its 128 KB SDRAM buffer from entry to the teardown (spec §17.2, §20).
 	uint8_t* logBuffer_ = nullptr;
 	SteeringLog log_{nullptr, 0};
+	uint32_t restarts_ = 0;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;

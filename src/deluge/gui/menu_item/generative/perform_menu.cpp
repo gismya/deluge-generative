@@ -359,6 +359,19 @@ public:
 	MenuItem* selectButtonPress() override { return confirmTransition(currentRecipe.recipe.genre); }
 };
 
+/// RESTART ▸ AS IT IS (spec §13.2, §13.6): as X+PLAY, the piece starts again at the next bar line from the Current
+/// Recipe as it is, or at once while stopped. The menu closes, so the popup and the queue show on the Perform page.
+class RestartAsItIsItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		soundEditor.exitCompletely();
+		performAdapter.pressRestart();
+		return NO_NAVIGATION;
+	}
+};
+
 /// RESET PART BIAS: the focused part's Part biases back to 0, or every part's with nothing focused (spec §3.3,
 /// §13.6). It closes the menu, as REGENERATE's confirm does, so the faders and rings show the result at once.
 class ResetPartBiasItem final : public MenuItem {
@@ -402,6 +415,8 @@ private:
 
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
+PLACE_SDRAM_BSS RestartAsItIsItem restartAsItIsItem{l10n::String::STRING_FOR_AS_IT_IS};
+PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem}};
 PLACE_SDRAM_BSS ResetPartBiasItem resetPartBiasItem{l10n::String::STRING_FOR_RESET_PART_BIAS};
 PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 
@@ -444,7 +459,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
     {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
-     &octavesMenu, &resetPartBiasItem},
+     &octavesMenu, &resetPartBiasItem, &restartMenu},
 };
 
 void refreshPerformMenu() {

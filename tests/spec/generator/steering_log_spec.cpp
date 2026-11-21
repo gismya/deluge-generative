@@ -424,6 +424,23 @@ describe steering_log("The steering log", $ {
 			expect(piece.log.piece(0).start().first == SectionKind::Intro).to_be_true();
 		});
 
+		it("ends the piece on a restart's line, logging nothing of the restarted run into it (#413 opens its own)", _ {
+			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};
+			piece.decideBefore(4);
+			piece.push(macro(Macro::Energy, 7));
+			piece.push({CommandKind::Restart, 0, 1});
+			piece.runToStepLine(kStepsPerBar + 2);
+			piece.push(macro(Macro::Density, 9));
+			piece.runToStepLine(kStepsPerBar + 6);
+			expect(piece.log.pieces()).to_equal(1);
+			const SteeringLog::Piece p = piece.log.piece(0);
+			expect(p.ended() == PieceEnd::Stopped).to_be_true();
+			expect(p.endStep()).to_equal(kStepsPerBar);
+			const std::vector<LogRecord> read = records(piece.log, 0);
+			expect(read.size()).to_equal(1u);
+			expect(read[0].step).to_equal(4);
+		});
+
 		it("ends at the Outro's end", _ {
 			TestLog entries(8);
 			Run run;

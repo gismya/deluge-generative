@@ -218,7 +218,8 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
-		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		// Generative mode (F9, spec §13.2): Perform blocks stock's restart shortcut, under any overlay too. The panel's
+		// X+PLAY never gets here: it is Perform's restart (PerformAdapter::pressPlay()). A MIDI-learned PLAY does.
 		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
 			return;
 		}

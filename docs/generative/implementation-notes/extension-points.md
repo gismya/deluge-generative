@@ -97,3 +97,11 @@ otherwise.
 - What a file chosen in `LoadRecipeUI` does is `loadChosen()` (`gui/ui/load/load_recipe_ui.cpp`): PERFORM FROM under
   it (`performFromShowing()`) asks DISCARD SONG?; Perform as root UI makes it a transition; otherwise the Compose
   load (`loadComposeRecipe()`), which shows the screen. A new place to open the browser from adds a branch there.
+- **Restart AS IT BEGAN (#413 part 2).** A restart is the core's `CommandKind::Restart` (lands on the next bar line,
+  stops the instance as a hard cut does), then `PerformDriver::restartOnLine()`, which ends the first run and calls
+  `NoteSink::restartPiece(generator)`. The firmware's is `PerformAdapter::restartPiece()`, which starts the Generator
+  through `PerformSteering::restartAsItIs()` (the Current Recipe). AS IT BEGAN is a second mode chosen at the press
+  (beside `pressRestart()`): its preload of the swapped sounds runs first, as a sound re-roll's does, and pushes the
+  Restart command once loaded; at the line `restartPiece()` puts the piece header's Recipe, takes and param snapshot
+  back before `Generator::start()`. #143's `openPiece()` (set by `begin()` and `switchToIncoming()`) also needs
+  setting in `restartOnLine()`, so the new piece gets its header.
