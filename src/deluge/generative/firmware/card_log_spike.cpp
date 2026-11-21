@@ -249,16 +249,21 @@ void report() {
 	           static_cast<unsigned long>(r.hist[1]), static_cast<unsigned long>(r.hist[2]),
 	           static_cast<unsigned long>(r.hist[3]), static_cast<unsigned long>(r.hist[4]),
 	           static_cast<unsigned long>(r.hist[5]), static_cast<unsigned long>(r.hist[6]));
+	TEST_EVENT("gen_gaps %lu/%lu/%lu/%lu/%lu/%lu", static_cast<unsigned long>(r.gaps[0]),
+	           static_cast<unsigned long>(r.gaps[1]), static_cast<unsigned long>(r.gaps[2]),
+	           static_cast<unsigned long>(r.gaps[3]), static_cast<unsigned long>(r.gaps[4]),
+	           static_cast<unsigned long>(r.gaps[5]));
 	if (chunk != 0) {
-		TEST_EVENT("gen_cardlog chunk=%lu sync=%s writes=%lu bytes=%lu write_mean_us=%lu write_max_us=%lu "
-		           "hist=%lu/%lu/%lu/%lu/%lu/%lu syncs=%lu sync_max_us=%lu open_max_us=%lu close_max_us=%lu "
-		           "unlink_max_us=%lu task_max_us=%lu worst_us=%lu backlog_max=%lu errors=%lu",
+		TEST_EVENT("gen_cardlog chunk=%lu sync=%s writes=%lu bytes=%lu mean_us=%lu max_us=%lu "
+		           "hist=%lu/%lu/%lu/%lu/%lu/%lu",
 		           static_cast<unsigned long>(chunk), syncEach ? "each" : "end",
 		           static_cast<unsigned long>(window.writes), static_cast<unsigned long>(window.bytes),
 		           window.writes > 0 ? us(window.writeTotal / window.writes) : 0UL, us(window.writeMax),
 		           static_cast<unsigned long>(window.hist[0]), static_cast<unsigned long>(window.hist[1]),
 		           static_cast<unsigned long>(window.hist[2]), static_cast<unsigned long>(window.hist[3]),
-		           static_cast<unsigned long>(window.hist[4]), static_cast<unsigned long>(window.hist[5]),
+		           static_cast<unsigned long>(window.hist[4]), static_cast<unsigned long>(window.hist[5]));
+		TEST_EVENT("gen_cardlog_ops syncs=%lu sync=%lu open=%lu close=%lu unlink=%lu "
+		           "task=%lu worst=%lu backlog=%lu err=%lu",
 		           static_cast<unsigned long>(window.syncs), us(window.syncMax), us(window.openMax),
 		           us(window.closeMax), us(window.unlinkMax), us(window.opMax), us(worstEver),
 		           static_cast<unsigned long>(window.backlogMax), static_cast<unsigned long>(window.errors));

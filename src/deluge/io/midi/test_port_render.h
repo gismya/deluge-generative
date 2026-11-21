@@ -39,6 +39,7 @@ struct RenderTiming {
 	// renders, the most samples the output buffer had drained when a render began, and sample-streaming misses.
 	uint32_t hist[7] = {};       ///< Renders under 250, 500, 750, 1000, 1250, 1500 µs, and the rest
 	uint32_t gapMaxCounts = 0;   ///< The longest span from one render's start to the next's
+	uint32_t gaps[6] = {};       ///< Spans between renders under 1, 2, 2.9 (the TX buffer), 5, 10 ms, and the rest
 	uint32_t drainedMax = 0;     ///< The most samples waiting in the routine (of the 128-sample TX buffer)
 	uint32_t lateClusters = 0;   ///< A playing voice's next Cluster wasn't loaded in time (the sound cuts)
 	uint32_t unloadedStarts = 0; ///< A voice's first Cluster wasn't loaded when it started or jumped

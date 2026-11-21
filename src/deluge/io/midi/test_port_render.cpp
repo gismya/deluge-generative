@@ -38,7 +38,15 @@ void recordRender(uint32_t start, size_t numSamples) {
 	renderTiming.hist[std::min<uint32_t>(us / 250, 6)]++;
 	static uint32_t lastStart = 0;
 	if (lastStart != 0) {
-		renderTiming.gapMaxCounts = std::max(renderTiming.gapMaxCounts, start - lastStart);
+		const uint32_t gap = start - lastStart;
+		renderTiming.gapMaxCounts = std::max(renderTiming.gapMaxCounts, gap);
+		const uint32_t gapUs = gap / (DELUGE_CLOCKS_PER / 1'000'000);
+		renderTiming.gaps[gapUs < 1000    ? 0
+		                  : gapUs < 2000  ? 1
+		                  : gapUs < 2902  ? 2
+		                  : gapUs < 5000  ? 3
+		                  : gapUs < 10000 ? 4
+		                                  : 5]++;
 	}
 	lastStart = start;
 }
