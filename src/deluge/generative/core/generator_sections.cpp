@@ -331,6 +331,20 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 	}
 }
 
+GEN_STEP_CODE RollStep Generator::punchRoll(int32_t partIndex, Lane lane) const {
+	// A fixed stage at normal velocity (tuning), on the Closed hat, and on the Snare or, in a kit with none, the Clap
+	// (spec §8.9).
+	constexpr auto kNormal = static_cast<int16_t>(kLevelVelocity[static_cast<int32_t>(VelocityLevel::Normal)]);
+	if (lane == Lane::ClosedHat && punch_.on(PunchIn::HatRoll)) {
+		return {RollStage::ThirtySecond, kNormal};
+	}
+	if (punch_.on(PunchIn::SnareRoll)
+	    && lane == (laneIndexOf(genre_->parts[partIndex], Lane::Snare) >= 0 ? Lane::Snare : Lane::Clap)) {
+		return {RollStage::Sixteenth, kNormal};
+	}
+	return {};
+}
+
 GEN_STEP_CODE void Generator::playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll) {
 	const LaneSpec& spec = genre_->parts[partIndex].lanes[laneIndex];
 	// A roll decides its steps, not Density, and plays no Lean, spread or Ornament.

@@ -184,6 +184,10 @@ _Avoid_: Break, turnaround, mute, drop-out, Ornament
 Whole parts or drum lanes falling silent for one to four bars in a Groove, often with the last hit thrown into an echo, such as the skank dropping out of a dub mix. A genre lists the drop-outs it may play, and the Generator plays them more often with more Motion. Unlike a fill, the notes already sounding ring on.
 _Avoid_: Rest, mute, Break, Fill, cut
 
+**Punch-in**:
+A player's effect on the KEYBOARD page, on while its pad is held or latched with a tap, at a fixed amount: a Drums lane muted, a hat or snare roll, flams, a doubled kick, or a pump (every other part ducking under the kick). It steers the Generator, so it starts and stops on step lines and Capture replays it. Stock Performance view's song FX pads, on KEYBOARD's second page, aren't punch-ins: they move song params.
+_Avoid_: Gesture, Fill, Throw, effect pad
+
 **Phrase accent**:
 A single hit on a genre's accent lane, usually the crash, that marks the start of a phrase: always on a Drop and after a fill, and sometimes on other Groove phrase starts.
 _Avoid_: Crash, downbeat, accent, Impact

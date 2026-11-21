@@ -98,6 +98,11 @@ BUILDERS = {
     "gen_browser_preview": (),  # the previewed path
     "gen_log": (),  # at=stop or at=phrase, literals beside it
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_performance_pad": (),  # down or up
+    "gen_punch": (
+        "src/deluge/generative/perform/keyboard_page.*",
+    ),  # describePunches()
+    "gen_punch_pad": (),  # down or up
     "gen_compose": (),  # the outcome's name
     "gen_compose_pick": (
         *_GENRE,

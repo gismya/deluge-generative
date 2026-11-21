@@ -58,6 +58,7 @@ void ClipBuilder::take(const Event& event) {
 	case EventKind::Section:  // the arranger has no markers (spec §15.2)
 	case EventKind::KeyScale: // the song's key is the Recipe's, set once (spec §15.5); Capture cuts clips on it
 	case EventKind::Sound:    // Compose plays no sound re-roll; Capture cuts clips on it (spec §15.3)
+	case EventKind::Pump:     // Compose plays no punch-ins (spec §8.9)
 		break;
 	}
 }

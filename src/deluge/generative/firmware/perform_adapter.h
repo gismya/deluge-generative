@@ -339,6 +339,8 @@ private:
 	Macros macrosShown_;
 	/// The Part biases the last tick saw the Generator play, for the gen_bias_landed test event.
 	PartBiases biasShown_;
+	/// The punch-ins the last tick saw the Generator play, for the gen_punch_landed test event.
+	PunchIns punchesShown_;
 #endif
 };
 

@@ -402,6 +402,61 @@ describe perform_steering("The Perform driver's steering", $ {
 		});
 	});
 
+	context("punch-ins (spec §8.9, §13.5)", _ {
+		it("reach the core on the next undecided step, and only while on", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			expect(piece.steering.setPunch(PunchIn::HatRoll, Lane::None, true)).to_be_true();
+			expect(piece.generator.punchIns().on(PunchIn::HatRoll)).to_be_false(); // waiting in the queue
+			piece.decideMore(1);
+			expect(piece.generator.punchIns().on(PunchIn::HatRoll)).to_be_true();
+			expect(piece.steering.setPunch(PunchIn::HatRoll, Lane::None, false)).to_be_true();
+			piece.decideMore(1);
+			expect(piece.generator.punchIns().any()).to_be_false();
+			expect(piece.steering.punchIns().any()).to_be_false();
+		});
+
+		it("still on across a stop, play from the next piece's first step", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setPunch(PunchIn::LaneMute, Lane::Kick, true);
+			piece.steering.setPunch(PunchIn::Pump, Lane::None, true);
+			piece.decideMore(1);
+			piece.playFromRecipe(true);
+			piece.decideBefore(1);
+			expect(piece.generator.punchIns().muted(Lane::Kick)).to_be_true();
+			expect(piece.generator.punchIns().on(PunchIn::Pump)).to_be_true();
+			// The pump starts on the new piece's step 0.
+			expect(piece.generator.punchIns().pumped).to_be_true();
+		});
+
+		it("turned on while stopped, play from the next start", _ {
+			Piece piece;
+			piece.driver.stop(piece.sink);
+			expect(piece.steering.setPunch(PunchIn::Flam, Lane::None, true)).to_be_true();
+			piece.playFromRecipe(true);
+			piece.decideBefore(1);
+			expect(piece.generator.punchIns().on(PunchIn::Flam)).to_be_true();
+		});
+
+		it("stay as they were when the queue is full, or the command names none", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			while (piece.push({CommandKind::SetFreeze, 0, kPress})) { // discrete: never coalesced, so it fills
+			}
+			expect(piece.steering.setPunch(PunchIn::SnareRoll, Lane::None, true)).to_be_false();
+			expect(piece.steering.punchIns().any()).to_be_false();
+			expect(piece.steering.setPunch(PunchIn::LaneMute, Lane::Riser, true)).to_be_false();
+		});
+
+		it("are dropped by a new entry", _ {
+			Piece piece;
+			piece.steering.setPunch(PunchIn::DoubleKick, Lane::None, true);
+			piece.steering.enter();
+			expect(piece.steering.punchIns().any()).to_be_false();
+		});
+	});
+
 	context("a transition's handover (spec §12.9)", _ {
 		it("makes the pending Recipe Current, with its seed and takes, and the macros the rule names", _ {
 			Piece piece;
