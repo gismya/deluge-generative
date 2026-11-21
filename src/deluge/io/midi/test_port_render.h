@@ -46,6 +46,7 @@ struct RenderTiming {
 	/// The task that finished last before each underrun's entry: the one that kept the routine away.
 	struct LateTask {
 		const char* name = nullptr;
+		bool nested = false; ///< The routine ran inside `name` (it called the routine), rather than after it.
 		uint32_t underruns = 0;
 		uint32_t runMaxCounts = 0; ///< Its longest run before an underrun.
 	};
@@ -62,8 +63,11 @@ void recordRender(uint32_t start, size_t numSamples);
 void audioRoutineEntered(uint32_t dmaFrame);
 /// The audio routine returns, with `queuedSamples` (txSamplesQueued()) in the TX ring and the DMA at `dmaFrame`.
 void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame);
-/// The scheduler's task `name` ran for `counts` (getSystemTicks()), for the underruns' culprit.
-void taskRan(const char* name, uint32_t counts);
+/// The scheduler starts task `name`, for the underruns' culprit: the task it runs inside (null at the top), to hand
+/// back to taskRan().
+const char* taskStarted(const char* name);
+/// The scheduler's task `name` ran for `counts` (getSystemTicks()), and `caller` (taskStarted()) runs again.
+void taskRan(const char* name, uint32_t counts, const char* caller);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

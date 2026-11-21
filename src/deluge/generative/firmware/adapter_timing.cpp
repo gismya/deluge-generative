@@ -64,7 +64,16 @@ void ControlTiming::report(const char* ramps) {
 	           static_cast<unsigned long>(render.routineCalls), static_cast<unsigned long>(render.underruns),
 	           marginMinUs, static_cast<unsigned long>(render.margins[0]),
 	           static_cast<unsigned long>(render.margins[1]), static_cast<unsigned long>(render.margins[2]),
-	           static_cast<unsigned long>(render.margins[3]));
+	           static_cast<unsigned long>(render.margins[3]), static_cast<long>(render.dmaDriftMax));
+	// Each underrun's culprit: the task the routine ran inside, or else the one that finished just before it (with its
+	// longest run then)
+	for (const TestPort::RenderTiming::LateTask& late : render.lateTasks) {
+		if (late.name != nullptr) {
+			TEST_EVENT("gen_audio_late task=%s %s underruns=%lu run_max_us=%lu", late.name,
+			           late.nested ? "inside" : "before", static_cast<unsigned long>(late.underruns),
+			           static_cast<unsigned long>(late.runMaxCounts / kCountsPerUs));
+		}
+	}
 	// The spike's measure (#447), for comparison: spans between render starts under 1, 2, 2.9, 5, 10 ms and more
 	TEST_EVENT("gen_render_gaps max_us=%lu gaps=%lu/%lu/%lu/%lu/%lu/%lu",
 	           static_cast<unsigned long>(render.renderGapMaxCounts / kCountsPerUs),

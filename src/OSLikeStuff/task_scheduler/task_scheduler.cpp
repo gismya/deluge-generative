@@ -245,6 +245,7 @@ void TaskManager::runTask(TaskID id) {
 	}
 #if ENABLE_SYSEX_TEST
 	const uint32_t startTicks = getSystemTicks();
+	const char* testCaller = TestPort::taskStarted(current_task->name);
 #endif
 	current_task->handle();
 
@@ -254,7 +255,8 @@ void TaskManager::runTask(TaskID id) {
 		Time runtime = (timeNow - start_time);
 		cpuTime += runtime;
 #if ENABLE_SYSEX_TEST
-		TestPort::taskRan(current_task->name, getSystemTicks() - startTicks); // Generative mode: underrun culprits
+		TestPort::taskRan(current_task->name, getSystemTicks() - startTicks, // Generative mode: underrun culprits
+		                  testCaller);
 #endif
 		if (current_task->removeAfterUse) {
 			removeTask(id);

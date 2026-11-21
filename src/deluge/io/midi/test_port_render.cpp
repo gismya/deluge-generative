@@ -34,15 +34,23 @@ namespace {
 deluge::io::midi::OutputMargin outputMargin{kSystemTicksPerSampleQ8};
 uint32_t lastRenderStart = 0;
 constexpr uint32_t kCountsPerUs = DELUGE_CLOCKS_PER / 1'000'000;
-const char* lastTaskName = nullptr;
-uint32_t lastTaskCounts = 0;
+const char* lastTaskName = nullptr;      ///< The task that finished last
+uint32_t lastTaskCounts = 0;             ///< and its run
+const char* runningTask = nullptr;       ///< The innermost task running
+const char* callerOfLastStart = nullptr; ///< The task running when the last one started: the audio routine's caller
 
-void blameLastTask() {
+/// An underrun: blame the task that called the routine, or else the one that finished just before it.
+void blameTask() {
+	const bool nested = callerOfLastStart != nullptr;
+	const char* name = nested ? callerOfLastStart : lastTaskName != nullptr ? lastTaskName : "?";
 	for (RenderTiming::LateTask& late : renderTiming.lateTasks) {
-		if (late.name == nullptr || late.name == lastTaskName) {
-			late.name = lastTaskName != nullptr ? lastTaskName : "?";
+		if (late.name == nullptr || (late.name == name && late.nested == nested)) {
+			late.name = name;
+			late.nested = nested;
 			late.underruns++;
-			late.runMaxCounts = std::max(late.runMaxCounts, lastTaskCounts);
+			if (!nested) {
+				late.runMaxCounts = std::max(late.runMaxCounts, lastTaskCounts);
+			}
 			return;
 		}
 	}
@@ -81,7 +89,7 @@ void audioRoutineEntered(uint32_t dmaFrame) {
 	renderTiming.marginMinCounts = std::min(renderTiming.marginMinCounts, margin);
 	if (margin < 0) {
 		renderTiming.underruns++;
-		blameLastTask();
+		blameTask();
 		return;
 	}
 	const uint32_t us = static_cast<uint32_t>(margin) / kCountsPerUs;
@@ -92,9 +100,16 @@ void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame) {
 	outputMargin.left(getSystemTicks(), queuedSamples, dmaFrame);
 }
 
-void taskRan(const char* name, uint32_t counts) {
+const char* taskStarted(const char* name) {
+	callerOfLastStart = runningTask;
+	runningTask = name;
+	return callerOfLastStart;
+}
+
+void taskRan(const char* name, uint32_t counts, const char* caller) {
 	lastTaskName = name;
 	lastTaskCounts = counts;
+	runningTask = caller;
 }
 
 void voiceCulled(const Sound& sound) {
