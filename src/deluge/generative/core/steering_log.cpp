@@ -271,14 +271,17 @@ int32_t SteeringLog::compactStep(int32_t maxBytes) {
 	while (moved < maxBytes && (gapAt_ >= 0 || startGap())) {
 		int32_t n = std::min(maxBytes - moved, used_ - src_);
 		// Never stop inside a piece's opening: it is read whole, from one place (infoAt()). The first piece whose
-		// opening isn't all moved yet starts at or past the cursor.
+		// opening isn't all moved yet starts at or past the cursor; the chunk then takes in every opening that starts
+		// before its end, however many small pieces it reaches (#439 R2).
 		int32_t at = gapAt_ + gapBytes_;
 		while (at < used_ && at + static_cast<int32_t>(sizeof(PieceInfo)) <= src_) {
 			at = nextAt(at);
 		}
-		if (at < used_ && at < src_ + n) {
-			n = std::min(std::max(n, at + static_cast<int32_t>(sizeof(PieceInfo)) - src_), used_ - src_);
+		while (at < used_ && at < src_ + n) {
+			n = std::max(n, at + static_cast<int32_t>(sizeof(PieceInfo)) - src_);
+			at = nextAt(at); // at or past the cursor: not moved yet, read where it stands
 		}
+		n = std::min(n, used_ - src_);
 		if (n > 0) {
 			// Down by the gap: the source is at or past the cursor, so where it stands, and the target below it.
 			std::memmove(buffer_ + src_ - gapBytes_, buffer_ + src_, static_cast<size_t>(n));

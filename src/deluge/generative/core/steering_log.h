@@ -126,7 +126,8 @@ public:
 
 	/// Closes the room of dropped pieces by moving the pieces after them down, at most `maxBytes` a call: the Perform
 	/// driver calls it once a step, outside the decision (spec §17.4), while the newest piece keeps writing at the end.
-	/// It moves more, up to openingBytes() more, only to finish a piece's opening it reached, which is read whole.
+	/// It moves more, up to openingBytes() more, only to finish the last piece's opening it reached: an opening is
+	/// read whole.
 	/// @return the bytes moved.
 	int32_t compactStep(int32_t maxBytes);
 	/// A piece's opening: its info and its start's Recipe.

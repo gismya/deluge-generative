@@ -590,6 +590,36 @@ describe steering_log("The steering log", $ {
 			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 3, 5});
 		});
 
+		it("never stops a step inside a piece's opening, however many small pieces one step's budget reaches", _ {
+			for (int32_t extra : {2, 6, 40, 100}) {
+				Buffer b(8192);
+				threeMarked(b.log);
+				const int32_t kept = b.log.piece(1).bytes(); // a kept piece's room, about: the budget reaches past it
+				b.log.markPiece(0, false);
+				b.log.beginPiece(startOf(4));
+				int32_t step = 0;
+				bool intact = true;
+				while (b.log.compacting() && step < 200) {
+					b.log.append(step, macro(Macro::Motion, step));
+					step++;
+					b.log.compactStep(kept + extra);
+					intact = intact && seeds(b.log) == std::vector<uint32_t>{2, 3, 4}
+					         && b.log.piece(2).recordCount() == step && b.log.piece(0).recordCount() == 2
+					         && b.log.piece(1).recordCount() == 2;
+				}
+				expect(intact).to_be_true();
+				expect(b.log.compacting()).to_be_false();
+				expect(twoIntact(b.log, 0)).to_be_true();
+				const std::vector<LogRecord> logged = records(b.log, 2);
+				bool inOrder = static_cast<int32_t>(logged.size()) == step;
+				for (int32_t i = 0; inOrder && i < step; i++) {
+					inOrder = logged[static_cast<size_t>(i)].step == i
+					          && logged[static_cast<size_t>(i)].command == macro(Macro::Motion, i);
+				}
+				expect(inOrder).to_be_true();
+			}
+		});
+
 		it("keeps every logged step whole when the log cuts the new piece while a move is under way", _ {
 			for (int32_t budget : {1, 3, 7, 13, 40}) {
 				Buffer b(2048);
