@@ -95,6 +95,12 @@ struct ChordGraph {
 	uint8_t cadencePeriod = 0;
 	/// Harmonic rhythm, in bars per chord: divides the phrase or is a whole multiple of it.
 	uint8_t barsPerChord = 2;
+	/// The loop (spec §7.4): per-mille chance on each Drop that the chords move to a new loop, or -1 for no loop, so
+	/// every phrase walks on. A loop is a phrase long, or half of one, starts on home and ends off it, and repeats
+	/// from Drop to Drop, through the Break and the Build.
+	int16_t loopChance = -1;
+	/// Per-mille chance that a new loop is half a phrase long.
+	int16_t halfLoopChance = 333;
 };
 constexpr int32_t kMaxChordMoves = 16;
 
