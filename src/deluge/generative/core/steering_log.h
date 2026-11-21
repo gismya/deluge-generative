@@ -66,6 +66,12 @@ enum class RecordKind : uint8_t {
 	Command,      ///< A command, where it landed.
 	SoundPath,    ///< A sound re-roll's new pick: command.target its part, command.value its token, `slot`, `path`.
 	SoundDropped, ///< The newest SetSound on command.target never played: a confirm dropped it (spec §12.9).
+	/// An Arc move (a force or End, or a transition) waits in its pending slot from this step: command, as it waits.
+	/// The Arc's look-ahead reads it until it lands or stops waiting, so replay puts it back (spec §2.6, §17.2).
+	Waiting,
+	/// Nothing waits in command.kind's slot from this step (ForceSection for the force or End, Transition): what
+	/// waited was cancelled. One that lands leaves its slot with its Command record.
+	NotWaiting,
 };
 struct LogRecord {
 	RecordKind kind = RecordKind::Command;
@@ -128,6 +134,9 @@ public:
 	/// (kDroppedReserve), which holds one for every part: a landing gets one drop. Nothing is written when the SetSound
 	/// itself was cut away, or for a landing already dropped.
 	bool appendSoundDropped(int32_t step, uint8_t part);
+	/// An Arc move's pending slot changed on `step`: `command` waits there now (RecordKind::Waiting), or, with `waits`
+	/// false, nothing waits in its slot (RecordKind::NotWaiting).
+	bool appendWaiting(int32_t step, const Command& command, bool waits);
 
 	// ---- Reading ----
 
@@ -170,6 +179,39 @@ public:
 			}
 		}
 
+		/// Reads the records one at a time, in order, as forEachRecord() hands them on: for a reader that stops between
+		/// steps (Capture's replay, a chunk of steps a call). Valid while the log doesn't change.
+		class Reader {
+		public:
+			/// Reads nothing.
+			Reader() = default;
+			/// The next record, without taking it. @return false past the last.
+			bool peek(LogRecord& out) const {
+				if (at_ >= end_) {
+					return false;
+				}
+				decode(at_, step_, out);
+				return true;
+			}
+			/// Takes the next record. @return false past the last.
+			bool next(LogRecord& out) {
+				if (at_ >= end_) {
+					return false;
+				}
+				at_ = decode(at_, step_, out);
+				step_ = out.step;
+				return true;
+			}
+
+		private:
+			friend class Piece;
+			Reader(const uint8_t* at, const uint8_t* end) : at_(at), end_(end) {}
+			const uint8_t* at_ = nullptr;
+			const uint8_t* end_ = nullptr;
+			int32_t step_ = 0;
+		};
+		[[nodiscard]] Reader reader() const { return Reader(records(), base_ + bytes()); }
+
 	private:
 		friend class SteeringLog;
 		explicit Piece(const uint8_t* base) : base_(base) {}
@@ -200,6 +242,8 @@ public:
 
 	static constexpr uint8_t kSoundPathTag = 0x80;
 	static constexpr uint8_t kSoundDroppedTag = 0x81;
+	static constexpr uint8_t kWaitingTag = 0x82;
+	static constexpr uint8_t kNotWaitingTag = 0x83;
 	static constexpr uint8_t kPickTag = 0x90;
 	static constexpr uint8_t kSnapshotTag = 0x91;
 

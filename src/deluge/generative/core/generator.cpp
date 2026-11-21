@@ -52,6 +52,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
+	waitingMoves_[0] = waitingMoves_[1] = Command{CommandKind::CancelNewest};
 	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
 	silent_ = 0;
@@ -219,8 +220,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (stoppedDeciding()) {
 		return; // a transition's start step: the new roster decides from here
 	}
-	events_.beginStep();
-	cutParts_ = 0; // set again below by a SetSound or SetKey landing on this step
+	beginDecision();
 
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
 	// phrase-quantised commands wait for their line in the pending list, and land before the Arc moves, so a forced
@@ -244,7 +244,76 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 			log->append(n, command);
 		}
 	}
+	logWaitingMoves(log);
 	landPending(log);
+	noteWaitingMoves();
+	decideLanded();
+}
+
+namespace {
+
+/// What waits in an Arc move slot: the force or End (`slot` 0), or the transition (1); CancelNewest for nothing.
+GEN_STEP_CODE Command waitingIn(const PendingList& pending, int32_t slot) {
+	const Command* waiting = pending.waiting({slot == 0 ? CommandKind::ForceSection : CommandKind::Transition});
+	return waiting != nullptr ? *waiting : Command{CommandKind::CancelNewest};
+}
+
+} // namespace
+
+GEN_STEP_CODE void Generator::logWaitingMoves(SteeringLog* log) {
+	for (int32_t slot = 0; slot < 2; slot++) {
+		const Command now = waitingIn(pending_, slot);
+		if (now == waitingMoves_[slot]) {
+			continue;
+		}
+		waitingMoves_[slot] = now;
+		if (log != nullptr) {
+			const bool waits = now.kind != CommandKind::CancelNewest;
+			log->appendWaiting(nextStep_,
+			                   waits ? now : Command{slot == 0 ? CommandKind::ForceSection : CommandKind::Transition},
+			                   waits);
+		}
+	}
+}
+
+GEN_STEP_CODE void Generator::noteWaitingMoves() {
+	for (int32_t slot = 0; slot < 2; slot++) {
+		waitingMoves_[slot] = waitingIn(pending_, slot);
+	}
+}
+
+void Generator::replay(const LogRecord& record) {
+	switch (record.kind) {
+	case RecordKind::Command:
+		if (isArcMove(record.command)) {
+			pending_.cancel(record.command); // it leaves its slot as it lands
+		}
+		apply(record.command);
+		break;
+	case RecordKind::Waiting:
+		pending_.add(record.command);
+		break;
+	case RecordKind::NotWaiting:
+		pending_.cancel(record.command);
+		break;
+	case RecordKind::SoundPath:
+	case RecordKind::SoundDropped:
+		break;
+	}
+}
+
+void Generator::startPiece(const PieceStart& start) {
+	begin(start.recipe, start.seed, start.takes, start.first, start.onDrop);
+	arc_.carryHold(start.held);
+}
+
+GEN_STEP_CODE void Generator::beginDecision() {
+	events_.beginStep();
+	cutParts_ = 0; // set again by a SetSound or SetKey landing on this step
+}
+
+GEN_STEP_CODE void Generator::decideLanded() {
+	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
 		endAtStop(); // a cut landed: its line is the start step
 		return;

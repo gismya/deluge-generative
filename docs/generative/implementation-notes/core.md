@@ -43,7 +43,9 @@ otherwise.
   so the restarted run opens its own piece at its step 0 (spec §17.3); the sink's `restartPiece()` runs between the two,
   where the ended piece's header is still the newest (AS IT BEGAN reads it there).
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
-  (ADR 0005), so an effect done anywhere else is lost on replay.
+  (ADR 0005), so an effect done anywhere else is lost on replay. A decision that reads the pending list breaks replay
+  unless the log says when that command waits: only Arc moves do today (`waitingMove()`, `lastGroovePhrase()`), and
+  `logWaitingMoves()` logs their slots (RecordKind::Waiting/NotWaiting). A new reader of another slot needs the same.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
