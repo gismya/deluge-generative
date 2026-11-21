@@ -591,6 +591,26 @@ describe genre_data("Every built-in genre", $ {
 		expect(fits(8, 12)).to_be_false();
 	});
 
+	it("rejects a looping Chord graph whose half-phrase loop doesn't hold 2 whole chords, or whose chances are off 0-1000 (spec §7.4)", _ {
+		constexpr ChordMove moves[] = {{0, 4, 10}};
+		auto valid = [&](uint8_t bars, uint8_t phraseBars, int16_t loop, int16_t half) {
+			const ChordGraph graph{
+			    .moves = moves, .cadenceTarget = 4, .barsPerChord = bars, .loopChance = loop, .halfLoopChance = half};
+			return harmonyValid(Genre{.phraseBars = phraseBars, .harmony = {.graph = &graph}});
+		};
+		expect(valid(2, 8, 333, 333)).to_be_true();
+		expect(valid(1, 8, 0, 0)).to_be_true();
+		expect(valid(4, 16, 1000, 1000)).to_be_true();
+		expect(valid(4, 8, 333, 333)).to_be_false();  // a half-phrase loop of one chord
+		expect(valid(8, 8, 333, 0)).to_be_false();    // a phrase-long chord can't loop
+		expect(valid(16, 8, 333, 333)).to_be_false(); // nor one longer than the phrase
+		expect(valid(2, 6, 333, 333)).to_be_false();  // half of 6 bars isn't whole 2-bar chords
+		expect(valid(2, 8, 1001, 333)).to_be_false();
+		expect(valid(2, 8, 333, -1)).to_be_false();
+		expect(valid(2, 8, 333, 1001)).to_be_false();
+		expect(valid(4, 8, -1, 333)).to_be_true(); // no loop: the walk as before
+	});
+
 	it("rejects an Extension order that doesn't try each Extension once, or tries the 6 before the 7 (spec §7.4)", _ {
 		auto valid = [](ExtensionOrder order) { return harmonyValid(Genre{.harmony = {.extensionOrder = order}}); };
 		using enum Extension;

@@ -65,7 +65,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(1);
+		expect(psyGenre.version).to_equal(2);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -108,6 +108,18 @@ describe psytrance("Psytrance", $ {
 			expect(std::string(part.name)).to_equal(std::get<2>(roster[p]));
 		}
 		expect(rosterFits(psyGenre)).to_be_true();
+	});
+
+	it("ghosts step 10 of the Lead's tier-1 riff X.88.88.X.88.8.8, as notes/132.md meant (listening round 2, QM2)", _ {
+		int32_t riffs = 0;
+		for (const Pattern& pattern : psyGenre.parts[kLeadPart].pool) {
+			if (pattern.tier == 1 && pattern.length == 16 && pattern.importance[2] != 0 && pattern.importance[8] != 0) {
+				riffs++;
+				expect(pattern.level[3] == VelocityLevel::Ghost).to_be_true();
+				expect(pattern.level[10] == VelocityLevel::Ghost).to_be_true();
+			}
+		}
+		expect(riffs).to_equal(1);
 	});
 
 	it("plays 138–146 BPM in Minor, Phrygian or Harmonic Minor, straight, in 16-bar phrases, with an empty Harmony slot", _ {
