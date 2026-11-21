@@ -53,7 +53,8 @@ public:
 	           SongWriter& writer, bool skipIntro = false);
 	/// Capture (spec §17.1): replays `piece` of a steering log from its header, each logged entry applied at its step
 	/// as it landed live (spec §2.6), up to the end of the piece's span: where it ended, or where the log was cut
-	/// (spec §17.2). No LENGTH rule: the log says where End landed. The log must not change until done. The song is
+	/// (spec §17.2). No LENGTH rule: the log says where End landed. The log must not change until done, and no move may
+	/// be under way (SteeringLog::finishCompaction() first: a piece partway through one is torn). The song is
 	/// cut where the piece changes (spec §17.6), and split at a Section line once its size estimate passes
 	/// `splitBudget` bytes (spec §17.5).
 	void beginReplay(Generator& generator, const SteeringLog::Piece& piece, SongWriter& writer,
