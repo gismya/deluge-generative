@@ -517,11 +517,12 @@ describe sound_swap("Sound swaps", $ {
 	context("a chosen preset", _ {
 		it("preloads as a re-roll's, with its path, on a synth part with nothing pending", _ {
 			Playing t;
-			const SoundPath path = pathOf("SYNTHS/ACID.XML");
-			expect(t.sounds.canChoose(kAcid, path) == Press::Preloading).to_be_true();
-			expect(t.sounds.choose(kAcid, path) == Press::Preloading).to_be_true();
+			const SoundChoice choice{.path = pathOf("SYNTHS/ACID.XML")};
+			expect(t.sounds.canChoose(kAcid, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Preloading).to_be_true();
 			expect(t.sounds.preloads.back().source == Source::Chosen).to_be_true();
 			expect(t.sounds.preloads.back().chosen).to_equal(std::string("SYNTHS/ACID.XML"));
+			expect(t.sounds.preloads.back().lane == Lane::None).to_be_true();
 			expect(t.sounds.has("gen_sound_press part=1 source=chosen token=1")).to_be_true();
 			expect(t.sounds.canStart(kAcid) == Press::Ignored).to_be_true(); // pending
 			t.sounds.endPreload();
@@ -530,14 +531,48 @@ describe sound_swap("Sound swaps", $ {
 
 		it("is refused as canChoose() says: Ignored, then Pending, then Busy", _ {
 			Playing t;
-			const SoundPath path = pathOf("SYNTHS/ACID.XML");
-			expect(t.sounds.choose(kAcid, SoundPath{}) == Press::Ignored).to_be_true();
-			expect(t.sounds.choose(kDrums, path) == Press::Ignored).to_be_true();
+			const SoundChoice choice{.path = pathOf("SYNTHS/ACID.XML")};
+			expect(t.sounds.choose(kAcid, SoundChoice{}) == Press::Ignored).to_be_true();
+			expect(t.sounds.choose(kDrums, choice) == Press::Ignored).to_be_true();
 			t.sounds.jobAhead = true;
-			expect(t.sounds.choose(kAcid, path) == Press::Busy).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Busy).to_be_true();
 			t.sounds.held = [] { return true; };
-			expect(t.sounds.choose(kAcid, path) == Press::Pending).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Pending).to_be_true();
 			expect(t.sounds.canStart(kDrums) == Press::Pending).to_be_true();
+			expect(t.sounds.preloads.empty()).to_be_true();
+		});
+	});
+
+	context("a chosen lane sound", _ {
+		it("preloads the Kit part's whole Output as a re-roll's, with the lane and its path", _ {
+			Playing t;
+			expect(t.sounds.canStart(kDrums) == Press::Preloading).to_be_true(); // the lane list opens
+			const SoundChoice choice{.path = pathOf("SAMPLES/MINE/Kick.wav"), .lane = Lane::Kick};
+			expect(t.sounds.canChoose(kDrums, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.choose(kDrums, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.preloads.back().part).to_equal(kDrums);
+			expect(t.sounds.preloads.back().source == Source::Chosen).to_be_true();
+			expect(t.sounds.preloads.back().chosen).to_equal(std::string("SAMPLES/MINE/Kick.wav"));
+			expect(t.sounds.preloads.back().lane == Lane::Kick).to_be_true();
+			expect(t.sounds.has("gen_sound_press part=0 source=chosen token=1")).to_be_true();
+			expect(t.sounds.canStart(kDrums) == Press::Ignored).to_be_true(); // pending: KIT cancels it first
+			t.sounds.endPreload();
+			expect(t.sounds.waiting(kDrums)).to_be_true();
+		});
+
+		it("is refused for a lane its part doesn't play, and as a chosen preset is: Busy, then Pending", _ {
+			Playing t;
+			const SoundPath path = pathOf("SAMPLES/MINE/Kick.wav");
+			expect(t.sounds.choose(kAcid, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Ignored).to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Riser}) == Press::Ignored)
+			    .to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.lane = Lane::Kick}) == Press::Ignored).to_be_true();
+			t.sounds.jobAhead = true;
+			expect(t.sounds.canStart(kDrums) == Press::Busy).to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Busy).to_be_true();
+			t.sounds.held = [] { return true; };
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Pending)
+			    .to_be_true();
 			expect(t.sounds.preloads.empty()).to_be_true();
 		});
 	});

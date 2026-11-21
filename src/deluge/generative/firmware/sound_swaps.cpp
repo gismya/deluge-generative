@@ -48,8 +48,8 @@ namespace {
 PLACE_SDRAM_BSS SoundPicks stagedPicks;
 PLACE_SDRAM_BSS SoundPicks incomingPicks;
 PLACE_SDRAM_BSS SoundPicks previousPicks;
-/// The path the preset browser chose, for the preload it submits (spec §13.5).
-PLACE_SDRAM_BSS SoundPath chosenPath;
+/// The sound a Perform browser chose, for the preload it submits (spec §13.5).
+PLACE_SDRAM_BSS SoundChoice chosenSound;
 
 /// Copies `part`'s picks, its preset and its lanes' samples, from `from` to `to`.
 void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, SoundPicks& to) {
@@ -67,7 +67,7 @@ class SoundJob final : public Job {
 public:
 	SoundJob() : Job(Kind::Live) {}
 
-	/// Before each submit. A Chosen source's path is in `chosenPath`.
+	/// Before each submit. A Chosen source's choice is in `chosenSound`.
 	void prepare(int32_t part, SoundSwaps::Source source, uint8_t token) {
 		part_ = part;
 		source_ = source;
@@ -97,8 +97,9 @@ public:
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
 		}
 		else if (source_ == SoundSwaps::Source::Chosen) {
-			// The browser's preset, whether or not the palette lists it.
-			if (!choosePartSound(*genre, part_, chosenPath, stagedPicks)) {
+			// The browser's preset or lane file, whether or not the palette lists it. The Kit's other lanes keep
+			// theirs.
+			if (!chooseSound(*genre, part_, chosenSound, stagedPicks)) {
 				return JobOutcome::Failed;
 			}
 		}
@@ -258,9 +259,9 @@ bool SoundSwaps::preloadRunning() const {
 	return runner.active() == &soundJob;
 }
 
-bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen) {
+bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundChoice* chosen) {
 	if (chosen != nullptr) {
-		chosenPath = *chosen;
+		chosenSound = *chosen;
 	}
 	soundJob.prepare(part, source, token);
 	return runner.submit(soundJob);

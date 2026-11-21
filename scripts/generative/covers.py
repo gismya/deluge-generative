@@ -95,6 +95,7 @@ BUILDERS = {
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
     "gen_browser": (),
+    "gen_browser_preview": (),  # the previewed path
     "gen_log": (),  # at=stop or at=phrase, literals beside it
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_compose": (),  # the outcome's name
@@ -128,6 +129,9 @@ BUILDERS = {
         "src/deluge/generative/perform/perform_steering.h",
     ),  # keySetName()
     "gen_keyboard": ("src/deluge/generative/perform/keyboard_page.*",),
+    "gen_lane_list": (
+        "src/deluge/generative/core/palette_file.*",
+    ),  # lanePaletteName()
     "gen_leave_menu": (),
     "gen_macropage": _SCREEN,
     "gen_mem": (  # the callers' tags: before_entry, after_leave, after_free, before_sound, before_transition

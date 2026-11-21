@@ -21,8 +21,8 @@
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::Generator;
+using deluge::generative::SoundChoice;
 using deluge::generative::SoundControl;
-using deluge::generative::SoundPath;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
@@ -262,13 +262,42 @@ void PerformView::openPresetBrowser(int32_t part) {
 	// A held row lets go once the browser has opened (a failed open leaves Perform on top). A held End pad needs
 	// nothing: the browser is the current UI from the start of its opened(), which reads the card, so a release
 	// delivered meanwhile isn't a tap (endPadActs()); it still lets go of the hold.
-	if (performPresetBrowser.open(part)) {
+	if (performSoundBrowser.open(part, deluge::generative::Lane::None,
+	                             deluge::generative::perform::BrowseKind::Preset)) {
 		letGoOfHeldPart();
 	}
 }
 
-void PerformView::chooseSound(int32_t part, const SoundPath& path) {
-	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
+void PerformView::openLaneList(int32_t part) {
+	if (currentUIMode != UI_MODE_NONE) {
+		return;
+	}
+	if (soundSwaps.pending(part)) {
+		soundPress(part, false); // KIT again cancels the part's sound (spec §10.7)
+		return;
+	}
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "lanes", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
+		return;
+	}
+	deluge::gui::menu_item::generative::setLaneListPart(part);
+	openMenu(&deluge::gui::menu_item::generative::laneListMenu, "LANES", false);
+}
+
+void PerformView::openLaneBrowser(int32_t part, deluge::generative::Lane lane,
+                                  deluge::generative::perform::BrowseKind kind) {
+	// Checked again: the runner may have taken a job (freeing a swapped-out sound) since the list opened.
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "browser", false, press);
+		return;
+	}
+	performSoundBrowser.open(part, lane, kind);
+}
+
+void PerformView::chooseSound(int32_t part, const SoundChoice& choice) {
+	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, choice); }));
 	refreshClipPage();
 }
 

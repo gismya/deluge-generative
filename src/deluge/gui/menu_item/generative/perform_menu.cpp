@@ -31,6 +31,7 @@
 #include "gui/menu_item/generative/row_value.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
+#include "gui/ui/browser/perform_sound_browser.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
@@ -197,6 +198,42 @@ public:
 private:
 	static const char* shown() {
 		return l10n::get(kGlideNames[static_cast<int32_t>(performAdapter.steering().glide())]);
+	}
+};
+
+// ---- BROWSER PREVIEW ----
+
+/// Indexed by perform::BrowserPreview.
+constexpr l10n::String kPreviewNames[] = {
+    l10n::String::STRING_FOR_OFF,
+    l10n::String::STRING_FOR_WHEN_STOPPED,
+    l10n::String::STRING_FOR_ALWAYS,
+};
+static_assert(std::size(kPreviewNames) == static_cast<size_t>(perform::BrowserPreview::Always) + 1);
+
+/// BROWSER PREVIEW: whether the preset and lane browsers play the file under the cursor (spec §13.3), kept until
+/// power-off.
+class BrowserPreviewItem final : public Selection {
+public:
+	using Selection::Selection;
+	deluge::vector<std::string_view> getOptions(OptType /*optType*/) override {
+		deluge::vector<std::string_view> options;
+		for (l10n::String name : kPreviewNames) {
+			options.push_back(l10n::getView(name));
+		}
+		return options;
+	}
+	void readCurrentValue() override { setValue(PerformSoundBrowser::previewSetting()); }
+	void writeCurrentValue() override {
+		PerformSoundBrowser::setPreviewSetting(getValue<perform::BrowserPreview>());
+		TEST_EVENT("gen_browser_preview_setting %d", static_cast<int>(PerformSoundBrowser::previewSetting()));
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
+
+private:
+	static const char* shown() {
+		return l10n::get(kPreviewNames[static_cast<int32_t>(PerformSoundBrowser::previewSetting())]);
 	}
 };
 
@@ -423,6 +460,7 @@ PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::Strin
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
 PLACE_SDRAM_BSS ScaleItem scaleItem{l10n::String::STRING_FOR_SCALE};
 PLACE_SDRAM_BSS GlideItem glideItem{l10n::String::STRING_FOR_GLIDE};
+PLACE_SDRAM_BSS BrowserPreviewItem browserPreviewItem{l10n::String::STRING_FOR_BROWSER_PREVIEW};
 
 static_assert(deluge::generative::kMaxParts == 6, "one TakeItem per part slot below");
 PLACE_SDRAM_BSS TakeItem takeItems[deluge::generative::kMaxParts] = {TakeItem{0}, TakeItem{1}, TakeItem{2},
@@ -459,7 +497,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
     {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
-     &octavesMenu, &resetPartBiasItem, &restartMenu},
+     &octavesMenu, &resetPartBiasItem, &restartMenu, &browserPreviewItem},
 };
 
 void refreshPerformMenu() {

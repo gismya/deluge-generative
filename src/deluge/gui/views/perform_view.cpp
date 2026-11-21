@@ -176,13 +176,20 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	}
 	if (b == SYNTH || b == KIT) {
 		// The focused part's new sound at the phrase line; SHIFT, its previous sound. SYNTH on a synth part opens the
-		// preset browser instead (spec §13.5).
+		// preset browser instead, and KIT on a Drums or FX part the lane list (spec §13.5).
 		if (on && focusedPart() >= 0) {
-			if (b == SYNTH && !Buttons::isShiftButtonPressed() && SoundSwaps::synthPart(focusedPart())) {
+			const bool synth = SoundSwaps::synthPart(focusedPart());
+			const bool shift = Buttons::isShiftButtonPressed();
+			if (!shift && ((b == SYNTH && synth) || (b == KIT && !synth))) {
 				if (inCardRoutine) {
 					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 				}
-				openPresetBrowser(focusedPart());
+				if (synth) {
+					openPresetBrowser(focusedPart());
+				}
+				else {
+					openLaneList(focusedPart());
+				}
 			}
 			else {
 				soundPress(focusedPart(), Buttons::isShiftButtonPressed());
