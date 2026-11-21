@@ -31,6 +31,9 @@ namespace deluge::generative::firmware::card_log_spike {
 /// at the piece's end), and busy mode (64 B per step instead of 5, to sample many writes).
 void setChunk(uint32_t bytes);
 void setSyncEach(bool on);
+/// #448 condition 5: a simulated card stall of `ms` every 2 s (0: off); steady 4 KB writes + f_sync every 500 ms.
+void setStall(uint32_t ms);
+void setSteady(bool on);
 void setBusy(bool on);
 
 /// From the tick: steps decided, a piece opening. Counters only, no card access.

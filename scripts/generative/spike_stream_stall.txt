@@ -1,0 +1,131 @@
+# SPIKE #448 condition 5: a long sample streamed from the card (an audio clip of GENTEST/GSTRx.WAV, 16 s stereo
+# 16-bit, a fresh file each case so nothing is cached) while the card is held for 100-800 ms every 2 s
+# (cardlog_stallN, simulated: currentlyAccessingCard set and the scheduler yielded to, as in a card wait), or 4 KB
+# writes with an f_sync every 500 ms (cardlog_steady). gen_stall/gen_steady carry the late-cluster counts.
+# needs: GENTEST/GSTRA..F.XML and .WAV on the card
+start_state
+# case A: no stall (baseline)
+load song GENTEST/GSTRA.XML
+expect event song_loaded path=GENTEST/GSTRA.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+wait 12500
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500
+# case B: cardlog_stall100
+load song GENTEST/GSTRB.XML
+expect event song_loaded path=GENTEST/GSTRB.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+hold cardlog_stall100
+wait 12500
+release cardlog_stall100
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500
+# case C: cardlog_stall200
+load song GENTEST/GSTRC.XML
+expect event song_loaded path=GENTEST/GSTRC.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+hold cardlog_stall200
+wait 12500
+release cardlog_stall200
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500
+# case D: cardlog_stall400
+load song GENTEST/GSTRD.XML
+expect event song_loaded path=GENTEST/GSTRD.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+hold cardlog_stall400
+wait 12500
+release cardlog_stall400
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500
+# case E: cardlog_stall800
+load song GENTEST/GSTRE.XML
+expect event song_loaded path=GENTEST/GSTRE.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+hold cardlog_stall800
+wait 12500
+release cardlog_stall800
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500
+# case F: cardlog_steady
+load song GENTEST/GSTRF.XML
+expect event song_loaded path=GENTEST/GSTRF.XML within=60
+start_state
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 300
+hold cardlog_steady
+wait 12500
+release cardlog_steady
+expect event gen_steady cleaned within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+hold cardlog_stall100
+expect event gen_stall set ms=100 within=5
+release cardlog_stall100
+wait 500

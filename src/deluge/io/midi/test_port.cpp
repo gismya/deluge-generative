@@ -293,6 +293,11 @@ constexpr Hold kHolds[] = {
     /// SPIKE: an f_sync after every chunk, or only at the piece's end
     {"cardlog_sync", [](bool on) { deluge::generative::firmware::card_log_spike::setSyncEach(on); }},
     /// SPIKE: 64 B per step instead of 5, to sample many writes
+    {"cardlog_stall100", [](bool on) { deluge::generative::firmware::card_log_spike::setStall(on ? 100 : 0); }},
+    {"cardlog_stall200", [](bool on) { deluge::generative::firmware::card_log_spike::setStall(on ? 200 : 0); }},
+    {"cardlog_stall400", [](bool on) { deluge::generative::firmware::card_log_spike::setStall(on ? 400 : 0); }},
+    {"cardlog_stall800", [](bool on) { deluge::generative::firmware::card_log_spike::setStall(on ? 800 : 0); }},
+    {"cardlog_steady", [](bool on) { deluge::generative::firmware::card_log_spike::setSteady(on); }},
     {"cardlog_busy", [](bool on) { deluge::generative::firmware::card_log_spike::setBusy(on); }},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},

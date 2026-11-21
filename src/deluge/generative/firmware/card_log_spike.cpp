@@ -19,6 +19,8 @@
 
 #include "generative/firmware/card_log_spike.h"
 #include "OSLikeStuff/scheduler_api.h"
+#include "deluge.h"
+#include "extern.h"
 #include "fatfs/fatfs.hpp"
 #include "io/midi/test_port.h"
 #include "io/midi/test_port_render.h"
@@ -70,6 +72,21 @@ struct Window {
 };
 Window window;
 uint32_t worstEver = 0; ///< ticks, since the hold went on
+
+// Stall test (#448 condition 5): every 2 s the task holds the card for `stallMs` without touching it, as a card
+// that stays busy does (currentlyAccessingCard set, the scheduler yielded to), so no Cluster loads meanwhile.
+// `steady`: every 500 ms one 4 KB write and an f_sync to /GENTEST/CSTEADY.BIN.
+uint32_t stallMs = 0;
+bool steady = false;
+uint32_t lastStall = 0;
+uint32_t lastSteady = 0;
+FIL steadyFile;
+bool steadyOpen = false;
+uint32_t stalls = 0;
+uint32_t stallMaxUs = 0;
+bool neverDone() {
+	return false;
+}
 
 const char* path(uint32_t index) {
 	return index == 0 ? "/GENTEST/CLOG0.BIN" : "/GENTEST/CLOG1.BIN";
@@ -158,8 +175,59 @@ void openFile() {
 	window.openMax = std::max(window.openMax, since(t));
 }
 
+void stallTask() {
+	const uint32_t now = getSystemTicks();
+	if (stallMs != 0 && since(lastStall) / kTicksPerUs >= 2'000'000) {
+		lastStall = now;
+		const uint32_t late = TestPort::renderTiming.lateClusters;
+		const uint32_t unloaded = TestPort::renderTiming.unloadedStarts;
+		currentlyAccessingCard = 1;
+		yieldingRoutineWithTimeoutForSD(neverDone, stallMs / 1000.);
+		currentlyAccessingCard = 0;
+		const uint32_t us = since(now) / kTicksPerUs;
+		stalls++;
+		stallMaxUs = std::max(stallMaxUs, us);
+		TEST_EVENT("gen_stall n=%lu ms=%lu us=%lu late=%lu unloaded=%lu late_total=%lu",
+		           static_cast<unsigned long>(stalls), static_cast<unsigned long>(stallMs),
+		           static_cast<unsigned long>(us),
+		           static_cast<unsigned long>(TestPort::renderTiming.lateClusters - late),
+		           static_cast<unsigned long>(TestPort::renderTiming.unloadedStarts - unloaded),
+		           static_cast<unsigned long>(TestPort::renderTiming.lateClusters));
+	}
+	if (steady && buffer != nullptr && since(lastSteady) / kTicksPerUs >= 500'000) {
+		lastSteady = now;
+		if (!steadyOpen) {
+			steadyOpen = f_open(&steadyFile, "/GENTEST/CSTEADY.BIN", FA_WRITE | FA_CREATE_ALWAYS) == FR_OK;
+		}
+		if (steadyOpen) {
+			const uint32_t late = TestPort::renderTiming.lateClusters;
+			UINT written = 0;
+			f_write(&steadyFile, buffer, 4096, &written);
+			f_sync(&steadyFile);
+			const uint32_t us = since(now) / kTicksPerUs;
+			stalls++;
+			stallMaxUs = std::max(stallMaxUs, us);
+			if (us > 20'000 || TestPort::renderTiming.lateClusters != late) {
+				TEST_EVENT("gen_steady us=%lu late=%lu late_total=%lu", static_cast<unsigned long>(us),
+				           static_cast<unsigned long>(TestPort::renderTiming.lateClusters - late),
+				           static_cast<unsigned long>(TestPort::renderTiming.lateClusters));
+			}
+		}
+	}
+	if (!steady && steadyOpen) {
+		f_close(&steadyFile);
+		f_unlink("/GENTEST/CSTEADY.BIN");
+		steadyOpen = false;
+		TEST_EVENT("gen_steady cleaned ops=%lu max_us=%lu late_total=%lu unloaded_total=%lu",
+		           static_cast<unsigned long>(stalls), static_cast<unsigned long>(stallMaxUs),
+		           static_cast<unsigned long>(TestPort::renderTiming.lateClusters),
+		           static_cast<unsigned long>(TestPort::renderTiming.unloadedStarts));
+	}
+}
+
 void task() {
 	const uint32_t t = getSystemTicks();
+	stallTask();
 	if (chunk == 0) {
 		if (fileOpen || hadFile[0] || hadFile[1]) {
 			closeFile(consumed);
@@ -220,6 +288,30 @@ void setChunk(uint32_t bytes) {
 	chunk = std::min(bytes, kMaxChunk);
 	window = {};
 	worstEver = 0;
+}
+
+void setStall(uint32_t ms) {
+	setChunk(chunk); // allocates the buffer and adds the task
+	if (buffer == nullptr) {
+		void* p = GeneralMemoryAllocator::get().allocLowSpeed(kMaxChunk + CACHE_LINE_SIZE * 2);
+		if (p != nullptr) {
+			buffer = static_cast<char*>(p) + CACHE_LINE_SIZE;
+			for (uint32_t i = 0; i < kMaxChunk; i++) {
+				buffer[i] = static_cast<char>('A' + i % 26);
+			}
+		}
+	}
+	stallMs = ms;
+	stalls = 0;
+	stallMaxUs = 0;
+	TEST_EVENT("gen_stall set ms=%lu late_total=%lu unloaded_total=%lu", static_cast<unsigned long>(ms),
+	           static_cast<unsigned long>(TestPort::renderTiming.lateClusters),
+	           static_cast<unsigned long>(TestPort::renderTiming.unloadedStarts));
+}
+
+void setSteady(bool on) {
+	setStall(stallMs);
+	steady = on;
 }
 
 void setSyncEach(bool on) {
