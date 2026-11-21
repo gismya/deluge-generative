@@ -170,8 +170,11 @@ MenuItem* LaneRow::selectButtonPress() {
 		return NO_NAVIGATION;
 	}
 	if (gen::laneTakesPreset(currentRecipe.palette(), *lane)) {
+		// SAMPLE or SYNTH PRESET first (spec §13.5). Entered here: the sound editor drops what a leaf row's
+		// selectButtonPress() returns.
 		kindLane = *lane;
-		return &kindMenu; // SAMPLE or SYNTH PRESET first (spec §13.5)
+		soundEditor.enterSubmenu(&kindMenu);
+		return NO_NAVIGATION;
 	}
 	performView.openLaneBrowser(listPart, *lane, BrowseKind::Sample);
 	return NO_NAVIGATION;

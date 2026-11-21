@@ -59,9 +59,9 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
+expect event /gen_browser_preview sounding=1 playing=0 path=(?P=kick)$/ within=5
 expect event /gen_browser open part=0 lane=kick kind=sample at=(?P=kick)$/ within=10
 expect ui=generative_sound_browser
-expect event /gen_browser_preview sounding=1 playing=0 path=(?P=kick)$/ within=5
 encoder 3 1
 expect event /gen_browser at=SAMPLES\/.+\.(wav|WAV|aif|aiff)$/ within=5
 expect event /gen_browser_preview sounding=1 playing=0 path=SAMPLES\// within=5
@@ -107,8 +107,8 @@ wait 50
 button SELECT_ENC up
 expect event /gen_browser chose part=0 path=(?P=chosen) lane=kick$/ within=5
 expect ui=generative_perform within=5
-expect event gen_press chosen part=0 previous=0 result=0 within=5
-expect event gen_sound_press part=0 source=chosen
+expect event gen_sound_press part=0 source=chosen within=5
+expect event gen_press chosen part=0 previous=0 result=0
 expect event /gen_sound DRUMS KICK pick mode=\d+ prio=\d+ (?P=chosen)$/ within=20
 expect events kept within=20
 expect event gen_sound_swap part=0 stopped within=30
@@ -121,8 +121,8 @@ wait 50
 button KIT up
 wait 50
 button SHIFT up
-expect event gen_press sound part=0 previous=1 result=0 within=5
-expect event gen_sound_press part=0 source=previous
+expect event gen_sound_press part=0 source=previous within=5
+expect event gen_press sound part=0 previous=1 result=0
 expect event /gen_sound DRUMS KICK \w+ mode=\d+ prio=\d+ (?P=kick)$/ within=20
 expect event gen_sound_swap part=0 stopped within=30
 
@@ -135,8 +135,8 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect ui=generative_perform within=5
-expect event gen_press sound part=0 previous=0 result=0 within=5
-expect event gen_sound_press part=0 source=roll
+expect event gen_sound_press part=0 source=roll within=5
+expect event gen_press sound part=0 previous=0 result=0
 expect event gen_sound_swap part=0 stopped within=30
 
 # ---- Playing, under WHEN STOPPED: the browser doesn't preview. A chosen sample waits for its line, and KIT then
@@ -154,8 +154,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_browser open part=0 lane=kick within=10
 expect event gen_browser_preview off playing=1 within=5
+expect event gen_browser open part=0 lane=kick within=10
 encoder 3 1
 expect event gen_browser_preview off playing=1 within=5
 button SELECT_ENC down
@@ -199,8 +199,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_browser open part=0 lane=kick within=10
 expect event /gen_browser_preview sounding=1 playing=1 path=SAMPLES\// within=5
+expect event gen_browser open part=0 lane=kick within=10
 
 # ---- OFF: nothing previews, stopped or not ----
 button BACK down
@@ -223,6 +223,15 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+# A stop drops the focus (spec §13.5): lock DRUMS again
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -250,8 +259,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_browser open part=0 lane=kick within=10
 expect event gen_browser_preview off playing=0 within=5
+expect event gen_browser open part=0 lane=kick within=10
 button BACK down
 wait 50
 button BACK up

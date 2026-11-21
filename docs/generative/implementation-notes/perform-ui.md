@@ -123,6 +123,9 @@ otherwise.
   `close()` lands back on the list. A choice closes the list too (`soundEditor.exitCompletely()`) before
   `chooseSound()`, so Perform is on top for the press's popup. Where a browser opens is `perform::browserStart()`
   (`generative/perform/sound_browser.h`): the pick's folder, the palette's, then SYNTHS or SAMPLES.
+- Trap: a leaf row in the sound editor (`shouldEnterSubmenu()` false) has its `selectButtonPress()` called, and what
+  it returns is dropped (`SoundEditor::buttonAction()`). A row that leads to a submenu enters it itself with
+  `soundEditor.enterSubmenu()` (the lane list's FX rows, `perform_lanes.cpp`).
 - Trap: `Browser::arrivedInNewFolder()`'s `defaultDirToAlsoTry` is **created** (`f_mkdir`) when it is missing too.
   Pass only a top folder (SYNTHS, SAMPLES) there: a palette folder (`SYNTHS/GENERATIVE/FX`) would be made on a card
   without the pack. The lane browser tries the palette folder with no default first, then the top folder.

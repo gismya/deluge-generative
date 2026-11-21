@@ -142,8 +142,7 @@ bool PerformSoundBrowser::opened() {
 		           currentDir.get(), item != nullptr ? item->filename.get() : "");
 	}
 #endif
-	preview();
-	return true;
+	return true; // arrivedInNewFolder() has previewed the file it selected (folderContentsReady())
 }
 
 void PerformSoundBrowser::focusRegained() {
