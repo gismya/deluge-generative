@@ -161,6 +161,8 @@ BUILDERS = {
         "src/deluge/generative/perform/clip_page.*",
         "src/deluge/generative/perform/recipe_name.*",
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
+    "gen_restart": (),  # as_it_is or as_it_began
+    "gen_restart_preload": (),  # how AS IT BEGAN's preload ended
     "gen_restart_press": (),  # what the press did
     "gen_retire_referenced": (),
     "gen_rings": (),
