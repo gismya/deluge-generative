@@ -53,6 +53,7 @@ bool PerformView::opened() {
 #if ENABLE_SYSEX_TEST
 	shownRings_[0] = '\0';
 	shownKeyboard_[0] = '\0';
+	shownPunches_[0] = '\0';
 	shownFaders_[0] = '\0';
 	shownClip_[0] = '\0';
 	shownSections[0] = '\0';
@@ -467,10 +468,11 @@ void PerformView::assertPageLeds() {
 
 ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	// SHIFT + a main pad: the sound editor at the printed param, on the focused part's Sound or the song FX (spec
-	// §13.7), from Perform or under the sound editor and Perform's menus, which hand their pads here (F7).
+	// §13.7; the song FX on stock Performance view), from Perform or under the sound editor and Perform's menus,
+	// which hand their pads here (F7).
 	if (velocity != 0 && x < kDisplayWidth && Buttons::isShiftButtonPressed()
 	    && deluge::generative::perform::shiftOpensSoundEditor(page_, x, rowFromY(y))) {
-		return openSoundEditorAtPad(focusedPart(), x, y);
+		return openSoundEditorAtPad(deluge::generative::perform::shiftEditorPart(page_, focusedPart()), x, y);
 	}
 	if (getCurrentUI() == &soundEditor && !editorOpen_) {
 		// A Perform menu: a pad press closes it, and does nothing more (spec §13.6).

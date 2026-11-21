@@ -103,7 +103,8 @@ otherwise.
   replaces a part's Output must end in `bindKnobs()` (the swap reaction and `releaseOutput()` both do).
 - Every pad press under the sound editor and Perform's menus reaches `PerformView::padAction()` (F7):
   `shiftOpensSoundEditor()` (`generative/perform/grid_page.h`) picks the SHIFT + main pad shortcuts, leaving out the
-  KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR; a Perform menu (`editorOpen_` false) closes on a
+  KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR, and `shiftEditorPart()` the target (the song FX on
+  stock Performance view, whatever is focused); a Perform menu (`editorOpen_` false) closes on a
   press. A SHIFT + pad that doesn't move an open editor (a param the target lacks) puts the current Clip back.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after

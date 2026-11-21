@@ -152,6 +152,10 @@ bool freeHeld();
 /// for its presses (refused with QUEUE FULL, whatever the phase). A script can't fill the queue itself: it holds 64
 /// presses, and every step decision takes them.
 bool queueFullHeld();
+/// Test hook for a steering log too full to keep the playing piece's header (spec §13.2, §17.2): true from a "hold
+/// log_full" line until "release log_full". AS IT BEGAN, playing, then finds no header to restart from. A script can't
+/// fill the log quickly: it takes about 45 minutes of busy steering (capture_h13.txt).
+bool logFullHeld();
 /// Test hook for delay setups (spec §10.6, §11.4): true from a "hold delay_setups" line until "release delay_setups".
 /// Perform entry then plays a test copy of the chosen genre that gives its Bass, its Drums kit (kit level) and the
 /// Snare row a delay setup, a dotted half on the Bass so that at 60 BPM the render fills the largest delay buffers

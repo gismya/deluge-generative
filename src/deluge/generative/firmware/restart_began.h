@@ -39,9 +39,9 @@ public:
 	/// RESTART ▸ AS IT BEGAN, in task context, with its popup. Playing: a restart already ahead is cancelled (RESTART
 	/// CANCELLED), as X+PLAY's press again does; refused with CHANGE PENDING while a transition is pending, and BUSY
 	/// while the runner is or the Outputs to free are full (spec §12.10); else the changed sounds preload, and the
-	/// restart queues once they have (RESTART). A piece whose header the log couldn't keep restarts AS IT IS. Stopped:
-	/// the last piece's start state is restored and it starts, once its sounds have loaded; with no piece of the
-	/// Current Recipe logged, it is PLAY.
+	/// restart queues once they have (RESTART). A piece whose header the log couldn't keep is refused with LOG FULL.
+	/// Stopped: the last piece's start state is restored and it starts, once its sounds have loaded; with no piece of
+	/// the Current Recipe logged, it is PLAY.
 	void press();
 	/// Whether its preload runs (the working animation's rule, BACK's newest action).
 	[[nodiscard]] bool preloading() const;
