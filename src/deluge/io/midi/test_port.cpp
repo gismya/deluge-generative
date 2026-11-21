@@ -137,6 +137,7 @@ bool holdingCardError = false;      ///< See cardErrorHeld()
 bool holdingPreload = false;        ///< See preloadHeld()
 bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
 bool holdingCommitted = false;      ///< See soundCommittedHeld()
+bool holdingPresetPreview = false;  ///< See presetPreviewHeld()
 bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
 bool holdingFree = false;           ///< See freeHeld()
@@ -256,6 +257,8 @@ constexpr Hold kHolds[] = {
     {"card_routine", [](bool on) { holdingCardRoutine = on; }},
     /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
     {"sound_committed", [](bool on) { holdingCommitted = on; }},
+    /// Holds a preset preview's build at its start until it is cancelled, or lets it go (see presetPreviewHeld())
+    {"preset_preview", [](bool on) { holdingPresetPreview = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
     /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
@@ -1202,6 +1205,10 @@ bool goldenHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool presetPreviewHeld() {
+	return holdingPresetPreview;
 }
 
 bool cardRoutineHeld() {

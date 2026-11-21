@@ -31,9 +31,15 @@ namespace deluge::generative::perform {
 enum class BrowserPreview : uint8_t { Off, WhenStopped, Always };
 constexpr BrowserPreview kDefaultBrowserPreview = BrowserPreview::WhenStopped;
 
-/// Whether a browser previews under `setting`, with the transport `playing`.
+/// Whether a browser previews a sample under `setting`, with the transport `playing`.
 [[nodiscard]] constexpr bool previews(BrowserPreview setting, bool playing) {
 	return setting == BrowserPreview::Always || (setting == BrowserPreview::WhenStopped && !playing);
+}
+
+/// Whether a browser previews a preset: while stopped only, at WHEN STOPPED or ALWAYS (#443). A preset previews by
+/// loading into an Output of the part, which a start would have to undo.
+[[nodiscard]] constexpr bool previewsPresets(BrowserPreview setting, bool playing) {
+	return setting != BrowserPreview::Off && !playing;
 }
 
 /// What a browser lists: card presets, or audio files.

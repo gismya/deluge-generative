@@ -486,6 +486,59 @@ class RunTogether(unittest.TestCase):
         self.assertEqual([row[1] for row in checks.rows], ["PASS"] * 4)
 
 
+class HardwareOnlySkips(unittest.TestCase):
+    def test_a_probe_scripts_note_keeps_its_skip_count(self):
+        text = "x.txt: 3 expects, 0 failed\n[test-port-emu] 3 checks, 0 failed, 2 hardware-only skipped; logs in o\n"
+        self.assertEqual(
+            check_all.SCRIPT_RESULT(text), "3 checks, 0 failed, 2 hardware-only skipped"
+        )
+        self.assertEqual(
+            check_all.SCRIPT_RESULT("4 checks, 1 failed; logs in o"),
+            "4 checks, 1 failed",
+        )
+
+    def test_the_table_counts_them_under_its_rows(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        with mock.patch.object(check_all, "LOGS", logs.name):
+            checks = check_all.Checks()
+        checks.rows = [
+            (
+                "delugemu a.txt",
+                "PASS",
+                1.0,
+                "3 checks, 0 failed, 2 hardware-only skipped",
+                "",
+            ),
+            ("delugemu b.txt", "PASS", 1.0, "4 checks, 0 failed", ""),
+            (
+                "delugemu c.txt",
+                "FAIL",
+                1.0,
+                "5 checks, 1 failed, 3 hardware-only skipped",
+                "",
+            ),
+        ]
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            self.assertEqual(checks.table(), 1)
+        self.assertIn(
+            "hardware-only expects skipped under delugemu: 5, in 2 scripts (they run on the Deluge)",
+            printed.getvalue(),
+        )
+
+    def test_with_none_the_table_says_nothing_of_them(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        with mock.patch.object(check_all, "LOGS", logs.name):
+            checks = check_all.Checks()
+        checks.rows = [("delugemu b.txt", "PASS", 1.0, "4 checks, 0 failed", "")]
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            checks.table()
+        self.assertNotIn("hardware-only", printed.getvalue())
+
+
 class FindBase(unittest.TestCase):
     def setUp(self):
         logs = tempfile.TemporaryDirectory()

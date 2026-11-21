@@ -118,6 +118,9 @@ public:
 	/// `genre`, the roster's; "outgoing" for the transition's outgoing roster, "other" for any other Sound.
 	[[nodiscard]] const char* partName(const Sound* sound, const Genre* genre) const;
 #endif
+	/// Plays `event`'s note on, or its note off, on `part`'s Output (its lane's drum on a Kit), in Perform's song.
+	/// The preset preview's audition note goes through it too, on an Output no roster holds (spec §13.3).
+	static void playNote(const PartOutput& part, const Event& event, bool on);
 
 private:
 	void note(const Roster& parts, const Event& event, bool on);
@@ -287,6 +290,8 @@ private:
 	friend class FreeJob;
 	friend class LeaveJob;
 	friend class SoundJob;
+	friend class PresetPreview;
+	friend class PresetPreviewJob;
 	friend class SoundSwaps;
 	friend class RestartBegan;
 	friend class BeganJob;

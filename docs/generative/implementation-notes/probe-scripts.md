@@ -34,6 +34,14 @@ otherwise.
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
   `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
   never on.
+- A timing or voice-count figure (H16 `voices=`/`culls=`, H1's ns, `gen_ext_tempo bpm=`, the MIDI feedback rate)
+  measures delugemu's speed under host load as much as the firmware: such expects failed beside other agents' runs
+  and passed alone in about 20 PRs (#417). Write them `hardware_only expect ...`; `covers.py --check` fails one that
+  pins a `covers.TIMING_FIELDS` field without it, so a new script gets told. Under delugemu a `hardware_only expect
+  event` still waits for its kind (keep it starting with the kind), so a press after it comes no sooner than on the
+  Deluge; a `hardware_only` no_event or state expect is skipped. It can't capture, and it moves the event search only
+  where it matches: a `mark` right after one keeps a different place under delugemu. A field that any value matches
+  (`voices=\d+`, `gen_h16 culls=`) pins nothing and needs no prefix.
 - An `expect event` or `expect no_event` TEXT matches as one piece of the event's text: `gen_focus locked=-1`
   never matches `gen_focus part=-1 locked=-1`, so an `expect no_event` written that way passes whatever happens. Use
   the `/regex/` form (`/gen_focus part=-?[0-9]+ locked=-1/`) for fields that aren't adjacent, and run a new no_event
@@ -126,6 +134,15 @@ otherwise.
   press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
   that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
   presses whose handler refuses instead (`perform_recipe_save.txt`).
+- A preset preview's build reports none of a build's events (`gen_sound`, `gen_sound_level`, ...: each sits under
+  `if (!previewBuild())`, `card_sounds.h`), so `gen_sound ACID` expects see only the part's own loads; its own
+  `gen_preset_preview built ... path=` says what it loaded. Keep the event kind literal at the start of a
+  `TEST_EVENT` format: a `%s` prefix there hides the kind from `covers.py --check`, which fails check_all. `hold
+  preset_preview` parks every preview build at its start until it is cancelled or released.
+- Trap: a BACK hold whose press closed a browser at its top folder also closes the lane list under it (the
+  `BACK_MENU_EXIT` timer fires on the list); from a subfolder only the browser closes. Which one depends on the card
+  (with the pack, an FX lane's SYNTH PRESET browser opens in a subfolder): follow the hold with one BACK tap, which on
+  Perform with nothing queued does nothing (`perform_preset_preview.txt`).
 - Late audio (#449): the time between render starts and a render's length don't tell whether the audio ran dry. Only
   `AudioEngine::routine()` copies rendered audio into the 2.9 ms TX ring, and a call may copy audio rendered earlier
   without rendering. `gen_audio` measures the ring's margin at each entry, and `drift=` checks it against the DMA's own

@@ -160,7 +160,12 @@ otherwise.
   way to pick a sound is a `Source`, not a second job or swap path. The preload links the new Output into Perform's song
   while it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a
   cancel after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
-  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
+  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job. One exception: the preset
+  preview (#443) frees its own Output from the browser's frame (`PresetPreview::freeShown()`). That Output was never in
+  a roster, so nothing but the preview points at it, and `freePartOutput()`'s waits per Kit row run only the audio
+  routine and cluster loading (`routineWithClusterLoading()`), never another job's task, so no job sees the song's
+  lists half changed. Only the `deleteUnusedAudioFiles()` after it waits for a free runner: a job may be loading
+  samples that no Output holds yet.
 - `SoundSwapAdapter` is a concept, and the lifecycle is a CRTP base: a concept can't see private members, so the
   adapter's members are public (the firmware's say "only the lifecycle calls them"), and the concept is checked in
   `adapter()` and by a `static_assert` after each adapter, where the type is complete (not in the template's
