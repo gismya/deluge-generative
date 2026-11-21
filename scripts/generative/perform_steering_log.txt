@@ -5,8 +5,8 @@
 # a synth or kit clip. Last, a REGENERATE by BUILD INTO A DROP: the incoming roster's piece opens at the start
 # step.
 #
-# gen_log_piece pieces= header= used= full= dropping= us=: a piece opened, its header's bytes, the bytes of dropped
-# pieces still to close (spec §17.4) and what opening it cost in the tick. gen_log at=phrase|stop pieces= used= piece= header=
+# gen_log_piece pieces= header= used= full= us=: a piece opened, its header's bytes, the ring's bytes not yet on the
+# card (spec §17.2) and what opening it cost in the tick. gen_log at=phrase|stop pieces= used= piece= header=
 # records= end= cut= full=: the log's use at each phrase line and at a stop. Busy steering: the macros on F8 (Energy on
 # the upper gold knob, Density on the lower), each turned a fast detent (4 knob steps) about every 16th, and the song's
 # F1 filter knobs between them (song params, logged as SetParam).
@@ -27,7 +27,7 @@ wait 50
 button PLAY up
 expect playing=true
 # Acid techno's roster: the song, a synth part each for ACID and DRONE, two Kits and their rows.
-expect event /^gen_log_piece pieces=1 header=(?P<header>[0-9]{4,5}) used=[0-9]+ full=0 dropping=0 us=[0-9]+$/
+expect event /^gen_log_piece pieces=1 header=(?P<header>[0-9]+) used=[0-9]+ full=0 us=[0-9]+$/
 
 # ---- Busy steering for two phrases: a macro turn about every 16th, a song filter turn every bar ----
 button F8 down
@@ -590,21 +590,22 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-# The stopped piece wasn't marked: it went, so the log holds the new piece's header alone.
-expect event /^gen_log_piece pieces=1 header=(?P=header) used=(?P=header) full=0 dropping=0 us=[0-9]+$/
+# The stopped piece wasn't marked: it went, so the log holds the new piece alone. The F1 knobs edited the song's params,
+# so its header holds the song's snapshot too (spec §17.2): larger than the first piece's.
+expect event /^gen_log_piece pieces=1 header=(?P<edited>[0-9]+) used=[0-9]+ full=0 us=[0-9]+$/
 wait 2000
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event /^gen_log at=stop pieces=1 used=(?P=header) piece=(?P=header) header=(?P=header) records=0 end=[0-9]+ cut=-1 full=0$/
+expect event /^gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=edited) records=0 end=[0-9]+ cut=-1 full=0$/
 
 # ---- REGENERATE → BUILD INTO A DROP: the outgoing piece ends at the start step, the incoming roster's opens ----
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event /^gen_log_piece pieces=1 header=(?P=header) used=(?P=header) full=0 dropping=0 us=[0-9]+$/
+expect event /^gen_log_piece pieces=1 header=(?P=edited) used=[0-9]+ full=0 us=[0-9]+$/
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -618,7 +619,7 @@ expect event gen_confirm regenerate style=0 result=0
 expect event gen_transition start style=0 within=90
 # The incoming roster's own header, after the handover's picks (Transitions::adoptPending()); the outgoing piece wasn't
 # marked, so it went.
-expect event /^gen_log_piece pieces=1 header=(?P<incoming>[0-9]{4,5}) used=(?P=incoming) full=0 dropping=0 us=[0-9]+$/ within=5
+expect event /^gen_log_piece pieces=1 header=(?P<incoming>[0-9]+) used=[0-9]+ full=0 us=[0-9]+$/ within=5
 button PLAY down
 wait 50
 button PLAY up

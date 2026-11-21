@@ -20,6 +20,7 @@
 #include "generative/core/steering_log.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
+#include "generative/firmware/capture_files.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/compose_song.h"
 #include "generative/firmware/current_recipe.h"
@@ -79,8 +80,6 @@ public:
 
 	JobOutcome run(Chunks& chunks) override {
 		chunks_ = &chunks;
-		// No move may be under way while a piece is read (spec §17.4); the log changes no more.
-		log_->finishCompaction();
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(CaptureWork));
 		if (memory == nullptr) {
 			error_ = Error::INSUFFICIENT_RAM;
@@ -90,7 +89,21 @@ public:
 		JobOutcome outcome = JobOutcome::Done;
 		for (int32_t i = perform::nextKept(*log_, keep_, -1); i >= 0 && outcome == JobOutcome::Done;
 		     i = perform::nextKept(*log_, keep_, i)) {
-			outcome = buildPiece(log_->piece(i), chunks);
+			// Each piece read back from its file (spec §17.2): the log in RAM holds only its info.
+			const uint32_t id = log_->piece(i).id();
+			uint8_t* image = nullptr;
+			int32_t bytes = 0;
+			error_ = cardLog.load(id, &image, &bytes);
+			if (error_ != Error::NONE) {
+				outcome = JobOutcome::Failed; // as a failed save (spec §17.7)
+				break;
+			}
+			outcome = buildPiece(SteeringLog::Piece(image), chunks);
+			piece_ = nullptr;
+			delugeDealloc(image);
+			if (outcome == JobOutcome::Done) {
+				cardLog.remove(id); // its songs are saved: the piece is captured
+			}
 		}
 		freeWork();
 		return outcome;
@@ -102,6 +115,7 @@ public:
 			building_ = nullptr;
 		}
 		performAdapter.freeLog();
+		cardLog.clean(true); // unmarked files go; a marked piece not saved stays for the next entry (spec §17.4)
 		// The last saved song in arranger view, or a blank session (spec §17.7): setUIForLoadedSong() picks it.
 		setUIForLoadedSong(currentSong);
 		currentUIMode = UI_MODE_NONE;

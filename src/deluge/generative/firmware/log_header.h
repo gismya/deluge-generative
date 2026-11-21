@@ -53,9 +53,19 @@ constexpr int32_t kCableValueBytes =
     sizeof(CableValue::destination) + sizeof(CableValue::value) + sizeof(CableValue::source);
 static_assert(kCableValueBytes == 9);
 
-/// The piece's header: the Current Recipe's sound picks, and every param on the song and on each part's Output and
-/// Kit rows, as they are now. In the tick, at the piece's step 0 decision.
-void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song);
+/// The piece's header: the Current Recipe's sound picks, and every param on the song (if `songEdited`) and on the
+/// Output and Kit rows of each part in `editedParts` (a bit a part), as they are now (spec §17.2, H13 option A): an
+/// Output not edited since it loaded holds its preset's values, which Capture loads from the same file. In the tick,
+/// at the piece's step 0 decision.
+void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song,
+                    uint8_t editedParts, bool songEdited);
+/// Which Output `manager` belongs to: a part's (its clip's or a Kit row's), kSongParams for the song's, or -1.
+int32_t editedOutput(const ParamManager* manager, const Roster& roster, const Genre& genre, Song& song);
+/// The parts whose Output (or Kit rows) `piece`'s header snapshot holds, a bit a part, and whether it holds the song's.
+uint8_t snapshotParts(const SteeringLog::Piece& piece, bool* song);
+/// The song's params back to what a Perform song is built with (an edited song AS IT BEGAN can't read back), its
+/// tempo as it is.
+void resetSongParams(Song& song);
 
 /// The param snapshot of `piece`'s header written back (AS IT BEGAN, spec §13.2): each param on the song and on each
 /// part's Output and Kit rows that differs from the snapshot takes its value, and each patch cable whose destination

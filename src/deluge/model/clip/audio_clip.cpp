@@ -1218,6 +1218,17 @@ someError:
 		reader.exitTag();
 	}
 
+	if (!paramManager.containsAnyMainParamCollections()) {
+		// A clip written without its <params> (a song not saved by a Deluge) would play with no param set, and the
+		// first read of one freezes with E410: give it the defaults a new audio track's clip gets
+		// (Song::createNewAudioOutput()).
+		error = paramManager.setupUnpatched();
+		if (error != Error::NONE) {
+			goto someError;
+		}
+		GlobalEffectableForClip::initParamsForAudioClip(&paramManager);
+	}
+
 	return Error::NONE;
 }
 

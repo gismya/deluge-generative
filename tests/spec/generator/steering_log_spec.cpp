@@ -12,6 +12,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -19,16 +20,18 @@ using namespace harness;
 
 namespace {
 
-/// A buffer of `bytes` and its log, with nothing in it.
-struct Buffer {
-	explicit Buffer(int32_t size) : bytes(static_cast<size_t>(size)), log(bytes.data(), size) {}
-	std::vector<uint8_t> bytes;
-	SteeringLog log;
+/// A log with a ring of `ring` bytes (and a header area of `header`) and its store, with nothing in it. Nothing drains
+/// unless the spec says so (store.drain()), so appending without one fills the ring as a card stall would.
+struct Buffer : StoredLog {
+	explicit Buffer(int32_t ring, int32_t header = kLogHeaderBytes) : StoredLog(header, ring) {}
 };
 
 std::vector<LogRecord> records(const SteeringLog& log, int32_t piece) {
+	// The images stay for the spec's run: a SoundPath's path points into one.
+	static std::vector<std::unique_ptr<PieceImage>> images;
+	images.push_back(std::make_unique<PieceImage>(image(log, piece)));
 	std::vector<LogRecord> out;
-	log.piece(piece).forEachRecord([&](const LogRecord& record) { out.push_back(record); });
+	images.back()->piece().forEachRecord([&](const LogRecord& record) { out.push_back(record); });
 	return out;
 }
 
@@ -46,6 +49,7 @@ PieceStart startOf(uint32_t seed) {
 /// Three marked pieces, seeds 1 to 3, each with a pick and two records, ended.
 void threeMarked(SteeringLog& log) {
 	for (uint32_t seed = 1; seed <= 3; seed++) {
+		drainLog(&log); // the last piece's header is on the card before the next opens
 		log.beginPiece(startOf(seed));
 		log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
 		log.append(2, macro(Macro::Energy, static_cast<int32_t>(seed)));
@@ -68,7 +72,7 @@ bool twoIntact(const SteeringLog& log, int32_t first) {
 	for (int32_t i = first; i < first + 2; i++) {
 		const auto seed = static_cast<int32_t>(log.piece(i).start().seed);
 		char path[kMaxSoundPath];
-		intact = intact && log.piece(i).pick(pickSlot(1), path) && std::string{path} == "SYNTHS/GEN ACID";
+		intact = intact && image(log, i).piece().pick(pickSlot(1), path) && std::string{path} == "SYNTHS/GEN ACID";
 		const std::vector<LogRecord> read = records(log, i);
 		intact = intact && read.size() == 2 && read[0].command == macro(Macro::Energy, seed) && read[0].step == 2
 		         && read[1].command == macro(Macro::Density, seed) && read[1].step == 5
@@ -208,7 +212,8 @@ describe steering_log("The steering log", $ {
 			const int32_t params[2] = {5, -5};
 			b.log.addSnapshot(params, sizeof params);
 			b.log.append(0, macro(Macro::Energy, 9));
-			const SteeringLog::Piece piece = b.log.piece(0);
+			const PieceImage pieceImage = image(b.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			expect(piece.start().recipe == start.recipe).to_be_true();
 			expect(piece.start().seed).to_equal(42u);
 			expect(piece.start().takes == start.takes).to_be_true();
@@ -240,7 +245,6 @@ describe steering_log("The steering log", $ {
 			expect(b.log.pieces()).to_equal(1);
 			expect(b.log.piece(0).endStep()).to_equal(10);
 			expect(b.log.piece(0).ended() == PieceEnd::Stopped).to_be_true();
-			const int32_t oneUsed = b.log.used();
 
 			b.log.beginPiece(startOf(2));
 			expect(b.log.pieces()).to_equal(1);
@@ -248,6 +252,7 @@ describe steering_log("The steering log", $ {
 			b.log.mark(true);
 			b.log.append(5, macro(Macro::Energy, 2));
 			b.log.endPiece(20, PieceEnd::Outro);
+			b.store.drain(); // its header is on the card: the next piece opens
 
 			b.log.beginPiece(startOf(3));
 			expect(b.log.pieces()).to_equal(2);
@@ -256,15 +261,15 @@ describe steering_log("The steering log", $ {
 			expect(b.log.piece(0).ended() == PieceEnd::Outro).to_be_true();
 			expect(b.log.piece(1).start().seed).to_equal(3u);
 			expect(b.log.piece(1).marked()).to_be_false();
-			expect(b.log.used()).to_be_greater_than(oneUsed);
-			// Unmarked, the current piece goes when the next begins, and its room with it.
+			// Unmarked, the current piece goes when the next begins, and its file with it.
 			b.log.append(7, macro(Macro::Density, 4));
 			b.log.endPiece(30, PieceEnd::Stopped);
-			const int32_t twoUsed = b.log.used();
+			const uint32_t unmarked = b.log.piece(1).id();
 			b.log.beginPiece(startOf(4));
 			expect(b.log.pieces()).to_equal(2);
 			expect(b.log.piece(1).start().seed).to_equal(4u);
-			expect(b.log.used()).to_be_less_than(twoUsed);
+			b.store.drain();
+			expect(b.store.files.contains(unmarked)).to_be_false();
 			expect(records(b.log, 0).size()).to_equal(1u);
 			expect(records(b.log, 0)[0].step).to_equal(5);
 		});
@@ -361,21 +366,21 @@ describe steering_log("The steering log", $ {
 		});
 
 		it("keeps the whole header when the piece's first record is the one that doesn't fit", _ {
-			Buffer b(1024);
+			Buffer b(kDroppedReserve + 2); // 2 bytes for records: none fits
 			b.log.beginPiece(startOf(1));
 			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
-			const int32_t left = 1024 - kDroppedReserve - b.log.used();
-			std::vector<uint8_t> snapshot(static_cast<size_t>(left - 3 - 2)); // 2 bytes stay: no record fits
+			std::vector<uint8_t> snapshot(600);
 			b.log.addSnapshot(snapshot.data(), static_cast<int32_t>(snapshot.size()));
 			const int32_t header = b.log.piece(0).headerBytes();
 			expect(b.log.full()).to_be_false();
 			expect(b.log.append(5, macro(Macro::Energy, 1))).to_be_false();
 			expect(b.log.piece(0).cutAt()).to_equal(5);
 			expect(b.log.piece(0).headerBytes()).to_equal(header);
-			expect(b.log.used()).to_equal(header); // the header alone: the piece starts at 0
+			expect(b.log.used()).to_equal(0); // no record: the piece holds its header alone
 			char path[kMaxSoundPath];
-			expect(b.log.piece(0).pick(pickSlot(1), path)).to_be_true();
+			expect(image(b.log, 0).piece().pick(pickSlot(1), path)).to_be_true();
 		});
+
 
 		it("keeps a drop when a later record on its step is the one that doesn't fit", _ {
 			Buffer b(1024);
@@ -436,7 +441,7 @@ describe steering_log("The steering log", $ {
 		});
 
 		it("cuts a piece whose header doesn't fit at its step 0", _ {
-			Buffer b(256);
+			Buffer b(1024, 256);
 			b.log.beginPiece(startOf(1));
 			std::vector<uint8_t> snapshot(300);
 			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
@@ -445,11 +450,11 @@ describe steering_log("The steering log", $ {
 			expect(b.log.piece(0).cutAt()).to_equal(0);
 			// None of its header stays: a pick without its snapshot can't be built.
 			char path[kMaxSoundPath];
-			expect(b.log.piece(0).pick(pickSlot(1), path)).to_be_false();
+			expect(image(b.log, 0).piece().pick(pickSlot(1), path)).to_be_false();
 			expect(b.log.append(0, macro(Macro::Energy, 1))).to_be_false();
 		});
 
-		it("opens no piece when even its opening doesn't fit behind the marked ones", _ {
+		it("opens no piece while the kept piece's header is still on its way to the card", _ {
 			Buffer b(1024);
 			b.log.beginPiece(startOf(1));
 			b.log.mark(true);
@@ -465,27 +470,6 @@ describe steering_log("The steering log", $ {
 			expect(b.log.piece(0).start().seed).to_equal(1u);
 		});
 
-		it("holds 10 marked 5-minute pieces of busy steering in 128 KB (H13's sum, spec §20)", _ {
-			// Busy steering: a macro turned a knob step on every other step of a 5-minute piece at 128 BPM (2,560
-			// steps), sweeping its whole range, and the largest roster's 6 KB header.
-			Buffer b(128 * 1024);
-			std::vector<uint8_t> header(6 * 1024);
-			int32_t kept = 0;
-			for (int32_t piece = 0; piece < 20; piece++) {
-				b.log.beginPiece(startOf(static_cast<uint32_t>(piece)));
-				b.log.addSnapshot(header.data(), static_cast<int32_t>(header.size()));
-				for (int32_t step = 0; step < 2560; step += 2) {
-					b.log.append(step, macro(Macro::Energy, (step / 2 * kMacroUnitsPerKnobStep) % kMacroFull));
-				}
-				if (b.log.full()) {
-					break;
-				}
-				b.log.mark(true);
-				b.log.endPiece(2560, PieceEnd::Stopped);
-				kept++;
-			}
-			expect(kept).to_equal(10);
-		});
 	});
 
 	context("marks (§17.4)", _ {
@@ -503,6 +487,7 @@ describe steering_log("The steering log", $ {
 			b.log.endPiece(10, PieceEnd::Stopped);
 			expect(b.log.current()).to_equal(0); // the last piece, which the leave menu offers
 			expect(b.log.mark(true)).to_be_true();
+			b.store.drain();
 			b.log.beginPiece(startOf(2));
 			expect(b.log.pieces()).to_equal(2);
 			expect(b.log.current()).to_equal(1);
@@ -539,7 +524,7 @@ describe steering_log("The steering log", $ {
 			expect(b.log.piece(0).marked()).to_be_true();
 		});
 
-		it("drops an earlier unmarked piece at the next piece without moving anything, and marks it again until then", _ {
+		it("drops an earlier unmarked piece at the next piece, and marks it again until then", _ {
 			Buffer b(8192);
 			threeMarked(b.log);
 			// The first piece, unmarked from the CAPTURE menu: it stays until the next piece begins, and can be
@@ -549,201 +534,15 @@ describe steering_log("The steering log", $ {
 			expect(b.log.markPiece(0, true)).to_be_true();
 			expect(b.log.markPiece(0, false)).to_be_true();
 			expect(b.log.pieces()).to_equal(3);
-			const int32_t before = b.log.used();
-			const int32_t first = b.log.piece(0).bytes();
 
 			const uint32_t opened = b.log.opened();
+			b.store.drain();
 			b.log.beginPiece(startOf(4));
 			expect(b.log.opened()).to_equal(opened + 1);
 			expect(b.log.pieces()).to_equal(3);
-			expect(b.log.compacting()).to_be_true();
-			expect(b.log.droppedBytes()).to_be_greater_than(first - 1);
-			expect(b.log.droppedBytes()).to_be_less_than(first + 8); // its aligned room
-			expect(b.log.used()).to_be_greater_than(before); // nothing moved: the room isn't free yet
 			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 3, 4});
 			expect(b.log.current()).to_equal(2);
 			expect(b.log.markedPieces()).to_equal(2);
-		});
-
-		it("closes a dropped piece's room a bounded part a step while the new piece logs, marks and pieces intact", _ {
-			Buffer b(8192);
-			threeMarked(b.log);
-			b.log.markPiece(0, false);
-			b.log.beginPiece(startOf(4));
-			b.log.addPick(pickSlot(2), "SYNTHS/GEN NEW");
-			const int32_t dropped = b.log.droppedBytes();
-			const int32_t opened = b.log.used();
-			int32_t step = 0;
-			int32_t calls = 0;
-			bool intact = true;
-			while (b.log.compacting()) {
-				expect(b.log.append(step, macro(Macro::Motion, step))).to_be_true();
-				const int32_t moved = b.log.compactStep(64);
-				intact = intact && moved <= 64 + SteeringLog::openingBytes() && b.log.pieces() == 3 && seeds(b.log) == std::vector<uint32_t>{2, 3, 4}
-				         && b.log.piece(0).marked() && b.log.piece(1).marked() && !b.log.piece(2).marked()
-				         && b.log.current() == 2;
-				step++;
-				calls++;
-			}
-			expect(intact).to_be_true();
-			expect(calls).to_be_greater_than(2); // the move took several steps
-			expect(b.log.droppedBytes()).to_equal(0);
-			// The room is free: everything past the dropped piece came down by its bytes, records written meanwhile
-			// included.
-			expect(b.log.used()).to_be_less_than(opened);
-			expect(b.log.used() - (opened - dropped)).to_be_less_than(step * 4 + 1);
-			expect(twoIntact(b.log, 0)).to_be_true();
-			char path[kMaxSoundPath];
-			expect(b.log.piece(2).pick(pickSlot(2), path)).to_be_true();
-			expect(std::string{path}).to_equal(std::string{"SYNTHS/GEN NEW"});
-			// Offsets after the shift: the new piece keeps logging, reads back whole, and its count is right.
-			for (int32_t more = 0; more < 5; more++, step++) {
-				expect(b.log.append(step, macro(Macro::Motion, step))).to_be_true();
-			}
-			const std::vector<LogRecord> logged = records(b.log, 2);
-			expect(static_cast<int32_t>(logged.size())).to_equal(step);
-			expect(b.log.piece(2).recordCount()).to_equal(step);
-			bool inOrder = true;
-			for (int32_t i = 0; i < step; i++) {
-				inOrder = inOrder && logged[static_cast<size_t>(i)].step == i
-				          && logged[static_cast<size_t>(i)].command == macro(Macro::Motion, i);
-			}
-			expect(inOrder).to_be_true();
-			// And the next piece throws the new one (unmarked) away at once, from the end.
-			b.log.endPiece(step, PieceEnd::Stopped);
-			b.log.beginPiece(startOf(5));
-			expect(b.log.compacting()).to_be_false();
-			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 3, 5});
-		});
-
-		it("never stops a step inside a piece's opening, however many small pieces one step's budget reaches", _ {
-			for (int32_t extra : {2, 6, 40, 100}) {
-				Buffer b(8192);
-				threeMarked(b.log);
-				const int32_t kept = b.log.piece(1).bytes(); // a kept piece's room, about: the budget reaches past it
-				b.log.markPiece(0, false);
-				b.log.beginPiece(startOf(4));
-				int32_t step = 0;
-				bool intact = true;
-				while (b.log.compacting() && step < 200) {
-					b.log.append(step, macro(Macro::Motion, step));
-					step++;
-					b.log.compactStep(kept + extra);
-					intact = intact && seeds(b.log) == std::vector<uint32_t>{2, 3, 4}
-					         && b.log.piece(2).recordCount() == step && b.log.piece(0).recordCount() == 2
-					         && b.log.piece(1).recordCount() == 2;
-				}
-				expect(intact).to_be_true();
-				expect(b.log.compacting()).to_be_false();
-				expect(twoIntact(b.log, 0)).to_be_true();
-				const std::vector<LogRecord> logged = records(b.log, 2);
-				bool inOrder = static_cast<int32_t>(logged.size()) == step;
-				for (int32_t i = 0; inOrder && i < step; i++) {
-					inOrder = logged[static_cast<size_t>(i)].step == i
-					          && logged[static_cast<size_t>(i)].command == macro(Macro::Motion, i);
-				}
-				expect(inOrder).to_be_true();
-			}
-		});
-
-		it("keeps every logged step whole when the log cuts the new piece while a move is under way", _ {
-			for (int32_t budget : {1, 3, 7, 13, 40}) {
-				Buffer b(2048);
-				threeMarked(b.log);
-				b.log.markPiece(1, false);
-				b.log.beginPiece(startOf(4));
-				int32_t step = 0;
-				// Three records a step, a bounded move between steps, until the log cuts the piece.
-				while (b.log.logging()) {
-					for (int32_t r = 0; r < 3; r++) {
-						b.log.append(step, macro(static_cast<Macro>(r), step + r));
-					}
-					b.log.compactStep(budget);
-					step++;
-				}
-				b.log.finishCompaction();
-				expect(b.log.compacting()).to_be_false();
-				expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 3, 4});
-				const std::vector<LogRecord> logged = records(b.log, 2);
-				const int32_t cutAt = b.log.piece(2).cutAt();
-				expect(cutAt).to_be_greater_than(0);
-				expect(static_cast<int32_t>(logged.size())).to_equal(3 * cutAt);
-				expect(b.log.piece(2).recordCount()).to_equal(3 * cutAt);
-				bool whole = true;
-				for (size_t i = 0; i < logged.size(); i++) {
-					const auto r = static_cast<int32_t>(i % 3);
-					const auto at = static_cast<int32_t>(i / 3);
-					whole = whole && logged[i].step == at && logged[i].command == macro(static_cast<Macro>(r), at + r);
-				}
-				expect(whole).to_be_true();
-				expect(records(b.log, 1).size()).to_equal(2u); // the third piece, moved, intact
-			}
-		});
-
-		it("throws away the unmarked pieces at the end at once, an earlier dropped one among them", _ {
-			Buffer b(8192);
-			threeMarked(b.log);
-			b.log.markPiece(1, false);
-			b.log.markPiece(2, false);
-			const int32_t before = b.log.piece(0).bytes();
-			b.log.beginPiece(startOf(4));
-			expect(b.log.compacting()).to_be_false();
-			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 4});
-			expect(b.log.used()).to_be_less_than(before + 400);
-		});
-
-		it("drops the move under way when the piece it is closing ends up last, and logs on from there", _ {
-			Buffer b(8192);
-			threeMarked(b.log);
-			b.log.markPiece(1, false);
-			b.log.beginPiece(startOf(4)); // drops the second piece; the move starts
-			b.log.mark(true);
-			b.log.append(1, macro(Macro::Motion, 1));
-			b.log.compactStep(8);
-			expect(b.log.compacting()).to_be_true();
-			// The third and fourth pieces unmarked: at the next piece, everything from the second on goes at once.
-			b.log.markPiece(2, false);
-			b.log.markPiece(1, false);
-			b.log.endPiece(4, PieceEnd::Stopped);
-			b.log.beginPiece(startOf(5));
-			expect(b.log.compacting()).to_be_false();
-			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 5});
-			expect(b.log.append(2, macro(Macro::Energy, 7))).to_be_true();
-			expect(records(b.log, 1).size()).to_equal(1u);
-			expect(records(b.log, 0).size()).to_equal(2u);
-		});
-
-		it("opens no piece that finds no room while a dropped piece's room is still to close; the next one opens", _ {
-			Buffer b(4096);
-			b.log.beginPiece(startOf(1));
-			b.log.mark(true);
-			int32_t step = 0;
-			while (step < 300 && b.log.append(step, macro(Macro::Energy, step))) {
-				step++;
-			}
-			b.log.endPiece(step, PieceEnd::Stopped);
-			b.log.beginPiece(startOf(2));
-			b.log.mark(true);
-			while (b.log.append(step, macro(Macro::Energy, step))) {
-				step++;
-			}
-			b.log.endPiece(step, PieceEnd::Stopped);
-			b.log.markPiece(0, false);
-			b.log.beginPiece(startOf(3));
-			expect(b.log.current()).to_equal(-1);
-			expect(b.log.full()).to_be_true();
-			expect(b.log.compacting()).to_be_true();
-			int32_t steps = 0;
-			while (b.log.compacting() && steps < 1000) {
-				b.log.compactStep(256);
-				steps++;
-			}
-			expect(b.log.compacting()).to_be_false();
-			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2});
-			b.log.beginPiece(startOf(4));
-			expect(b.log.current()).to_equal(1);
-			expect(b.log.full()).to_be_false();
-			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 4});
 		});
 
 		it("takes marks again after an unmarked earlier piece made room at the next piece", _ {
@@ -784,6 +583,226 @@ describe steering_log("The steering log", $ {
 		});
 	});
 
+	context("on the card (§17.2)", _ {
+		it("hands the store each piece's opening, header and records in order, the header once whole, a step once past", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
+			LogChunk chunk;
+			expect(b.log.nextChunk(chunk, 4096)).to_be_false(); // the header may still grow
+			b.log.commitBefore(0); // step 0's decision: the header is whole
+			expect(b.log.nextChunk(chunk, 4096)).to_be_true();
+			expect(chunk.offset).to_equal(0);
+			expect(chunk.length).to_equal(static_cast<int32_t>(sizeof(PieceInfo))); // the opening alone
+			b.log.took(chunk);
+			expect(b.log.nextChunk(chunk, 4096)).to_be_true();
+			expect(chunk.offset).to_equal(static_cast<int32_t>(sizeof(PieceInfo)));
+			b.log.took(chunk);
+			expect(b.log.nextChunk(chunk, 4096)).to_be_false();
+			b.log.append(0, macro(Macro::Energy, 1));
+			b.log.append(3, macro(Macro::Energy, 2));
+			b.log.commitBefore(3); // step 3 is being decided: only step 0's record is final
+			expect(b.log.nextChunk(chunk, 4096)).to_be_true();
+			expect(chunk.offset).to_equal(b.log.piece(0).headerBytes());
+			const int32_t first = chunk.length;
+			b.log.took(chunk);
+			expect(b.log.nextChunk(chunk, 4096)).to_be_false();
+			b.log.endPiece(5, PieceEnd::Stopped); // everything is final
+			expect(b.log.nextChunk(chunk, 4096)).to_be_true();
+			expect(chunk.offset).to_equal(b.log.piece(0).headerBytes() + first);
+			b.log.took(chunk);
+			expect(b.log.allTaken(b.log.slotOf(0))).to_be_true();
+			expect(b.log.used()).to_equal(0);
+		});
+
+		it("rides out a card stall in RAM, and cuts the piece as a full log only when the ring fills (spec §17.2)", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			int32_t step = 0;
+			for (; step < 100; step++) {
+				b.log.commitBefore(step);
+				expect(b.log.append(step, macro(Macro::Energy, step % 50))).to_be_true();
+			}
+			b.log.commitBefore(step);
+			b.store.drain(); // the card is back: the ring empties
+			expect(b.log.used()).to_equal(0);
+			for (; b.log.append(step, macro(Macro::Energy, step % 50)); step++) {
+				b.log.commitBefore(step + 1);
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.piece(0).cutAt()).to_equal(step);
+			b.log.endPiece(step + 10, PieceEnd::Stopped);
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(static_cast<int32_t>(read.size())).to_equal(step);
+			expect(read.back().step).to_equal(step - 1);
+			// The next piece has the ring back once the card took the last one.
+			b.store.drain();
+			b.log.beginPiece(startOf(2));
+			expect(b.log.full()).to_be_false();
+			expect(b.log.append(0, macro(Macro::Energy, 1))).to_be_true();
+		});
+
+		it("cuts the playing piece when the card fails, and the file reads back up to its last whole step", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
+			b.log.mark(true);
+			int32_t step = 0;
+			for (; step < 40; step++) {
+				b.log.commitBefore(step);
+				b.log.append(step, macro(Macro::Energy, step));
+				b.log.append(step, macro(Macro::Density, step));
+			}
+			b.store.drain();
+			const int32_t stored = static_cast<int32_t>(b.store.files[b.log.piece(0).id()].size());
+			b.store.failFrom = stored + 7; // the card fills partway through the next write
+			for (; step < 80 && b.log.logging(); step++) {
+				b.log.commitBefore(step);
+				b.log.append(step, macro(Macro::Energy, step));
+				b.log.append(step, macro(Macro::Density, step));
+				b.store.drain();
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.storeFailing()).to_be_true();
+			expect(b.log.mark(true)).to_be_true(); // it was marked when the card cut it
+			b.log.endPiece(step, PieceEnd::Stopped);
+			const PieceImage file = b.store.stored(0);
+			expect(file.bytes.empty()).to_be_false();
+			const SteeringLog::Piece piece = file.piece();
+			// What the last flush stored, steps 0 to 38 (step 39 was being decided): none of the steps after it.
+			expect(piece.cutAt()).to_equal(39);
+			expect(piece.spanEnd()).to_equal(39);
+			std::vector<LogRecord> read;
+			piece.forEachRecord([&](const LogRecord& r) { read.push_back(r); });
+			expect(static_cast<int32_t>(read.size())).to_equal(78);
+			expect(read.back().step).to_equal(38);
+			char path[kMaxSoundPath];
+			expect(piece.pick(pickSlot(1), path)).to_be_true();
+		});
+
+		it("reads a piece cut short by a power-off back to its last whole step, or the last step a quiet stretch reached", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			for (int32_t step = 0; step < 200; step++) {
+				b.log.commitBefore(step);
+				if (step < 30 && step % 3 == 0) {
+					b.log.append(step, macro(Macro::Energy, step));
+				}
+			}
+			b.store.drain(); // the last flush before the power went
+			std::vector<uint8_t> file = b.store.files[b.log.piece(0).id()];
+			// Its info never said it ended; the steps after the last steering said how far it got.
+			expect(SteeringLog::readImage(file.data(), static_cast<int32_t>(file.size()))).to_be_true();
+			const SteeringLog::Piece quiet(file.data());
+			expect(quiet.ended() == PieceEnd::Stopped).to_be_true();
+			expect(quiet.spanEnd()).to_be_greater_than(198 - SteeringLog::kReachedEvery - 1);
+			expect(quiet.spanEnd()).to_be_less_than(200);
+			expect(quiet.recordCount()).to_equal(10);
+			// A record the card has only part of goes, with the rest of its step.
+			Buffer c(4096);
+			c.log.beginPiece(startOf(2));
+			for (int32_t step = 0; step < 6; step++) {
+				c.log.commitBefore(step);
+				c.log.append(step, macro(Macro::Energy, step));
+			}
+			c.log.commitBefore(6);
+			c.store.drain();
+			std::vector<uint8_t> torn = c.store.files[c.log.piece(0).id()];
+			torn.pop_back();
+			expect(SteeringLog::readImage(torn.data(), static_cast<int32_t>(torn.size()))).to_be_true();
+			const SteeringLog::Piece cut(torn.data());
+			expect(cut.cutAt()).to_equal(5);
+			expect(cut.recordCount()).to_equal(5);
+			// A header the card has only part of leaves the opening alone, cut at step 0.
+			std::vector<uint8_t> headerless(b.store.files[b.log.piece(0).id()].begin(),
+			                                b.store.files[b.log.piece(0).id()].begin() + sizeof(PieceInfo));
+			PieceInfo info;
+			std::memcpy(&info, headerless.data(), sizeof info);
+			info.headerBytes = sizeof(PieceInfo) + 40;
+			std::memcpy(headerless.data(), &info, sizeof info);
+			expect(SteeringLog::readImage(headerless.data(), static_cast<int32_t>(headerless.size()))).to_be_true();
+			expect(SteeringLog::Piece(headerless.data()).cutAt()).to_equal(0);
+		});
+
+		it("refuses an image of another format, or of a genre version this firmware doesn't have", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.endPiece(4, PieceEnd::Stopped);
+			b.store.drain();
+			const std::vector<uint8_t> good = b.store.files[b.log.piece(0).id()];
+			std::vector<uint8_t> file = good;
+			expect(SteeringLog::readImage(file.data(), static_cast<int32_t>(file.size()))).to_be_true();
+			expect(SteeringLog::Piece(file.data()).start().recipe.genre == acidRecipe().genre).to_be_true();
+			for (const int32_t field : {0, 1, 2}) {
+				file = good;
+				PieceInfo info;
+				std::memcpy(&info, file.data(), sizeof info);
+				if (field == 0) {
+					info.magic ^= 1;
+				}
+				else if (field == 1) {
+					info.format++;
+				}
+				else {
+					info.genreVersion++;
+				}
+				std::memcpy(file.data(), &info, sizeof info);
+				expect(SteeringLog::readImage(file.data(), static_cast<int32_t>(file.size()))).to_be_false();
+			}
+		});
+
+		it("takes marked pieces found on the card back as earlier marked pieces, its own ids going on past theirs", _ {
+			Buffer b(4096);
+			PieceInfo found;
+			found.id = 41;
+			found.bytes = sizeof(PieceInfo);
+			found.headerBytes = sizeof(PieceInfo);
+			found.endStep = 64;
+			found.ended = PieceEnd::Stopped;
+			found.start = startOf(9);
+			expect(b.log.adopt(found) >= 0).to_be_true();
+			expect(b.log.nextId()).to_equal(42u);
+			expect(b.log.current()).to_equal(-1); // not the current piece: RECORD can't unmark it
+			b.log.beginPiece(startOf(1));
+			expect(b.log.pieces()).to_equal(2);
+			expect(b.log.piece(0).marked()).to_be_true();
+			expect(b.log.piece(0).start().seed).to_equal(9u);
+			expect(b.log.piece(1).id()).to_equal(42u);
+			b.store.drain();
+			expect(b.store.files.contains(41)).to_be_false(); // on the card already: nothing is written again
+		});
+
+		it("drops a thrown-away piece's bytes still in RAM and gives its room back", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			for (int32_t step = 0; step < 30; step++) {
+				b.log.append(step, macro(Macro::Energy, step));
+			}
+			b.log.endPiece(30, PieceEnd::Stopped);
+			const uint32_t first = b.log.piece(0).id();
+			b.log.beginPiece(startOf(2)); // unmarked, the first piece goes, its records never stored
+			b.store.drain();
+			expect(b.store.files.contains(first)).to_be_false();
+			expect(b.log.used()).to_equal(0);
+		});
+
+		it("opens no piece when the table is full of marked pieces", _ {
+			Buffer b(4096);
+			for (int32_t i = 0; i < kMaxLogPieces; i++) {
+				b.store.drain();
+				b.log.beginPiece(startOf(static_cast<uint32_t>(i)));
+				b.log.mark(true);
+				b.log.endPiece(4, PieceEnd::Stopped);
+			}
+			b.store.drain();
+			b.log.beginPiece(startOf(99));
+			expect(b.log.full()).to_be_true();
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.pieces()).to_equal(kMaxLogPieces);
+		});
+	});
+
 	context("Perform's pieces", _ {
 		it("logs a param edit on the next undecided step, one value per param a step", _ {
 			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};
@@ -811,7 +830,8 @@ describe steering_log("The steering log", $ {
 			piece.driver.stop(piece.sink);
 			const SteeringLog& log = piece.log;
 			expect(log.pieces()).to_equal(1);
-			const SteeringLog::Piece p = log.piece(0);
+			const PieceImage pImage = image(log, 0);
+			const SteeringLog::Piece p = pImage.piece();
 			expect(p.start().seed).to_equal(3u);
 			expect(p.start().recipe.macros[Macro::Energy]).to_equal(acidRecipe().macros[Macro::Energy]);
 			expect(p.start().first == SectionKind::Groove).to_be_true();
@@ -869,14 +889,16 @@ describe steering_log("The steering log", $ {
 			if (piece.log.pieces() != 2) {
 				return; // piece(1) isn't there to read
 			}
-			const SteeringLog::Piece p = piece.log.piece(0);
+			const PieceImage pImage = image(piece.log, 0);
+			const SteeringLog::Piece p = pImage.piece();
 			expect(p.ended() == PieceEnd::Stopped).to_be_true();
 			expect(p.endStep()).to_equal(kStepsPerBar);
 			const std::vector<LogRecord> read = records(piece.log, 0);
 			expect(read.size()).to_equal(2u);
 			expect(read[0].step).to_equal(4);
 			// The restarted run: its own header (the Current Recipe at its step 0, from the Intro) and its steering.
-			const SteeringLog::Piece restarted = piece.log.piece(1);
+			const PieceImage restartedImage = image(piece.log, 1);
+			const SteeringLog::Piece restarted = restartedImage.piece();
 			expect(restarted.ended() == PieceEnd::Playing).to_be_true();
 			expect(restarted.start().recipe.macros[Macro::Density]).to_equal(31);
 			expect(restarted.start().first == SectionKind::Intro).to_be_true();
@@ -896,7 +918,8 @@ describe steering_log("The steering log", $ {
 			run.steer = steerAt({{40, {CommandKind::End, 0, 1}}});
 			Result result = play(run, 128);
 			expect(result.ended).to_be_true();
-			const SteeringLog::Piece p = entries.log.piece(entries.log.pieces() - 1);
+			const PieceImage pImage = image(entries.log, entries.log.pieces() - 1);
+			const SteeringLog::Piece p = pImage.piece();
 			expect(p.ended() == PieceEnd::Outro).to_be_true();
 			// The driver stops on the call that reaches the end line.
 			expect(p.endStep() * kTicksPerStep <= result.endedAt).to_be_true();
@@ -934,7 +957,8 @@ describe steering_log("The steering log", $ {
 			const SteeringLog& log = entries.log;
 			// The outgoing piece was unmarked: once the new one opened, it went. Mark it this time.
 			expect(log.pieces()).to_equal(1);
-			const SteeringLog::Piece incoming = log.piece(0);
+			const PieceImage incomingImage = image(log, 0);
+			const SteeringLog::Piece incoming = incomingImage.piece();
 			expect(incoming.start().onDrop).to_be_true();
 			expect(incoming.start().first == SectionKind::Groove).to_be_true();
 			expect(incoming.start().held).to_be_true();
@@ -955,7 +979,7 @@ describe steering_log("The steering log", $ {
 			t.runBars(4 * t.phraseSteps() / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			std::vector<LogRecord> glides;
-			entries.log.piece(0).forEachRecord([&](const LogRecord& r) {
+			image(entries.log, 0).piece().forEachRecord([&](const LogRecord& r) {
 				if (r.kind == RecordKind::Command && r.command.kind == CommandKind::TransitionTempo) {
 					glides.push_back(r);
 				}
@@ -987,7 +1011,7 @@ describe steering_log("The steering log", $ {
 			expect(t.lifecycle.cancel()).to_be_true();
 			t.runBars(2);
 			std::vector<LogRecord> glides;
-			entries.log.piece(entries.log.pieces() - 1).forEachRecord([&](const LogRecord& r) {
+			image(entries.log, entries.log.pieces() - 1).piece().forEachRecord([&](const LogRecord& r) {
 				if (r.kind == RecordKind::Command && r.command.kind == CommandKind::TransitionTempo) {
 					glides.push_back(r);
 				}
@@ -1012,7 +1036,8 @@ describe steering_log("The steering log", $ {
 			t.runBars(4 * phrase / kStepsPerBar);
 			const SteeringLog& log = entries.log;
 			expect(log.pieces()).to_equal(2);
-			const SteeringLog::Piece outgoing = log.piece(0);
+			const PieceImage outgoingImage = image(log, 0);
+			const SteeringLog::Piece outgoing = outgoingImage.piece();
 			expect(outgoing.ended() == PieceEnd::Transition).to_be_true();
 			expect(outgoing.endStep() * kTicksPerStep).to_equal(t.sink.startAt);
 			bool transition = false;
