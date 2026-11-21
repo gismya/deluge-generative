@@ -83,7 +83,6 @@ std::vector<ArcStep> arcSteps(const Recipe& recipe, uint32_t seed, int32_t count
 	return out;
 }
 
-/// A Control event's set and control.
 /// Over Pad chord changes: a pitch class the voicings on both sides share, held at its pitch, or moved an octave and
 /// struck again there (round 2's HOLD). The Pad played from a copy of Ambient whose holdSharedChance is `chance`.
 struct SharedTones {
@@ -130,6 +129,7 @@ SharedTones padSharedTones(int32_t chance) {
 	return out;
 }
 
+/// A Control event's set and control.
 using ControlKey = std::tuple<uint8_t, Lane, SoundControl>;
 
 ControlKey keyOf(const Event& e) {
