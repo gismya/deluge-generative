@@ -51,6 +51,10 @@ struct RenderTiming {
 		uint32_t runMaxCounts = 0; ///< Its longest run before an underrun.
 	};
 	LateTask lateTasks[4] = {};
+	/// The UI timers (TimerName) whose handler ran over 2 ms, and their longest run: the "ui routine" task's culprits.
+	static constexpr int32_t kUiTimers = 40;
+	uint16_t uiTimerSlow[kUiTimers] = {};
+	uint32_t uiTimerMaxCounts[kUiTimers] = {};
 	uint32_t renderGapMaxCounts = 0; ///< The longest span from one render's start to the next's.
 	uint32_t renderGaps[6] = {};     ///< Spans between render starts under 1, 2, 2.9, 5, 10 ms, and the rest.
 };
@@ -68,6 +72,8 @@ void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame);
 const char* taskStarted(const char* name);
 /// The scheduler's task `name` ran for `counts` (getSystemTicks()), and `caller` (taskStarted()) runs again.
 void taskRan(const char* name, uint32_t counts, const char* caller);
+/// UITimerManager ran UI timer `timer`'s handler for `counts` (getSystemTicks()).
+void uiTimerRan(int32_t timer, uint32_t counts);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

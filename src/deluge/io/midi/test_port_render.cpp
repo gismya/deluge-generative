@@ -112,6 +112,16 @@ void taskRan(const char* name, uint32_t counts, const char* caller) {
 	runningTask = caller;
 }
 
+void uiTimerRan(int32_t timer, uint32_t counts) {
+	if (timer < 0 || timer >= RenderTiming::kUiTimers) {
+		return;
+	}
+	renderTiming.uiTimerMaxCounts[timer] = std::max(renderTiming.uiTimerMaxCounts[timer], counts);
+	if (counts > 2 * 1000 * kCountsPerUs) {
+		renderTiming.uiTimerSlow[timer]++;
+	}
+}
+
 void voiceCulled(const Sound& sound) {
 	renderTiming.culls++;
 	renderTiming.lastCulled = &sound;

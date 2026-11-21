@@ -74,6 +74,14 @@ void ControlTiming::report(const char* ramps) {
 			           static_cast<unsigned long>(late.runMaxCounts / kCountsPerUs));
 		}
 	}
+	// The UI timers whose handler ran over 2 ms (TimerName's value), how often, and their longest run
+	for (int32_t timer = 0; timer < TestPort::RenderTiming::kUiTimers; timer++) {
+		if (render.uiTimerSlow[timer] > 0) {
+			TEST_EVENT("gen_audio_ui_timer timer=%ld over_2ms=%lu run_max_us=%lu", static_cast<long>(timer),
+			           static_cast<unsigned long>(render.uiTimerSlow[timer]),
+			           static_cast<unsigned long>(render.uiTimerMaxCounts[timer] / kCountsPerUs));
+		}
+	}
 	// The spike's measure (#447), for comparison: spans between render starts under 1, 2, 2.9, 5, 10 ms and more
 	TEST_EVENT("gen_render_gaps max_us=%lu gaps=%lu/%lu/%lu/%lu/%lu/%lu",
 	           static_cast<unsigned long>(render.renderGapMaxCounts / kCountsPerUs),
