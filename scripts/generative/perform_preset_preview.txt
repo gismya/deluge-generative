@@ -220,19 +220,31 @@ expect event /gen_browser open part=3 lane=riser kind=preset at=(?P<fx>SYNTHS\/.
 expect event /gen_preset_preview built part=3 error=0 ms=\d+ path=(?P=fx)$/ within=20
 expect event gen_preset_preview note part=3 lane=riser
 expect event gen_mem preset_preview
+# BACK taps: each goes up a folder (with the pack the browser opens in SYNTHS/GENERATIVE/FX, which a BACK leaves for
+# a folder, freeing the preview) or closes the browser at SYNTHS, then the lane list. Five cover either card: a tap on
+# Perform with nothing queued does nothing.
 button BACK down
-wait 800
+wait 50
 button BACK up
-expect event gen_browser closed within=5
-expect event gen_preset_preview freed part=3 within=5
-# The hold's timer closes the lane list too when the press closed the browser (at SYNTHS, a card without the pack);
-# from the pack's FX folder only the browser closes. Either way one BACK tap more leaves Perform on top: on Perform,
-# with nothing queued, it does nothing.
-wait 500
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
 button BACK down
 wait 50
 button BACK up
 expect ui=generative_perform within=5
+expect event gen_preset_preview freed part=3 since=mark within=5
+expect event gen_browser closed since=mark within=5
 expect no_event gen_sound_press since=mark within=1
 expect no_event gen_sound_swap since=mark within=1
 expect no_event /^gen_sound FX / since=mark within=1
@@ -275,5 +287,26 @@ expect event gen_browser_preview off playing=0 within=5
 expect no_event gen_preset_preview built since=mark within=2
 button BACK down
 wait 800
+button BACK up
+expect ui=generative_perform within=5
+
+# ---- Back to WHEN STOPPED: the setting lasts until power-off, and the next script expects the default ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_browser_preview_setting 1
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
 button BACK up
 expect ui=generative_perform within=5
