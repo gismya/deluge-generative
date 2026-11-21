@@ -273,7 +273,8 @@ class TestPort:
 
     def __init__(self, link, key=None, on_hardware=True):
         self.link = link
-        # False under delugemu: run_script() then skips "hardware_only expect" lines, counting them here
+        # False under delugemu: run_script() then skips a "hardware_only expect" no_event or state line and checks
+        # only the kind of a "hardware_only expect event" line's event, counting both here
         self.on_hardware = on_hardware
         self.hardware_only_skipped = 0
         self.key = [] if key is None else [0x00] + pack_8to7(key.to_bytes(4, "little"))
@@ -998,9 +999,12 @@ def run_script(port, lines, out=print, on_start_state=None):
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
                                                    came before the previous expect's match
-      hardware_only expect ...                     the expect on a Deluge only: under delugemu (a port made with
-                                                   on_hardware=False) it prints a SKIP line and counts in
-                                                   port.hardware_only_skipped, not in the expects. For a timing or
+      hardware_only expect ...                     the expect on a Deluge only. Under delugemu (a port made with
+                                                   on_hardware=False) a no_event or state expect prints a SKIP line
+                                                   and isn't an expect; an event expect waits for any event of its
+                                                   kind (same within=, since=mark), its figures unchecked, and
+                                                   counts as an expect. Both count in port.hardware_only_skipped,
+                                                   which so overlaps the expects' count. For a timing or
                                                    voice-count figure (gen_h16 voices=[1-9], gen_ext_tempo bpm=120),
                                                    which the emulator's speed under host load decides as much as the
                                                    firmware. It can't capture ((?P<name>...)). It moves the expect
@@ -1132,7 +1136,8 @@ def run_one_script(port, script, out=print, events=None):
                 out(line)
 
 
-# The prefix of an expect that runs on the Deluge only: delugemu skips it (and counts it). For a timing or voice-count
+# The prefix of an expect that runs on the Deluge only: delugemu skips a no_event or state one and checks only the kind
+# of an event one's event (counting both in port.hardware_only_skipped). For a timing or voice-count
 # figure, which the emulator's speed under host load decides as much as the firmware (#417); covers.py --check
 # refuses such an expect without it (covers.TIMING_FIELDS).
 HARDWARE_ONLY = "hardware_only"
@@ -1160,10 +1165,8 @@ def _run_lines(
         if not line:
             continue
         word, _, rest = line.partition(" ")
-        shown, hardware_kind = (
-            line,
-            None,
-        )  # the line as its PASS or FAIL line shows it; see HARDWARE_ONLY
+        shown = line  # the line as its PASS or FAIL line shows it
+        hardware_kind = None  # a hardware_only event expect's kind, under delugemu: see HARDWARE_ONLY
         if word == HARDWARE_ONLY:
             line = rest.strip()
             word, _, rest = line.partition(" ")

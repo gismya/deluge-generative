@@ -1,5 +1,6 @@
 # #448: the card log OFF (hold card_log_off: the log takes every byte, nothing goes to the card) for the on/off
 # comparison with capture_card_on.txt. A measurement, not a check (no perform_ prefix).
+# runs-via: deluge_probe.py session (on the Deluge: a measurement for the on/off comparison, its figures from --events)
 # covers: src/deluge/generative/firmware/capture_files.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.cpp
