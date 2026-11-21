@@ -42,8 +42,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	const bool groove = startInGroove_;
 	startInGroove_ = false;
 	pieceEnded_ = false;
-	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
-	steering_.pieceStarts(generator_->recipe().macros);
+	steering_.startFromCurrentRecipe(*generator_, groove);
 	pieceBegins();
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
 	// lands on its next bar line (spec §12.4).
@@ -74,6 +73,8 @@ void PerformAdapter::pieceBegins() {
 }
 
 void PerformAdapter::restartPiece(Generator& generator) {
+	// The safety net after the flush, as at a stop or the piece's end (spec §12.5).
+	sink_.allNotesOff();
 	// The first run's sounds go back home, a Throw's Space too, before the new piece reads them as home (spec §11.6),
 	// as a stop puts them back. Its waiting sounds go with the core's pending list.
 	soundControls.restoreHomes();
@@ -302,10 +303,14 @@ void PerformAdapter::pressRestart() {
 		return;
 	}
 	if (!playbackHandler.playbackState) {
-		// Stopped, AS IT IS is PLAY: the Current Recipe from bar 1 (spec §13.2).
-		display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART));
-		TEST_EVENT("gen_restart_press stopped");
+		// Stopped, AS IT IS is PLAY: the Current Recipe from bar 1 (spec §13.2). A PLAY already waiting for a
+		// transition's preload is cancelled by this one, as PLAY's would be: no RESTART popup then.
+		const bool cancelsWait = transitions.playWaits();
+		TEST_EVENT("gen_restart_press %s", cancelsWait ? "stopped_cancels_wait" : "stopped");
 		playOrStop(false);
+		if (!cancelsWait) {
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART));
+		}
 		return;
 	}
 	const bool cancels = steering_.restartAhead();

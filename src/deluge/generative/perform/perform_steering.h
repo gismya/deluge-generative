@@ -156,12 +156,17 @@ public:
 	/// Refused while a transition is pending (spec §12.9). Nothing to do while stopped, where the adapter starts the
 	/// piece as PLAY does.
 	PressOutcome pressRestart();
-	/// Whether a restart waits for its line: in the core's pending list, or pressed and not yet taken from the queue.
-	/// A transition request is refused meanwhile (TransitionLifecycle::request()).
+	/// Whether a restart is ahead: pressed and not yet taken from the queue, waiting in the core's pending list, or
+	/// landed and waiting for its line, where pieceStarts() empties the queue. A transition request is refused
+	/// meanwhile (TransitionLifecycle::request()).
 	[[nodiscard]] bool restartAhead() const;
-	/// The restart's line, from the adapter's NoteSink::restartPiece(): `generator` starts again from the Current
-	/// Recipe (AS IT IS), as a start does, and the steering with it (pieceStarts()). The adapter follows it with its
-	/// instance start (instanceStarts()), so a FILL or KEYBOARD fader still held plays from the new piece's start.
+	/// A piece starts on `generator` from the Current Recipe, in Groove with `groove` (SHIFT+PLAY), and the steering
+	/// with it (pieceStarts()): PLAY from stop, and a restart's line. The adapter follows it with its instance start
+	/// (instanceStarts()), so a FILL or KEYBOARD fader still held plays from the new piece's start.
+	void startFromCurrentRecipe(Generator& generator, bool groove);
+	/// The restart's line, from the adapter's NoteSink::restartPiece(): what landed on the line (a take, an octave
+	/// shift) goes into the Current Recipe first, as the tick's recordLanded() would after the call, then
+	/// startFromCurrentRecipe() (AS IT IS). So a call that comes past the line plays what an on-time one does.
 	void restartAsItIs(Generator& generator);
 
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
@@ -566,6 +571,9 @@ PressOutcome PerformSteering<Adapter>::pressRestart() {
 	if (gated(PressKind::Restart)) {
 		return PressOutcome::ChangePending;
 	}
+	if (const Generator* piece = playing(); piece != nullptr && piece->restartLanded()) {
+		return PressOutcome::NothingToDo; // landed: it can't be cancelled, and the line empties the queue
+	}
 	return steer({CommandKind::Restart, 0, restartAhead() ? 0 : 1});
 }
 
@@ -575,13 +583,19 @@ bool PerformSteering<Adapter>::restartAhead() const {
 		return pressed->value != 0;
 	}
 	const Generator* piece = playing();
-	return piece != nullptr && piece->restartWaiting();
+	return piece != nullptr && (piece->restartWaiting() || piece->restartLanded());
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::startFromCurrentRecipe(Generator& generator, bool groove) {
+	generator.start(adapter().recipe(), adapter().seed(), adapter().takes(), groove);
+	pieceStarts(generator.recipe().macros);
 }
 
 template <typename Adapter>
 void PerformSteering<Adapter>::restartAsItIs(Generator& generator) {
-	generator.start(adapter().recipe(), adapter().seed(), adapter().takes());
-	pieceStarts(generator.recipe().macros);
+	recordLanded(generator);
+	startFromCurrentRecipe(generator, false);
 }
 
 template <typename Adapter>

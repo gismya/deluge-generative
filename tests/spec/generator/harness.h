@@ -48,8 +48,7 @@ struct RecordingSink final : perform::NoteSink {
 	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
 	/// Where each restart's new piece begins in `events` (spec §13.2): its first event's index.
 	std::vector<size_t> restartedAt;
-	/// Starts a restart's piece, as the adapter does; a StepwisePiece sets it to its Current Recipe's. Unset, the
-	/// Generator starts again on its own Recipe (NoteSink's default).
+	/// Starts a restart's piece, as the adapter does: a StepwisePiece sets it to its Current Recipe's.
 	std::function<void(Generator&)> restarts;
 	void play(const Event& event) override { events.push_back(event); }
 	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
@@ -57,9 +56,6 @@ struct RecordingSink final : perform::NoteSink {
 		restartedAt.push_back(events.size());
 		if (restarts) {
 			restarts(generator);
-		}
-		else {
-			NoteSink::restartPiece(generator);
 		}
 	}
 };

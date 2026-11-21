@@ -78,11 +78,9 @@ public:
 
 	/// A restart reached its bar line: every note of the piece has ended there. Starts `generator` again for the new
 	/// piece, from bar 1 with its Intro, as start() does: the firmware from the Current Recipe as it is now (AS IT IS).
-	/// The driver then decides its step 0 on the line, at the new piece's tempo and swing. The default starts it on its
-	/// own Recipe, seed and takes, for a sink that keeps no Current Recipe.
-	virtual void restartPiece(Generator& generator) {
-		generator.start(generator.recipe(), generator.seed(), generator.takes());
-	}
+	/// The driver then decides its step 0 on the line, at the new piece's tempo and swing. Only Perform's adapters
+	/// queue a restart; a sink that doesn't start the Generator leaves the piece silent from the line.
+	virtual void restartPiece(Generator& /*generator*/) {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -207,6 +205,8 @@ private:
 	/// The restart's line (spec §13.2): the piece's last notes end there, the sink starts the Generator again, and the
 	/// clock counts from the line as the new piece's step 0.
 	void restartOnLine(NoteSink& sink);
+	/// What begin() and a restart's line reset: no transition, no Riser held, the phrase history and the end.
+	void freshPiece();
 	/// Starts the transition's tempo glide once the clock reaches it.
 	void glideIntoTransition(NoteSink& sink);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.

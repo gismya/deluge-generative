@@ -200,6 +200,43 @@ describe restart("Restart", $ {
 		expect(before(afterRestart(piece.sink), line) == before(steered.sink.events, line)).to_be_true();
 	});
 
+	it("plays a take and an octave shift that land on its own line, whether the call is on time or late", _ {
+		// The take and the shift land on the restart's line (a phrase line), at the decision the restart lands at.
+		// On time the tick records them in the Current Recipe 12 ticks before the line; a call past the line must
+		// restart with them too (review R1 MUST 1).
+		const auto pressAll = [](StepwisePiece<>& piece) {
+			piece.decideBefore(2 * 64 - 6);
+			piece.steering.pressTake(kAcid, 1);
+			piece.steering.pressOctave(kAcid, 1);
+			piece.steering.pressRestart();
+			piece.decideBefore(2 * 64 - 5);
+		};
+		StepwisePiece<> onTime{{.seed = 4}};
+		pressAll(onTime);
+		expect(restartLine(onTime.generator)).to_equal(2 * 64);
+		onTime.hook.runUntil([&] { return !onTime.sink.restartedAt.empty(); });
+
+		StepwisePiece<> late{{.seed = 4}};
+		pressAll(late);
+		late.runToStepLine(2 * 64, -kLookaheadTicks - 1); // the line's decision is not due yet
+		late.hook.callAt(late.hook.now() + kLookaheadTicks + 8); // 7 ticks past the line
+		expect(late.sink.restartedAt.size()).to_equal(1U);
+
+		for (StepwisePiece<>* piece : {&onTime, &late}) {
+			expect(piece->currentTakes.take[kAcid]).to_equal(1);
+			expect(piece->currentRecipe.octave[kAcid]).to_equal(1);
+			piece->decideBefore(1);
+			expect(piece->generator.take(kAcid)).to_equal(1);
+			expect(piece->generator.octave(kAcid)).to_equal(1);
+		}
+		onTime.decideBefore(kStepsPerBar);
+		onTime.runToStepLine(kStepsPerBar);
+		late.decideBefore(kStepsPerBar);
+		late.runToStepLine(kStepsPerBar);
+		expect(before(afterRestart(late.sink), kStepsPerBar) == before(afterRestart(onTime.sink), kStepsPerBar))
+		    .to_be_true();
+	});
+
 	it("restarts on the line from a late call, the new piece on time from there", _ {
 		StepwisePiece<> onTime{{.seed = 6}};
 		const int32_t line = restartAfter(onTime, 2 * kStepsPerBar + 3);
@@ -241,6 +278,19 @@ describe restart("Restart", $ {
 		expect(piece.steering.restartAhead()).to_be_false();
 		piece.decideBefore(3 * kStepsPerBar + 1);
 		expect(piece.sink.restartedAt.empty()).to_be_true();
+	});
+
+	it("stays ahead from its landing to its line: a second press does nothing", _ {
+		StepwisePiece<> piece{{.seed = 3}};
+		piece.decideBefore(21);
+		piece.steering.pressRestart();
+		piece.runToStepLine(2 * kStepsPerBar, -6); // the line's decision landed it; the line is 6 ticks on
+		expect(piece.generator.restartLanded()).to_be_true();
+		expect(piece.sink.restartedAt.empty()).to_be_true();
+		expect(piece.steering.restartAhead()).to_be_true();
+		expect(piece.steering.pressRestart() == PressOutcome::NothingToDo).to_be_true();
+		piece.hook.runUntil([&] { return !piece.sink.restartedAt.empty(); });
+		expect(piece.steering.restartAhead()).to_be_false();
 	});
 
 	it("is refused while a transition is pending, and does nothing while stopped", _ {

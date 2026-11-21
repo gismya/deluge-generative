@@ -200,6 +200,8 @@ otherwise.
   asks for `stepTick()` of the stop step, not its decision tick, else it is called every tick until the line). On the
   line `restartOnLine()` plays the first run's last events, flushes the rest, rebases the clock by the line (a whole
   number of bars, so the master's bar lines stay) and calls `NoteSink::restartPiece()`; step 0 is then decided late,
-  on the line, as a Start from 0 decides it, which is why the restarted stream equals a fresh start's. The adapter's
-  `restartPiece()` runs inside `advance()`, in the tick: it frees nothing (`SoundSwapLifecycle::pieceRestarts()` only
+  on the line, as a Start from 0 decides it, which is why the restarted stream equals a fresh start's. `restartAsItIs()` records what landed on
+  the line (`recordLanded()`) before it starts the Generator: a call past the line runs the restart before the
+  tick's own `recordLanded()` would (review R1). The adapter's `restartPiece()` (all notes off first, as every flush)
+  runs inside `advance()`, in the tick: it frees nothing (`SoundSwapLifecycle::pieceRestarts()` only
   retires) and leaves a running sound preload alone.

@@ -310,9 +310,6 @@ public:
 	// ---- Queries, safe from task context between ticks (spec §2.8) ----
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
-	[[nodiscard]] uint32_t seed() const { return seed_; }
-	/// The takes this instance plays, with the take changes that landed.
-	[[nodiscard]] const Takes& takes() const { return takes_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
 	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
 	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser

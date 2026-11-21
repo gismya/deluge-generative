@@ -56,14 +56,19 @@ void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnit
 	generator_ = &generator;
 	incoming_ = nullptr;
 	outgoing_ = nullptr;
+	freshPiece();
+	magnitude_ = magnitude;
+	placeBefore(0, toBarLine(songTick, magnitude));
+}
+
+void PerformDriver::freshPiece() {
+	// Every start is fresh (spec §13.2): a begin() and a restart's line.
 	transitionFrom_ = -1;
 	transitionTempo_.reset();
 	dropRiser();
-	history_.begin(generator.recipe().genre->phraseSteps());
+	history_.begin(generator_->recipe().genre->phraseSteps());
 	ended_ = false;
 	drainedEndLine_ = -1;
-	magnitude_ = magnitude;
-	placeBefore(0, toBarLine(songTick, magnitude));
 }
 
 void PerformDriver::placeBefore(int32_t step, int64_t songTicks) {
@@ -463,15 +468,10 @@ void PerformDriver::restartOnLine(NoteSink& sink) {
 	playDue(sink, line);
 	generator_->flush(line, Generator::FlushFor::Stop);
 	playDue(sink, clock_);
-	dropRiser();
 	flushOutgoing(Generator::FlushFor::Stop, sink);
-	clock_ -= line;
+	clock_ -= line; // a whole number of bars: the clock's bar lines stay the master's
 	sink.restartPiece(*generator_);
-	// As begin(): every start is fresh (spec §13.2), and the clock's bar lines stay the master's.
-	history_.begin(generator_->recipe().genre->phraseSteps());
-	ended_ = false;
-	drainedEndLine_ = -1;
-	transitionTempo_.reset();
+	freshPiece();
 	setTempo(generator_->recipe().tempo, sink);
 	setSwing(generator_->recipe().swing, sink);
 	swingLine_ = nextStepLine();

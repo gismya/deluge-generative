@@ -51,6 +51,7 @@ public:
 	using TransitionLifecycle::holdsStart;
 	using TransitionLifecycle::pending;
 	using TransitionLifecycle::phase;
+	using TransitionLifecycle::playWaits;
 	using TransitionLifecycle::preloading;
 	using TransitionLifecycle::starts;
 	using TransitionLifecycle::startWhenLoaded;

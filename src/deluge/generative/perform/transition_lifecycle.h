@@ -289,6 +289,8 @@ public:
 	[[nodiscard]] bool preloading() const { return phase_ == Phase::Preloading; }
 	/// Whether a piece mustn't start yet: a transition that commits when loaded still preloads. MIDI Start waits too.
 	[[nodiscard]] bool holdsStart() const { return phase_ == Phase::Preloading && commitOnLoad_; }
+	/// Whether a PLAY waits for that preload (startWhenLoaded()): PLAY again cancels it.
+	[[nodiscard]] bool playWaits() const { return holdsStart() && startWhenLoaded_; }
 	/// Counts the new rosters started: the view drops focus to song level when it changes.
 	[[nodiscard]] uint32_t starts() const { return starts_; }
 	/// Whether `request` is the newest: a preload for an older one changes nothing when it ends.

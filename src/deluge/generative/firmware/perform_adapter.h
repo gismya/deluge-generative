@@ -258,9 +258,8 @@ private:
 	void startPiece(int32_t swungTick, int32_t magnitude);
 	/// What every new piece reads once its Generator has started: the controls' homes, the Section shown.
 	void pieceBegins();
-	/// A restart's line, from the sink (spec §13.2): the first run's sounds go home and its waiting swaps are dropped,
-	/// then `generator` starts again from the Current Recipe (AS IT IS). M4's AS IT BEGAN starts it from the piece's
-	/// header instead.
+	/// A restart's line, from the sink (spec §13.2): every voice is released, the first run's sounds go home and its
+	/// waiting swaps are dropped, then `generator` starts again from the Current Recipe (AS IT IS).
 	void restartPiece(Generator& generator);
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();

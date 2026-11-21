@@ -361,7 +361,6 @@ public:
 
 /// RESTART ▸ AS IT IS (spec §13.2, §13.6): as X+PLAY, the piece starts again at the next bar line from the Current
 /// Recipe as it is, or at once while stopped. The menu closes, so the popup and the queue show on the Perform page.
-/// AS IT BEGAN (the piece header's state, M4 Capture) is a second row beside it, pressing its own restart.
 class RestartAsItIsItem final : public MenuItem {
 public:
 	using MenuItem::MenuItem;

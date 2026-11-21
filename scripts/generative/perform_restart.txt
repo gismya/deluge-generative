@@ -6,11 +6,11 @@
 # in delugemu (test_port_emu.py). The external-clock part sends MIDI clock from the host. Start as after boot:
 # transport stopped, the current clip a synth or kit clip.
 #
-# Events: gen_restart_press queued|cancelled|refused|stopped: what X+PLAY or AS IT IS did. gen_restart as_it_is
-# tempo=: the restart reached its line and the piece started again. gen_section <SECTION> <n> clip_pos= bar=: a
-# Section started; clip_pos=0 is on the stock clips' bar line. Menus remember their last row, so a row is chosen from
-# the top (encoder 3 -20 first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE,
-# KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART.
+# Events: gen_restart_press queued|cancelled|refused|stopped|stopped_cancels_wait: what X+PLAY or AS IT IS did.
+# gen_restart as_it_is tempo=: the restart reached its line and the piece started again. gen_section <SECTION> <n>
+# clip_pos= bar=: a Section started; clip_pos=0 is on the stock clips' bar line. Menus remember their last row, so a row
+# is chosen from the top (encoder 3 -20 first); with no transition to cancel, the Perform menu's rows are GENRE,
+# REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART.
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/perform/perform_driver.*
 # covers: src/deluge/generative/perform/perform_steering.h src/deluge/generative/perform/queue_text.*
 # covers: src/deluge/generative/core/steering.h src/deluge/generative/core/generator_steering.cpp
@@ -174,6 +174,38 @@ expect event gen_section INTRO 0 clip_pos=0 bar=0 within=10
 button PLAY down
 wait 50
 button PLAY up
+expect playing=false
+
+# ---- Stopped, with a PLAY waiting for a transition's preload: X+PLAY cancels the wait, as PLAY does (no RESTART) ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button PLAY down
+wait 50
+button PLAY up
+expect event gen_transition start_when_loaded
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press stopped_cancels_wait
+expect event gen_transition start_when_loaded off
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition_preload cancelled within=5
 expect playing=false
 
 # ---- External clock: the clock keeps running, and the piece starts again on the master's bar line ----
