@@ -32,6 +32,7 @@
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
 #include "playback/playback_handler.h"
+#include <bit>
 #include <cstring>
 
 namespace deluge::generative::firmware {
@@ -162,7 +163,12 @@ bool RestartBegan::cancelPreload() {
 	return runner.cancel();
 }
 
-uint32_t RestartBegan::changedParts(const SteeringLog::Piece& piece) {
+bool RestartBegan::holdsSounds() const {
+	const auto& steering = performAdapter.steering();
+	return preloading() || (steering.restartAhead() && steering.restartFrom() == perform::RestartFrom::AsItBegan);
+}
+
+uint32_t RestartBegan::changedParts(const SteeringLog::Piece& piece) const {
 	const Genre& genre = *currentRecipe.recipe.genre;
 	const SoundPicks& now = currentRecipe.sounds;
 	uint32_t parts = 0;
@@ -171,7 +177,9 @@ uint32_t RestartBegan::changedParts(const SteeringLog::Piece& piece) {
 		for (const LaneSpec& lane : genre.parts[p].lanes) {
 			changed = changed || pickDiffers(piece, pickSlot(lane.lane), now.lane[static_cast<int32_t>(lane.lane)]);
 		}
-		if (changed) {
+		// A re-roll waiting for its phrase line could swap in before the restart's: the header's sound is built for
+		// its part too, and swaps in over it on the line.
+		if (changed || soundSwaps.waiting(p)) {
 			parts |= 1U << p;
 		}
 	}
@@ -186,14 +194,13 @@ void RestartBegan::press() {
 	}
 	auto& steering = adapter.steering();
 	const bool playing = playbackHandler.playbackState != 0;
-	if (playing && steering.restartAhead()) {
-		// Pressed again: the restart ahead, either kind, is cancelled (spec §13.2).
-		if (!cancelPreload()) {
-			adapter.pressRestart();
-			return;
-		}
-		TEST_EVENT("gen_restart_press began_cancelled");
-		display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+	if (builtParts_ != 0 && !preloading() && !steering.restartAhead()) {
+		dropBuilt(); // a restart gone before the pump saw it: its Outputs never play
+	}
+	if (preloading() || (playing && steering.restartAhead())) {
+		// Pressed again: the restart ahead, either kind, is cancelled (spec §13.2): its preload, playing or stopped,
+		// or the restart queued. PerformAdapter::pressRestart() does both, with RESTART CANCELLED.
+		adapter.pressRestart();
 		return;
 	}
 	if (gui::refusedWithPopup(transitions.gate(perform::PressKind::Restart))) {
@@ -233,10 +240,7 @@ void RestartBegan::press() {
 		return;
 	}
 	// One Output to retire for each changed part: the preloaded one if it never plays, else the one it replaces.
-	int32_t owed = 0;
-	for (uint32_t bits = parts; bits != 0; bits &= bits - 1) {
-		owed++;
-	}
+	const auto owed = static_cast<int32_t>(std::popcount(parts));
 	if (runner.busy() || owed + soundSwaps.waitingSounds() > retirements.room(Retirements::Owner::Sound)) {
 		TEST_EVENT("gen_restart_press busy parts=%lu", static_cast<unsigned long>(parts));
 		gui::refusedWithPopup(PressOutcome::Busy);
@@ -287,7 +291,9 @@ void RestartBegan::preloadEnded(JobOutcome outcome) {
 		queueRestart();
 	}
 	else {
-		dropBuilt(); // the transport started or stopped meanwhile: the press is gone
+		// The transport started or stopped meanwhile: the press is gone.
+		TEST_EVENT("gen_restart_dropped transport parts=%lu", static_cast<unsigned long>(builtParts_));
+		dropBuilt();
 	}
 }
 

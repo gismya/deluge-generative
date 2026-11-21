@@ -337,8 +337,9 @@ void PerformAdapter::playOrStop(bool groove) {
 		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
 		return;
 	}
-	if (restartBegan.cancelPreload()) {
-		TEST_EVENT("gen_restart_press began_cancelled"); // PLAY cancels AS IT BEGAN's start, as a transition's
+	if (restartBegan.preloading()) {
+		restartBegan.cancelPreload(); // PLAY cancels AS IT BEGAN's start, as a transition's
+		TEST_EVENT("gen_restart_press began_cancelled");
 		return;
 	}
 	if (active() && !leaving() && transitions.startWhenLoaded(groove)) {
@@ -352,8 +353,10 @@ void PerformAdapter::pressRestart() {
 	if (!active() || leaving()) {
 		return;
 	}
-	if (restartBegan.cancelPreload()) {
-		// AS IT BEGAN's sounds preloading is the restart ahead: pressed again, it is cancelled.
+	if (restartBegan.preloading()) {
+		// AS IT BEGAN's sounds preloading is the restart ahead: pressed again (X+PLAY, AS IT BEGAN), it is cancelled,
+		// playing or stopped. A press while its cancel unwinds does nothing more.
+		restartBegan.cancelPreload();
 		TEST_EVENT("gen_restart_press began_cancelled");
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
 		return;

@@ -126,7 +126,9 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 					TEST_EVENT("gen_back_tap preload");
 				}
 				else if (restartBegan.cancelPreload()) {
-					TEST_EVENT("gen_back_tap restart_preload"); // AS IT BEGAN's sounds: nothing restarts
+					// AS IT BEGAN's sounds: nothing restarts
+					display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+					TEST_EVENT("gen_back_tap restart_preload");
 				}
 				else {
 					refusedWithPopup(performAdapter.steering().cancelNewest());

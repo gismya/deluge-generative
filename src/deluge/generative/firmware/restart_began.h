@@ -45,6 +45,9 @@ public:
 	void press();
 	/// Whether its preload runs (the working animation's rule, BACK's newest action).
 	[[nodiscard]] bool preloading() const;
+	/// While AS IT BEGAN preloads or its restart is ahead: sound re-rolls and chosen sounds are refused BUSY
+	/// (SoundSwaps::runnerBusy()), since one landing before the restart's line would outlive it.
+	[[nodiscard]] bool holdsSounds() const;
 	/// BACK, X+PLAY or PLAY while its preload runs: it is cancelled, and nothing restarts. @return whether one ran.
 	bool cancelPreload();
 	/// The restart's line, in the tick, after the first run's flush and its sounds' homes, with the sounds waiting for
@@ -63,7 +66,8 @@ private:
 	/// The job's end, in its task: Done with every changed part's Output built (`built_`).
 	void preloadEnded(JobOutcome outcome);
 	/// Which parts' picks differ from `piece`'s header: a bit a part.
-	[[nodiscard]] uint32_t changedParts(const SteeringLog::Piece& piece);
+	/// Which parts' picks differ from `piece`'s header, or whose re-roll waits for its line: a bit a part.
+	[[nodiscard]] uint32_t changedParts(const SteeringLog::Piece& piece) const;
 	/// Pushes the restart AS IT BEGAN, with its popup and test event; frees the Outputs if it isn't accepted.
 	void queueRestart();
 	/// Stopped: the Outputs swap in, the snapshot and the Current Recipe are restored, and the piece starts.

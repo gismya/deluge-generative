@@ -10,7 +10,9 @@
 #
 # Events: gen_restart_press began parts=0 | began_preload parts= stopped= submitted= | began_queued | began_cancelled:
 # what AS IT BEGAN did (parts: a bit per part whose picks changed). gen_restart_preload_held parts=,
-# gen_restart_preload done|cancelled|failed parts= error= missing= ms= working=: its preload. gen_restart_snapshot
+# gen_restart_preload done|cancelled|failed parts= error= missing= ms= working=: its preload (parts: a bit per
+# part whose picks changed or whose re-roll waits for its line). gen_press sound part= previous= result=2: a re-roll
+# refused with BUSY while AS IT BEGAN is ahead. gen_restart_snapshot
 # params=: params written back on the line. gen_restart as_it_began [stopped] tempo= energy=: it started the piece
 # again (energy: the Energy macro's units). gen_log_piece pieces=: a piece opened in the log. Acid techno: ACID is part
 # 1, its SONG row pad 9 6; perform_choose_002.txt chooses SYNTHS/002 for it. The Perform menu's rows with no transition to cancel:
@@ -117,6 +119,11 @@ expect event gen_restart_press began_preload parts=2 stopped=0 submitted=1
 expect event /^gen_sound ACID - pick .*SYNTHS\/(?!002 Basic Square Bass)/ within=10
 expect event /^gen_restart_preload done parts=2 error=0 missing=0 ms=\d+ working=1$/ within=10
 expect event gen_restart_press began_queued
+# A re-roll while the restart waits is refused with BUSY: landing first, it would outlive the restart
+pad 1 6 down
+wait 50
+pad 1 6 up
+expect event gen_press sound part=1 previous=0 result=2
 expect event /^gen_status [^|]*\|>RST/ within=5
 expect event gen_restart_snapshot params= within=15
 expect event /^gen_restart as_it_began tempo=\d+ energy=(?P=energy)$/ within=1
@@ -125,6 +132,34 @@ expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
 # Take 1 is the Recipe's again, with take 2 still made; the re-rolled Output is freed once silent
 expect event gen_clip part=1 takes=Pen............. within=5
 expect event gen_outputs_freed outputs=1 within=40
+expect playing=true
+
+# ---- A re-roll waiting for its phrase line at the press: ACID's first sound is built too, though its pick hasn't
+# changed yet, so the re-roll can't outlive the restart if its line comes first ----
+mark now
+expect event gen_phrase bar= since=mark within=40
+include perform_choose_002.txt
+expect event gen_sound_preload done part=1 source=chosen within=10
+expect event gen_clip part=1 takes=Pen............. freeze=0 sound=w
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began_preload parts=2 stopped=0 submitted=1
+expect event /^gen_sound ACID - pick .*SYNTHS\/(?!002 Basic Square Bass)/ within=10
+expect event gen_restart_press began_queued within=10
+expect event /^gen_restart as_it_began tempo=\d+ energy=(?P=energy)$/ within=40
+expect event gen_clip part=1 takes=Pen............. freeze=0 sound=- within=5
 expect playing=true
 
 # ---- BACK cancels AS IT BEGAN's preload: nothing restarts ----
@@ -155,11 +190,47 @@ expect event gen_restart_preload cancelled parts=2 within=5
 release preload
 expect no_event gen_restart as_it_began within=8
 
-# ---- Stopped: the last piece's start state comes back, its sounds first, then it starts ----
+# ---- Stopped: AS IT BEGAN again cancels its preload (RESTART CANCELLED), and nothing starts ----
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+hold preload
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_preload_held parts=2 within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began_cancelled
+expect event gen_restart_preload cancelled parts=2 within=5
+expect no_event gen_section INTRO within=5
+expect playing=false
+
+# ---- Stopped: the last piece's start state comes back, its sounds first, then it starts ----
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

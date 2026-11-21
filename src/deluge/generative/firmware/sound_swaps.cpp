@@ -24,6 +24,7 @@
 #include "generative/firmware/compose_edits.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
@@ -261,7 +262,7 @@ bool SoundSwaps::queueHeldFull() const {
 }
 
 bool SoundSwaps::runnerBusy() const {
-	return runner.busy();
+	return runner.busy() || restartBegan.holdsSounds();
 }
 
 bool SoundSwaps::preloadRunning() const {

@@ -368,7 +368,7 @@ describe restart("Restart", $ {
 			expect(piece.currentRecipe.macros == steered).to_be_true();
 		});
 
-		it("is a restart ahead while its sounds preload: a transition is refused, and a press then cancels", _ {
+		it("is a restart ahead while its sounds preload, and not once they have", _ {
 			StepwisePiece<> piece{{.seed = 3}};
 			piece.decideBefore(5);
 			piece.steering.restartPreloads(true);
