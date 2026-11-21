@@ -70,6 +70,11 @@ include perform_new_sound_drums.txt
 expect event gen_press sound part=0 previous=0 result=0 working=1
 expect event gen_sound_preload_held part=0 within=10
 include perform_hold_back.txt
+# NOTHING, the option before CANCEL (no Capture), one detent at a time (perform_leave.txt says why)
+encoder 3 1
+encoder 3 1
+encoder 3 1
+encoder 3 -1
 button 4 3 down
 wait 50
 button 4 3 up

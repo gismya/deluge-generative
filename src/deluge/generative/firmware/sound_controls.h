@@ -58,6 +58,14 @@ public:
 	/// read from it, and each control snaps to the offset it had on the old one. Every other part keeps its homes.
 	/// Tick-safe: no allocation, no card. Only while a piece plays: stopped, the next start binds every part.
 	void rebindPart(const Roster& roster, const Genre& genre, int32_t part);
+	/// Capture (spec §17.6): `part`'s clip was cut and the clip after the cut, `clip`, is on the same Output. Its sets
+	/// move there with their homes, and each param they move starts at its home on `clip`, where writeNode() and
+	/// writeBase() write from here. Not for a new Output: rebindPart() reads that one's homes.
+	void moveToClip(int32_t part, InstrumentClip* clip);
+	/// Capture: a SetHome (spec §17.2) moves the home of the param `key` names (paramKey()) on `part`'s set for `lane`
+	/// to `home`, for the nodes and bases written from here. @return the home it had, or nullopt if no control moves
+	/// that param.
+	std::optional<int32_t> moveHome(uint8_t part, Lane lane, uint16_t key, int32_t home);
 	/// A Control event: each param the control moves ramps to home + the offset over `rampTicks` internal ticks, or
 	/// jumps there on a snap (spec §11.7).
 	void apply(const Event& event, int32_t rampTicks);

@@ -40,6 +40,7 @@ void ClipBuilder::begin(SongWriter& writer) {
 		std::fill(std::begin(slots), std::end(slots), 0);
 	}
 	counts_ = Counts{};
+	std::fill(std::begin(partStart_), std::end(partStart_), 0);
 }
 
 void ClipBuilder::take(const Event& event) {
@@ -125,6 +126,9 @@ ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl con
 		}
 		track.started = true;
 		track.id = {part, lane, control, throwDelay};
+		// A lane that first leaves home after a split or a cut on its part starts there, not at the piece's start.
+		track.origin = partStart_[part];
+		track.endTick = partStart_[part];
 	}
 	return &track;
 }
