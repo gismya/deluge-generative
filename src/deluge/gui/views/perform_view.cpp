@@ -302,6 +302,7 @@ void PerformView::assertLeds() {
 		scaleBlinkShown_ = keyWaits;
 		TEST_EVENT("gen_scale_led %s", keyWaits ? "blink" : "off");
 	}
+	assertRecordLed();
 	// View::setModLedStates, which a menu runs as it opens and moves, sets F7 and F8 steady: under it the knobs are
 	// still on Thin / Drive or Complexity / Motion (F16), so their LEDs blink again.
 	const auto f7 = indicator_leds::modLed[kThinDriveModButton];
@@ -311,6 +312,43 @@ void PerformView::assertLeds() {
 	const auto f8 = indicator_leds::modLed[kMacroModButton];
 	if (onMacroPage() && secondMacroSet_ && indicator_leds::getLedBlinkerIndex(f8) == 255) {
 		indicator_leds::blinkLed(f8);
+	}
+}
+
+void PerformView::assertRecordLed() {
+	using deluge::generative::perform::RecordLed;
+	// The RECORD LED is Capture's (spec §13.5, §17.4): on = the current piece is marked, blinking = the log is full.
+	// Resampling (SHIFT+RECORD stays RESAMPLE) and MIDI learn's flash own it meanwhile; it comes back after them.
+	const deluge::generative::perform::CaptureStatus capture = performAdapter.captureStatus();
+#if ENABLE_SYSEX_TEST
+	{
+		deluge::generative::perform::CaptureStatus reported = capture;
+		reported.usedPercent = 0; // moves with every record: gen_log reports the log's use
+		if (!(reported == captureShown_)) {
+			captureShown_ = reported;
+			TEST_EVENT("gen_capture piece=%d marked=%d full=%d marks=%ld", capture.piece ? 1 : 0,
+			           capture.marked ? 1 : 0, capture.full ? 1 : 0, static_cast<long>(capture.markedPieces));
+		}
+	}
+#endif
+	if (audioRecorder.recordingSource > AudioInputChannel::NONE || currentUIMode == UI_MODE_MIDI_LEARN) {
+		return;
+	}
+	const RecordLed want = deluge::generative::perform::recordLed(capture);
+	const bool blinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::RECORD) != 255;
+	if (want == RecordLed::Blink) {
+		if (!blinking) {
+			indicator_leds::blinkLed(IndicatorLED::RECORD);
+		}
+	}
+	else if (blinking
+	         || indicator_leds::ledStates[static_cast<int32_t>(IndicatorLED::RECORD)] != (want == RecordLed::On)) {
+		indicator_leds::setLedState(IndicatorLED::RECORD, want == RecordLed::On);
+	}
+	if (static_cast<uint8_t>(want) != recordLedShown_) {
+		recordLedShown_ = static_cast<uint8_t>(want);
+		static constexpr const char* kNames[] = {"off", "on", "blink"};
+		TEST_EVENT("gen_record_led %s", kNames[static_cast<int32_t>(want)]);
 	}
 }
 
@@ -340,6 +378,8 @@ void PerformView::leave() {
 	// LEAVE stops the transport, which drops a waiting key change (spec §13.2): SCALE goes dark with it.
 	indicator_leds::setLedState(IndicatorLED::SCALE_MODE, false);
 	scaleBlinkShown_ = false;
+	// The marks go with the log at the teardown: RECORD goes dark now, as stock leaves it outside Perform.
+	indicator_leds::setLedState(IndicatorLED::RECORD, false);
 	generativeModalUI.open(performAdapter.leaveJob());
 	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
 		generativeModalUI.jobEnded();

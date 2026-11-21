@@ -30,6 +30,7 @@
 #include "generative/firmware/entry_source.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
@@ -196,6 +197,16 @@ public:
 	/// Current Recipe as it is then (pressed again while it waits, it cancels); stopped, it is PLAY. Shows its popup:
 	/// RESTART, RESTART CANCELLED, or why it was refused (CHANGE PENDING while a transition is pending).
 	void pressRestart();
+
+	// ---- Capture marks (spec §17.4) ----
+
+	/// RECORD or MIDI RECORD (F9, F10): the current piece's mark, toggled at once, playing or stopped (the last
+	/// piece). A refusal shows its popup: LOG FULL, or NOTHING PLAYED before any piece.
+	perform::MarkOutcome pressMark();
+	/// A CAPTURE menu row: piece `piece`'s mark, toggled.
+	perform::MarkOutcome pressMark(int32_t piece);
+	[[nodiscard]] perform::CaptureStatus captureStatus() const { return perform::captureStatus(log_); }
+
 	/// Counts the restarts that reached their line: the view returns the Arc map to now when it changes.
 	[[nodiscard]] uint32_t restarts() const { return restarts_; }
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).

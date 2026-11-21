@@ -136,6 +136,7 @@ BUILDERS = {
         "src/deluge/generative/firmware/sound_swaps.cpp",
         "src/deluge/generative/firmware/transitions.cpp",
     ),
+    "gen_mark": ("src/deluge/generative/perform/capture.*",),  # the MarkOutcome's name
     "gen_menu": (),
     "gen_menu_cancel_change": (),
     "gen_octave_landed": (),
@@ -161,6 +162,9 @@ BUILDERS = {
         "src/deluge/generative/perform/clip_page.*",
         "src/deluge/generative/perform/recipe_name.*",
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
+    "gen_record_led": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the RecordLed's name
     "gen_restart_press": (),  # what the press did
     "gen_retire_referenced": (),
     "gen_rings": (),

@@ -143,7 +143,12 @@ private:
 	/// LED setup), writing only LEDs that differ. The page LEDs and CROSS-SCREEN (assertPageLeds()); SCALE blinks while
 	/// a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
 	void assertLeds();
+	/// The RECORD LED from the Capture marks, every frame (spec §13.5).
+	void assertRecordLed();
 	bool scaleBlinkShown_ = false; ///< The SCALE blink last reported (test builds) or started.
+	/// The RECORD LED's Capture state last reported (test builds); the marks last reported (gen_capture).
+	uint8_t recordLedShown_ = 0xFF;
+	deluge::generative::perform::CaptureStatus captureShown_{.markedPieces = -1};
 #if ENABLE_SYSEX_TEST
 	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
 #endif
