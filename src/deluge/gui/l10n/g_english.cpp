@@ -239,7 +239,6 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_LAST, "Last"},
         {STRING_FOR_NOTHING, "Nothing"},
         {STRING_FOR_BACK_STOPS, "BACK = STOP"},
-        {STRING_FOR_CAPTURE_FAILED, "Capture failed"},
         {STRING_FOR_REROLL_ALL, "Re-roll all"},
         {STRING_FOR_SYNTH_PRESET, "Synth preset"},
         {STRING_FOR_BROWSER_PREVIEW, "Browser preview"},

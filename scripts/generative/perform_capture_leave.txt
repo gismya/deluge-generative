@@ -17,6 +17,10 @@
 # covers: src/deluge/generative/firmware/sound_controls.* src/deluge/gui/views/perform_view.*
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/gui/l10n/english.json
 # covers: src/deluge/gui/l10n/g_english.cpp src/deluge/gui/l10n/strings.h
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h
 
 start_state
 hold entropy
