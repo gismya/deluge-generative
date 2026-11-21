@@ -590,21 +590,22 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-# The stopped piece wasn't marked: it went, so the log holds the new piece's header alone.
-expect event /^gen_log_piece pieces=1 header=(?P=header) used=[0-9]+ full=0 us=[0-9]+$/
+# The stopped piece wasn't marked: it went, so the log holds the new piece alone. The F1 knobs edited the song's params,
+# so its header holds the song's snapshot too (spec §17.2): larger than the first piece's.
+expect event /^gen_log_piece pieces=1 header=(?P<edited>[0-9]+) used=[0-9]+ full=0 us=[0-9]+$/
 wait 2000
 button PLAY down
 wait 50
 button PLAY up
 expect playing=false
-expect event /^gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=header) records=0 end=[0-9]+ cut=-1 full=0$/
+expect event /^gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=(?P=edited) records=0 end=[0-9]+ cut=-1 full=0$/
 
 # ---- REGENERATE → BUILD INTO A DROP: the outgoing piece ends at the start step, the incoming roster's opens ----
 button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event /^gen_log_piece pieces=1 header=(?P=header) used=[0-9]+ full=0 us=[0-9]+$/
+expect event /^gen_log_piece pieces=1 header=(?P=edited) used=[0-9]+ full=0 us=[0-9]+$/
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
