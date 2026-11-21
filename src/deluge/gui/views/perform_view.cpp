@@ -15,6 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "generative/firmware/preset_preview.h"
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::firmware::keepFeedbackRunning;
@@ -82,6 +83,9 @@ void PerformView::focusRegained() {
 	releaseEndPad();
 	backDown_ = false;
 	xDown_ = false;
+	// No browser is open over Perform now, so nothing previews (spec §13.3): the browser stops its preview as it
+	// closes, and this catches a close that didn't go through it.
+	deluge::generative::firmware::presetPreview.stop();
 	releaseLostHolds();
 	// The song's current Clip is set only while the sound editor is open on a part (openSoundEditor()).
 	if (currentSong->getCurrentClip() != nullptr) {

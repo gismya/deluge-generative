@@ -269,7 +269,7 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Roll, .mask = kSnareMask, .beats = 2, .weight = 1},
 };
 
-/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves is 8), so
+/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves was 8), so
 /// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV through its colour move; in Major the
 /// same degrees read I–IV and so on. Weights in the colour moves' units (20).
 constexpr ChordMove kHouseMoves[] = {

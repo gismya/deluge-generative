@@ -315,7 +315,10 @@ void OutputSink::note(const Roster& parts, const Event& event, bool on) {
 	if (event.part >= kMaxParts) {
 		return;
 	}
-	const PartOutput& part = parts.parts[event.part];
+	playNote(parts.parts[event.part], event, on);
+}
+
+void OutputSink::playNote(const PartOutput& part, const Event& event, bool on) {
 	if (part.output == nullptr || part.clip == nullptr) {
 		return;
 	}

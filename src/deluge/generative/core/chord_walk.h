@@ -96,7 +96,7 @@ struct ChordGraph {
 	/// Harmonic rhythm, in bars per chord: divides the phrase or is a whole multiple of it.
 	uint8_t barsPerChord = 2;
 };
-constexpr int32_t kMaxChordMoves = 8;
+constexpr int32_t kMaxChordMoves = 16;
 
 /// The walk rules' bonuses, Generator-wide values (spec §7.4, tuning), in the graph's weight units.
 struct WalkRules {

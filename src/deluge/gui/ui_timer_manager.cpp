@@ -32,6 +32,7 @@
 #include "hid/led/pad_leds.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_follow.h"
+#include "io/midi/test_port_render.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "util/functions.h"
@@ -65,6 +66,9 @@ void UITimerManager::routine() {
 			int32_t timeTil = (uint32_t)(timer.triggerTime - AudioEngine::audioSampleTimer);
 			if (timeTil < 0) {
 				timer.active = false;
+#if ENABLE_SYSEX_TEST
+				const uint32_t testStart = getSystemTicks(); // Generative mode (spec §20): underrun culprits
+#endif
 
 				switch (name) {
 
@@ -257,6 +261,9 @@ void UITimerManager::routine() {
 				case TimerName::METER_INDICATOR_BLINK: // really nothing for this?
 				case TimerName::NUM_TIMERS:;
 				}
+#if ENABLE_SYSEX_TEST
+				TestPort::uiTimerRan(i, getSystemTicks() - testStart);
+#endif
 			}
 		}
 	}

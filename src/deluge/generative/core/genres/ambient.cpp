@@ -168,11 +168,10 @@ constexpr PartSpec kParts[] = {
         .band = {0, 0},
         // Over the Intro floor (the Drone's 0), so it enters as the Intro's Density rises (tuning).
         .densityGate = macroPoints(15),
-        // The key's root between F#2 and F3, the Drone's own (anchor C3: owner, Ambient sounds round 1's bass-up), and
-        // every chord root at or over it, up to a 7th, so the Bass never sounds under F#2 (about 92 Hz; round 1's I2:
-        // the octave down, under 45 Hz, was mud). The semitone under the root makes the Register 12 wide; it is the 7th
-        // degree, no Ambient chord's root.
-        .reg = {.anchor = 48, .spanLow = -1, .spanHigh = 11},
+        // The key's root between F#2 and F3, the Drone's own (anchor C3: owner, Ambient sounds round 1's bass-up). The
+        // roots a 4th or less over it play there; V, vi and ♭VII fold under it, so the Bass stays under the Pad (owner,
+        // round 2's BASS), never under C#2 (about 69 Hz; round 1's I2: the octave down, under 45 Hz, was mud).
+        .reg = {.anchor = 48, .spanLow = -6, .spanHigh = 6},
         .loop = kSubLoop,
         .expression = {.spread = 0},
         .gestures = kNoGestures,
@@ -188,8 +187,10 @@ constexpr PartSpec kParts[] = {
         // Drone's. Lowest note G3–F#4 by key; +19 gives the upper voices their octave, the top reaching the bells'.
         .reg = {.anchor = 64, .spanLow = -4, .spanHigh = 19},
         // Held across Section lines, the Drop's included, and at every chord change: only a changed pitch strikes
-        // (spec §5.2, §9.5).
-        .sustain = {.holdsAcrossSections = true, .holdsCommonTones = true, .openVoicing = true},
+        // (spec §5.2, §9.5). Half the chord changes keep a shared note in place; the rest may move it an octave and
+        // strike it there (owner, round 2's HOLD: "sometimes one, sometimes the other").
+        .sustain =
+            {.holdsAcrossSections = true, .holdsCommonTones = true, .openVoicing = true, .holdSharedChance = 500},
         .gestures = kNoGestures,
         .drift = {.weight = kSlowDrift, .sweepBars = 16},
         // With the Drone at its preset's level, 145 Eerie High Pad clipped the mix (tuning, spec §4.5).
@@ -242,18 +243,22 @@ constexpr DropOutEntry kDropOuts[] = {
     {.mask = {.parts = partBit(kLeadPart) | partBit(kBassPart)}, .bars = 8, .weight = 2},
 };
 
-/// Home I, the brief's moves one way each; the home pull and the repeat bring the walk back (spec §4.5). Weights in
-/// the colour moves' units (20). Lydian's and Dorian's colour moves come from the table (spec §7.4).
+/// Home I, the brief's moves one way each, and iii and ♭VII, each mostly back home (owner, round 2's S6: between
+/// round 1's graph and the review's wider one); the home pull and the repeat bring the walk back (spec §4.5). Weights
+/// in the colour moves' units (20). Lydian's and Dorian's colour moves come from the table (spec §7.4).
 constexpr ChordMove kMoves[] = {
-    {kI, kIV, 25},  // I–IV
-    {kI, kVI, 25},  // I–vi
-    {kIV, kI, 25},  // IV–I
-    {kVI, kIV, 25}, // vi–IV
-    {kI, kV, 10},   // I–V, rare
+    {kI, kIV, 25},   // I–IV
+    {kI, kVI, 20},   // I–vi
+    {kI, kIII, 15},  // I–iii (Dorian and Minor: i–♭III)
+    {kI, kVII, 12},  // I–♭VII in Dorian, Minor and Mixolydian, I–vii in Lydian; Major's vii° is guarded
+    {kI, kV, 8},     // I–V, rare
+    {kIV, kI, 25},   // IV–I
+    {kVI, kIV, 25},  // vi–IV
+    {kVI, kI, 20},   // vi–I: Lydian's vi has no other way out once the guard closes vi–IV on #iv°
+    {kIII, kIV, 20}, // iii–IV, iii's one way on; the home pull takes it back otherwise
+    {kVII, kI, 20},  // ♭VII–I
     // No ii–IV, the brief's: only Lydian reaches ii (its colour move I–II), where IV is #iv°, which the guard closes.
     {kII, kI, 25}, // ii–I: so Lydian's II has a way out besides the home pull
-    {kVI, kI, 25}, // vi–I: Lydian's vi has no other way out once the guard closes vi–IV on #iv°; in Major it splits
-                   // vi's exits between IV and I
     {kV, kI, 25},  // V–I: without it V leaves only by the home pull (10) against the repeat (40), and holds ~40 bars
 };
 
@@ -265,7 +270,8 @@ constexpr ChordGraph kGraph{
     .barsPerChord = 8,
 };
 
-constexpr Scale kScales[] = {Scale::Major, Scale::Lydian, Scale::Dorian};
+/// Minor and Mixolydian: owner, rules round 1's S6-scales A.
+constexpr Scale kScales[] = {Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian};
 
 constexpr WeightedBars kBuildBars[] = {{16, 1}};
 
@@ -300,15 +306,16 @@ constexpr Genre kAmbient{
             .grooveToBuild = 150,
             .dropDecayPhrases = 2,
             // The Build's top equals the Drop lift for Energy and Density (spec §9.5): neither falls on the Drop's
-            // step, and no gate closes on its bar line.
-            .dropLiftEnergy = macroPoints(3),
-            .dropLiftDensity = macroPoints(3),
+            // step, and no gate closes on its bar line. +5 (owner, round 2's S4): the mallets (29) come in late in the
+            // Build and fade after the Drop; the Pad a little louder and brighter.
+            .dropLiftEnergy = macroPoints(5),
+            .dropLiftDensity = macroPoints(5),
             .offsets =
                 {
                     {macroPoints(-15), 0},                                                    // Intro
                     {},                                                                       // Groove
                     {macroPoints(-10), macroPoints(-10), macroPoints(-15), macroPoints(-15)}, // Break: a dip
-                    {0, macroPoints(3), 0, macroPoints(3)},                                   // Build: a swell
+                    {0, macroPoints(5), 0, macroPoints(5)},                                   // Build: a swell
                     {0, macroPoints(-15)},                                                    // Outro
                 },
             // The Break recedes to the Pad, the Drone and the bells; the Build keeps everything, so its Density ramp

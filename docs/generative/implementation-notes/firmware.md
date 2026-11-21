@@ -122,3 +122,14 @@ otherwise.
   `writeBase()`/`repatch()` do: fine on the line after the flush, wrong under sounding voices. A swing interval that
   changes in the tick waits for the pump (`Transitions::swingIntervalFollows()`): `changeSwingInterval()` reschedules
   the internal clock while playing.
+- The preset preview (#443, `preset_preview.*`, the portable `perform/preset_preview.h`) builds with
+  `buildPartOutput()` in a live job, as `SoundJob` does, but the Output goes into no roster: it sits linked in the song
+  beside the part's own, its note goes through `OutputSink::playNote()`, and it is freed in task context with
+  `freePartOutput()` (from the UI, or in the job's `finished()` for a build the cursor has left). Putting it in the
+  roster would have needed a restore before every start step (`soundControls.begin()` reads homes from the roster),
+  restart, transition and knob bind. The runner is busy while a preview builds, so the browser's SELECT cancels it and
+  chooses once it has unwound (`chooseWhenFree_`); a choice made at once would be refused BUSY.
+  `deleteUnusedAudioFiles()` after a free runs only with the runner free (or from the preview job itself): another job
+  may be loading samples no Output holds yet. What a preview holds, on the Deluge with the pack (`gen_mem preset_preview`
+  against `preset_preview_freed`): a synth part's preset 13.7 KB of internal RAM, an FX lane's (a whole Kit, the
+  lane's row a synth) 39 KB, external RAM about 0 for both.
