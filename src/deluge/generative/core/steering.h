@@ -86,7 +86,22 @@ enum class CommandKind : uint8_t {
 	/// target: part. length: the Macro. value: the part's Part bias on that macro, in macro units, -kMacroFull to
 	/// kMacroFull (spec §3.3). Continuous, by part and macro, as SetMacro is: it lands on the next undecided step.
 	SetBias,
+	/// A tier 2 punch-in pad (spec §8.9, §13.5). target: PunchIn. lane: the Drums lane a LaneMute silences, else
+	/// Lane::None. value: 1 on, 0 off, as the KEYBOARD page's hold or latch left it: the core resolves no press. Lands
+	/// on the next undecided step.
+	SetPunch,
 };
+
+/// The tier 2 punch-ins (spec §8.9): each plays a fixed amount while on. All but Pump act on the Drums part.
+enum class PunchIn : uint8_t {
+	LaneMute,   ///< One Drums lane plays nothing (Command::lane).
+	HatRoll,    ///< The Closed hat plays 32nds.
+	SnareRoll,  ///< The Snare, or the Clap where there's none, plays 16ths.
+	Flam,       ///< Every Drums hit but the Kick's flams.
+	DoubleKick, ///< Each Kick hit plays twice, a 32nd apart.
+	Pump,       ///< Every other part ducks under the Kick through its sidechain (the driver's, on Event::pump()).
+};
+constexpr int32_t kNumPunchIns = 6;
 
 /// How a transition plays (spec §9.7), chosen in the confirm.
 enum class TransitionStyle : uint8_t {

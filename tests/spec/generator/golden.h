@@ -92,6 +92,8 @@ inline std::string whatOf(const Event& e) {
 		return "sound " + std::to_string(e.soundToken());
 	case EventKind::NoteOn:
 		return key + " on v" + std::to_string(e.velocity) + (e.ornament ? " ornament" : "") + (e.muted ? " muted" : "");
+	case EventKind::Pump:
+		return e.pumps() ? "pump on" : "pump off";
 	}
 	return "?";
 }
@@ -103,6 +105,8 @@ inline std::string ownerOf(const Genre& genre, const Event& e) {
 		return "SECTION";
 	case EventKind::KeyScale:
 		return "KEY";
+	case EventKind::Pump:
+		return "PUNCH";
 	default:
 		return e.part < genre.parts.size() ? genre.parts[e.part].name : "PART " + std::to_string(e.part);
 	}

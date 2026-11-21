@@ -259,6 +259,16 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		stopAt_ = nextStep_ + transitionSteps(command);
 		return true;
 	}
+	case CommandKind::SetPunch:
+		if (!punch_.set(command)) {
+			return false;
+		}
+		// The pump starts or stops on this step's line: the driver ducks the other parts from there (spec §8.9).
+		if (punch_.on(PunchIn::Pump) != punch_.pumped) {
+			punch_.pumped = !punch_.pumped;
+			push(Event::pump(stepTick(nextStep_), punch_.pumped));
+		}
+		return true;
 	case CommandKind::SetFill: {
 		const std::span<const FillEntry> fills = genre_->fills;
 		if (command.value == kFillReleased) {

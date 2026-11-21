@@ -35,6 +35,7 @@
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
 #include "generative/core/part_bias.h"
+#include "generative/core/punch_ins.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
@@ -345,6 +346,8 @@ public:
 	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
 	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
+	/// The tier 2 punch-ins on as of the last decided step (spec §8.9).
+	[[nodiscard]] const PunchIns& punchIns() const { return punch_; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
@@ -487,6 +490,10 @@ private:
 	/// One step of a roll on a lane, at `roll`'s stage and from its base velocity: the Build roll's (spec §8.3) or a
 	/// Roll fill's (§8.7).
 	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
+	/// Whether the punch-ins act on `part`: the Drums part (spec §8.9).
+	[[nodiscard]] bool punchesPart(int32_t part) const { return genre_->parts[part].role == Role::Drums; }
+	/// The roll a punch-in plays on the Drums part's `lane`, or one with no stage (spec §8.9).
+	[[nodiscard]] RollStep punchRoll(int32_t partIndex, Lane lane) const;
 	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
 	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
 		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
@@ -664,6 +671,9 @@ private:
 	/// Whether a note gets an Ornament, and which (spec §8.2).
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
 	                                       int32_t patternStep, Lane lane) const;
+	/// The Ornament a Drums hit on `lane` plays while a Flam or Double kick punch-in is on, in place of `drawn` (spec
+	/// §8.9).
+	[[nodiscard]] OrnamentKind punchOrnament(Lane lane, OrnamentKind drawn) const;
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
@@ -861,6 +871,8 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
+	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
+	PunchIns punch_;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
 	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;

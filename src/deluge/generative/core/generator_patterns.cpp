@@ -453,6 +453,15 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			}
 		}
 	}
+	// A punch-in's roll replaces the lane's hits whatever gates, section rules, fills and Replace pairs say: the
+	// player's (spec §8.9). A LaneMute still flags it.
+	if (punch_.effects != 0 && punchesPart(partIndex)) {
+		for (int32_t l = 0; l < lanes; l++) {
+			if (const RollStep roll = punchRoll(partIndex, spec.lanes[l].lane); roll.stage != RollStage::None) {
+				rolls[l] = roll;
+			}
+		}
+	}
 	for (int32_t l = 0; l < lanes; l++) {
 		if (rolls[l].stage != RollStage::None) {
 			playRoll(partIndex, l, step, rolls[l]);
@@ -521,7 +530,10 @@ GEN_STEP_CODE int32_t Generator::express(int32_t partIndex, const Expression& ex
 		return start;
 	}
 
-	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	if (punch_.effects != 0 && punchesPart(partIndex)) {
+		ornament = punchOrnament(decided.lane, ornament);
+	}
 	if (decided.tie && ornament == OrnamentKind::None
 	    && sounding_.extend(partIndex, note.lane, note.pitch, note.onTick, note.offTick)) {
 		return start; // a slide onto the same note ties
@@ -600,6 +612,15 @@ Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornament
 	int32_t which =
 	    drawWeighted(onPick(key, pick, 1, static_cast<uint32_t>(patternStep)), std::span<const Choice>(choices));
 	return static_cast<OrnamentKind>(static_cast<int32_t>(OrnamentKind::Ratchet2) + which);
+}
+
+GEN_STEP_CODE Generator::OrnamentKind Generator::punchOrnament(Lane lane, OrnamentKind drawn) const {
+	// Each a fixed amount (spec §8.9): a 32nd double on the Kick, a flam on every other Drums lane. They replace the
+	// hit's own Ornament, whose draw stays as it was, so letting go plays the piece's own again.
+	if (lane == Lane::Kick) {
+		return punch_.on(PunchIn::DoubleKick) ? OrnamentKind::Ratchet2 : drawn;
+	}
+	return punch_.on(PunchIn::Flam) && lane != Lane::None && !isFxLane(lane) ? OrnamentKind::Flam : drawn;
 }
 
 } // namespace deluge::generative
