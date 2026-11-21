@@ -541,11 +541,11 @@ void PerformDriver::restartOnLine(NoteSink& sink) {
 	clock_ -= line; // a whole number of bars: the clock's bar lines stay the master's
 	if (log_ != nullptr) {
 		// The piece ends on the line: the restarted one counts its steps from 0, so nothing more goes in this one.
-		// The new piece's opening is #413's second part.
 		log_->endPiece(generator_->nextStep(), PieceEnd::Stopped);
 	}
-	sink.restartPiece(*generator_);
+	sink.restartPiece(*generator_); // AS IT BEGAN reads the ended piece's header here: it is still the newest
 	freshPiece();
+	pieceDue_ = true; // the restarted run is a new piece, with its own header (spec §17.3)
 	setTempo(generator_->recipe().tempo, sink);
 	setSwing(generator_->recipe().swing, sink);
 	swingLine_ = nextStepLine();

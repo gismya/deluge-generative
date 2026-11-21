@@ -74,6 +74,13 @@ struct HeaderSink final : perform::NoteSink {
 	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override {
 		log.appendSoundPath(step, part, token, pickSlot(part), "SYNTHS/GEN NEW");
 	}
+	/// A restart's line starts the piece again, as RecordingSink's does: a StepwisePiece sets it.
+	std::function<void(Generator&)> restarts;
+	void restartPiece(Generator& generator) override {
+		if (restarts) {
+			restarts(generator);
+		}
+	}
 };
 
 } // namespace
@@ -500,21 +507,35 @@ describe steering_log("The steering log", $ {
 			expect(piece.log.piece(0).start().first == SectionKind::Intro).to_be_true();
 		});
 
-		it("ends the piece on a restart's line, logging nothing of the restarted run into it (#413 opens its own)", _ {
+		it("ends the piece on a restart's line, and the restarted run opens a piece of its own (#413)", _ {
 			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};
 			piece.decideBefore(4);
+			piece.log.mark(true); // kept, so both pieces read back
 			piece.push(macro(Macro::Energy, 7));
+			piece.steering.setMacro(Macro::Density, 31); // the Current Recipe's: the next header holds it
 			piece.push({CommandKind::Restart, 0, 1});
 			piece.runToStepLine(kStepsPerBar + 2);
 			piece.push(macro(Macro::Density, 9));
 			piece.runToStepLine(kStepsPerBar + 6);
-			expect(piece.log.pieces()).to_equal(1);
+			expect(piece.log.pieces()).to_equal(2);
+			if (piece.log.pieces() != 2) {
+				return; // piece(1) isn't there to read
+			}
 			const SteeringLog::Piece p = piece.log.piece(0);
 			expect(p.ended() == PieceEnd::Stopped).to_be_true();
 			expect(p.endStep()).to_equal(kStepsPerBar);
 			const std::vector<LogRecord> read = records(piece.log, 0);
-			expect(read.size()).to_equal(1u);
+			expect(read.size()).to_equal(2u);
 			expect(read[0].step).to_equal(4);
+			// The restarted run: its own header (the Current Recipe at its step 0, from the Intro) and its steering.
+			const SteeringLog::Piece restarted = piece.log.piece(1);
+			expect(restarted.ended() == PieceEnd::Playing).to_be_true();
+			expect(restarted.start().recipe.macros[Macro::Density]).to_equal(31);
+			expect(restarted.start().first == SectionKind::Intro).to_be_true();
+			expect(piece.sink.headers).to_equal(2);
+			const std::vector<LogRecord> again = records(piece.log, 1);
+			expect(again.size()).to_equal(1u);
+			expect(again[0].command == macro(Macro::Density, 9)).to_be_true();
 		});
 
 		it("ends at the Outro's end", _ {

@@ -27,6 +27,7 @@
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/perform_midi.h"
 #include "generative/firmware/pump.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"

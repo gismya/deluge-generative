@@ -1,6 +1,7 @@
-// Restart AS IT IS (spec §13.2, issue #413): X+PLAY or RESTART ▸ AS IT IS while a piece plays queues a restart to the
-// next bar line, where the piece starts again from bar 1 with its Intro, from the Current Recipe as the player left
-// it. Nothing carries over from the first run.
+// Restart (spec §13.2, issue #413): X+PLAY or RESTART ▸ AS IT IS while a piece plays queues a restart to the next bar
+// line, where the piece starts again from bar 1 with its Intro, from the Current Recipe as the player left it.
+// RESTART ▸ AS IT BEGAN starts it from its piece header instead (spec §17.2): the Recipe, seed and takes it began with.
+// Nothing carries over from the first run.
 
 #include "generative/perform/queue_text.h"
 #include "harness.h"
@@ -56,12 +57,13 @@ int32_t restartLine(const Generator& generator) {
 	return -1;
 }
 
-/// A piece that plays `steps` steps, presses X+PLAY, and plays on until the restart's line. @return the line.
+/// A piece that plays `steps` steps, presses X+PLAY (or RESTART ▸ `from`), and plays on until the restart's line.
+/// @return the line.
 template <typename Piece>
-int32_t restartAfter(Piece& piece, int32_t steps) {
+int32_t restartAfter(Piece& piece, int32_t steps, RestartFrom from = RestartFrom::AsItIs) {
 	const size_t restarts = piece.sink.restartedAt.size();
 	piece.decideBefore(steps);
-	if (piece.steering.pressRestart() != PressOutcome::Accepted) {
+	if (piece.steering.pressRestart(from) != PressOutcome::Accepted) {
 		throw std::runtime_error("restartAfter: the press was not accepted");
 	}
 	piece.decideBefore(steps + 1);
@@ -303,6 +305,77 @@ describe restart("Restart", $ {
 		pending = false;
 		piece.driver.stop(piece.sink);
 		expect(piece.steering.pressRestart() == PressOutcome::NothingToDo).to_be_true();
+	});
+
+	context("AS IT BEGAN", _ {
+		it("after steering (macros, a take, an octave shift, a bias, a re-roll), replays the first run", _ {
+			StepwisePiece<> piece{{.seed = 4, .logEntries = 256}};
+			piece.decideBefore(40);
+			piece.steering.setMacro(Macro::Energy, piece.currentRecipe.macros[Macro::Energy] + 10);
+			piece.steering.setMacro(Macro::Density, piece.currentRecipe.macros[Macro::Density] - 8);
+			piece.steering.pressTake(kAcid, 1);
+			piece.steering.pressOctave(kAcid, 1);
+			piece.steering.setBias(kAcid, Macro::Density, -12);
+			piece.push({CommandKind::SetSound, kAcid, 5}); // a re-roll's token
+			piece.decideBefore(2 * 64 + 1);
+			expect(piece.currentTakes.take[kAcid]).to_equal(1);
+			const int32_t line = restartAfter(piece, 2 * 64 + 20, RestartFrom::AsItBegan);
+			piece.decideBefore(line);
+			piece.runToStepLine(line);
+
+			StepwisePiece<> fresh{{.seed = 4}};
+			fresh.decideBefore(line);
+			fresh.runToStepLine(line);
+			expect(before(afterRestart(piece.sink), line) == before(fresh.sink.events, line)).to_be_true();
+			// The Current Recipe is the piece's start state again: the next start, a save or a Compose reads it.
+			expect(piece.currentTakes.take[kAcid]).to_equal(0);
+			expect(piece.currentRecipe.octave[kAcid]).to_equal(0);
+			expect(piece.currentRecipe.bias.of(kAcid, Macro::Density)).to_equal(0);
+			expect(piece.currentRecipe.macros == acidRecipe().macros).to_be_true();
+			expect(piece.generator.soundLanded(kAcid)).to_equal(-1); // the re-roll's token went with the first run
+		});
+
+		it("with no steering, replays the first run's stream as AS IT IS does", _ {
+			StepwisePiece<> piece{{.seed = 7, .logEntries = 64}};
+			const int32_t line = restartAfter(piece, 3 * 64 + 13, RestartFrom::AsItBegan);
+			piece.decideBefore(line);
+			piece.runToStepLine(line);
+			expect(before(afterRestart(piece.sink), line) == before(firstRun(piece.sink), line)).to_be_true();
+		});
+
+		it("goes back to the start of the piece playing: after an AS IT IS restart, that one's", _ {
+			StepwisePiece<> piece{{.seed = 4, .logEntries = 256}};
+			piece.decideBefore(20);
+			piece.steering.setMacro(Macro::Energy, piece.currentRecipe.macros[Macro::Energy] + 10);
+			const Macros steered = piece.currentRecipe.macros;
+			const int32_t line = restartAfter(piece, 30);
+			piece.decideBefore(20);
+			piece.steering.setMacro(Macro::Energy, piece.currentRecipe.macros[Macro::Energy] + 10);
+			expect(restartAfter(piece, 30, RestartFrom::AsItBegan)).to_equal(line);
+			expect(piece.currentRecipe.macros == steered).to_be_true();
+			piece.decideBefore(20);
+			piece.runToStepLine(20);
+			// Up to where the restarted run was steered again.
+			expect(before(afterRestart(piece.sink, 1), 20) == before(afterRestart(piece.sink, 0), 20)).to_be_true();
+		});
+
+		it("restarts AS IT IS when the piece logged no header", _ {
+			StepwisePiece<> piece{{.seed = 4}}; // no log
+			piece.decideBefore(20);
+			piece.steering.setMacro(Macro::Energy, piece.currentRecipe.macros[Macro::Energy] + 10);
+			const Macros steered = piece.currentRecipe.macros;
+			restartAfter(piece, 30, RestartFrom::AsItBegan);
+			expect(piece.currentRecipe.macros == steered).to_be_true();
+		});
+
+		it("is a restart ahead while its sounds preload: a transition is refused, and a press then cancels", _ {
+			StepwisePiece<> piece{{.seed = 3}};
+			piece.decideBefore(5);
+			piece.steering.restartPreloads(true);
+			expect(piece.steering.restartAhead()).to_be_true();
+			piece.steering.restartPreloads(false);
+			expect(piece.steering.restartAhead()).to_be_false();
+		});
 	});
 });
 

@@ -21,6 +21,7 @@
 #include "generative/core/pitch.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/transitions.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
@@ -47,6 +48,7 @@ using deluge::generative::kNumScales;
 using deluge::generative::Scale;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::restartBegan;
 using deluge::generative::firmware::transitions;
 namespace perform = deluge::generative::perform;
 using perform::PressOutcome;
@@ -372,6 +374,19 @@ public:
 	}
 };
 
+/// RESTART ▸ AS IT BEGAN (spec §13.2, §13.6): the piece starts again as it began, from its header in the steering
+/// log, once the sounds changed since have preloaded: at the next bar line, or at once while stopped. The menu closes.
+class RestartAsItBeganItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		soundEditor.exitCompletely();
+		restartBegan.press();
+		return NO_NAVIGATION;
+	}
+};
+
 /// RESET PART BIAS: the focused part's Part biases back to 0, or every part's with nothing focused (spec §3.3,
 /// §13.6). It closes the menu, as REGENERATE's confirm does, so the faders and rings show the result at once.
 class ResetPartBiasItem final : public MenuItem {
@@ -416,7 +431,8 @@ private:
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
 PLACE_SDRAM_BSS RestartAsItIsItem restartAsItIsItem{l10n::String::STRING_FOR_AS_IT_IS};
-PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem}};
+PLACE_SDRAM_BSS RestartAsItBeganItem restartAsItBeganItem{l10n::String::STRING_FOR_AS_IT_BEGAN};
+PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem, &restartAsItBeganItem}};
 PLACE_SDRAM_BSS ResetPartBiasItem resetPartBiasItem{l10n::String::STRING_FOR_RESET_PART_BIAS};
 PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 

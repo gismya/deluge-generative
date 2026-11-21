@@ -21,6 +21,7 @@ using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::restartBegan;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
@@ -120,6 +121,9 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 				}
 				else if (soundSwaps.cancelPreload()) {
 					TEST_EVENT("gen_back_tap preload");
+				}
+				else if (restartBegan.cancelPreload()) {
+					TEST_EVENT("gen_back_tap restart_preload"); // AS IT BEGAN's sounds: nothing restarts
 				}
 				else {
 					refusedWithPopup(performAdapter.steering().cancelNewest());

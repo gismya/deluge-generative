@@ -25,8 +25,9 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 
 ### 17.3 Pieces
 
-- A **piece** runs from a Start, Regenerate, genre change or mid-set LOAD until the transport stops or the next Regenerate, genre change or LOAD.
+- A **piece** runs from a Start, restart, Regenerate, genre change or mid-set LOAD until the transport stops or the next restart, Regenerate, genre change or LOAD.
 - If End was pressed, the piece includes the Outro up to where it finishes. A plain stop cuts the piece at the stop step. A Start after a stop begins a new piece.
+- A **restart** ([§13.2](13-perform.md#132-transport-start-and-end)), AS IT IS or AS IT BEGAN, ends the piece on its bar line (as a stop, before the line's step), and the restarted run is a new piece from its step 0, with its own header, so Capture keeps the take as a song of its own. AS IT BEGAN reads the ended piece's header on that line, before the new piece's opening throws an unmarked one away.
 - At a transition, the old piece ends on the last step before the new roster starts, its Build or Outro included, and the new piece starts there ([§9.7](09-arc.md#97-transitions)). A captured piece that began on a Drop opens on a Groove with the Drop lift, one that began at a seam opens on its Intro, and one that began on a hard cut opens on a Groove. Every piece has one set of Outputs.
 - When a piece ends, its log is thrown away unless the piece is marked, once the next piece begins: until then it is the last piece, which the leave menu offers ([§17.7](#177-building-on-leave)). A plain stop ends the piece before its first undecided step, which can include one step decided in the lookahead and never heard ([§12.2](12-runtime.md#122-when-steps-are-decided)).
 

@@ -101,6 +101,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 		}
 	}
 	open_ = false;
+	newestWithHeader_ = -1;
 	const int32_t at = alignUp(used_);
 	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > room()) {
 		newest_ = pieces_ > 0 ? offsetOf(pieces_ - 1) : 0;
@@ -119,6 +120,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	info.start = start;
 	used_ = at + static_cast<int32_t>(sizeof(PieceInfo));
 	pieces_++;
+	newestWithHeader_ = pieces_ - 1;
 	open_ = true;
 	cut_ = false;
 	inRecords_ = false;
@@ -197,6 +199,7 @@ void SteeringLog::cutHeader() {
 	info.bytes = used_ - newest_;
 	info.cutAt = 0;
 	cut_ = true;
+	newestWithHeader_ = -1;
 }
 
 GEN_STEP_CODE void SteeringLog::cut(int32_t step) {
@@ -339,6 +342,7 @@ void SteeringLog::clear() {
 	used_ = 0;
 	pieces_ = 0;
 	newest_ = 0;
+	newestWithHeader_ = -1;
 	open_ = false;
 	cut_ = false;
 	inRecords_ = false;

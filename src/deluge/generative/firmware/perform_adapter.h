@@ -254,6 +254,8 @@ private:
 	friend class LeaveJob;
 	friend class SoundJob;
 	friend class SoundSwaps;
+	friend class RestartBegan;
+	friend class BeganJob;
 	friend class TransitionJob;
 	friend class OutputSink;
 

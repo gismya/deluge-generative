@@ -1,0 +1,198 @@
+# Restart AS IT BEGAN (#413, spec §13.2, §13.6, §17.2, §17.3) over the sysex test port: RESTART ▸ AS IT BEGAN starts
+# the piece again from its header in the steering log. With nothing changed it queues to the next bar line at once;
+# after steering (a macro, a take, a preset chosen in the preset browser, which ACID's palette doesn't list, so the pick
+# surely changes) the part's first sound preloads under the working animation, then
+# the restart queues, and on its line the first sound swaps back in, the param snapshot is written back, and the
+# Current Recipe's macros and takes are the piece's first ones. The restarted run opens a piece of its own in the log.
+# BACK cancels the preload. Stopped, it restores the last piece's start state, then starts. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
+# clip a synth or kit clip.
+#
+# Events: gen_restart_press began parts=0 | began_preload parts= stopped= submitted= | began_queued | began_cancelled:
+# what AS IT BEGAN did (parts: a bit per part whose picks changed). gen_restart_preload_held parts=,
+# gen_restart_preload done|cancelled|failed parts= error= missing= ms= working=: its preload. gen_restart_snapshot
+# params=: params written back on the line. gen_restart as_it_began [stopped] tempo= energy=: it started the piece
+# again (energy: the Energy macro's units). gen_log_piece pieces=: a piece opened in the log. Acid techno: ACID is part
+# 1, its SONG row pad 9 6; perform_choose_002.txt chooses SYNTHS/002 for it. The Perform menu's rows with no transition to cancel:
+# GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART; RESTART ▸'s: AS IT IS, AS IT
+# BEGAN. Menus remember their row, so each choice counts from the top, and the script leaves both on their first row.
+# covers: src/deluge/generative/firmware/restart_began.* src/deluge/generative/firmware/log_header.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/perform_steering.h src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/generative/core/steering_log.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/working_animation.* src/deluge/generative/firmware/pump.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/gui/menu_item/generative/perform_menu.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view_internal.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/gui/l10n/strings.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 /
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=10
+
+# ---- With nothing changed: no preload, the restart queues at once and lands on the next bar line ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began parts=0
+expect event gen_restart_press began_queued
+expect ui=generative_perform
+expect event /^gen_restart as_it_began tempo=\d+ energy=(?P<energy>\d+)$/ within=15
+expect event /^gen_log_piece pieces=1 / within=5
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+
+# ---- Steer: Energy up a few detents (F8's upper gold knob) ----
+button F8 down
+wait 50
+button F8 up
+encoder 4 1 fast
+wait 100
+encoder 4 1 fast
+wait 100
+encoder 4 1 fast
+expect event gen_macro_landed macro=0 within=5
+
+# ---- Lock ACID (double tap its SONG row) and open its CLIP page: a new take, then a NEW SOUND ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+encoder 0 1
+expect event gen_press take part=1 take=1 y=1
+expect event gen_clip part=1 takes=ePn............. within=40
+include perform_choose_002.txt
+expect event gen_sound_press part=1 source=chosen
+expect event gen_sound_preload done part=1 source=chosen within=10
+expect event gen_sound_swap part=1 line=1 within=40
+
+# ---- AS IT BEGAN: ACID's first sound preloads, then the restart queues; on its line it all goes back ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began_preload parts=2 stopped=0 submitted=1
+# ACID's first preset, not the chosen one
+expect event /^gen_sound ACID - pick .*SYNTHS\/(?!002 Basic Square Bass)/ within=10
+expect event /^gen_restart_preload done parts=2 error=0 missing=0 ms=\d+ working=1$/ within=10
+expect event gen_restart_press began_queued
+expect event /^gen_status [^|]*\|>RST/ within=5
+expect event gen_restart_snapshot params= within=15
+expect event /^gen_restart as_it_began tempo=\d+ energy=(?P=energy)$/ within=1
+expect event /^gen_log_piece pieces=1 / within=5
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+# Take 1 is the Recipe's again, with take 2 still made; the re-rolled Output is freed once silent
+expect event gen_clip part=1 takes=Pen............. within=5
+expect event gen_outputs_freed outputs=1 within=40
+expect playing=true
+
+# ---- BACK cancels AS IT BEGAN's preload: nothing restarts ----
+include perform_choose_002.txt
+expect event gen_sound_press part=1 source=chosen
+expect event gen_sound_swap part=1 line=1 within=40
+hold preload
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_preload_held parts=2 within=10
+button BACK down
+wait 30
+button BACK up
+expect event gen_back_tap restart_preload
+expect event gen_restart_preload cancelled parts=2 within=5
+release preload
+expect no_event gen_restart as_it_began within=8
+
+# ---- Stopped: the last piece's start state comes back, its sounds first, then it starts ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began_preload parts=2 stopped=1 submitted=1
+expect event gen_restart_preload done parts=2 error=0 within=10
+expect event gen_restart_snapshot params=
+expect event /^gen_restart as_it_began stopped tempo=\d+ energy=(?P=energy)$/
+expect playing=true
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- Both menus back on their first row, for a later script ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+expect ui=generative_perform

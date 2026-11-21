@@ -26,6 +26,9 @@
 #include "modulation/params/param_manager.h"
 #include "modulation/params/param_set.h"
 #include "modulation/patch/patch_cable_set.h"
+#include "processing/sound/sound.h"
+#include "processing/sound/sound_drum.h"
+#include "processing/sound/sound_instrument.h"
 #include <cstring>
 
 namespace deluge::generative::firmware {
@@ -82,7 +85,110 @@ void logParams(SteeringLog& log, uint8_t output, Lane lane, ParamManager& paramM
 	}
 }
 
+/// Where a snapshot block's params live: a ParamManager, and the Sound that owns it, if any (patched again once
+/// written).
+struct BlockParams {
+	ParamManager* manager = nullptr;
+	Sound* sound = nullptr;
+};
+
+/// The ParamManager a block names, as logPieceHeader() walked them: the song's, a part's Output's (its clip's), or a
+/// Kit row's. Empty for a part, row or collection that isn't there now.
+BlockParams paramsOf(const SnapshotBlock& block, const Roster& roster, const Genre& genre, Song& song) {
+	if (block.output == kSongParams) {
+		return {&song.paramManager, nullptr};
+	}
+	if (block.output >= partCount(genre)) {
+		return {};
+	}
+	const PartOutput& part = roster.parts[block.output];
+	if (part.clip == nullptr || part.output == nullptr) {
+		return {};
+	}
+	if (block.lane == Lane::None) {
+		Sound* sound = part.output->type == OutputType::SYNTH ? static_cast<SoundInstrument*>(part.output) : nullptr;
+		return {&part.clip->paramManager, sound};
+	}
+	Drum* drum = part.drums[laneRow(block.lane)];
+	NoteRow* row = drum != nullptr ? part.clip->getNoteRowForDrum(drum) : nullptr;
+	if (row == nullptr || !row->paramManager.containsAnyMainParamCollections()) {
+		return {};
+	}
+	return {&row->paramManager, drum->type == DrumType::SOUND ? static_cast<SoundDrum*>(drum) : nullptr};
+}
+
+/// Writes a block's values into `manager`'s collection. @return the params written.
+int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t length, ParamManager& manager) {
+	if (block.collection >= manager.getExpressionParamSetOffset()) {
+		return 0;
+	}
+	ParamCollection* collection = manager.summaries[block.collection].paramCollection;
+	if (collection == nullptr) {
+		return 0;
+	}
+	int32_t written = 0;
+	if (isCableCollection(manager, block.collection)) {
+		auto* set = static_cast<PatchCableSet*>(collection);
+		const int32_t count = std::min<int32_t>(block.count, length / kCableValueBytes);
+		for (int32_t i = 0; i < count; i++) {
+			const uint8_t* at = values + i * kCableValueBytes;
+			CableValue value{};
+			std::memcpy(&value.destination, at, sizeof value.destination);
+			std::memcpy(&value.value, at + sizeof value.destination, sizeof value.value);
+			std::memcpy(&value.source, at + sizeof value.destination + sizeof value.value, sizeof value.source);
+			for (int32_t c = 0; c < set->numPatchCables; c++) {
+				PatchCable& cable = set->patchCables[c];
+				if (cable.destinationParamDescriptor.data == value.destination
+				    && static_cast<uint8_t>(cable.from) == value.source) {
+					if (cable.param.getCurrentValue() != value.value) {
+						cable.param.setCurrentValueBasicForSetup(value.value);
+						written++;
+					}
+					break;
+				}
+			}
+		}
+		return written;
+	}
+	auto* set = static_cast<ParamSet*>(collection);
+	const int32_t count = std::min<int32_t>(
+	    {static_cast<int32_t>(block.count), set->getNumParams(), length / static_cast<int32_t>(sizeof(int32_t))});
+	for (int32_t p = 0; p < count; p++) {
+		int32_t value = 0;
+		std::memcpy(&value, values + p * static_cast<int32_t>(sizeof(int32_t)), sizeof value);
+		AutoParam& param = set->params[p];
+		if (param.getCurrentValue() != value) {
+			param.resetInterpolationIncrement(); // a ramp still running mustn't carry on past the restore
+			param.setCurrentValueBasicForSetup(value);
+			written++;
+		}
+	}
+	return written;
+}
+
 } // namespace
+
+int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song) {
+	int32_t written = 0;
+	piece.forEachSnapshot([&](const void* data, int32_t length) {
+		if (length < static_cast<int32_t>(sizeof(SnapshotBlock))) {
+			return;
+		}
+		SnapshotBlock block{};
+		std::memcpy(&block, data, sizeof block);
+		const BlockParams params = paramsOf(block, roster, genre, song);
+		if (params.manager == nullptr) {
+			return;
+		}
+		const int32_t n = restoreBlock(block, static_cast<const uint8_t*>(data) + sizeof block,
+		                               length - static_cast<int32_t>(sizeof block), *params.manager);
+		if (n > 0 && params.sound != nullptr) {
+			params.sound->patcher.performInitialPatching(*params.sound, *params.manager);
+		}
+		written += n;
+	});
+	return written;
+}
 
 void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song) {
 	const int32_t parts = partCount(genre);

@@ -17,6 +17,7 @@
 
 #include "generative/firmware/working_animation.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
 #include "gui/l10n/l10n.h"
@@ -26,7 +27,7 @@
 namespace deluge::generative::firmware {
 
 bool preloadRunning() {
-	return transitions.preloading() || soundSwaps.preloadRunning();
+	return transitions.preloading() || soundSwaps.preloadRunning() || restartBegan.preloading();
 }
 
 bool workingAnimationShown() {

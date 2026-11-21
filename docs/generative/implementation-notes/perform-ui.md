@@ -161,3 +161,6 @@ otherwise.
   `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
   rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
   (`perform_restart.txt`), since the menu remembers its row.
+- RESTART ▸ has two rows, AS IT IS then AS IT BEGAN, and the submenu remembers its row too: a script that picks AS IT
+  BEGAN puts the submenu back on AS IT IS (`encoder 3 -20` inside it) before leaving, or `perform_restart.txt`'s
+  SELECT, SELECT picks AS IT BEGAN (`perform_restart_began.txt` does).

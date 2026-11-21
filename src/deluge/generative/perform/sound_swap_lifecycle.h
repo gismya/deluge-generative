@@ -427,6 +427,9 @@ public:
 		return count;
 	}
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
+	/// `part`'s Output was swapped in by a restart AS IT BEGAN (spec §13.2), not a re-roll: it has a previous sound
+	/// from here, as after a swap.
+	void swappedByRestart(int32_t part) { hasPrevious_[part] = true; }
 
 private:
 	/// A part's sound waiting for its line.

@@ -214,6 +214,15 @@ bool SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& outp
 	});
 }
 
+void SoundSwaps::adoptRestarted(int32_t part, const PartOutput& output, const SoundPicks& picks) {
+	// The restart's line dropped every sound waiting for its line (pieceRestarts()), and while stopped a preload swaps
+	// in as it ends: the part's incoming slot is free.
+	incoming_[part] = output;
+	copyPartPicks(*genre(), part, picks, incomingPicks);
+	swapIn(part);
+	swappedByRestart(part);
+}
+
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
 	const Genre* current = genre();
 	retirements.retire(output, when, Retirements::Owner::Sound,
