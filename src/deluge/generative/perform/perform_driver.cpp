@@ -58,6 +58,7 @@ void PerformDriver::begin(Generator& generator, int32_t songTick, int32_t magnit
 	outgoing_ = nullptr;
 	freshPiece();
 	magnitude_ = magnitude;
+	pieceDue_ = true;
 	placeBefore(0, toBarLine(songTick, magnitude));
 }
 
@@ -121,8 +122,7 @@ void PerformDriver::resumeAt(int64_t songTick, NoteSink& sink) {
 	swingLine_ = nextStepLine();
 }
 
-int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log,
-                               NoteSink& sink) {
+int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, NoteSink& sink) {
 	if (generator_ == nullptr) {
 		return INT32_MAX;
 	}
@@ -140,7 +140,7 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 	moveClock(songTicks, magnitude);
 	moveGlides(clock_ - before, sink);
 	drainOutgoing(sink);
-	decideDue(queue, log, sink);
+	decideDue(queue, sink);
 	playDue(sink, clock_);
 	drainOutgoing(sink);
 	glideIntoTransition(sink);
@@ -149,7 +149,7 @@ int32_t PerformDriver::advance(int32_t songTicks, int32_t magnitude, SteeringQue
 		// The Outro is over: the piece stops on its last line, every note released there (spec §13.2).
 		generator_->flush(stepTick(generator_->nextStep()), Generator::FlushFor::Stop);
 		playDue(sink, clock_);
-		finish(sink);
+		finish(sink, PieceEnd::Outro);
 		ended_ = true;
 		return INT32_MAX;
 	}
@@ -178,7 +178,7 @@ void PerformDriver::moveClock(int32_t songTicks, int32_t magnitude) {
 	}
 }
 
-void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink) {
+void PerformDriver::decideDue(SteeringQueue& queue, NoteSink& sink) {
 	// Play as you decide: everything due before a decision plays first, so a late call never piles several steps'
 	// events into the buffer, and they play in the order they would have on time.
 	while (decisionTick(generator_->nextStep()) <= clock_) {
@@ -215,13 +215,21 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		}
 		const int32_t decision = decisionTick(generator_->nextStep());
 		playDue(sink, decision - 1);
+		if (pieceDue_) {
+			openPiece(sink); // outside the decision's time: the snapshot reads every param (H1, spec §20)
+		}
+		int32_t soundsBefore[kMaxParts];
+		for (int32_t p = 0; p < kMaxParts; p++) {
+			soundsBefore[p] = generator_->soundLanded(p);
+		}
 		if (timer_ != nullptr) {
 			timer_->decisionsBegin();
 		}
-		generator_->decideNextStep(queue, log);
+		generator_->decideNextStep(queue, log_ != nullptr && log_->logging() ? log_ : nullptr);
 		if (timer_ != nullptr) {
 			timer_->decisionsEnd(1);
 		}
+		logLandedSounds(soundsBefore, sink);
 		if (incoming_ != nullptr && transitionFrom_ < 0) {
 			if (generator_->transitionStart() >= 0) {
 				const bool cut = generator_->stoppedDeciding();
@@ -239,6 +247,45 @@ void PerformDriver::decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& 
 		}
 		history_.decided(generator_->nextStep() - 1,
 		                 generator_->effectiveMacro(Macro::Energy) - generator_->recipe().macros[Macro::Energy]);
+	}
+}
+
+void PerformDriver::openPiece(NoteSink& sink) {
+	pieceDue_ = false;
+	if (log_ == nullptr) {
+		return;
+	}
+	PieceStart start;
+	start.recipe = generator_->recipe();
+	start.seed = generator_->seed();
+	start.takes = generator_->takes();
+	start.first = generator_->arc().first();
+	start.onDrop = generator_->arc().opensOnDrop();
+	start.held = generator_->arc().held();
+	log_->beginPiece(start);
+	if (log_->logging()) {
+		sink.logPieceHeader(*log_);
+	}
+}
+
+void PerformDriver::logSoundDropped(uint8_t part) {
+	if (log_ != nullptr && generator_ != nullptr && generator_->nextStep() > 0) {
+		log_->appendSoundDropped(generator_->nextStep() - 1, part);
+	}
+}
+
+void PerformDriver::logLandedSounds(const int32_t (&before)[kMaxParts], NoteSink& sink) {
+	if (log_ == nullptr || !log_->logging()) {
+		return;
+	}
+	// A new token always differs from the one that last landed on its part (SoundSwapLifecycle's tokens), so a
+	// change is a SetSound that landed on this step, which the core has just logged.
+	const int32_t step = generator_->stoppedDeciding() ? generator_->nextStep() : generator_->nextStep() - 1;
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		const int32_t token = generator_->soundLanded(p);
+		if (token != before[p] && token >= 0) {
+			sink.logSoundPaths(*log_, step, static_cast<uint8_t>(p), static_cast<uint8_t>(token));
+		}
 	}
 }
 
@@ -366,7 +413,7 @@ void PerformDriver::stop(NoteSink& sink) {
 	playDue(sink, clock_);
 	flushOutgoing(Generator::FlushFor::Stop, sink);
 	dropRiser();
-	finish(sink);
+	finish(sink, PieceEnd::Stopped);
 	incoming_ = nullptr; // the caller commits the transition (spec §12.9), or ends one whose command was dropped
 	transitionFrom_ = -1;
 	transitionTempo_.reset();
@@ -388,6 +435,7 @@ void PerformDriver::cancelIncoming(NoteSink& sink) {
 	incoming_ = nullptr;
 	if (transitionTempo_.started && generator_ != nullptr) {
 		glideTempo(generator_->recipe().tempo, cutGlideTicks_, sink);
+		logTransitionTempo(generator_->recipe().tempo, clock_ + cutGlideTicks_);
 	}
 	transitionTempo_.reset();
 	transitionFrom_ = -1;
@@ -427,10 +475,30 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 	planned.window = false;
 	glideTempo(planned.target, std::max<int32_t>(planned.to - clock_, 0), sink); // which times the Riser again
 	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
+	if (incoming_ != nullptr) {
+		// Heard in the outgoing piece. An Instant cut's glide starts after the switch, 12 ticks before the cut line:
+		// the outgoing piece has ended by then, and the incoming one opens at the target tempo.
+		logTransitionTempo(planned.target, planned.to);
+	}
+}
+
+void PerformDriver::logTransitionTempo(int32_t tempo, int32_t endTick) {
+	const int32_t step = generator_->nextStep() - 1;
+	if (log_ == nullptr || step < 0) {
+		return;
+	}
+	// From the step's line, so a replay's glide ends where the live one does.
+	const int32_t ticks = std::clamp<int32_t>(endTick - stepTick(step), 0, UINT16_MAX);
+	log_->append(step, Command{CommandKind::TransitionTempo, 0, tempo, static_cast<uint16_t>(ticks)});
 }
 
 void PerformDriver::switchToIncoming(NoteSink& sink) {
 	const int32_t startTick = stepTick(generator_->transitionStart());
+	if (log_ != nullptr) {
+		// The outgoing piece ends on the last step before the new roster starts, its Build or Outro included (spec
+		// §17.3); the new one opens at its step 0's decision, just after this.
+		log_->endPiece(generator_->transitionStart(), PieceEnd::Transition);
+	}
 	flushOutgoing(Generator::FlushFor::Stop, sink); // never one left: a third roster is refused (spec §12.9)
 	outgoing_ = generator_;
 	outgoingBase_ = startTick;
@@ -456,6 +524,7 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 		transitionTempo_.from -= startTick;
 		transitionTempo_.to -= startTick;
 	}
+	pieceDue_ = true;
 	sink.transitionStarts(startTick);
 	// Swing switches on the start step, in one step: never a glide under a Build roll (spec §9.7).
 	glideSwing(generator_->recipe().swing, 0, sink);
@@ -470,6 +539,11 @@ void PerformDriver::restartOnLine(NoteSink& sink) {
 	playDue(sink, clock_);
 	flushOutgoing(Generator::FlushFor::Stop, sink);
 	clock_ -= line; // a whole number of bars: the clock's bar lines stay the master's
+	if (log_ != nullptr) {
+		// The piece ends on the line: the restarted one counts its steps from 0, so nothing more goes in this one.
+		// The new piece's opening is #413's second part.
+		log_->endPiece(generator_->nextStep(), PieceEnd::Stopped);
+	}
 	sink.restartPiece(*generator_);
 	freshPiece();
 	setTempo(generator_->recipe().tempo, sink);
@@ -512,7 +586,11 @@ void PerformDriver::flushOutgoing(Generator::FlushFor why, NoteSink& sink) {
 	}
 }
 
-void PerformDriver::finish(NoteSink& sink) {
+void PerformDriver::finish(NoteSink& sink, PieceEnd why) {
+	if (log_ != nullptr && !pieceDue_) {
+		log_->endPiece(generator_->nextStep(), why); // a plain stop cuts the piece at its first undecided step
+	}
+	pieceDue_ = false;
 	if (incoming_ != nullptr && dropReported_ && transitionTempo_.started) {
 		// The core dropped the command, so the transition ends: the playing Recipe's tempo stays, not the glide's
 		// target (issue #206). With no generator left, the caller's cancelIncoming() glides nothing back.

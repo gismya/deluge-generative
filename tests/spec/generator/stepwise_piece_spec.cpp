@@ -62,8 +62,8 @@ describe stepwise_piece("The stepwise piece", $ {
 		piece.push(kMuteNow);
 		piece.runTicks(0); // the first call alone
 		expect(piece.generator.nextStep()).to_equal(1);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(0);
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(0);
 	});
 
 	it("decides every step before the one named: it is the next to decide, and a push now reaches it", _ {
@@ -77,8 +77,8 @@ describe stepwise_piece("The stepwise piece", $ {
 		}
 		piece.push(kMuteNow);
 		piece.decideBefore(21);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(20);
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(20);
 		// Already there: nothing moves.
 		piece.decideBefore(5);
 		expect(piece.generator.nextStep()).to_equal(21);
@@ -96,8 +96,8 @@ describe stepwise_piece("The stepwise piece", $ {
 		expect(kickOnLine).to_be_true();
 		piece.push(kMuteNow);
 		piece.runToStepLine(18);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(17);
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(17);
 	});
 
 	it("runs to a line less or plus some ticks, and not back", _ {
@@ -133,8 +133,8 @@ describe stepwise_piece("The stepwise piece", $ {
 		StepwisePiece<> piece{{.skipIntro = true, .logEntries = 4}};
 		// Pressed on step 9's decision tick, after its call: in time for step 10.
 		piece.runTicks(stepTick(12), {piece.press(decisionTick(9), kMuteNow)});
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(10);
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(10);
 	});
 
 	it("takes a pushed command into the pending list by deciding one more step", _ {
@@ -180,7 +180,7 @@ describe stepwise_piece("The stepwise piece", $ {
 		piece.push(kMuteNow);
 		piece.decideBefore(2);
 		expect(piece.generator.partMuted(kAcid)).to_be_true();
-		expect(piece.log.size()).to_equal(0);
+		expect(logSize(piece.log)).to_equal(0);
 	});
 
 	it("hands a sink that asks for them the driver and the Hook", _ {
@@ -192,19 +192,23 @@ describe stepwise_piece("The stepwise piece", $ {
 		}
 	});
 
-	it("starts again from nothing: the pending list and the log are gone, and step 0 is next", _ {
+	it("starts again from nothing: the pending list is gone, the log's last piece goes as the next opens, and step 0 is next",
+	   _ {
 		StepwisePiece<> piece{{.skipIntro = true, .logEntries = 4}};
 		piece.decideBefore(5);
 		piece.push(kMuteNow);
 		piece.pushAndDecide({CommandKind::SetSolo, 0, kPress});
 		expect(piece.generator.soloPending(0)).to_be_true();
-		expect(piece.log.size()).to_equal(1);
+		expect(logSize(piece.log)).to_equal(1);
 		piece.restart({.skipIntro = true});
 		expect(piece.driver.running()).to_be_true();
 		expect(piece.generator.nextStep()).to_equal(0);
 		expect(piece.generator.soloPending(0)).to_be_false();
 		expect(piece.generator.partMuted(kAcid)).to_be_false();
-		expect(piece.log.size()).to_equal(0);
+		expect(logSize(piece.log)).to_equal(1); // kept until the next piece opens: the leave menu offers it (spec §17.7)
+		piece.decideBefore(1);
+		expect(logSize(piece.log)).to_equal(0);
+		expect(piece.log.pieces()).to_equal(1);
 		piece.runToStepLine(16);
 		expect(piece.driver.clock()).to_equal(stepTick(16));
 		expect(piece.generator.nextStep()).to_equal(17);

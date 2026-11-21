@@ -17,6 +17,7 @@
 
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_midi.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sidechain_pump.h"
@@ -95,11 +96,33 @@ void OutputSink::restartPiece(Generator& generator) {
 void PerformAdapter::stopPiece() {
 	if (driver_.running()) {
 		driver_.stop(sink_);
+		reportLog(true);
 	}
 	sink_.allNotesOff();
 	sidechainPump.release(sink_.roster); // the next start's pump ducks again (spec §8.9)
 	soundControls.restoreHomes();        // every sound back as its preset was, or as the player left it while stopped
 }
+
+#if ENABLE_SYSEX_TEST
+void PerformAdapter::reportLog(bool stopped) const {
+	// H13 (spec §20): the newest piece's bytes, its header's, its records, its end and cut, and the whole log's use.
+	if (log_.pieces() == 0) {
+		return;
+	}
+	const SteeringLog::Piece piece = log_.piece(log_.pieces() - 1);
+	int32_t records = 0;
+	piece.forEachRecord([&](const LogRecord&) { records++; });
+	const auto pieces = static_cast<long>(log_.pieces());
+	const auto used = static_cast<long>(log_.used());
+	const auto bytes = static_cast<long>(piece.bytes());
+	const auto header = static_cast<long>(piece.headerBytes());
+	const auto end = static_cast<long>(piece.endStep());
+	const auto cut = static_cast<long>(piece.cutAt());
+	TEST_EVENT("gen_log at=%s pieces=%ld used=%ld piece=%ld header=%ld records=%ld end=%ld cut=%ld full=%d",
+	           stopped ? "stop" : "phrase", pieces, used, bytes, header, static_cast<long>(records), end, cut,
+	           log_.full() ? 1 : 0);
+}
+#endif
 
 void PerformAdapter::dropSong() {
 	soundControls.forget();
@@ -159,7 +182,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
 	steering_.sampleFill(currentSong->isFillModeActive());
-	int32_t wait = driver_.advance(delta, magnitude, steering_.queue(), nullptr, sink_);
+	int32_t wait = driver_.advance(delta, magnitude, steering_.queue(), sink_);
 #if ENABLE_SYSEX_TEST
 	if (generator_->heldFill() != fillShown_) {
 		// A held fill landed on the last decided step, or ended there.
@@ -244,6 +267,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		const int32_t line = (generator_->nextStep() - 1) / genre->phraseSteps() * genre->phraseSteps();
 		if (line > 0) {
 			TEST_EVENT("gen_phrase bar=%ld", static_cast<long>(line / kStepsPerBar));
+			reportLog(false);
 		}
 		nextPhraseReport_ = line + genre->phraseSteps();
 	}
@@ -357,6 +381,11 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		// Acts at once; the core only logs it, at the next undecided step (spec §11.6). Continuous, so it coalesces
 		// per param and a full queue only loses the log entry.
 		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
+	}
+	else if (const auto edit = paramEdit(stack, value, sink_.roster, *currentRecipe.recipe.genre, *song_)) {
+		// Any other param edit is logged the same way, for Capture's automation (spec §17.2). A full queue loses the
+		// entry while the edit is still heard: Capture's song then misses it.
+		steering_.queue().push(*edit);
 	}
 }
 

@@ -92,11 +92,28 @@ enum class CommandKind : uint8_t {
 	/// (NoteSink::restartPiece()). It has a pending slot of its own, and once landed it can't be cancelled. Never
 	/// logged: it ends the piece.
 	Restart,
+	/// Driver-side steering (spec §17.2): a player edit to a param no sound control moves, from a knob, a fader, the
+	/// sound editor or MIDI. target: the part whose Output holds it, or kSongParams. lane: the Drums or FX lane whose
+	/// row holds it, or Lane::None. length: the param, keyed by the driver. value: the param's value. Continuous, by
+	/// part, lane and param. Capture makes it automation; the core keeps nothing.
+	SetParam,
+	/// Logged only, by the Perform driver (spec §17.2): the tempo glide a transition starts by itself, into the
+	/// incoming Recipe's tempo across the Build, the Outro or a cut's Glide window, or back to the playing Recipe's on
+	/// a cancel. value: the target, hundredths of a BPM. length: its glide, in Generator ticks from the entry's step.
+	/// Never pushed; apply() keeps nothing, so the outgoing Recipe's tempo stays as it played.
+	TransitionTempo,
 	/// A tier 2 punch-in pad (spec §8.9, §13.5). target: PunchIn. lane: the Drums lane a LaneMute silences, else
 	/// Lane::None. value: 1 on, 0 off, as the KEYBOARD page's hold or latch left it: the core resolves no press. Lands
 	/// on the next undecided step.
 	SetPunch,
 };
+
+/// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
+/// steering_log_spec round-trips every kind up to here.
+constexpr CommandKind kLastCommandKind = CommandKind::SetPunch;
+
+/// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
+constexpr uint8_t kSongParams = 0xFF;
 
 /// The tier 2 punch-ins (spec §8.9): each plays a fixed amount while on. All but Pump act on the Drums part.
 enum class PunchIn : uint8_t {
@@ -139,7 +156,8 @@ constexpr int32_t kMaxSoundToken = 255;
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
 	return kind == CommandKind::SetMacro || kind == CommandKind::SetTempo || kind == CommandKind::SetSwing
-	       || kind == CommandKind::SetSwingInterval || kind == CommandKind::SetHome || kind == CommandKind::SetBias;
+	       || kind == CommandKind::SetSwingInterval || kind == CommandKind::SetHome || kind == CommandKind::SetBias
+	       || kind == CommandKind::SetParam;
 }
 
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
@@ -161,14 +179,15 @@ struct Command {
 	uint16_t length = 0;
 	Lane lane = Lane::None; ///< SetHome: the Drums or FX lane whose row holds the param, or Lane::None.
 
-	/// SetHome: the param whose home moved, as the driver keys it on the part's Output.
+	/// SetHome and SetParam: the param, as the driver keys it on the part's Output.
 	[[nodiscard]] constexpr uint16_t homeParam() const { return length; }
 	/// SetBias: the macro whose Part bias it sets.
 	[[nodiscard]] constexpr uint16_t biasMacro() const { return length; }
 
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
+		const bool byParam = kind == CommandKind::SetHome || kind == CommandKind::SetParam;
 		return kind == other.kind && target == other.target
-		       && (kind != CommandKind::SetHome || (lane == other.lane && homeParam() == other.homeParam()))
+		       && (!byParam || (lane == other.lane && homeParam() == other.homeParam()))
 		       && (kind != CommandKind::SetBias || biasMacro() == other.biasMacro());
 	}
 	constexpr bool operator==(const Command&) const = default;
@@ -354,40 +373,7 @@ private:
 	int32_t count_ = 0;
 };
 
-/// One logged command, stamped with the step where it took effect (spec §17.2).
-struct LogEntry {
-	int32_t step = 0;
-	Command command;
-};
-
-/// The steering log, over a buffer the driver hands it (Perform: a fixed SDRAM block, spec §20).
-class SteeringLog {
-public:
-	SteeringLog(LogEntry* buffer, int32_t capacity) : entries_(buffer), capacity_(capacity) {}
-
-	/// Logs a command where it landed. @return false once the log is full; the entry is lost.
-	bool append(int32_t step, const Command& command) {
-		if (count_ == capacity_) {
-			full_ = true;
-			return false;
-		}
-		entries_[count_++] = LogEntry{step, command};
-		return true;
-	}
-
-	[[nodiscard]] int32_t size() const { return count_; }
-	[[nodiscard]] bool full() const { return full_; }
-	[[nodiscard]] const LogEntry& at(int32_t i) const { return entries_[i]; }
-	void clear() {
-		count_ = 0;
-		full_ = false;
-	}
-
-private:
-	LogEntry* entries_;
-	int32_t capacity_;
-	int32_t count_ = 0;
-	bool full_ = false;
-};
+/// The steering log (steering_log.h): the core appends each command where it lands.
+class SteeringLog;
 
 } // namespace deluge::generative

@@ -343,6 +343,14 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+	// The steering log's one fixed buffer, in SDRAM: not the fast heap (spec §17.2, §20).
+	logBuffer_ = static_cast<uint8_t*>(GeneralMemoryAllocator::get().allocExternal(kPerformLogBytes));
+	if (logBuffer_ == nullptr) {
+		freeBlocks();
+		return Error::INSUFFICIENT_RAM;
+	}
+	log_ = SteeringLog(logBuffer_, kPerformLogBytes);
+	driver_.setLog(&log_);
 #if ENABLE_SYSEX_TEST
 	// Which heap each block landed in, so a probe can compare H1 between the two.
 	auto& allocator = GeneralMemoryAllocator::get();
@@ -358,6 +366,12 @@ Error PerformAdapter::allocateBlocks() {
 }
 
 void PerformAdapter::freeBlocks() {
+	driver_.setLog(nullptr);
+	log_ = SteeringLog(nullptr, 0);
+	if (logBuffer_ != nullptr) {
+		delugeDealloc(logBuffer_);
+		logBuffer_ = nullptr;
+	}
 	for (Generator*& block : blocks_) {
 		if (block != nullptr) {
 			block->~Generator();

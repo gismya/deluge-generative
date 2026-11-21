@@ -19,6 +19,7 @@
 // transition's points from the tick (spec §12.5, §12.9).
 
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
@@ -246,6 +247,27 @@ void OutputSink::playOutgoing(const Event& event) {
 void OutputSink::outgoingThrowsCut() {
 	soundControls.restoreOutgoingHomes();
 	TEST_EVENT("gen_outgoing_throws_cut");
+}
+
+void OutputSink::logPieceHeader(SteeringLog& log) {
+	const Generator* playing = performAdapter.driver().playing();
+	if (playing == nullptr || performAdapter.song_ == nullptr) {
+		return;
+	}
+#if ENABLE_SYSEX_TEST
+	const uint32_t started = getSystemTicks();
+#endif
+	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_);
+	// header: the newest piece's opening and header records, in bytes; us: what writing it cost in the tick.
+	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d us=%lu", static_cast<long>(log.pieces()),
+	           static_cast<long>(log.piece(log.pieces() - 1).headerBytes()), static_cast<long>(log.used()),
+	           log.full() ? 1 : 0, ticksToNs(getSystemTicks() - started) / 1000);
+}
+
+void OutputSink::logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) {
+	if (const Generator* playing = performAdapter.driver().playing()) {
+		firmware::logSoundPaths(log, step, part, token, SoundSwaps::waitingPicks(), *playing->recipe().genre);
+	}
 }
 
 void OutputSink::outgoingDrained() {
