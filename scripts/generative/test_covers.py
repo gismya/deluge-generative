@@ -203,6 +203,117 @@ class Hardware(Repo):
         )
 
 
+class FullRule(Repo):
+    """Whether a change needs check_all.py --full before its merge, or its covers pick suffices (#417 slice 3)."""
+
+    def rule(self, *changed, into_generative=False):
+        return covers.full_rule(
+            list(changed), self.scripts(), into_generative, self.repo
+        )
+
+    def test_src_files_a_covers_line_names_need_only_the_pick(self):
+        self.assertIsNone(
+            self.rule(
+                "src/deluge/a.cpp",
+                "src/deluge/views/deep/w.cpp",
+                "src/deluge/b_two.cpp",
+            )
+        )
+
+    def test_a_change_outside_src_and_the_runner_needs_only_the_pick(self):
+        self.assertIsNone(self.rule("docs/x.md", G + "perform_a.txt", G + "listen.py"))
+
+    def test_a_src_file_no_covers_line_names_needs_full(self):
+        self.assertEqual(
+            self.rule("src/deluge/a.cpp", "src/deluge/dsp/reverb.cpp"),
+            "src/deluge/dsp/reverb.cpp is on no probe script's covers lines",
+        )
+
+    def test_the_emulator_checks_code_and_what_picks_them_need_full(self):
+        self.write(G + "check_all.py", "import covers\n")
+        self.write(G + "covers.py", "")
+        self.write(G + "delugemu.pin", "")
+        for name in (
+            "test_port_emu.py",
+            "deluge_probe.py",
+            "fat_image.py",  # test_port_emu.py imports it
+            "gen_emu.py",
+            "wav_levels.py",  # gen_emu.py imports it
+            "check_all.py",
+            "covers.py",
+            "delugemu.pin",
+        ):
+            with self.subTest(name):
+                self.assertEqual(
+                    self.rule(G + name),
+                    f"{G}{name} changed: the emulator checks run on it or it picks them",
+                )
+
+    def test_a_merge_into_generative_always_needs_full(self):
+        self.assertEqual(
+            self.rule("docs/x.md", into_generative=True), "a merge into generative"
+        )
+
+    def test_no_diff_needs_full(self):
+        self.assertEqual(
+            covers.full_rule(None, self.scripts(), False, self.repo),
+            "the files changed are unknown",
+        )
+
+
+class Orphans(Repo):
+    """Every scripts/generative/*.txt is picked by check_all.py, included by another script, or says what runs it in
+    a "# runs-via:" line (#466)."""
+
+    def orphans(self):
+        return covers.orphans(self.here)
+
+    def test_the_fixtures_scripts_and_includes_have_no_orphan(self):
+        self.assertEqual(self.orphans(), [])
+
+    def test_a_script_check_all_doesnt_pick_is_one(self):
+        self.write(G + "song_x.txt", "# needs: card fixtures/x\nstart_state\n")
+        self.assertEqual(self.orphans(), ["song_x.txt"])
+
+    def test_an_include_nothing_includes_is_one(self):
+        self.write(G + "perform_body.txt", "button 1 2 down\n")
+        self.assertEqual(self.orphans(), ["perform_body.txt"])
+
+    def test_an_include_of_an_orphan_counts_as_included(self):
+        # the orphan is named; what it includes is not named again
+        self.write(G + "capture_x.txt", "start_state\ninclude capture_body.txt\n")
+        self.write(G + "capture_body.txt", "button 1 2 down\n")
+        self.assertEqual(self.orphans(), ["capture_x.txt"])
+
+    def test_a_runs_via_line_declares_it(self):
+        self.write(G + "golden_x.txt", "# runs-via: gen_emu.py golden\nstart_state\n")
+        self.assertEqual(self.orphans(), [])
+
+    def test_a_runs_via_line_needs_a_command(self):
+        self.write(G + "golden_x.txt", "# runs-via:\nstart_state\n")
+        self.assertEqual(self.orphans(), ["golden_x.txt"])
+
+    def test_a_script_check_all_lists_as_not_run_is_declared(self):
+        # its "# needs:" line names a song: check_all.py's "not run" row lists it
+        self.write(G + "perform_song_y.txt", "# needs: SONGS/Y.XML\nstart_state\n")
+        self.assertEqual(self.orphans(), [])
+
+    def test_check_names_each_orphan_and_fails(self):
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.write(G + "song_x.txt", "start_state\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = covers.check(covers.all_scripts(self.here), self.repo)
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "song_x.txt: check_all.py doesn't pick it and no script includes it: name it perform_*.txt or "
+            'compose_*.txt, or give it a "# runs-via: COMMAND" line',
+            out.getvalue(),
+        )
+        self.assertIn("1 orphan scripts", out.getvalue())
+
+
 class CheckFlag(Repo):
     def setUp(self):
         super().setUp()
@@ -401,6 +512,19 @@ class TimingExpects(Repo):
             ("/^gen_ext_tempo bpm=(119|120|121)$/", "bpm"),
             (r"/^gen_midi_feedback .* bytes_per_s=\d{4,} /", "bytes_per_s"),
             ("/^gen_h1 steps=8 mean_ns=1[0-9]{5} /", "mean_ns"),
+            (
+                "/^gen_h2 ramps=1 moved=1 steps=4 params=2 mean_ns=[0-9]{1,5} /",
+                "mean_ns",
+            ),
+            ("gen_audio calls=10 underruns=0", "underruns"),
+            (r"/^gen_audio_late task=\S+ .* run_max_us=[0-9]{1,3}$/", "run_max_us"),
+            ("gen_audio_ui_timer timer=1 over_2ms=0", "over_2ms"),
+            ("/^gen_transition start style=1 us=[0-9]{1,4} /", "us"),
+            (
+                "/^gen_arcplan first=0 us=(\\d{1,3})$/",
+                "us",
+            ),  # a group around a pinned value pins it
+            ("gen_log_piece pieces=1 header=0 used=12 full=0 us=5", "us"),
         ):
             with self.subTest(text=text):
                 self.assertEqual(covers.timing_field(text), field)
@@ -414,6 +538,9 @@ class TimingExpects(Repo):
             r"/^gen_midi_feedback ccs=[1-9]\d* /",
             "gen_ext_tempo",
             "gen_phrase voices=3",  # not a timing kind
+            "/^gen_h16 culls=[0-9]+ culled=[0-9]* voices=-?[0-9]+/",
+            r"/^gen_h1 steps=8 mean_ns=(\d+) max_ns=(?P<max>\d+)/",  # a capture group around any value
+            "/^gen_transition start style=1 us=([0-9]+) /",
         ):
             with self.subTest(text=text):
                 self.assertIsNone(covers.timing_field(text))

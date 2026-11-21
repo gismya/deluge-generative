@@ -1,7 +1,7 @@
 # A song whose audio clip has no <params> loads and plays (#448): such a clip used to keep a ParamManager with no param
 # set, and the first read of one froze the Deluge with E410 (it did on the desk Deluge, 2026-11-21, with a song written
 # by hand). AudioClip::readFromFile() now gives it the defaults a new audio track's clip gets.
-# needs: card fixtures/song_audio_clip_no_params
+# needs: card fixtures/perform_song_audio_clip_no_params
 # covers: src/deluge/model/clip/audio_clip.cpp
 start_state
 load song GENTEST/NOPARAMS.XML

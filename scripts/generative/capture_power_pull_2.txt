@@ -3,6 +3,7 @@
 # as a marked piece (spec §17.4), read back to its last whole step (spec §17.2); a leave keeping MARKED builds it into
 # a song from the file and saves it to SONGS/ (GEN ACID TECHNO <seed> LIVE or a letter: delete it after), and the song
 # loads. Run with --events 'gen_card_log|gen_capture'.
+# runs-via: deluge_probe.py session (a human check: after capture_power_pull_1.txt and the power pull)
 # covers: src/deluge/generative/firmware/capture_files.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/capture_job.cpp
 # covers: src/deluge/generative/perform/capture.cpp src/deluge/generative/perform/capture.h

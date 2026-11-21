@@ -69,6 +69,102 @@ class Events(unittest.TestCase):
         self.assertFalse([line for line in self.run_with(None) if ": event " in line])
 
 
+class EmulatorSlot(unittest.TestCase):
+    """EmuRun holds a real-time emulator slot (emu_slots.py, #417) from before its first launch until its emulator has
+    stopped."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.did = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def taker(self):
+        did = self.did
+
+        class Slot:
+            fd = 99
+
+        @contextlib.contextmanager
+        def take(out):
+            did.append("take")
+            try:
+                yield Slot()
+            finally:
+                did.append("release")
+
+        return take
+
+    def run_emu(self, boots):
+        emu = test_port_emu.EmuRun(
+            "x.elf",
+            self.tmp.name,
+            sd_master=os.path.join(self.tmp.name, "master.img"),
+            take_slot=self.taker(),
+        )
+        tries = iter(boots)
+
+        def launch(attempt):
+            self.did.append("launch")
+            emu.port = mock.Mock()
+            emu.run_log = "boot.log"
+
+        def boot():
+            if not next(tries):
+                raise RuntimeError("blank")
+            return {}
+
+        with (
+            mock.patch.object(emu, "_launch", side_effect=launch),
+            mock.patch.object(emu, "_wait_for_boot", side_effect=boot),
+            mock.patch.object(emu, "_warm_up"),
+            mock.patch.object(
+                emu, "_stop", side_effect=lambda: self.did.append("stop")
+            ),
+            mock.patch.object(emu, "save_log"),
+            contextlib.redirect_stdout(io.StringIO()),
+            emu,
+        ):
+            self.did.append("run")
+        return emu
+
+    def test_takes_a_slot_before_the_launch_and_releases_it_after_the_stop(self):
+        self.run_emu([True])
+        self.assertEqual(self.did, ["take", "launch", "run", "stop", "release"])
+
+    def test_keeps_one_slot_across_boot_retries(self):
+        self.run_emu([False, True])
+        self.assertEqual(
+            self.did, ["take", "launch", "stop", "launch", "run", "stop", "release"]
+        )
+
+    def test_a_run_with_no_boot_releases_its_slot(self):
+        with self.assertRaises(RuntimeError):
+            self.run_emu([False] * test_port_emu.BOOT_TRIES)
+        self.assertEqual(self.did[0], "take")
+        self.assertEqual(self.did[-1], "release")
+        self.assertEqual(self.did.count("release"), 1)
+
+    def test_the_emulator_inherits_the_slots_lock(self):
+        emu = test_port_emu.EmuRun(
+            "x.elf",
+            self.tmp.name,
+            sd_master=os.path.join(self.tmp.name, "master.img"),
+            take_slot=self.taker(),
+        )
+        emu.slot = mock.Mock(fd=42)
+        with (
+            mock.patch.object(test_port_emu.subprocess, "run"),
+            mock.patch.object(test_port_emu.subprocess, "Popen") as popen,
+            mock.patch.object(test_port_emu.deluge_probe, "UdpLink"),
+            mock.patch.object(test_port_emu, "free_udp_port", return_value=5000),
+        ):
+            emu._launch(1)
+            emu.log_file.close()
+        self.assertEqual(popen.call_args.kwargs["pass_fds"], [42])
+
+
 class Stopped(unittest.TestCase):
     def test_a_script_that_stops_on_an_error_says_how_far_it_got(self):
         with tempfile.TemporaryDirectory() as tmp:

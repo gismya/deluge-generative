@@ -153,6 +153,17 @@ otherwise.
 - A hand-written song on a card fixture: `start_state` after `load song` needs an instrument clip, so give the song
   one (an audio-only song fails it, and the next script's too). Write each clip as the firmware does: an
   `<instrumentClip>` with no `<soundParams>` froze in `ParamManager::getPatchCableSet()` during the load
-  (`song_audio_clip_no_params.txt`'s fixture, #448), as an audio clip with no `<params>` froze with E410. Run it in
+  (`perform_song_audio_clip_no_params.txt`'s fixture, #448), as an audio clip with no `<params>` froze with E410. Run it in
   delugemu first; a hang there shows as `no reply to test port command`, and `test_port_emu.py --gdb PORT` plus
   `arm-none-eabi-gdb -batch -ex "target remote :PORT" -ex bt` names the freeze.
+- Every `scripts/generative/*.txt` must be run by `check_all.py` (a `perform_*.txt` or `compose_*.txt` check, or one
+  it lists as not run for its `# needs:` line), included by another script, or carry a `# runs-via: COMMAND` line
+  (`covers.orphans()`, in `--check`, #466). A script with another prefix was never run and nothing said so:
+  `song_audio_clip_no_params.txt` (#448) became `perform_song_audio_clip_no_params.txt`; the capture measurements,
+  the power-pull pair, `golden_compose.txt` and `test_port_boot_dma.txt` got `runs-via` lines.
+- `test_port_emu.EmuRun` takes a slot from the host-wide pool of real-time emulators (`emu_slots.py`, #417) before its
+  first launch and keeps it across boot retries; qemu inherits the lock's fd (`pass_fds`), so an emulator orphaned by
+  a killed runner keeps its slot until it exits. The leak check and the firmware check boot through `EmuRun` in real
+  time (no icount), so they take slots too; only `gen_emu.py smoke` and `capture` don't. Waiting by hand for a
+  `pgrep -x qemu-system-arm` count is no longer needed: the run waits and prints `waited N s for a real-time emulator
+  slot`, which check_all's row shows.
