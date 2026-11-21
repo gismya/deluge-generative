@@ -80,6 +80,8 @@ const char* queueTag(const Command& command) {
 		return "END";
 	case CommandKind::Transition:
 		return "CHG";
+	case CommandKind::Restart:
+		return "RST";
 	case CommandKind::ForceSection:
 		return command.target < kNumSectionKinds ? kSectionTags[command.target] : "??";
 	default:
@@ -120,6 +122,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 		text.add(command.target == static_cast<uint8_t>(TransitionStyle::BuildIntoDrop) ? "CHANGE DROP"
 		         : command.target == static_cast<uint8_t>(TransitionStyle::Fade)        ? "CHANGE FADE"
 		                                                                                : "CHANGE CUT");
+		break;
+	case CommandKind::Restart:
+		text.add("RESTART");
 		break;
 	default:
 		text.add("?");

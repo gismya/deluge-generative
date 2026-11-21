@@ -46,8 +46,18 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
 	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
+	/// Where each restart's new piece begins in `events` (spec §13.2): its first event's index.
+	std::vector<size_t> restartedAt;
+	/// Starts a restart's piece, as the adapter does: a StepwisePiece sets it to its Current Recipe's.
+	std::function<void(Generator&)> restarts;
 	void play(const Event& event) override { events.push_back(event); }
 	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
+	void restartPiece(Generator& generator) override {
+		restartedAt.push_back(events.size());
+		if (restarts) {
+			restarts(generator);
+		}
+	}
 };
 
 /// The Glide setting that lasts `ticks` Generator ticks for a genre whose phrase is `phraseSteps` long (spec §13.3).
@@ -446,6 +456,9 @@ struct StepwisePiece {
 			static_assert(
 			    !requires { &Sink::attach; }, "the sink's attach() must take (const PerformDriver&, const Hook&)");
 		}
+		if constexpr (requires { sink.restarts = [](Generator&) {}; }) {
+			sink.restarts = [this](Generator& instance) { restartAsItIs(instance); };
+		}
 		begin(start);
 	}
 	StepwisePiece(const StepwisePiece&) = delete;
@@ -484,6 +497,13 @@ struct StepwisePiece {
 		start.takes = currentTakes;
 		start.skipIntro = groove;
 		begin(start, true, instance != nullptr ? *instance : generator);
+	}
+
+	/// A restart's line (spec §13.2), as the adapter's: the Generator starts again from the Current Recipe, and the
+	/// steering with it, then a FILL or a KEYBOARD fader still held is sent again. A sink calls it from restartPiece().
+	void restartAsItIs(Generator& instance) {
+		steering.restartAsItIs(instance);
+		instanceStarts();
 	}
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.
