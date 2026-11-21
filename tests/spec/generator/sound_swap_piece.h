@@ -116,6 +116,7 @@ struct HarnessSoundSwaps : perform::SoundSwapLifecycle<HarnessSoundSwaps> {
 		incoming[part] = 0;
 	}
 	void rebind(int32_t part) { rebound.push_back(part); }
+	void swapDropped(int32_t part) { driver_.logSoundDropped(static_cast<uint8_t>(part)); }
 	void dropIncoming(int32_t part) {
 		retire(incoming[part], unplayed);
 		incoming[part] = 0;

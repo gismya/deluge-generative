@@ -529,8 +529,8 @@ describe loop_lines("Loop lines", $ {
 			Run frozen = plain;
 			frozen.steer = steerAt({{kFreeze, {CommandKind::SetFreeze, 0, kPress}},
 			                        {kThaw, {CommandKind::SetFreeze, 0, kPress}}});
-			LogEntry entries[4];
-			SteeringLog log(entries, 4);
+			TestLog entries(4);
+			SteeringLog& log = entries.log;
 			frozen.log = &log;
 			auto a = barsOf(play(plain, kBars), kBars);
 			auto b = barsOf(play(frozen, kBars), kBars);
@@ -544,11 +544,11 @@ describe loop_lines("Loop lines", $ {
 				expect(b[9][s] == a[9][s] || b[9][s] == b[8][s]).to_be_true();
 				carriedOn += b[9][s] == a[9][s] && b[9][s] != b[8][s] ? 1 : 0;
 			}
-			expect(log.size()).to_equal(2);
-			expect(log.at(0).step).to_equal(kFreeze);
-			expect(log.at(0).command.value).to_equal(1);
-			expect(log.at(1).step).to_equal(kThaw);
-			expect(log.at(1).command.value).to_equal(0);
+			expect(logSize(log)).to_equal(2);
+			expect(logAt(log, 0).step).to_equal(kFreeze);
+			expect(logAt(log, 0).command.value).to_equal(1);
+			expect(logAt(log, 1).step).to_equal(kThaw);
+			expect(logAt(log, 1).command.value).to_equal(0);
 		}
 		expect(carriedOn).to_be_greater_than(0);
 	});

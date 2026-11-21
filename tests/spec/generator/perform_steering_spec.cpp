@@ -34,9 +34,9 @@ std::string fillPress(bool shift) {
 
 /// The value of the first SetFill logged, or -1.
 int32_t firstFillLogged(const SteeringLog& log) {
-	for (int32_t i = 0; i < log.size(); i++) {
-		if (log.at(i).command.kind == CommandKind::SetFill) {
-			return log.at(i).command.value;
+	for (int32_t i = 0; i < logSize(log); i++) {
+		if (logAt(log, i).command.kind == CommandKind::SetFill) {
+			return logAt(log, i).command.value;
 		}
 	}
 	return -1;

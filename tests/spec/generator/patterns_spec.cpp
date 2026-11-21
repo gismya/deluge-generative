@@ -321,8 +321,8 @@ describe patterns("Patterns", $ {
 			Run stepped = plain;
 			// One press each: the same take pressed again would cancel it (spec §13.5).
 			stepped.steer = steerAt({{kNewTake, {CommandKind::SetTake, 0, 1}}, {kStepBack, {CommandKind::SetTake, 0, 0}}});
-			LogEntry entries[8];
-			SteeringLog log(entries, 8);
+			TestLog entries(8);
+			SteeringLog& log = entries.log;
 			stepped.log = &log;
 
 			auto drums = [](const Result& result, int32_t fromStep, int32_t toStep) {
@@ -342,9 +342,9 @@ describe patterns("Patterns", $ {
 			expect(drums(b, 5 * kPhrase, kEnd) == drums(a, 5 * kPhrase, kEnd)).to_be_true();
 
 			// Logged where each take landed, not where it was pushed.
-			expect(log.size()).to_equal(2);
-			expect(log.at(0).step).to_equal(3 * kPhrase);
-			expect(log.at(1).step).to_equal(5 * kPhrase);
+			expect(logSize(log)).to_equal(2);
+			expect(logAt(log, 0).step).to_equal(3 * kPhrase);
+			expect(logAt(log, 1).step).to_equal(5 * kPhrase);
 		}
 	});
 

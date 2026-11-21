@@ -35,9 +35,9 @@ describe queue("Queued actions", $ {
 			d.runToStepLine(kLine, -early);
 			d.push(mute(kAcid));
 			d.runToStepLine(kLine + 2 * kStepsPerBar);
-			expect(d.log.size()).to_equal(1);
+			expect(logSize(d.log)).to_equal(1);
 			// Pressed 13 ticks before the line it arrives in time for the line's decision, 12 before the line.
-			expect(d.log.at(0).step).to_equal(early > 12 ? kLine : kLine + kStepsPerBar);
+			expect(logAt(d.log, 0).step).to_equal(early > 12 ? kLine : kLine + kStepsPerBar);
 		}
 	});
 
@@ -72,11 +72,11 @@ describe queue("Queued actions", $ {
 		expect(named.size()).to_equal(size_t{5});
 		d.runToStepLine(3 * kPhraseSteps);
 		expect(d.generator.queuedCount()).to_equal(0);
-		expect(d.log.size()).to_equal(5);
+		expect(logSize(d.log)).to_equal(5);
 		for (auto [kind, at] : named) {
 			bool found = false;
-			for (int32_t i = 0; i < d.log.size(); i++) {
-				found = found || (d.log.at(i).command.kind == kind && d.log.at(i).step == at);
+			for (int32_t i = 0; i < logSize(d.log); i++) {
+				found = found || (logAt(d.log, i).command.kind == kind && logAt(d.log, i).step == at);
 			}
 			expect(found).to_be_true();
 		}
@@ -112,7 +112,7 @@ describe queue("Queued actions", $ {
 		d.decideBefore(7);
 		expect(d.generator.queuedCount()).to_equal(0);
 		d.runToStepLine(kPhraseSteps + 1);
-		expect(d.log.size()).to_equal(0);
+		expect(logSize(d.log)).to_equal(0);
 	});
 
 	it("counts a press that replaces a waiting one as the newest", _ {
@@ -136,9 +136,9 @@ describe queue("Queued actions", $ {
 		d.push(kHoldPress);
 		d.decideBefore(7);
 		expect(d.generator.arc().held()).to_be_false();
-		expect(d.log.size()).to_equal(2);
-		expect(d.log.at(0).command == Command{CommandKind::SetHold, 0, 1}).to_be_true();
-		expect(d.log.at(1).command == Command{CommandKind::SetHold, 0, 0}).to_be_true();
+		expect(logSize(d.log)).to_equal(2);
+		expect(logAt(d.log, 0).command == Command{CommandKind::SetHold, 0, 1}).to_be_true();
+		expect(logAt(d.log, 1).command == Command{CommandKind::SetHold, 0, 0}).to_be_true();
 	});
 
 	it("says which parts the Arc silences, for the dim MUTE pads", _ {

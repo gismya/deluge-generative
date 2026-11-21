@@ -1,4 +1,4 @@
-// The steering queue and log (spec §2.6, ADR 0005).
+// The steering queue and the pending list (spec §2.6, ADR 0005). The log is steering_log_spec's.
 
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
@@ -49,18 +49,6 @@ describe steering("The steering queue", $ {
 		expect(queue.push({CommandKind::SetMacro, 200, 0})).to_be_false();
 		expect(queue.push({CommandKind::SetMacro, 5, 99})).to_be_true();
 		expect(queue.size()).to_equal(64);
-	});
-
-	it("logs each command with its step until the log is full", _ {
-		LogEntry entries[2];
-		SteeringLog log(entries, 2);
-		expect(log.append(10, macro(Macro::Motion, 7))).to_be_true();
-		expect(log.append(11, macro(Macro::Motion, 8))).to_be_true();
-		expect(log.full()).to_be_false();
-		expect(log.append(12, macro(Macro::Motion, 9))).to_be_false();
-		expect(log.full()).to_be_true();
-		expect(log.size()).to_equal(2);
-		expect(log.at(1).step).to_equal(11);
 	});
 
 	it("keeps one pending slot for the key and the force, one per part for takes, and refuses past its capacity", _ {

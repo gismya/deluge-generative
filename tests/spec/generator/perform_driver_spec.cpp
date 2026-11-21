@@ -70,14 +70,14 @@ describe perform_driver("The Perform driver", $ {
 		perform::PerformDriver driver;
 		generator.start(acidRecipe(), 42, {});
 		driver.begin(generator);
-		driver.advance(0, 3, queue, nullptr, sink);
-		driver.advance(1, 3, queue, nullptr, sink); // half a Generator tick
+		driver.advance(0, 3, queue, sink);
+		driver.advance(1, 3, queue, sink); // half a Generator tick
 		expect(driver.clock()).to_equal(0);
-		driver.advance(2, 4, queue, nullptr, sink); // another half, at the finer magnitude
+		driver.advance(2, 4, queue, sink); // another half, at the finer magnitude
 		expect(driver.clock()).to_equal(1);
-		driver.advance(1, 2, queue, nullptr, sink); // a whole one at Perform's own magnitude
+		driver.advance(1, 2, queue, sink); // a whole one at Perform's own magnitude
 		expect(driver.clock()).to_equal(2);
-		driver.advance(3, 4, queue, nullptr, sink); // three quarters: still short of the next
+		driver.advance(3, 4, queue, sink); // three quarters: still short of the next
 		expect(driver.clock()).to_equal(2);
 	});
 
@@ -98,7 +98,7 @@ describe perform_driver("The Perform driver", $ {
 		// One call every 7 song ticks at magnitude 3 (48 per 16th): 3.5 Generator ticks a call.
 		constexpr int32_t kCall = 7;
 		for (int32_t t = 0; t < 8 * kStepsPerBar * 48; t += kCall) {
-			driver.advance(t == 0 ? 0 : kCall, 3, queue, nullptr, sink);
+			driver.advance(t == 0 ? 0 : kCall, 3, queue, sink);
 		}
 		expect(sink.played.size()).to_be_greater_than(size_t{50}); // all Intro: thin while Density rises from the floor
 		for (auto [event, clock] : sink.played) {
@@ -184,9 +184,9 @@ describe perform_driver("The Perform driver", $ {
 		piece.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(10)});
 		int32_t landing = piece.generator.nextStep();
 		piece.runSteps(1);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(landing);
-		expect(piece.log.at(0).command.value).to_equal(macroPoints(10));
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(landing);
+		expect(logAt(piece.log, 0).command.value).to_equal(macroPoints(10));
 	});
 
 	it("ends every sounding note on stop, at the stop tick, and plays nothing after", _ {

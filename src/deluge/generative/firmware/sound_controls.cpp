@@ -720,10 +720,13 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 	return HomeEdit{set.part, set.lane, paramKey(bound), bound.home};
 }
 
-uint16_t SoundControls::paramKey(const Bound& bound) {
+uint16_t SoundControls::paramKey(int32_t collection, PatchSource source, int32_t param) {
 	static_assert(static_cast<int32_t>(PatchSource::NONE) < 32, "a source fits the key's 5 bits");
-	return static_cast<uint16_t>(static_cast<int32_t>(bound.collection) << 13 | static_cast<int32_t>(bound.source) << 8
-	                             | bound.param);
+	return static_cast<uint16_t>(collection << 13 | static_cast<int32_t>(source) << 8 | (param & 0xFF));
+}
+
+uint16_t SoundControls::paramKey(const Bound& bound) {
+	return paramKey(static_cast<int32_t>(bound.collection), bound.source, bound.param);
 }
 
 void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) {
