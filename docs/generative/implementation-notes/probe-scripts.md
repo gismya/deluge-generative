@@ -126,3 +126,10 @@ otherwise.
   press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
   that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
   presses whose handler refuses instead (`perform_recipe_save.txt`).
+- Late audio (#449): the time between render starts and a render's length don't tell whether the audio ran dry. Only
+  `AudioEngine::routine()` copies rendered audio into the 2.9 ms TX ring, and a call may copy audio rendered earlier
+  without rendering. `gen_audio` measures the ring's margin at each entry, and `drift=` checks it against the DMA's own
+  position (`io/midi/output_margin.h`, its unit tests in `tests/unit/output_margin_tests.cpp`). The scheduler doesn't
+  preempt: any main-loop task over about 2.9 ms is an underrun. `gen_audio_late` blames the task the routine ran
+  inside, or else the one that finished just before it; `TaskManager::currentID` starts at 0, not -1, so it can't tell
+  a nested call apart, and the test port keeps its own caller (`TestPort::taskStarted()`).

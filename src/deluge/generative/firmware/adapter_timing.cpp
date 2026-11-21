@@ -82,12 +82,6 @@ void ControlTiming::report(const char* ramps) {
 			           static_cast<unsigned long>(render.uiTimerMaxCounts[timer] / kCountsPerUs));
 		}
 	}
-	// The spike's measure (#447), for comparison: spans between render starts under 1, 2, 2.9, 5, 10 ms and more
-	TEST_EVENT("gen_render_gaps max_us=%lu gaps=%lu/%lu/%lu/%lu/%lu/%lu",
-	           static_cast<unsigned long>(render.renderGapMaxCounts / kCountsPerUs),
-	           static_cast<unsigned long>(render.renderGaps[0]), static_cast<unsigned long>(render.renderGaps[1]),
-	           static_cast<unsigned long>(render.renderGaps[2]), static_cast<unsigned long>(render.renderGaps[3]),
-	           static_cast<unsigned long>(render.renderGaps[4]), static_cast<unsigned long>(render.renderGaps[5]));
 	stepsSending_ = totalCounts_ = maxCounts_ = 0;
 }
 

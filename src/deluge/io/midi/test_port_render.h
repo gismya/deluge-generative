@@ -55,8 +55,6 @@ struct RenderTiming {
 	static constexpr int32_t kUiTimers = 40;
 	uint16_t uiTimerSlow[kUiTimers] = {};
 	uint32_t uiTimerMaxCounts[kUiTimers] = {};
-	uint32_t renderGapMaxCounts = 0; ///< The longest span from one render's start to the next's.
-	uint32_t renderGaps[6] = {};     ///< Spans between render starts under 1, 2, 2.9, 5, 10 ms, and the rest.
 };
 extern RenderTiming renderTiming;
 
