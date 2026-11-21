@@ -64,6 +64,8 @@ wait 30
 button BACK up
 expect event gen_back_tap
 expect no_event gen_restart as_it_is within=8
+# Just after a phrase line, so the bar line can't come between the two presses
+expect event gen_phrase bar= within=60
 button X_ENC down
 wait 100
 button PLAY down
