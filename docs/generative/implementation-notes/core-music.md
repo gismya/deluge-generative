@@ -37,7 +37,7 @@ otherwise.
   rules: the loop playing is a stored byte (`chordLoop_`), moved only on a Drop's chord line and keyed on the
   Groove's occurrence there, so a Break, a Build and the Outro hold the Groove's loop with no recount. Each chord is
   keyed on the loop's index and the bar in it (`Purpose::ChordLoop`), so every pass replays it chord for chord: the
-  walk's other inputs (the chord before, A-B-A) agree because a loop always starts on home. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
+  walk's other inputs agree because a loop always starts on home, but only while `abaAllowed` is true (House's case): with it false, a 2-chord half loop (home, A) would exclude A on its second pass, since `previousChord_` carries over from the pass before. A genre turning both on must handle that first. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
   rhythm's grid draws no chord there, so the loop stays on the phrase grid.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
