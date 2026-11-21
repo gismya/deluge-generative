@@ -1,0 +1,90 @@
+# Recipe SAVE on the Compose screen (#138, spec §14.2, §14.4, §16.4) over the sysex test port: SAVE opens the full save
+# UI on the default name and SAVE there writes the Current Recipe, which reads back the same ("check recipe *");
+# the Compose screen is back on top after. REGENERATE? → OK clears the remembered name, so the next save offers the
+# new Recipe's default name again rather than a letter variation.
+# gen_recipe_save full opened|saved|closed name=...; gen_recipe_check name= read= error= match= recipe= seed= takes=
+# sounds=.
+# covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
+# covers: src/deluge/generative/firmware/card_text.* src/deluge/generative/core/recipe_file.*
+# covers: src/deluge/generative/core/xml_tags.h src/deluge/generative/perform/recipe_name.*
+# covers: src/deluge/gui/menu_item/generative/compose_screen.* src/deluge/gui/ui/sound_editor.cpp
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/compose_edits.*
+# covers: src/deluge/io/midi/test_port.cpp src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*
+start_state
+expect playing=false
+
+# ---- FROM ▸ → GENRE ▸ → TECHNO ▸ → ACID rolls a Recipe on the Compose screen ----
+compose screen
+expect event gen_compose_screen opened
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll genre done within=30
+expect ui=sound_editor
+
+# ---- SAVE: the full save UI on the default name; SAVE there saves, and the screen is back ----
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}$/ within=10
+expect ui=generative_save_recipe
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full saved name=ACID TECHNO [0-9A-Z]{7} overwrite=0$/ within=10
+expect ui=sound_editor
+check recipe *
+expect event /^gen_recipe_check name=ACID TECHNO [0-9A-Z]{7} read=ok error=0 match=1 / within=10
+
+# ---- A saved name is remembered: the next SAVE offers its letter variation; BACK saves nothing ----
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}A$/ within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_save full closed
+expect ui=sound_editor
+
+# ---- REGENERATE? → OK forgets the name: the next SAVE offers the new Recipe's default name ----
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll regenerate done within=30
+expect ui=sound_editor
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}$/ within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_save full closed
+expect ui=sound_editor

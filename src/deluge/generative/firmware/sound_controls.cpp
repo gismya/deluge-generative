@@ -550,6 +550,83 @@ int32_t SoundControls::valueOf(const Set& set, const Bound& bound, int32_t offse
 	return perform::targetValue(bound.range, bound.home, offset);
 }
 
+SoundControls::Set* SoundControls::setOf(uint8_t part, Lane lane) {
+	for (int32_t i = 0; i < setCount_; i++) {
+		if (sets_[i].part == part && sets_[i].lane == lane) {
+			return &sets_[i];
+		}
+	}
+	return nullptr;
+}
+
+template <typename Found>
+void SoundControls::forEachComposed(Set& set, SoundControl control, bool throwDelay, int32_t offset, Found found) {
+	const auto c = static_cast<int32_t>(throwDelay ? SoundControl::Space : control);
+	for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
+		const Bound& bound = bound_[b];
+		// A delay setup's feedback follows the Throw's lift lane alone. Space moves it ±4 at most, and only where the
+		// preset already uses its delay (spec §11.2); its share stays at home there, so two lanes never write one
+		// param.
+		const bool lifted = set.throwDepth > 0 && bound.range.target == Target::DelayFeedback;
+		if (lifted != throwDelay) {
+			continue;
+		}
+		const int32_t slot = slotOf(set, bound);
+		AutoParam* param = paramAt(set, bound, slot);
+		if (param == nullptr) {
+			continue;
+		}
+		const int32_t value = throwDelay ? perform::throwDelayValue(bound.range, bound.home, 0, set.throwDepth, offset)
+		                                 : perform::targetValue(bound.range, bound.home, offset);
+		if (!found(bound, *param, slot, value)) {
+			return;
+		}
+	}
+}
+
+bool SoundControls::writeNode(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t tick,
+                              int32_t offset, bool interpolated) {
+	Set* set = setOf(part, lane);
+	if (set == nullptr) {
+		return true; // nothing loaded there to move
+	}
+	bool written = true;
+	forEachComposed(
+	    *set, control, throwDelay, offset, [&](const Bound& bound, AutoParam& param, int32_t slot, int32_t value) {
+		    if (param.setNodeAtPos(tick, value, interpolated) < 0) {
+			    written = false;
+			    return false;
+		    }
+		    // The param's automated bit, as ParamSet::paramHasAutomationNow() and patch_cable_set.cpp's flagCable()
+		    // set it (setNodeAtPos() doesn't).
+		    ParamCollectionSummary& summary = set->paramManager->summaries[static_cast<int32_t>(bound.collection)];
+		    summary.whichParamsAreAutomated[slot >> 5] |= 1U << (slot & 31);
+		    return true;
+	    });
+	return written;
+}
+
+void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t offset) {
+	Set* set = setOf(part, lane);
+	if (set == nullptr) {
+		return;
+	}
+	forEachComposed(*set, control, throwDelay, offset,
+	                [](const Bound& /*bound*/, AutoParam& param, int32_t /*slot*/, int32_t value) {
+		                param.setCurrentValueBasicForSetup(value);
+		                return true;
+	                });
+}
+
+void SoundControls::repatch() {
+	for (int32_t i = 0; i < setCount_; i++) {
+		Set& set = sets_[i];
+		if (set.sound != nullptr) {
+			set.sound->patcher.performInitialPatching(*set.sound, *set.paramManager);
+		}
+	}
+}
+
 void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks) {
 	for (int32_t i = 0; i < count; i++) {
 		Set& set = sets[i];

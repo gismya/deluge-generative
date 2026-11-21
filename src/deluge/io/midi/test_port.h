@@ -80,6 +80,19 @@ void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 /// job waits at its first boundary while it's set, so a script can cancel it at a known point.
 bool entryHeld();
 void releaseEntry();
+/// Test hooks for the Compose build (spec §14.5, §15.9), each from a "hold <name>" line until "release <name>":
+/// "compose" makes the build wait after its first bar, so a script can press BACK on a private song with notes in it;
+/// "compose_alone" makes the size estimate fit only alone, so the build frees the player's song first;
+/// "compose_reserve" makes the build find the SDRAM reserve reached after its first bar; "compose_roll" makes it wait
+/// after a genre roll, so a script can press BACK there.
+bool composeHeld();
+bool composeAloneHeld();
+bool composeRollHeld();
+bool composeReserveHeld();
+/// Test hook for the firmware check (spec §21.3): true from a "hold golden" line until "release golden". A genre roll
+/// then makes the genre's golden case (golden_case.h: its default Recipe, at the goldens' seed, takes 0), and a Compose
+/// build starts in the Groove, as the golden plays from SHIFT+PLAY, so the saved song holds the golden's notes.
+bool goldenHeld();
 /// Test hook for H2 (spec §20): true from a "hold ramps" line until "release ramps". Perform then drops its Control
 /// events, so the same piece can be timed with and without live ramps.
 bool rampsHeld();
@@ -90,11 +103,16 @@ bool rampsStressed();
 /// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
 /// can't fault its card, and on the Deluge pulling it would end the session.
 bool cardErrorHeld();
-/// Test hook for sound re-rolls and transitions: true from a "hold preload" line until "release preload" or
-/// releasePreload(). The preload's job waits at its start, yielding, so a script can press BACK while it runs instead
-/// of racing it.
+/// Test hook for sound re-rolls, transitions and the Compose screen's card edits: true from a "hold preload" line until
+/// "release preload" or releasePreload(). The job waits at its start, yielding, so a script can press BACK while it
+/// runs instead of racing it.
 bool preloadHeld();
 void releasePreload();
+/// Test hook for presses that land inside a card wait: true from a "hold card_routine" line until "release
+/// card_routine". Injected presses then reach their handlers with sdRoutineLock set, as a press read inside
+/// routineForSD() does, so a script can put a release inside a card wait instead of racing a load. A handler that
+/// returns REMIND_ME_OUTSIDE_CARD_ROUTINE meanwhile waits until the hold is released.
+bool cardRoutineHeld();
 /// A preload job's wait at its start while the preload hold is on: it yields at `chunks`' boundaries until the hold
 /// is released or the job is cancelled, then turns the hold off, so the next preload runs straight through.
 template <typename Chunks>
@@ -103,6 +121,20 @@ void waitWhilePreloadHeld(Chunks& chunks) {
 		chunks.boundary();
 	}
 	releasePreload();
+}
+/// Test hook for a sound re-roll whose preload ends Done after a transition's confirm (#316): true from a "hold
+/// sound_committed" line until "release sound_committed" or releaseSoundCommitted(). The sound's job waits just past
+/// its chunks.commit(), yielding, so a script's confirm finds a preload it can't cancel.
+bool soundCommittedHeld();
+void releaseSoundCommitted();
+/// The sound job's wait past its commit while the sound_committed hold is on: it yields at `chunks`' boundaries until
+/// the hold is released (a cancel no longer stops a committed run), then turns the hold off.
+template <typename Chunks>
+void waitWhileSoundCommittedHeld(Chunks& chunks) {
+	while (soundCommittedHeld()) {
+		chunks.boundary();
+	}
+	releaseSoundCommitted();
 }
 /// Test hook for retiring Outputs (spec §12.9): true from a "hold reactions" line until "release reactions". Perform's
 /// view then skips its display reactions to a sound swap and a new roster (the knob rebind, the focus drop, closing a

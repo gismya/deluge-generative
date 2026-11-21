@@ -344,7 +344,12 @@ bool readButtonsAndPads() {
 		if (auto injected = TestPort::takeHidEvent()) {
 			anything = true;
 			deluge::hid::display::Screensaver::noteActivity();
-			if (handleHidEvent(injected->value, injected->velocity) == ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE) {
+			// "hold card_routine": the press is handled as one read inside a card wait.
+			const bool wasLocked = sdRoutineLock;
+			sdRoutineLock = wasLocked || TestPort::cardRoutineHeld();
+			const ActionResult result = handleHidEvent(injected->value, injected->velocity);
+			sdRoutineLock = wasLocked;
+			if (result == ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE) {
 				TestPort::putBackHidEvent();
 				waitingForSDRoutineToEnd = true;
 				return false;

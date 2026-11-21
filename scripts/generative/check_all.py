@@ -28,19 +28,21 @@ into generative or a milestone branch is --full. With no merge base, every step 
   7. delugemu (skipped by --quick), after the test-port build in build-testport/, --jobs emulators at a time, the
      longest first (by its last passing run here, build/check_all/costs.json, else LISTED_COSTS; one with neither
      right after the longest listed one): gen_emu.py smoke --no-leak (the functional smoke checks); gen_emu.py leak (the memory
-     check, one warm-up and one checked cycle); and each probe
+     check, one warm-up and one checked cycle); gen_emu.py golden (the firmware check, spec §21.3: a golden's case
+     through Compose on the test-port build, its saved song's notes against the harness golden, with the Compose and
+     Recipe-file smoke checks); and each probe
      script in delugemu on its own boot (test_port_emu.py, on the test-port build): test_port_smoke.txt (with the
-     test port's error-reply checks) and the perform_*.txt checks the change picks by their "# covers:" lines
-     (covers.py: a script whose paths, own file or includes changed, and every one with no covers line), or the
-     --scripts given. --full picks every perform_*.txt but includes and those with a "# needs:" line (a song, a
-     Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
+     test port's error-reply checks) and the perform_*.txt and compose_*.txt checks the change picks by their
+     "# covers:" lines (covers.py: a script whose paths, own file or includes changed, and every one with no covers
+     line), or the --scripts given. --full picks every perform_*.txt and compose_*.txt but includes and those with a
+     "# needs:" line (a song, a Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
      card with the overlay folder DIR (relative to scripts/generative/) put on it (test_port_emu.py reads the line).
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
 src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file (`scripts/cmake/`), the dbt
 build tasks), to what the emulator checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the
 delugemu pin) or decide what they run (check_all.py, covers.py), to a probe script or an include, or to a file a covers
-line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check and
-test_port_smoke.txt only (and every script with no covers line): --full, the final run before a merge, is the backstop.
+line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check, the
+firmware check and test_port_smoke.txt only (and every script with no covers line): --full, the final run before a merge, is the backstop.
 The table has a SKIP row for each step left out, with why, and a "not picked" row naming the probe scripts the change
 didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
@@ -128,7 +130,7 @@ class Plan(NamedTuple):
     """What a run checks. A skip_ field is why that part is skipped, or None to run it."""
 
     skip_unit_tests: "str | None"
-    # both firmware builds, the step section, smoke, the leak check and the probe scripts
+    # both firmware builds, the step section, smoke, the leak check, the firmware check and the probe scripts
     skip_firmware: "str | None"
     scripts: list  # the probe scripts to run in delugemu, test_port_smoke.txt first
     not_picked: list  # the probe scripts whose covers paths didn't change
@@ -615,8 +617,8 @@ TESTPORT_BUILD = (
 
 
 def run_delugemu(checks, todo, built, workers, given):
-    """The test-port build, then smoke, the leak check and the plan's probe scripts, `workers` at a time, the longest
-    first."""
+    """The test-port build, then smoke, the leak check, the firmware check and the plan's probe scripts, `workers` at a
+    time, the longest first."""
     py = sys.executable
     # Not started beside the harness specs: two A/B runs of a narrow src/ change saved 1 and 6 s, within the noise
     # (#314). Both builds are ninja-parallel already.
@@ -647,6 +649,21 @@ def run_delugemu(checks, todo, built, workers, given):
                 leak_detail,
             )
         )
+        jobs.append(
+            (
+                "firmware check",
+                [
+                    py,
+                    os.path.join(HERE, "gen_emu.py"),
+                    "golden",
+                    "--testport-elf",
+                    elf,
+                    "--out",
+                    os.path.join(LOGS, "emu-golden"),
+                ],
+                last_match(r"\d+ checks, \d+ failed"),
+            )
+        )
         for script in todo.scripts:
             name = os.path.basename(script)
             cmd = [
@@ -665,7 +682,9 @@ def run_delugemu(checks, todo, built, workers, given):
                 (f"delugemu {name}", cmd, last_match(r"\d+ checks, \d+ failed"))
             )
     else:
-        checks.skip("leak check and probe scripts", "the test-port build failed")
+        checks.skip(
+            "leak check, firmware check and probe scripts", "the test-port build failed"
+        )
     checks.run_together(jobs, workers, longest_first(jobs, read_costs()))
     write_costs(COSTS, checks.cost_rows)
     if todo.not_picked:

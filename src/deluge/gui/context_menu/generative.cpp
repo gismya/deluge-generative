@@ -18,9 +18,11 @@
 #include "gui/context_menu/generative.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
+#include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"
@@ -36,6 +38,7 @@ namespace deluge::gui::context_menu {
 Generative generativeMenu{};
 DiscardSong discardSong{};
 LeavePerform leavePerform{};
+RegenerateRecipe regenerateRecipe{};
 TransitionConfirm transitionConfirm{};
 
 ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
@@ -54,14 +57,17 @@ char const* Generative::getTitle() {
 }
 
 std::span<char const*> Generative::getOptions() {
-	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_PERFORM)};
-	return {options, 1};
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_PERFORM),
+	                                l10n::get(l10n::String::STRING_FOR_COMPOSE)};
+	return {options, std::size(options)};
 }
 
 bool Generative::acceptCurrentOption() {
-	// PERFORM opens PERFORM FROM, full screen, in place of this menu.
+	// PERFORM opens PERFORM FROM and COMPOSE opens COMPOSE FROM, full screen, in place of this menu.
+	const bool perform = currentOption == 0;
 	close();
-	if (soundEditor.setup(nullptr, &menu_item::generative::performFromMenu)) {
+	if (soundEditor.setup(nullptr, perform ? &menu_item::generative::performFromMenu
+	                                       : &menu_item::generative::composeFromMenu)) {
 		openUI(&soundEditor);
 	}
 	return true;
@@ -95,18 +101,40 @@ void entryEnded(generative::JobOutcome outcome, Error error) {
 } // namespace
 
 bool DiscardSong::acceptCurrentOption() {
-	if (genre_ == nullptr) {
-		return false;
+	if (compose_) {
+		close();
+		menu_item::generative::buildComposeRecipe();
+		return true;
+	}
+	if (source_.file != nullptr) {
+		generative::firmware::showVersionNotice(*source_.file); // PERFORM FROM's FILE... (spec §16.2)
 	}
 	// Back to the session view first, so nothing above it outlives the song it was opened over.
 	soundEditor.exitCompletely();
 
 	// The build is a modal runner job: the player's song plays on under the working animation, and BACK cancels.
 	generativeModalUI.open(generative::firmware::performAdapter.entryJob());
-	if (!generative::firmware::performAdapter.beginEntry(*genre_, entryEnded)) {
+	if (!generative::firmware::performAdapter.beginEntry(source_, entryEnded)) {
 		generativeModalUI.jobEnded();
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_GENERATIVE_BUSY));
 	}
+	return true;
+}
+
+// ---- REGENERATE? (the Compose screen's) ----
+
+char const* RegenerateRecipe::getTitle() {
+	return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
+}
+
+std::span<char const*> RegenerateRecipe::getOptions() {
+	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_OK)};
+	return {options, 1};
+}
+
+bool RegenerateRecipe::acceptCurrentOption() {
+	close();
+	menu_item::generative::regenerateComposeRecipe();
 	return true;
 }
 
@@ -134,17 +162,19 @@ bool LeavePerform::acceptCurrentOption() {
 // ---- REGENERATE?, or the genre changed to ----
 
 bool TransitionConfirm::regenerates() const {
-	return genre_ == generative::firmware::currentRecipe.recipe.genre;
+	return file_ == nullptr && genre_ == generative::firmware::currentRecipe.recipe.genre;
 }
 
 char const* TransitionConfirm::getTitle() {
 	if (regenerates()) {
 		return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
 	}
-	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`). The `?` is punctuation, as in
-	// STRING_FOR_REGENERATE_QMARK's text: no language this firmware ships puts the name anywhere else.
-	const size_t length = std::min(std::strlen(genre_->oledName), sizeof(title_) - 2);
-	std::memcpy(title_, genre_->oledName, length);
+	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`); a LOAD: the file's name (one too long
+	// to remember has none, and shows its genre's). The `?` is punctuation, as in STRING_FOR_REGENERATE_QMARK's text:
+	// no language this firmware ships puts the name anywhere else.
+	const char* name = file_ != nullptr && !name_->empty() ? name_->text : genre_->oledName;
+	const size_t length = std::min(std::strlen(name), sizeof(title_) - 2);
+	std::memcpy(title_, name, length);
 	title_[length] = '?';
 	title_[length + 1] = 0;
 	return title_;
@@ -174,12 +204,23 @@ bool TransitionConfirm::acceptCurrentOption() {
 	using generative::firmware::Transitions;
 	const auto style = static_cast<generative::TransitionStyle>(currentOption);
 	const bool regenerate = regenerates();
-	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10).
-	soundEditor.exitCompletely();
-	const Transitions::Request request = generative::firmware::pressShowingWork(
-	    [&] { return generative::firmware::transitions.change(*genre_, style); });
+	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10): out of
+	// the Perform menu, or (a LOAD's, opened from the load browser) straight over Perform.
+	if (isUIOpen(&soundEditor)) {
+		soundEditor.exitCompletely();
+	}
+	else {
+		close();
+	}
+	const Transitions::Request request = generative::firmware::pressShowingWork([&] {
+		return file_ != nullptr ? generative::firmware::transitions.load(*file_, *name_, style)
+		                        : generative::firmware::transitions.change(*genre_, style);
+	});
 	refusedWithPopup(generative::perform::pressOutcome(request));
-	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d", regenerate ? "regenerate" : genre_->name,
+	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d",
+	           file_ != nullptr ? "load"
+	           : regenerate     ? "regenerate"
+	                            : genre_->name,
 	           static_cast<int>(style), static_cast<int>(request),
 	           generative::firmware::workingAnimationShown() ? 1 : 0);
 	return true;

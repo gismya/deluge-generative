@@ -1,0 +1,53 @@
+# The tick gate with a stock song (#251, from #242): session.cpp calls performAdapter.tick() only while Perform is
+# active, which touches every song's tick path. Load the user's song Ttt (it has a 36-bar arrangement), play it in
+# session view, then in the arranger. The checks are that it keeps playing (playing=true after 15 and 20 s) without a
+# hang, and listening on the device: Ttt plays as it does on stock firmware. No event can show the gate itself:
+# outside Perform tick() isn't called, so nothing in it can report.
+# needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
+# covers: src/deluge/playback/mode/session.cpp src/deluge/generative/firmware/perform_adapter.cpp
+start_state
+load song SONGS/Ttt.XML
+expect event song_loaded path=SONGS/Ttt.XML within=120
+# A second start_state, the load song exception in scripts.md: Ttt opens in whatever view it was saved in.
+start_state
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view; PLAY there plays the session
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+sleep 15
+expect playing=true
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# SONG in Song view goes to the arranger; PLAY there plays the arrangement from where Ttt was saved scrolled to (it
+# keeps playing on the desk Deluge's Ttt; a song scrolled past its arrangement's end would stop at once)
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+expect ui=arranger within=5
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+sleep 20
+expect playing=true
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

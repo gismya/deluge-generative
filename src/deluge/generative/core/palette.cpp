@@ -565,6 +565,32 @@ bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, So
 	return rollPart(genre, palette, part, sounds, entropy, lister, true, true);
 }
 
+bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
+                   FolderLister& lister) {
+	const auto index = static_cast<int32_t>(lane);
+	if (index >= kNumLanes) {
+		return true;
+	}
+	bool played = false;
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& spec : part.lanes) {
+			played = played || spec.lane == lane;
+		}
+	}
+	if (!played) {
+		return true;
+	}
+	const LaneSounds* laneSounds = palette.laneSounds(lane);
+	if (laneSounds == nullptr) {
+		sounds.lane[index].clear();
+		return true;
+	}
+	EntropyStream draws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane));
+	const SoundPath old = sounds.lane[index];
+	int32_t tag = 0;
+	return rollLane(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
+}
+
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
                   FolderLister& lister) {
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
@@ -583,6 +609,45 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 	}
 	sounds = SoundPicks{};
 	return rollSounds(incoming, palette, sounds, entropy, lister);
+}
+
+int32_t replaceMissingSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                             FolderLister& lister, FileChecker& files) {
+	int32_t replaced = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartSpec& part = genre.parts[p];
+		if (part.synth()) {
+			const LoadOutcome found =
+			    sounds.part[p].empty() ? LoadOutcome::Missing : files.exists(sounds.part[p].c_str());
+			if (found == LoadOutcome::CardError) {
+				return -1;
+			}
+			if (found == LoadOutcome::Missing) {
+				if (!rollPartSounds(genre, palette, p, sounds, entropy, lister)) {
+					return -1;
+				}
+				replaced++;
+			}
+			continue;
+		}
+		for (const LaneSpec& lane : part.lanes) {
+			SoundPath& pick = sounds.lane[static_cast<int32_t>(lane.lane)];
+			if (pick.empty()) {
+				continue;
+			}
+			const LoadOutcome found = files.exists(pick.c_str());
+			if (found == LoadOutcome::CardError) {
+				return -1;
+			}
+			if (found == LoadOutcome::Missing) {
+				if (!rollLaneSound(genre, palette, lane.lane, sounds, entropy, lister)) {
+					return -1;
+				}
+				replaced++;
+			}
+		}
+	}
+	return replaced;
 }
 
 bool synthPart(const Genre& genre, int32_t part) {

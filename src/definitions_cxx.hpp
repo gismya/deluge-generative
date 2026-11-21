@@ -194,6 +194,8 @@ enum class UIType : uint8_t {
 	GENERATIVE_MODAL,          // Generative mode (F5, spec §14.1): entry's and leave's modal job
 	GENERATIVE_PERFORM,        // Generative mode (F5, spec §14.1): Perform, the root UI
 	GENERATIVE_PRESET_BROWSER, // Generative mode (F5, spec §13.5): Perform's preset browser
+	GENERATIVE_LOAD_RECIPE,    // Generative mode (spec §16.5): the Recipe load browser
+	GENERATIVE_SAVE_RECIPE,    // Generative mode (spec §16.4): the Recipe file save UI
 	INSTRUMENT_CLIP,
 	KEYBOARD_SCREEN,
 	LOAD_INSTRUMENT_PRESET,

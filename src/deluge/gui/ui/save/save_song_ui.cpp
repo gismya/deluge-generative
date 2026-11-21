@@ -84,6 +84,9 @@ gotError:
 	currentFolderIsEmpty = false;
 
 	currentDir.set(&currentSong->dirPath);
+	// A song named but never saved (a Compose song) is offered under its own name: the browser keeps a nominated name
+	// when no file has it, where it would otherwise pick a new SONG name. A song whose file exists takes it from there.
+	enteredText.set(&currentSong->name);
 
 	error = arrivedInNewFolder(0, searchFilename.get(), "SONGS");
 	if (error != Error::NONE) {

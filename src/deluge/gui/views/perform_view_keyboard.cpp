@@ -37,6 +37,11 @@ constexpr RGB kFillColour = RGB::monochrome(70);
 /// A KEYBOARD fader press let go sooner than this is a tap, a new centre; held longer, it springs back (spec §13.5).
 constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform::kMacroTapMs / 1000;
 
+/// What the Recipe keeps for a fader let go: the macro's centre, or `part`'s bias on it (test events).
+[[maybe_unused]] int32_t keptByFader(Macro macro, int32_t part) {
+	return part >= 0 ? currentRecipe.recipe.bias.of(part, macro) : currentRecipe.recipe.macros[macro];
+}
+
 } // namespace
 
 void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
@@ -48,11 +53,20 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 			releaseMacroPad(at.macro, at.pad);
 			break;
 		}
+		// With a part focused the row sets its Part bias, so the part plays at the row (spec §3.3, §13.5).
 		const int32_t units = macroLevelUnits(at.level);
-		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer);
-		performAdapter.steering().holdMacro(at.macro, units);
-		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld", static_cast<int>(at.macro), static_cast<long>(units));
-		showMacroPopup(at.macro, units);
+		macroHolds_.press(at.macro, at.pad, units, AudioEngine::audioSampleTimer, focusedPart());
+		const int32_t part = macroHolds_.part(at.macro);
+		performAdapter.steering().holdFader(part, at.macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
+		           static_cast<long>(units), static_cast<long>(part));
+		if (part >= 0) {
+			const int32_t bias = performAdapter.steering().heldBias(at.macro);
+			showBiasPopup(at.macro, deluge::generative::partBiased(currentRecipe.recipe.macros[at.macro], bias), bias);
+		}
+		else {
+			showMacroPopup(at.macro, units);
+		}
 		break;
 	}
 	case KeyboardPad::Fill:
@@ -68,17 +82,18 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
 	using deluge::generative::perform::MacroFaderHolds;
 	const int32_t units = macroHolds_.units(macro);
-	// A tap keeps the value as the new centre; a hold springs back to the centre (spec §13.5).
+	const int32_t part = macroHolds_.part(macro); // the part the press steered, whatever is focused now
+	// A tap keeps the value as the new centre, or bias; a hold springs back to it (spec §13.5).
 	switch (macroHolds_.release(macro, pad, AudioEngine::audioSampleTimer, kMacroTapSamples)) {
 	case MacroFaderHolds::Release::Keep:
-		performAdapter.steering().keepMacroCentre(macro, units);
-		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld", static_cast<int>(macro),
-		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		performAdapter.steering().keepFader(part, macro, units);
+		TEST_EVENT("gen_macro_pad macro=%d keep units=%ld part=%ld", static_cast<int>(macro),
+		           static_cast<long>(keptByFader(macro, part)), static_cast<long>(part));
 		break;
 	case MacroFaderHolds::Release::SpringBack:
-		performAdapter.steering().springMacroBack(macro);
-		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld", static_cast<int>(macro),
-		           static_cast<long>(currentRecipe.recipe.macros[macro]));
+		performAdapter.steering().springFaderBack(part, macro);
+		TEST_EVENT("gen_macro_pad macro=%d spring units=%ld part=%ld", static_cast<int>(macro),
+		           static_cast<long>(keptByFader(macro, part)), static_cast<long>(part));
 		break;
 	case MacroFaderHolds::Release::None:
 		return;
@@ -148,6 +163,8 @@ void PerformView::refreshKeyboardPage() {
 	KeyboardPageInput in;
 	in.centres = currentRecipe.recipe.macros;
 	in.holds = &macroHolds_;
+	in.focused = focusedPart();
+	in.bias = currentRecipe.recipe.bias;
 	in.piece = performAdapter.playingGenerator();
 	in.sounding = in.piece != nullptr && output.sectionKnown;
 	in.section = output.section;

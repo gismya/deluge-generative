@@ -3,20 +3,13 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
-  `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) take the file's Recipe, seed and takes instead of rolling them. The lifecycle
-  never reads the pending Recipe. The handover is the steering's (`PerformSteering::handOver()`, `takeOverStopped()`),
-  and the handover's macro rule lives there: each caller passes `HandoverMacros::Live` today
-  (`PerformAdapter::incomingStarts()`, `incomingCommits()`, `pendingCommitsOnLeave()` and the harness's
-  `TransitionAdapter`); a LOAD passes `Pending`, the file's. `Pending` isn't the whole of a LOAD's macro rule: at the
-  start step the incoming instance's `carryOver()` (`PerformDriver::switchToIncoming()`) copies the live macros into
-  it, which a LOAD has to skip, and the steering's `macroSteering_` has to restart from the file's macros
-  (`MacroSteering::startFrom()`, as `PerformSteering::pieceStarts()` does), or it steers from the live ones. The confirm
-  (`gui/context_menu/generative.cpp`, `TransitionConfirm::setupAndCheckAvailability()`) starts on
-  `perform::confirmStyle(genre)` (`perform/genre_menu.h`), the incoming genre's `ArcSpec::transitionEntry` (Drop or
-  Intro, #125); a LOAD passes the file's genre. Incoming Outputs don't get unique names yet (§9.7):
-  Perform's song is never saved.
+- **LOAD as a transition (#139, built):** `Transitions::load()` beside `change()`; the preload type is
+  `Transitions::Incoming` (a genre, or a file and its name, copied into the job's own `LoadSlot`). The macro rule is
+  `PendingRecipe::macros` (`HandoverMacros::Pending` for a LOAD): `handOver()` reads it and restarts `macroSteering_`
+  from the file's macros, and the lifecycle passes it to `PerformDriver::queueIncoming(keepsMacros)` through the
+  adapter's `incomingMacros()`, so `carryOver()` skips the live macros at the start step. A new kind of transition
+  sets those two fields in its preload. Incoming Outputs don't get unique names yet (§9.7): Perform's song is never
+  saved.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
   walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
@@ -87,3 +80,15 @@ otherwise.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.
+- **Capture's clips (M4):** `ClipBuilder::take()` drops Section, KeyScale and Sound events today (spec §15.2, §15.5).
+  Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
+  a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
+  (`endsHere()`), and its muted notes are already dropped there.
+- The Generative menu's lists (#140): a new source row is a `MenuItem` in `SourceMenu`'s list
+  (`gui/menu_item/generative/source_rows.h`), in PERFORM FROM (`perform_from.cpp`), COMPOSE FROM and the screen's
+  FROM (`compose_screen.cpp`). Perform entry from a new kind of source is an `EntrySource`
+  (`generative/firmware/entry_source.h`) and a branch at the start of `EntryJob::run()`. SAVE and LOAD on the screen
+  are the sound editor's SAVE and LOAD branches (F19, `composeScreenShowing()`).
+- What a file chosen in `LoadRecipeUI` does is `loadChosen()` (`gui/ui/load/load_recipe_ui.cpp`): PERFORM FROM under
+  it (`performFromShowing()`) asks DISCARD SONG?; Perform as root UI makes it a transition; otherwise the Compose
+  load (`loadComposeRecipe()`), which shows the screen. A new place to open the browser from adds a branch there.

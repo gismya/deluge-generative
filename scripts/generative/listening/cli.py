@@ -11,6 +11,9 @@
 A session has two folders: the session folder (<notes dir>/tuning/<genre>/round-<n>/: the page, audio/, midi/,
 variants.md, diffs/ and tools/ with the content and job files) and a scratch folder (raw WAVs, card images, worktrees,
 build dirs; delete it once the page passes its browser test).
+
+A session may hold several genres: a job's own --genre (and a variant's, a page card's) wins; the commands' --genre is
+only the default for those that name none (#426).
 """
 
 import argparse
@@ -27,7 +30,8 @@ PALETTE_MAX_BYTES = 8192  # spec 10.1: the firmware ignores a larger override fi
 
 
 def oled_names(repo=None):
-    """Every genre's OLED name, the stem of its palette override file (GENERATIVE/PALETTES/<GENRE NAME>.XML)."""
+    """Every playable genre's OLED name, the stem of its palette override file (GENERATIVE/PALETTES/<GENRE NAME>.XML).
+    A parent's (version 0, as gen_emu.genre_names) is left out: it is never played, so the firmware never reads it."""
     folder = os.path.join(
         repo or runner.REPO, "src", "deluge", "generative", "core", "genres"
     )
@@ -35,7 +39,15 @@ def oled_names(repo=None):
     for name in os.listdir(folder):
         if name.endswith(".cpp"):
             with open(os.path.join(folder, name)) as fh:
-                names |= set(re.findall(r'oledName\s*=\s*"([^"]+)"', fh.read()))
+                text = fh.read()
+            # a genre written whole, unless it is a parent ...
+            for body in re.findall(
+                r"(?:const|constexpr) Genre\s+\w+\s*\{(.*?)\n\};", text, re.DOTALL
+            ):
+                if not re.search(r"\.version\s*=\s*0\b", body):
+                    names |= set(re.findall(r'\.oledName\s*=\s*"([^"]+)"', body))
+            # ... or a subgenre, written as overrides of its parent (spec 4.1)
+            names |= set(re.findall(r'\bgenre\.oledName\s*=\s*"([^"]+)"', text))
     return names
 
 
@@ -119,13 +131,13 @@ def cmd_variants(a):
             print(f"{name}: {n} lines")
         return 0
     extra = [w for arg in a.extra for w in arg.split()]
-    lines = variants.prove(
+    lines, failed = variants.prove(
         wt, a.session, a.names, a.genre, range(1, a.seeds + 1), a.bars, extra, a.scratch
     )
     for line in lines:
         print(line)
     # a variant that didn't build: the others are proved, and the exit says not all were
-    return 1 if any("doesn't build" in line for line in lines) else 0
+    return 1 if failed else 0
 
 
 def page_module_variants(path):
@@ -229,13 +241,17 @@ def parser():
     )
     v.add_argument(
         "--worktree",
-        help="default <scratch>/wt/<action>, a worktree of the repo's HEAD; one you give must be clean under src/ and pack/",
+        help="default <scratch>/wt/<action>, a worktree of the repo's HEAD; one you give must be clean under src/ "
+        "and pack/",
     )
     v.add_argument(
         "--scratch",
         help="its worktree (wt/make, wt/prove); prove keeps bin/<name> and the MIDI there",
     )
-    v.add_argument("--genre")
+    v.add_argument(
+        "--genre",
+        help="prove: the genre of each variant whose Variant names none (default: theirs; #426)",
+    )
     v.add_argument(
         "--seeds", type=int, default=20, help="prove: seeds 1..N, entropy = seed"
     )
@@ -249,7 +265,9 @@ def parser():
     v.add_argument("names", nargs="*")
 
     r = sub.add_parser("run", help="capture the jobs in delugemu")
-    r.add_argument("--genre", required=True)
+    r.add_argument(
+        "--genre", help="the genre of each job that gives no --genre of its own (#426)"
+    )
     r.add_argument("--session", required=True, help="the session folder (its diffs/)")
     r.add_argument("--scratch", required=True)
     r.add_argument("--runners", type=int, default=2)
@@ -271,7 +289,9 @@ def parser():
     r.add_argument("jobs", nargs="+")
 
     o = sub.add_parser("clips", help="rough-render jobs offline")
-    o.add_argument("--genre", required=True)
+    o.add_argument(
+        "--genre", help="the genre of each job that gives no --genre of its own (#426)"
+    )
     o.add_argument("--scratch", required=True)
     o.add_argument(
         "--session",
@@ -297,7 +317,7 @@ def parser():
 def main(argv=None):
     a = parser().parse_args(argv)
     if a.command == "variants":
-        need = {"make": ("content", "scratch"), "prove": ("scratch", "genre")}[a.action]
+        need = {"make": ("content", "scratch"), "prove": ("scratch",)}[a.action]
         missing = [f"--{n}" for n in need if not getattr(a, n)]
         if missing:
             sys.exit(f"variants {a.action} needs {', '.join(missing)}")

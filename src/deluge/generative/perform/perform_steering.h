@@ -112,17 +112,17 @@ public:
 
 	// ---- A transition's handover (spec §12.9): the firmware's Transitions and the harness's adapter call these ----
 
-	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros `macros` says, then
-	/// newRecipe(). Its sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter
-	/// follows it with its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the
-	/// incoming instance; the song's tempo, swing and key change as that instance plays. Leaving Perform commits with
-	/// this alone.
-	void handOver(const PendingRecipe& pending, HandoverMacros macros);
+	/// The pending Recipe becomes the Current Recipe: its Recipe, seed and takes, with the macros its `macros` names
+	/// (a LOAD's file's macros also restart the macro steering, which then starts from them), then newRecipe(). Its
+	/// sound picks are the adapter's to copy. At a transition's start step, in the tick, the adapter follows it with
+	/// its instance start (instanceStarts()), so a FILL or KEYBOARD fader still held reaches the incoming instance; the
+	/// song's tempo, swing and key change as that instance plays. Leaving Perform commits with this alone.
+	void handOver(const PendingRecipe& pending);
 	/// A stop commits a transition: handOver(), then the song jumps to the new Recipe's tempo and swing (the sink), and
 	/// its swing interval and key (the adapter's swingIntervalChanged() and keyChanged()). Can run in the tick, when
 	/// the piece ended by itself with the transition Queued: the transport has stopped by then, so the adapter's calls
 	/// reschedule nothing.
-	void takeOverStopped(const PendingRecipe& pending, HandoverMacros macros);
+	void takeOverStopped(const PendingRecipe& pending);
 
 	/// Each tick, before the driver advances: FILL's state (the song's fill mode) goes to the core as SetFill when it
 	/// changed (spec §8.7, §2.6). A full queue tries again on the next tick.
@@ -134,9 +134,9 @@ public:
 			sendFill(down);
 		}
 	}
-	/// Each tick, after the driver advanced: the Recipe keeps each part's take as it lands, so the next start, a save
-	/// or a Compose has it (spec §6.6, §15).
-	void recordTakes(const Generator& playing);
+	/// Each tick, after the driver advanced: the Recipe keeps each part's take and octave shift as they land, so the
+	/// next start, a save or a Compose has them (spec §6.6, §7.3, §15).
+	void recordLanded(const Generator& playing);
 
 	// ---- The transport's presses (spec §13.2) ----
 
@@ -186,6 +186,31 @@ public:
 	/// The take `part` plays: the playing piece's, or the Recipe's while stopped.
 	[[nodiscard]] int32_t take(int32_t part) const;
 
+	// ---- Octave shifts (spec §7.3, §13.4, §13.6) ----
+
+	/// OCTAVES ▸ or SHIFT + Y: `part`'s octave shift `shift` from the next bar line; the shift playing pressed again
+	/// cancels the one waiting. Stopped, the shift is the Recipe's at once, and the next start plays it. Nothing to do
+	/// for a part with no Register (Drums, FX), a part past the roster, or a shift past the part's octave range.
+	[[gnu::noinline]] PressOutcome pressOctave(uint8_t part, int32_t shift);
+	/// A SHIFT + Y turn or an OCTAVES ▸ turn: the shift one down or up (`direction`) from octaveAhead(), pressed as
+	/// pressOctave() does. `outcome` is what the press did.
+	/// @return the shift pressed, or kNoOctaveWaiting if none was: the part's octave range ends that way (the caller's
+	/// LOWEST or HIGHEST popup, octaveAtEdge()), or nothing to do.
+	[[gnu::noinline]] int32_t stepOctave(uint8_t part, int32_t direction, PressOutcome* outcome);
+	/// `part`'s octave shift as it goes on: its newest press still in the steering queue, else the shift waiting in
+	/// the core, else the one playing (the Recipe's while stopped). 0 for Drums and FX.
+	[[nodiscard, gnu::noinline]] int32_t octaveAhead(int32_t part) const;
+	/// The octave shift `part` plays: the playing piece's, or the Recipe's while stopped.
+	[[nodiscard]] int32_t octave(int32_t part) const;
+	/// Whether `part` of the roster has a Register, so it takes an octave shift.
+	[[nodiscard]] bool takesOctave(int32_t part) const;
+	/// The shifts `part` of the roster takes: those that keep every note of it a MIDI note (spec §7.3). Only 0 for a
+	/// part that takes none.
+	[[nodiscard]] OctaveRange octavesOf(int32_t part) const;
+	/// Whether a turn `direction` from octaveAhead() would leave `part`'s octave range: the turn is refused, and the
+	/// player is told the shift is the lowest or highest the part takes.
+	[[nodiscard]] bool octaveAtEdge(int32_t part, int32_t direction) const;
+
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing, and logs it.
@@ -215,6 +240,55 @@ public:
 	void keepMacroCentre(Macro macro, int32_t units);
 	/// A fader hold let go: the core goes back to the Current Recipe's centre.
 	void springMacroBack(Macro macro);
+
+	// ---- Part bias (spec §3.3, §13.5) ----
+
+	/// Steers `part`'s Part bias on `macro` (F8 with the part focused): the Current Recipe's at once, and the core's
+	/// from the next undecided step, as a macro is. While a KEYBOARD fader holds that bias, only the Recipe's moves.
+	/// Nothing for a part past the roster.
+	void setBias(int32_t part, Macro macro, int32_t units);
+	/// A KEYBOARD fader held with `part` focused: the core plays the bias `units` while it is held, across a piece or
+	/// instance start, and the Current Recipe keeps its own.
+	void holdBias(int32_t part, Macro macro, int32_t units);
+	/// A fader tap let go: `units` is `part`'s bias in the Current Recipe, and the core's.
+	void keepBias(int32_t part, Macro macro, int32_t units);
+	/// A fader hold let go: the core goes back to the Current Recipe's bias.
+	void springBiasBack(int32_t part, Macro macro);
+	/// A KEYBOARD fader row pressed with `part` focused, or -1 for the Recipe level (spec §13.5): holds the macro at
+	/// the row's `units`, or the part's bias that puts it there (faderBias()). keepFader() and springFaderBack() are
+	/// its tap and hold let go, for the part the press held.
+	void holdFader(int32_t part, Macro macro, int32_t units) {
+		if (part < 0) {
+			holdMacro(macro, units);
+			return;
+		}
+		holdBias(part, macro, faderBias(adapter().recipe().macros[macro], units));
+	}
+	void keepFader(int32_t part, Macro macro, int32_t units) {
+		if (part < 0) {
+			keepMacroCentre(macro, units);
+			return;
+		}
+		keepBias(part, macro, faderBias(adapter().recipe().macros[macro], units));
+	}
+	void springFaderBack(int32_t part, Macro macro) {
+		if (part < 0) {
+			springMacroBack(macro);
+			return;
+		}
+		springBiasBack(part, macro);
+	}
+	/// RESET PART BIAS: `part`'s bias on every macro to 0, or every part's for -1.
+	void resetBias(int32_t part);
+	/// Where `part` plays `macro` at the Recipe's centre: the centre moved by its bias (partBiased()). The KEYBOARD
+	/// fader's fill and F8's ring with the part focused.
+	[[nodiscard]] int32_t biasedCentre(int32_t part, Macro macro) const {
+		return partBiased(adapter().recipe().macros[macro], adapter().recipe().bias.of(part, macro));
+	}
+	/// The Part bias a KEYBOARD fader holds on `macro` (its popup), whichever part it holds.
+	[[nodiscard]] int32_t heldBias(Macro macro) const { return macroSteering_.heldBias(macro); }
+	/// Whether `part` is in the roster, so it takes a Part bias.
+	[[nodiscard]] bool takesBias(int32_t part) const { return part >= 0 && part < rosterParts(); }
 
 	// ---- Key (spec §7.6, §13.5) ----
 
@@ -247,6 +321,8 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
+	/// Octave shift presses, and BACK taps (which may cancel one), from any control, modulo 256.
+	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
 
 private:
 	[[nodiscard]] Adapter& adapter() { return static_cast<Adapter&>(*this); }
@@ -259,6 +335,8 @@ private:
 	PressOutcome steer(const Command& command);
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
 	void pushMacro(Macro macro, int32_t units);
+	/// Pushes a SetBias while Perform is entered. @return false if the queue was full.
+	bool pushBias(int32_t part, Macro macro, int32_t units);
 	/// pressTake() past the pending gate.
 	PressOutcome pressTakeUngated(uint8_t part, int32_t take);
 	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
@@ -302,6 +380,9 @@ private:
 	/// Each part's highest take played in this Recipe (the CLIP page's earlier takes, spec §13.5).
 	uint8_t newestTake_[kMaxParts] = {};
 	GlideLength glide_ = kDefaultGlide;
+	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
+	/// step pins (PerformAdapter::incomingStarts()).
+	uint8_t octavePresses_ = 0;
 };
 
 // ---- Definitions ----
@@ -338,6 +419,11 @@ void PerformSteering<Adapter>::instanceStarts(bool fillDown) {
 		if (const int32_t held = macroSteering_.resend(macro); held != MacroSteering::kNotHeld) {
 			pushMacro(macro, held);
 		}
+		// A fader still holding a part's bias too: the new instance starts from the Recipe's or carries the last
+		// one's, either way not the held one.
+		if (const int32_t part = macroSteering_.biasHeldOn(macro); part != MacroSteering::kNoPart) {
+			pushBias(part, macro, macroSteering_.heldBias(macro));
+		}
 	}
 }
 
@@ -348,12 +434,27 @@ void PerformSteering<Adapter>::newRecipe() {
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::handOver(const PendingRecipe& pending, HandoverMacros macros) {
+void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	Recipe& recipe = adapter().recipe();
 	const Macros live = recipe.macros;
+	const PartBiases liveBias = recipe.bias;
+	// A Regenerate keeps each part's bias: the same roster. A genre change starts at the new Recipe's (0), a LOAD at
+	// its file's, and a fader still holding a bias lets go of it (spec §3.3).
+	const bool keepsBias = keepsPartBias(pending.macros, pending.recipe.genre, recipe.genre);
 	recipe = pending.recipe;
-	if (macros == HandoverMacros::Live) {
+	if (keepsBias) {
+		recipe.bias = liveBias;
+	}
+	else {
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			macroSteering_.letGoBias(static_cast<Macro>(m));
+		}
+	}
+	if (pending.macros == HandoverMacros::Live) {
 		recipe.macros = live;
+	}
+	else {
+		macroSteering_.startFrom(recipe.macros); // the incoming instance plays the file's (spec §12.9)
 	}
 	adapter().seed() = pending.seed;
 	adapter().takes() = pending.takes;
@@ -361,8 +462,8 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending, HandoverMa
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::takeOverStopped(const PendingRecipe& pending, HandoverMacros macros) {
-	handOver(pending, macros);
+void PerformSteering<Adapter>::takeOverStopped(const PendingRecipe& pending) {
+	handOver(pending);
 	const Recipe& recipe = adapter().recipe();
 	adapter().sink().setTempo(recipe.tempo);
 	adapter().sink().setSwing(recipe.swing);
@@ -384,9 +485,10 @@ void PerformSteering<Adapter>::sendFill(bool down) {
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::recordTakes(const Generator& playing) {
+void PerformSteering<Adapter>::recordLanded(const Generator& playing) {
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		recordTake(p, playing.take(p));
+		adapter().recipe().octave[p] = static_cast<int8_t>(playing.octave(p));
 	}
 }
 
@@ -446,8 +548,9 @@ PressOutcome PerformSteering<Adapter>::forceSection(SectionKind kind) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
-	// It may cancel a waiting key change or take: menus showing one read it again.
+	// It may cancel a waiting key change, take or octave shift: menus showing one read it again.
 	keyPresses_++;
+	octavePresses_++;
 	for (uint32_t& presses : takePresses_) {
 		presses++;
 	}
@@ -527,6 +630,77 @@ int32_t PerformSteering<Adapter>::take(int32_t part) const {
 template <typename Adapter>
 int32_t PerformSteering<Adapter>::newestTake(int32_t part) const {
 	return std::max<int32_t>(newestTake_[part], take(part));
+}
+
+// ---- Octave shifts ----
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::takesOctave(int32_t part) const {
+	const Genre* genre = rosterGenre();
+	return entered_ && genre != nullptr && part >= 0 && part < partCount(*genre)
+	       && hasRegister(genre->parts[part].role);
+}
+
+template <typename Adapter>
+OctaveRange PerformSteering<Adapter>::octavesOf(int32_t part) const {
+	return takesOctave(part) ? octaveRange(rosterGenre()->parts[part]) : OctaveRange{};
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::octaveAtEdge(int32_t part, int32_t direction) const {
+	return !leaving_ && direction != 0 && takesOctave(part)
+	       && !octavesOf(part).contains(octaveAhead(part) + (direction > 0 ? 1 : -1));
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressOctave(uint8_t part, int32_t shift) {
+	if (leaving_ || !takesOctave(part) || !octavesOf(part).contains(shift)) {
+		return PressOutcome::NothingToDo;
+	}
+	octavePresses_++;
+	if (playing() != nullptr) {
+		return queued(queue_.push({CommandKind::SetOctave, part, shift}));
+	}
+	// Stopped: no line to wait for. The shift is the Recipe's, which the next start plays.
+	adapter().recipe().octave[part] = static_cast<int8_t>(shift);
+	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::stepOctave(uint8_t part, int32_t direction, PressOutcome* outcome) {
+	*outcome = PressOutcome::NothingToDo;
+	if (direction == 0 || !takesOctave(part)) {
+		return kNoOctaveWaiting;
+	}
+	const int32_t shift = octaveAhead(part) + (direction > 0 ? 1 : -1);
+	if (!octavesOf(part).contains(shift)) {
+		return kNoOctaveWaiting; // the part's octave range ends that way
+	}
+	*outcome = pressOctave(part, shift);
+	return refused(*outcome) || *outcome == PressOutcome::NothingToDo ? kNoOctaveWaiting : shift;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
+	if (!takesOctave(part)) {
+		return 0;
+	}
+	const Generator* piece = playing();
+	if (piece == nullptr) {
+		return adapter().recipe().octave[part];
+	}
+	// A press the core hasn't drained yet goes on as pushed: a shift waits, and the one playing cancels the wait.
+	if (const Command* queued = queue_.newest(CommandKind::SetOctave, static_cast<uint8_t>(part))) {
+		return queued->value;
+	}
+	const int32_t waiting = piece->octaveWaiting(part);
+	return waiting != kNoOctaveWaiting ? waiting : piece->octave(part);
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::octave(int32_t part) const {
+	const Generator* piece = playing();
+	return piece != nullptr ? piece->octave(part) : adapter().recipe().octave[part];
 }
 
 // ---- Tempo and swing ----
@@ -615,6 +789,68 @@ template <typename Adapter>
 void PerformSteering<Adapter>::springMacroBack(Macro macro) {
 	macroSteering_.letGo(macro);
 	pushMacro(macro, adapter().recipe().macros[macro]);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::setBias(int32_t part, Macro macro, int32_t units) {
+	if (!takesBias(part)) {
+		return;
+	}
+	PartBiases& bias = adapter().recipe().bias;
+	const int32_t before = bias.of(part, macro);
+	bias.set(part, macro, units);
+	// A full queue loses the turn: the Recipe keeps what the core plays, as a macro's centre does.
+	if (macroSteering_.biasHeldOn(macro) != part && !pushBias(part, macro, bias.of(part, macro))) {
+		bias.set(part, macro, before);
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::holdBias(int32_t part, Macro macro, int32_t units) {
+	if (!takesBias(part)) {
+		return;
+	}
+	PartBiases held;
+	held.set(part, macro, units); // clamped as the Recipe's
+	if (pushBias(part, macro, held.of(part, macro))) {
+		macroSteering_.holdBias(part, macro, held.of(part, macro));
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::keepBias(int32_t part, Macro macro, int32_t units) {
+	macroSteering_.letGoBias(macro);
+	setBias(part, macro, units);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::springBiasBack(int32_t part, Macro macro) {
+	macroSteering_.letGoBias(macro);
+	if (takesBias(part)) {
+		pushBias(part, macro, adapter().recipe().bias.of(part, macro));
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::resetBias(int32_t part) {
+	for (int32_t p = 0; p < rosterParts(); p++) {
+		if (part >= 0 && p != part) {
+			continue;
+		}
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			if (adapter().recipe().bias.of(p, macro) != 0) {
+				setBias(p, macro, 0);
+			}
+		}
+	}
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::pushBias(int32_t part, Macro macro, int32_t units) {
+	Command command{CommandKind::SetBias, static_cast<uint8_t>(part), units};
+	command.length = static_cast<uint16_t>(macro);
+	return !entered_ || queue_.push(command);
 }
 
 template <typename Adapter>

@@ -49,21 +49,13 @@ void wrapped(Playing& t, int32_t part) {
 }
 
 /// `part`'s preload runs as a transition is confirmed, which cancels it, but it is past its last boundary and ends
-/// Done: its SetSound is queued while the transition is pending, after the confirm counted the waiting sounds.
+/// Done while the transition is pending, after the confirm counted the waiting sounds.
 void preloadedPastConfirm(Playing& t, int32_t part, TransitionStyle style) {
 	t.sounds.press(part, false);
 	t.runToStepLine(3, -1);
 	t.lifecycle.request(style);
 	t.lifecycle.load();
 	t.sounds.endPreload();
-}
-
-/// Plays steps, with the pump after each, until `part`'s sound no longer waits: at most `steps`.
-void playUntilSettled(Playing& t, int32_t part, int32_t steps) {
-	for (int32_t s = 0; s < steps && t.sounds.waiting(part); s++) {
-		t.runSteps(1);
-		t.pump();
-	}
 }
 
 /// The Sound event's test event for a swap on `step`'s line.
@@ -142,10 +134,10 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.sounds.cancelledJobs).to_equal(1);
 			expect(t.sounds.press(kAcid, false) == Press::Pending).to_be_true(); // still preloading
 			expect(t.sounds.cancelledJobs).to_equal(1);
-			t.sounds.endPreload(); // past its last boundary: it waits for its line
+			t.sounds.endPreload(); // past its last boundary: retired unplayed (#316)
 			expect(t.sounds.press(kAcid, false) == Press::Pending).to_be_true();
-			expect(t.sounds.waiting(kAcid)).to_be_true();
-			expect(t.sounds.unplayed.empty()).to_be_true();
+			expect(t.sounds.waiting(kAcid)).to_be_false();
+			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
 		});
 
 		it("cancels the part's preload when pressed again", _ {
@@ -417,46 +409,46 @@ describe sound_swap("Sound swaps", $ {
 		});
 	});
 
-	// Today's behaviour, pinned (#310 review 2): the confirm's cancelAll() counted no waiting sound, then the cancelled
-	// preload ended Done anyway. preloaded() doesn't check for a pending transition, so its SetSound waits uncounted.
+	// The confirm's cancelAll() cancelled the preload, but it was past its last boundary and ended Done (#316). Sound
+	// actions are refused while a transition is pending (spec §12.9), so its Output is retired unplayed: nothing waits
+	// uncounted by the confirm, and the part's sound doesn't change, whatever the transition's style.
 	context("a preload that ends Done after a confirm cancelled it", _ {
-		it("waits for its line though a transition is pending, uncounted by the confirm", _ {
+		it("is retired unplayed, with nothing queued for the part", _ {
 			Playing t;
 			t.sounds.press(kAcid, false);
 			t.runToStepLine(3, -1);
 			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
 			expect(t.sounds.cancelledJobs).to_equal(1);
-			expect(t.queue.holds({CommandKind::SetSound, kAcid, kNoSound})).to_be_false(); // nothing was waiting
 			t.lifecycle.load();
 			t.sounds.endPreload();
 			expect(t.lifecycle.pending()).to_be_true();
-			expect(t.sounds.waiting(kAcid)).to_be_true();
-			expect(t.queue.holds({CommandKind::SetSound, kAcid, 1})).to_be_true();
-		});
-
-		it("swaps into the outgoing roster on the transition's line when it plays a Build", _ {
-			Playing t;
-			const int32_t phrase = t.phraseSteps();
-			preloadedPastConfirm(t, kAcid, TransitionStyle::BuildIntoDrop);
-			pastLine(t, phrase);
-			expect(t.lifecycle.phase() == perform::TransitionPhase::Committed).to_be_true();
-			expect(t.sink.starts).to_equal(0);
-			expect(t.sounds.has(swapOnLine(kAcid, 1, phrase))).to_be_true();
-			expect(t.sounds.playing[kAcid]).to_equal(1);
-			expect(t.sounds.tails == Outputs{0}).to_be_true();
-		});
-
-		it("is dropped by the pump once a Cut's new roster has moved on", _ {
-			Playing t;
-			const int32_t phrase = t.phraseSteps();
-			preloadedPastConfirm(t, kAcid, TransitionStyle::Cut);
-			pastLine(t, phrase);
-			expect(t.sink.starts).to_equal(1);
-			playUntilSettled(t, kAcid, phrase);
-			expect(t.sounds.waiting(kAcid)).to_be_false();
-			expect(t.sounds.has("gen_sound_cancel part=1 dropped")).to_be_true();
+			expect(t.sounds.pending(kAcid)).to_be_false();
+			expect(t.sounds.waitingSounds()).to_equal(0);
+			expect(t.queue.holds({CommandKind::SetSound, kAcid, 1})).to_be_false();
+			expect(t.sounds.incoming[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
-			expect(t.sounds.playing[kAcid]).to_equal(0);
+			expect(t.sounds.has("gen_sound_cancel part=1 transition_done")).to_be_true();
+		});
+
+		it("leaves the part's sound alone through the transition, in each style", _ {
+			for (const TransitionStyle style : {TransitionStyle::BuildIntoDrop, TransitionStyle::Fade, TransitionStyle::Cut}) {
+				Playing t;
+				const int32_t phrase = t.phraseSteps();
+				preloadedPastConfirm(t, kAcid, style);
+				pastLine(t, phrase);
+				for (int32_t s = 0; s < 2 * phrase; s++) {
+					t.runSteps(1);
+					t.pump();
+				}
+				expect(t.sink.starts).to_equal(1); // the transition ran: its new roster started
+				expect(t.sounds.playing[kAcid]).to_equal(0);
+				expect(t.sounds.tails.empty()).to_be_true();
+				expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+				expect(std::none_of(t.sounds.events.begin(), t.sounds.events.end(), [](const std::string& event) {
+					return event.starts_with("gen_sound_swap part=1");
+				})).to_be_true();
+				expect(t.sounds.has("gen_sound_cancel part=1 dropped")).to_be_false();
+			}
 		});
 	});
 

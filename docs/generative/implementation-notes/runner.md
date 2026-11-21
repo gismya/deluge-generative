@@ -36,9 +36,10 @@ otherwise.
   run goes in the steering, with a spec in `transition_lifecycle_spec.cpp`; one hook per firmware step on the
   lifecycle's adapter was rejected (#260): it widens that contract and splits the start step's timed window.
 - A genre change's preload (`TransitionJob::run()`) reads the new genre's palette override into the Current Recipe's
-  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether this is a
-  genre change and records it beside the pending Recipe (`PendingRecipe::genreChange`); `commitPending()` adopts the
-  staged palette by that flag, not by comparing genres. Two preloads never run at once (one cancels and unwinds
+  spare override (`CurrentRecipe::stagePalette()`) and rolls and loads from it. It works out once whether it staged a
+  palette and records it beside the pending Recipe (`PendingRecipe::stagedPalette`); `commitPending()` adopts the
+  staged palette by that flag, not by comparing genres. A LOAD always stages its file genre's palette, so a LOAD of
+  the playing genre reads its override again; its missing sounds are re-rolled from that staged palette. Two preloads never run at once (one cancels and unwinds
   before the next starts), so one spare is enough. `Transitions::phraseLength()` reads the Current Recipe's genre,
   so the lifecycle reads it for the outgoing roster's cap before the pending Recipe replaces it: at the start step
   (kept until the drain) and at a stop's commit. No shipped genre has another phrase length yet: the harness's
@@ -52,7 +53,8 @@ otherwise.
   press against `SoundSwapLifecycle::retirementsOwed()`, a transition request against `Transitions::retirementRoom()`
   (the share less pending, less a roster for a `TransitionJob` still active, which `preloaded()` retires if it ends for
   an older request). The lifecycle asks for one roster's room, two when it replaces a Queued one. `gen_retire_overflow`
-  never fires; if a new path retires Outputs (M3's LOAD, Capture), give it a share or count it in an owner's check. The
+  never fires; if a new path retires Outputs (Capture), give it a share or count it in an owner's check. A LOAD is a
+  transition and uses the transitions' share. The
   harness models it (`TransitionAdapter::jobs`, `retirementRoom()`): the newest preload ends last, so its `load()`
   leaves the runner idle.
 - A transition request (`TransitionLifecycle::request()`) presses a cancel, the playing take and a sound's cancel into
@@ -167,14 +169,18 @@ otherwise.
   `adopt()`; the firmware's entries are `preloadDone()` and `forgetSong()`): a derived name hides the base's.
 - A rule both adapters would follow belongs in the lifecycle, or the harness tests a copy: the lifecycle calls
   `rebind(part)` after a swap while playing, and neither adapter decides it.
-- `SoundSwaps::preloadDone()` returns at once unless `takesPreloads()` (Perform being left: the Output goes with the
-  song), then parks the built Output in `incoming_[part]` before the lifecycle decides, since the lifecycle's swap and
-  drop name only the part. That slot is free: one preload runs at a time, and only for a part with nothing pending (a
-  press on a waiting part cancels it, and `canStart()` needs `!pending()`).
-- A confirm's `cancelAll()` cancels a running sound preload, but one past its `chunks.commit()` still ends Done, and
-  `preloaded()` doesn't check for a pending transition: its SetSound waits uncounted by the confirm. With a Build or a
-  Fade it lands on the transition's own line and swaps into the outgoing roster; with a Cut the pump drops it once the
-  new roster has moved past `pushedAt`. `sound_swap_spec` pins both (#310 review 2).
+- `SoundSwapLifecycle::preloaded(part, token, park)` is the one `takesPreloads()` guard: unless Perform is being left
+  (the Output goes with the song) it calls `park()`, where the adapter holds the built Output as `incoming_[part]`,
+  before it decides, since the lifecycle's swap and drop name only the part. The firmware's `preloadDone()` and the
+  harness's `endPreload()` park only through it; a second guard in an adapter would drift. That slot is free: one
+  preload runs at a time, and only for a part with nothing pending (a press on a waiting part cancels it, and
+  `canStart()` needs `!pending()`).
+- A confirm's `cancelAll()` cancels a running sound preload, but one past its `chunks.commit()` can't be cancelled and
+  still ends Done. `preloaded()` retires its Output unplayed while a transition is pending (`gen_sound_cancel part=N
+  transition_done`, #316): sound actions wait for the new roster (spec §12.9), so no sound waits while a transition is
+  pending, and a waiting sound never outlives a confirm into a Cut's new instance (whose steps count from 0 again,
+  so the pump's `pushedAt` check would hold it). A replacing request therefore counts no waiting sound. The test port's
+  `hold sound_committed` parks the sound job past its commit; `perform_transition.txt` confirms against it.
 - In a harness spec, a SetSound pushed before the piece has decided step 0 lands on step 0, a phrase line: the swap
   plays at once. `sound_swap_spec` plays its piece past step 0 first (`Playing`).
 - Sound swaps, transitions and retiring Outputs are serviced in one place, `Pump::service()`

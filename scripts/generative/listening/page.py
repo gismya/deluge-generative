@@ -20,6 +20,11 @@ A content file is a Python file defining SESSION, a dict:
         rough                 True: rough render (stand-in sounds), badged
         normal_mode, picks, question, midi   optional, as earlier sessions used them; midi is [{label, variant,
                               args, bars}] rendered by bin/<variant> --midi-only
+        genre                 optional: the genre its MIDI renders in (default the session's; a midi entry's
+                              args may give --genre too), for a session comparing genres (#426)
+        verdicts              optional, with picks: the answers each clip takes, {name: [answer, ...]} in
+                              order, as {"level": ["louder", "fine", "quieter"], "weight": ["0", "1", "2"]};
+                              default {"verdict": ["keep", "unsure", "drop"]}
     later                     [{title, ticket, waits}]: held for a later round
     not_renderable            [{title, ticket, why}]
     details                   optional {card id: Markdown}: what the card stood for, for variants.md
@@ -36,10 +41,13 @@ import shlex
 import subprocess
 
 from . import cutter, variants
+from . import jobs as _jobs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CARD_FIELDS = ("id", "ticket", "title", "section", "now", "listen", "setup", "clips")
 MAX_WORDS = 60
+# A picks card's answers per clip, unless it names its own.
+VERDICTS = {"verdict": ["keep", "unsure", "drop"]}
 
 
 def load(path):
@@ -82,6 +90,11 @@ def problems(session, sources):
         ]
         if card.get("section") and card["section"] not in sections:
             out.append(f"{cid}: section {card['section']} isn't in sections")
+        if card.get("genre") and card["genre"] not in _jobs._names(
+            "genres", _jobs.gen_emu.genre_names
+        ):
+            out.append(f"{cid}: unknown genre {card['genre']}")
+        out += verdict_problems(cid, card.get("verdicts", VERDICTS))
         keys = [o.get("key") for o in card.get("options", [])]
         if len(set(keys)) != len(keys):
             out.append(f"{cid}: option keys repeated")
@@ -103,12 +116,28 @@ def problems(session, sources):
     return out
 
 
+def verdict_problems(cid, verdicts):
+    """What's wrong with a card's `verdicts`: it must name at least one answer list, each of distinct answers."""
+    if not isinstance(verdicts, dict) or not verdicts:
+        return [f"{cid}: verdicts must be {{name: [answer, ...]}}"]
+    out = []
+    for name, answers in verdicts.items():
+        if (
+            not isinstance(answers, list)
+            or not answers
+            or len(set(answers)) != len(answers)
+        ):
+            out.append(f"{cid}: verdicts {name}: a list of distinct answers")
+    return out
+
+
 def page_data(session, clips):
     """The page's DATA: the content with each clip's file and seconds (`clips`: stem -> seconds)."""
     cards = []
     for card in session["cards"]:
         c = dict(card)
         c.setdefault("options", [])
+        c.setdefault("verdicts", VERDICTS)
         c["clips"] = [
             dict(
                 x,
@@ -160,18 +189,26 @@ def sources(scratch):
 
 
 def render_midi(card, scratch, out_dir, genre):
+    """The card's MIDI files, each in its genre: the entry's own --genre, else the card's `genre`, else its variant's
+    recorded genre (diffs/genres.json in the session folder `out_dir`), else `genre` (the session's)."""
+    variant_genres = variants.genres(out_dir)
     files = []
     for m in card.get("midi", []):
         slug = re.sub(r"[^a-z0-9]+", "-", m["label"].lower()).strip("-")
         name = f"{card['id'].lower()}-{slug}"
         dest = os.path.join(out_dir, "midi", name)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
+        args = shlex.split(m["args"])
+        if not any(a == "--genre" or a.startswith("--genre=") for a in args):
+            args = [
+                "--genre",
+                card.get("genre") or variant_genres.get(m.get("variant")) or genre,
+                *args,
+            ]
         subprocess.run(
             [
                 os.path.join(scratch, "bin", m.get("variant") or "base"),
-                "--genre",
-                genre,
-                *shlex.split(m["args"]),
+                *args,
                 "--bars",
                 str(m.get("bars", 200)),
                 "--midi-only",

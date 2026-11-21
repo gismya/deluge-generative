@@ -11,12 +11,17 @@ that, split it by topic and list the parts here.
   data checks, subgenres and their tables.
 - [Portable code: chords, fills, sounding notes, flavours](implementation-notes/core-music.md): the Chord-graph
   walk, fills, the sounding-note pools, the Sustain, Stab, Arp and Motif flavours, cut lines, portable text.
+- [Compose driver and build](implementation-notes/compose.md): `generative/compose/`, the `SongWriter` seam, where
+  End goes, the node thinning, the Perform-matches-Compose spec; `generative/firmware/compose_*`, the Song adapter,
+  the build job and its memory checks.
 - [Timing](implementation-notes/timing.md): the tick, step lookahead, tempo, the driver's clock.
 - [Runner and jobs](implementation-notes/runner.md): the Runner's jobs, transitions, the start step's cost,
   the step's code section (`GEN_STEP_CODE`, `.text.generative_step`) and H1.
 - [Firmware adapter and the private song](implementation-notes/firmware.md): `generative/firmware/`, Outputs,
   clips, sounds and their settings.
 - [Perform UI](implementation-notes/perform-ui.md): `gui/views/perform_view.*`, pads, pages, menus.
+- [Recipe files](implementation-notes/recipe-files.md): `generative/core/recipe_file.*`, `perform/recipe_name.*`,
+  `firmware/recipe_files.*`, the save UI, SAVE in Perform and on the Compose screen.
 - [Extension points left open](implementation-notes/extension-points.md): seams later tickets extend.
 - [Build and the harness](implementation-notes/build-and-harness.md): the firmware build, CI's GCC, harness specs,
   goldens.

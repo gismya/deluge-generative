@@ -99,6 +99,14 @@ const answers = JSON.parse(localStorage.getItem(KEY) || '{}');
 const save = () => { localStorage.setItem(KEY, JSON.stringify(answers)); markNav(); };
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(k => k != null)); return e; };
 
+// A clip's answer under a card's verdicts: the default's one ("verdict") is saved under the stem, as before #426.
+const soundKey = (stem, name) => name === 'verdict' ? stem : stem + ':' + name;
+function soundsText(card, c, sounds) {
+  const names = Object.keys(card.verdicts);
+  if (names.length === 1 && names[0] === 'verdict') return sounds?.[c.stem] || '-';
+  return names.map(n => n + ' ' + (sounds?.[soundKey(c.stem, n)] || '-')).join(', ');
+}
+
 function renderCard(card) {
   const a = answers[card.id] ||= { pick: '', note: '', sounds: {} };
   const sec = el('article', { className: 'card', id: card.id });
@@ -122,11 +130,14 @@ function renderCard(card) {
     loop.addEventListener('change', () => { audio.loop = loop.checked; });
     const row = el('div', { className: 'row' }, el('label', {}, loop, ' loop'), el('span', { className: 'muted', textContent: c.seconds + ' s' + (c.level ? ' · ' + c.level : '') }));
     if (card.picks && (!card.picks_only || card.picks_only.includes(c.stem))) {
-      const sel = el('select', { 'aria-label': 'Verdict on ' + c.label });
-      for (const [v, t] of [['', 'verdict…'], ['keep', 'keep'], ['unsure', 'unsure'], ['drop', 'drop']]) sel.append(el('option', { value: v, textContent: t }));
-      sel.value = a.sounds[c.stem] || '';
-      sel.addEventListener('change', () => { a.sounds[c.stem] = sel.value; save(); });
-      row.append(sel);
+      for (const [name, choices] of Object.entries(card.verdicts)) {
+        const key = soundKey(c.stem, name);
+        const sel = el('select', { 'aria-label': name + ' of ' + c.label });
+        for (const [v, t] of [['', name + '…'], ...choices.map(x => [x, x])]) sel.append(el('option', { value: v, textContent: t }));
+        sel.value = a.sounds[key] || '';
+        sel.addEventListener('change', () => { a.sounds[key] = sel.value; save(); });
+        row.append(sel);
+      }
     }
     grid.append(el('div', { className: 'clip' },
       el('div', { className: 'top' }, el('span', { textContent: c.label }), el('span', { className: 'kind', textContent: c.kind })),
@@ -191,7 +202,7 @@ function exportText() {
     }
     L.push(`- Pick: ${pick}`);
     if (card.picks) {
-      const s = card.clips.filter(c => !card.picks_only || card.picks_only.includes(c.stem)).map(c => `${c.label}: ${a.sounds?.[c.stem] || '-'}`);
+      const s = card.clips.filter(c => !card.picks_only || card.picks_only.includes(c.stem)).map(c => `${c.label}: ${soundsText(card, c, a.sounds)}`);
       L.push('- Sounds: ' + s.join('; '));
     }
     L.push(`- Note: ${a.note.trim() ? a.note.trim().replace(/\n+/g, ' / ') : '-'}`);

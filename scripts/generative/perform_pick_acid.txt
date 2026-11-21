@@ -9,6 +9,10 @@ button 4 3 up
 expect ui=sound_editor
 
 # GENRE ▸ (SELECT push), then ACID by name: TECHNO ▸ in GENRE, then ACID in TECHNO ▸, which asks DISCARD SONG?
+# PERFORM FROM remembers its row, and CURRENT RECIPE shows only once one exists: GENRE is the row above FILE..., the
+# last.
+encoder 3 5
+encoder 3 -1
 button 4 3 down
 wait 50
 button 4 3 up

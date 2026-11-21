@@ -1,0 +1,16 @@
+# A Compose build's sound fallback and its one warning (spec §10.1, §15.7), in delugemu on perform_sounds_fallback's
+# card: the factory card without the Generative pack and without Techno's four acid presets, so the ACID part falls
+# to the default synth and the Riser lane stays silent. The build still ends Done, and one warning covers both, after
+# the song opens in arranger view, as Perform entry warns.
+# needs: card fixtures/perform_sounds_fallback (its own card; test_port_emu.py builds it)
+# covers: src/deluge/generative/firmware/compose_job.cpp
+# covers: src/deluge/generative/firmware/perform_song.*
+start_state
+expect playing=false
+
+compose 60 techno-acid
+expect event /^gen_compose done ran=1 / within=120
+expect event gen_compose_sound_missing sounds=2
+expect ui=arranger within=10
+expect root_ui=arranger
+expect playing=false

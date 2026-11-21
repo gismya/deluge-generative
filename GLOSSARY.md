@@ -37,7 +37,7 @@ A genre written as overrides of a parent genre, such as Acid techno under Techno
 _Avoid_: Variant, sub-style, flavour, family
 
 **Macro**:
-A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion.
+A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion. The Recipe value is the one centre every part follows; a part's Part bias only moves where it sits around that centre.
 _Avoid_: Mood, knob, parameter
 
 **Energy**:
@@ -119,6 +119,14 @@ _Avoid_: Style, mode, type
 **Register**:
 A part's pitch home: the octave its key root sits in, and the span around that root its notes stay within. A key change moves the root to the nearest instance of the new key, so every part keeps its place and its lines keep their shape rather than moving by the full interval.
 _Avoid_: Range, octave, tessitura
+
+**Octave shift**:
+A Recipe value per pitched part, up to two octaves down or up as far as every note of the part stays a MIDI note, that moves the part's Register by whole octaves: every note of the part moves by the same octaves and nothing else about the music changes. The player steps it in Perform, and it lands at the next bar line.
+_Avoid_: Transpose, octave offset
+
+**Part bias**:
+A Recipe value per part and macro, −50 to +50: a signed offset that moves where that part plays the macro, around the Recipe value as the Arc moves it. Linear through the middle, it eases into 0 or 50 as the shared value nears that end, so a biased part still follows the Arc. With a part focused, the KEYBOARD faders and F8's knobs set it. Regenerate keeps it; a genre change resets it to 0.
+_Avoid_: Per-part macro, part offset, track macro
 
 **Interplay rule**:
 A genre rule that makes one part's rhythm react to an earlier part's: Avoid (stay off its hits), Lock (play only on its hits, or between them) or Respond (play in the quieter half of each bar, after the call). A rule only ever removes the part's own notes, never adds or moves one, and how strictly it applies is a strength that Complexity can tighten or loosen.

@@ -76,10 +76,13 @@ private:
 	friend class Pump;
 	/// The pump's call (SoundSwapLifecycle::service()), private to it.
 	using perform::SoundSwapLifecycle<SoundSwaps>::service;
+	/// Meant to be called only by preloadDone() and forgetSong(), which hold the Outputs the lifecycle names by part.
+	using perform::SoundSwapLifecycle<SoundSwaps>::preloaded;
+	using perform::SoundSwapLifecycle<SoundSwaps>::forget;
 
 	/// A preload ended well, in the job's task: `output` is `part`'s incoming Output, with `picks`, and the lifecycle
-	/// queues its swap for the line, or swaps it at once while stopped.
-	void preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
+	/// decides (SoundSwapLifecycle::preloaded()). @return whether the Output is kept.
+	bool preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks);
 	/// Queues `output` to be freed: at once, or after its tail, a phrase at most.
 	void retire(const PartOutput& output, Retirements::When when);
 

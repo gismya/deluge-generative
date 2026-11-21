@@ -17,160 +17,15 @@
 
 #include "generative/core/palette_file.h"
 #include "generative/core/genre.h"
+#include "generative/core/xml_tags.h"
 
 namespace deluge::generative {
 
 namespace {
 
-bool isSpace(char c) {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
-
-bool isNameChar(char c) {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'
-	       || c == '.' || c == ':';
-}
-
-/// One tag of the file: `<name attributes>`, `<name attributes/>` or `</name>`.
-struct Tag {
-	std::string_view name;
-	std::string_view attributes;
-	bool closing = false;
-	bool selfClosing = false;
-};
-
-/// Reads the tags of an XML file one at a time, skipping text, comments, declarations and processing instructions.
-class Tags {
-public:
-	explicit Tags(std::string_view text) : text_(text) {}
-
-	/// The next tag, or false at the end of the text or on a syntax error (then failed() is true).
-	bool next(Tag& tag) {
-		while (true) {
-			size_t open = text_.find('<', at_);
-			if (open == std::string_view::npos) {
-				return false;
-			}
-			std::string_view rest = text_.substr(open);
-			if (rest.starts_with("<!--")) {
-				size_t end = text_.find("-->", open + 4);
-				if (end == std::string_view::npos) {
-					return fail();
-				}
-				at_ = end + 3;
-				continue;
-			}
-			if (rest.starts_with("<?") || rest.starts_with("<!")) {
-				size_t end = text_.find('>', open);
-				if (end == std::string_view::npos) {
-					return fail();
-				}
-				at_ = end + 1;
-				continue;
-			}
-			size_t end = findTagEnd(open + 1);
-			if (end == std::string_view::npos) {
-				return fail();
-			}
-			std::string_view inside = text_.substr(open + 1, end - open - 1);
-			at_ = end + 1;
-			tag = Tag{};
-			if (!inside.empty() && inside.front() == '/') {
-				tag.closing = true;
-				inside.remove_prefix(1);
-			}
-			if (!inside.empty() && inside.back() == '/') {
-				tag.selfClosing = true;
-				inside.remove_suffix(1);
-			}
-			size_t nameEnd = 0;
-			while (nameEnd < inside.size() && isNameChar(inside[nameEnd])) {
-				nameEnd++;
-			}
-			if (nameEnd == 0 || (tag.closing && tag.selfClosing)) {
-				return fail();
-			}
-			tag.name = inside.substr(0, nameEnd);
-			tag.attributes = inside.substr(nameEnd);
-			return true;
-		}
-	}
-
-	[[nodiscard]] bool failed() const { return failed_; }
-
-private:
-	/// The '>' that ends a tag starting at `from`, skipping quoted attribute values.
-	size_t findTagEnd(size_t from) const {
-		char quote = 0;
-		for (size_t i = from; i < text_.size(); i++) {
-			char c = text_[i];
-			if (quote != 0) {
-				quote = c == quote ? 0 : quote;
-			}
-			else if (c == '"' || c == '\'') {
-				quote = c;
-			}
-			else if (c == '>') {
-				return i;
-			}
-			else if (c == '<') {
-				return std::string_view::npos;
-			}
-		}
-		return std::string_view::npos;
-	}
-
-	bool fail() {
-		failed_ = true;
-		return false;
-	}
-
-	std::string_view text_;
-	size_t at_ = 0;
-	bool failed_ = false;
-};
-
-/// An attribute's raw (still entity-encoded) value, or false if the tag doesn't have it.
-bool attribute(const Tag& tag, std::string_view key, std::string_view& value) {
-	std::string_view rest = tag.attributes;
-	while (true) {
-		size_t i = 0;
-		while (i < rest.size() && isSpace(rest[i])) {
-			i++;
-		}
-		size_t nameStart = i;
-		while (i < rest.size() && isNameChar(rest[i])) {
-			i++;
-		}
-		if (i == nameStart) {
-			return false;
-		}
-		std::string_view name = rest.substr(nameStart, i - nameStart);
-		while (i < rest.size() && isSpace(rest[i])) {
-			i++;
-		}
-		if (i >= rest.size() || rest[i] != '=') {
-			return false;
-		}
-		i++;
-		while (i < rest.size() && isSpace(rest[i])) {
-			i++;
-		}
-		if (i >= rest.size() || (rest[i] != '"' && rest[i] != '\'')) {
-			return false;
-		}
-		char quote = rest[i++];
-		size_t valueEnd = rest.find(quote, i);
-		if (valueEnd == std::string_view::npos) {
-			return false;
-		}
-		if (name == key) {
-			value = rest.substr(i, valueEnd - i);
-			return true;
-		}
-		rest = rest.substr(valueEnd + 1);
-	}
-}
+using xml::attribute;
+using xml::Tag;
+using xml::Tags;
 
 /// The name a palette file gives a sound control's range on a preset ("brightness", "decay"...).
 const char* controlPaletteName(SoundControl control) {
@@ -413,34 +268,12 @@ private:
 	/// Copies an attribute value into the override's text, decoding XML's five entities. Null if it doesn't fit.
 	const char* copy(std::string_view value) {
 		char* start = out_.text_ + out_.textUsed_;
-		int32_t used = out_.textUsed_;
-		for (size_t i = 0; i < value.size(); i++) {
-			char c = value[i];
-			if (c == '&') {
-				constexpr std::string_view kEntities[] = {"&amp;", "&lt;", "&gt;", "&quot;", "&apos;"};
-				constexpr char kChars[] = {'&', '<', '>', '"', '\''};
-				bool decoded = false;
-				for (int32_t e = 0; e < 5 && !decoded; e++) {
-					if (value.substr(i).starts_with(kEntities[e])) {
-						c = kChars[e];
-						i += kEntities[e].size() - 1;
-						decoded = true;
-					}
-				}
-				if (!decoded) {
-					return nullptr;
-				}
-			}
-			if (used >= PaletteOverride::kTextBytes - 1) {
-				return nullptr;
-			}
-			out_.text_[used++] = c;
-		}
-		if (used >= PaletteOverride::kTextBytes) {
+		const int32_t length =
+		    xml::decode(value, {start, static_cast<size_t>(PaletteOverride::kTextBytes - out_.textUsed_)});
+		if (length < 0) {
 			return nullptr;
 		}
-		out_.text_[used++] = 0;
-		out_.textUsed_ = used;
+		out_.textUsed_ += length + 1;
 		return start;
 	}
 

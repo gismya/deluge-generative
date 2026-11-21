@@ -61,7 +61,7 @@ int32_t nowPhrase(const Frame& frame) {
 }
 
 /// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End or key change) or on
-/// part `part`'s row (its mute, solo, take or sound).
+/// part `part`'s row (its mute, solo, take, sound or octave shift).
 bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 	for (const QueuedAction& action : frame.queued) {
 		if (action.landsAt / frame.phraseSteps != phrase) {
@@ -72,6 +72,7 @@ bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 		case CommandKind::SetSolo:
 		case CommandKind::SetTake:
 		case CommandKind::SetSound:
+		case CommandKind::SetOctave:
 			if (action.command.target == part) {
 				return true;
 			}
@@ -159,6 +160,7 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 		}
 		// The Arc plans around the Recipe's centres: an Energy or Density turn moves the plan (spec §2.8).
 		key.macros = piece->recipe().macros;
+		key.bias = piece->recipe().bias;
 	}
 	if (key == key_) {
 		return false;
