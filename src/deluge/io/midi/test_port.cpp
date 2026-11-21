@@ -265,13 +265,13 @@ constexpr Hold kHolds[] = {
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
     /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
     {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
-    /// Holds a Compose build after its first bar, or lets it go (see composeHeld())
+    /// Holds a Compose or Capture build after its first bar, or lets it go (see composeHeld())
     {"compose", [](bool on) { holdingCompose = on; }},
     /// A Compose build's estimate fits only alone, or as it is (see composeAloneHeld())
     {"compose_alone", [](bool on) { holdingComposeAlone = on; }},
     /// Holds a Compose build after its genre roll, or lets it go (see composeRollHeld())
     {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
-    /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
+    /// A Compose or Capture build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
     {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
     /// A genre roll makes the golden case and a Compose build starts in the Groove, or both as they are (see
     /// goldenHeld())

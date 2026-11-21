@@ -89,4 +89,153 @@ void captureRow(const SteeringLog& log, int32_t piece, CaptureRow& out) {
 	Text(out.value).add(shown.marked() ? "MARKED" : "-");
 }
 
+// ---- Leaving ----
+
+namespace {
+
+/// Whether a piece has steps to build: some logged before its end, or before the log cut it. One still playing
+/// (the leave menu opens while it plays) counts unless the log cut its header.
+bool buildable(const SteeringLog::Piece& piece) {
+	return piece.spanEnd() != 0;
+}
+
+} // namespace
+
+bool keeps(const SteeringLog& log, LeaveOption option, int32_t piece) {
+	if (piece < 0 || piece >= log.pieces()) {
+		return false;
+	}
+	const SteeringLog::Piece shown = log.piece(piece);
+	if (!buildable(shown)) {
+		return false;
+	}
+	switch (option) {
+	case LeaveOption::MarkedAndLast:
+	case LeaveOption::Last:
+		return shown.marked() || piece == log.current();
+	case LeaveOption::MarkedOnly:
+	case LeaveOption::Marked:
+		return shown.marked();
+	default:
+		return false;
+	}
+}
+
+int32_t nextKept(const SteeringLog& log, LeaveOption option, int32_t after) {
+	for (int32_t i = after < 0 ? 0 : after + 1; i < log.pieces(); i++) {
+		if (keeps(log, option, i)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void leaveMenu(const SteeringLog& log, LeaveMenu& out) {
+	out = LeaveMenu{};
+	int32_t marked = 0;
+	for (int32_t i = 0; i < log.pieces(); i++) {
+		marked += keeps(log, LeaveOption::Marked, i) ? 1 : 0;
+	}
+	const int32_t current = log.current();
+	const bool last = current >= 0 && buildable(log.piece(current));
+	const bool lastMarked = last && log.piece(current).marked();
+	auto add = [&](LeaveOption option) { out.options[out.count++] = option; };
+	if (marked > 0) {
+		Text(out.title).add("KEEP: ").add(marked).add(" MARKED");
+		if (last && !lastMarked) {
+			add(LeaveOption::MarkedAndLast);
+			add(LeaveOption::MarkedOnly);
+		}
+		else {
+			add(LeaveOption::Marked); // the last piece is marked, or there's none to add (it found no room)
+		}
+		add(LeaveOption::Nothing);
+	}
+	else if (last) {
+		Text(out.title).add("LEAVE, KEEP:");
+		add(LeaveOption::Last);
+		add(LeaveOption::Nothing);
+	}
+	else {
+		Text(out.title).add("LEAVE PERFORM?");
+		add(LeaveOption::Leave);
+	}
+	add(LeaveOption::Cancel);
+}
+
+void captureSongName(const Genre& genre, uint32_t seed, int32_t letter, int32_t song,
+                     char (&out)[kCaptureNameChars + 1]) {
+	char code[kSeedCodeChars + 1];
+	seedCode(seed, code);
+	Text text(out);
+	text.add("GEN ").add(genre.oledName).add(" ").add(code).add(" LIVE");
+	if (letter > 0 && letter < kCaptureLetters) {
+		const char mark[] = {' ', static_cast<char>('A' + letter), 0};
+		text.add(mark);
+	}
+	if (song > 1) {
+		text.add(" ").add(song);
+	}
+}
+
+namespace {
+
+char upper(char c) {
+	return c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
+}
+
+/// Whether `rest` is empty or ` N`, N one or more digits: a piece's first song or a later one.
+bool songNumber(const char* rest) {
+	if (rest[0] == 0) {
+		return true;
+	}
+	if (rest[0] != ' ' || rest[1] == 0) {
+		return false;
+	}
+	for (const char* c = rest + 1; *c != 0; c++) {
+		if (*c < '0' || *c > '9') {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+int32_t captureLetterOf(const char* base, const char* stem) {
+	int32_t i = 0;
+	for (; base[i] != 0; i++) {
+		if (upper(stem[i]) != upper(base[i])) {
+			return -1;
+		}
+	}
+	const char* rest = stem + i;
+	if (songNumber(rest)) {
+		return 0;
+	}
+	const char letter = upper(rest[1]);
+	if (rest[0] != ' ' || letter < 'B' || letter > 'Z' || (rest[2] != 0 && rest[2] != ' ')) {
+		return -1;
+	}
+	return songNumber(rest + 2) ? letter - 'A' : -1;
+}
+
+int32_t freeCaptureLetter(uint32_t taken) {
+	for (int32_t letter = 0; letter < kCaptureLetters; letter++) {
+		if ((taken & (1U << letter)) == 0) {
+			return letter;
+		}
+	}
+	return -1;
+}
+
+void captureTitle(CaptureStage stage, int32_t song, int32_t songs, char (&out)[kCaptureTitleChars + 1]) {
+	Text text(out);
+	if (stage == CaptureStage::Saved) {
+		text.add(song).add(" OF ").add(songs).add(" SAVED");
+		return;
+	}
+	text.add(stage == CaptureStage::Building ? "BUILDING " : "SAVING ").add(song).add(" OF ").add(songs);
+}
+
 } // namespace deluge::generative::perform
