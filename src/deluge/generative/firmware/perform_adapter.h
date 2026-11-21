@@ -231,6 +231,18 @@ public:
 	/// While a piece plays, a param a sound control moves gets a new home, logged at the next undecided step.
 	void playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
 
+	/// What a piece's header snapshots (spec §17.2, H13 option A): the parts whose Output was edited since it loaded,
+	/// and whether the song's params were. Set by any player edit, playing or stopped.
+	[[nodiscard]] uint8_t editedParts() const { return editedParts_; }
+	[[nodiscard]] bool songEdited() const { return songEdited_; }
+	/// Part `part`'s Output loaded, or swapped in by a re-roll: its params are its preset's.
+	void outputLoaded(int32_t part) { editedParts_ &= static_cast<uint8_t>(~(1U << part)); }
+	/// The marks for `parts` (and the song if `song`), as AS IT BEGAN left them: written back from a header block.
+	void outputsEdited(uint8_t parts, bool song) {
+		editedParts_ |= parts;
+		songEdited_ = song;
+	}
+
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }
 	/// Generator ticks since step 0's grid line, while playing.
@@ -349,12 +361,16 @@ private:
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
-	/// The steering log, over its 128 KB SDRAM buffer from entry to the teardown (spec §17.2, §20).
+	/// The steering log, over its 16 KB SDRAM buffer from entry to the teardown, its pieces on the card (spec §17.2).
 	uint8_t* logBuffer_ = nullptr;
 	SteeringLog log_;
 	uint32_t restarts_ = 0;
 	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).
 	bool keepLog_ = false;
+	/// The song's params were edited since Perform's song was built (spec §17.2's header snapshot).
+	bool songEdited_ = false;
+	/// The parts whose Output was edited since it loaded (a bit a part): the header snapshots only those.
+	uint8_t editedParts_ = 0;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;

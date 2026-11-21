@@ -426,6 +426,16 @@ void PerformAdapter::songPositionPointer(int32_t songTick) {
 }
 
 void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
+	if (active() && !leaving() && song_ != nullptr && currentRecipe.recipe.genre != nullptr) {
+		// Stopped too: a Start keeps the Outputs, so the next piece's header must snapshot this one (spec §17.2).
+		const int32_t output = editedOutput(stack.paramManager, sink_.roster, *currentRecipe.recipe.genre, *song_);
+		if (output == kSongParams) {
+			songEdited_ = true;
+		}
+		else if (output >= 0) {
+			editedParts_ |= static_cast<uint8_t>(1U << output);
+		}
+	}
 	if (!active() || leaving() || !driver_.running()) {
 		return; // stopped, the edit is on the Output: the next piece reads it as home (spec §11.7)
 	}
@@ -444,6 +454,7 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 void PerformAdapter::takeRoster(Roster& incoming) {
 	sink_.roster = incoming;
 	incoming = Roster{};
+	editedParts_ = 0; // a transition's new roster: every Output as its preset loaded
 }
 
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {

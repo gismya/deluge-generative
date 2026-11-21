@@ -272,7 +272,8 @@ void OutputSink::logPieceHeader(SteeringLog& log) {
 	if (playing == nullptr || performAdapter.song_ == nullptr) {
 		return;
 	}
-	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_);
+	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_,
+	                         performAdapter.editedParts(), performAdapter.songEdited());
 	// header: the newest piece's opening and header records, in bytes; used: the ring's bytes not yet on the card;
 	// us: what opening the piece and its header cost in the tick.
 	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d us=%lu", static_cast<long>(log.pieces()),

@@ -418,6 +418,8 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	song_ = song;
+	editedParts_ = 0; // every Output and the song as built (spec §17.2's header snapshot)
+	songEdited_ = false;
 	generator_ = blocks_[0];
 	steering_.enter(); // an empty queue, and a new Recipe: every take at 0 (spec §6.6)
 }

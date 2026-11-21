@@ -292,6 +292,7 @@ void SoundSwaps::swapIn(int32_t part) {
 	retire(roster.parts[part], Retirements::When::AfterTail);
 	roster.parts[part] = incoming_[part];
 	incoming_[part] = PartOutput{};
+	performAdapter.outputLoaded(part); // its params are its preset's (spec §17.2's header snapshot)
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);
