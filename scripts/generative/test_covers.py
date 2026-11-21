@@ -229,6 +229,31 @@ class FullRule(Repo):
             "src/deluge/dsp/reverb.cpp is on no probe script's covers lines",
         )
 
+    def test_a_firmware_input_outside_src_no_covers_line_names_needs_full(self):
+        # pick() runs only smoke and the scripts with no covers line for these, as for an uncovered src/ file
+        for path in (
+            "lib/fatfs/ff.c",
+            "CMakeLists.txt",
+            "linker_script_rz_a1l.ld",
+            "toolchain/v20/x.cmake",
+            "scripts/cmake/arm.cmake",
+        ):
+            with self.subTest(path):
+                self.assertEqual(
+                    self.rule("docs/x.md", path),
+                    f"{path} is on no probe script's covers lines",
+                )
+
+    def test_a_firmware_input_outside_src_a_covers_line_names_needs_only_the_pick(self):
+        self.write(G + "perform_lib.txt", "# covers: lib/fatfs/\nstart_state\n")
+        rule = covers.full_rule(
+            ["lib/fatfs/ff.c"],
+            [*self.scripts(), self.path("perform_lib.txt")],
+            False,
+            self.repo,
+        )
+        self.assertIsNone(rule)
+
     def test_the_emulator_checks_code_and_what_picks_them_need_full(self):
         self.write(G + "check_all.py", "import covers\n")
         self.write(G + "covers.py", "")

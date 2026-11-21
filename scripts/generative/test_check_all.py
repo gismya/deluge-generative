@@ -654,6 +654,39 @@ class MergeRuleHeader(unittest.TestCase):
             self.assertFalse(rule.call_args.args[2])
             self.assertEqual(rule.call_args.args[0], ["docs/x.md"])
 
+    def test_no_merge_base_runs_everything_so_counts_as_a_full_run(self):
+        # changed None: plan() runs every check and script, so nothing asks for another run with --full
+        with mock.patch.object(
+            check_all.covers, "full_rule", return_value="the files changed are unknown"
+        ):
+            reason, line, ran_full = check_all.merge_rule(
+                None, "origin/m4-capture", full=False
+            )
+        self.assertTrue(ran_full)
+        self.assertEqual(reason, "the files changed are unknown")
+        self.assertEqual(
+            line,
+            "merge rule: needs --full: the files changed are unknown (this run is --full)",
+        )
+        self.assertEqual(check_all.full_run_note(reason, ran_full), "")
+
+    def test_a_pick_run_that_needs_full_says_so_on_the_last_line(self):
+        with mock.patch.object(check_all.covers, "full_rule", return_value="x changed"):
+            reason, line, ran_full = check_all.merge_rule(
+                ["x"], "origin/m4-capture", full=False
+            )
+        self.assertFalse(ran_full)
+        self.assertIn("this run isn't --full", line)
+        self.assertEqual(
+            check_all.full_run_note(reason, ran_full),
+            "; needs --full before the merge (x changed)",
+        )
+        with mock.patch.object(check_all.covers, "full_rule", return_value="x changed"):
+            reason, line, ran_full = check_all.merge_rule(
+                ["x"], "origin/m4-capture", full=True
+            )
+        self.assertEqual(check_all.full_run_note(reason, ran_full), "")
+
     def test_a_full_run_says_it_was_one(self):
         self.checks.merge_rule = check_all.merge_rule_line(
             "check_all.py changed", full=True

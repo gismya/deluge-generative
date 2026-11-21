@@ -6,11 +6,12 @@ Run it from the host, in the checkout to check: it calls ./dbt itself. It runs w
 since the merge base with origin/BASE (committed, staged, unstaged, untracked or deleted) pick the steps below and the
 probe scripts (#314). --full runs every step and every probe script whatever changed. With no merge base, every step
 runs too. Whether the final run before a merge must be --full is mechanical (covers.full_rule(), #417), and the
-table's first line says which rule applied: "needs --full: WHY" for a merge into generative, a changed src/ file no
-probe script's "# covers:" line names, or a change to what the emulator checks run on or what picks them (gen_emu.py,
+table's first line says which rule applied: "needs --full: WHY" for a merge into generative, a changed firmware input
+(covers.FIRMWARE: src/, lib/, the build files, the toolchain) no probe script's "# covers:" line names, or a change to what the emulator checks run on or what picks them (gen_emu.py,
 test_port_emu.py, deluge_probe.py, their imports and the scripts they name, the delugemu pin, the test port,
 check_all.py, covers.py); else "covers pick suffices", and the run without --full is the one a merge into a milestone
-branch needs. A run that needs --full and wasn't says so on its last line too. In order:
+branch needs. A run that needs --full and wasn't says so on its last line too; a run with no merge base runs everything, so counts as
+--full. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
   1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects;
@@ -407,6 +408,21 @@ def full_reason(changed, base_ref):
     return covers.full_rule(changed, scripts, base_ref == "origin/generative", REPO)
 
 
+def merge_rule(changed, base_ref, full):
+    """(reason, the table's first line, ran_full) for this run: covers.full_rule()'s reason or None, and whether the
+    run checks everything, by --full or because with `changed` None (no merge base, no diff) plan() runs it all."""
+    reason = full_reason(changed, base_ref)
+    ran_full = full or changed is None
+    return reason, merge_rule_line(reason, ran_full), ran_full
+
+
+def full_run_note(reason, ran_full):
+    """What the last line adds when the change needs --full and this run wasn't one."""
+    return (
+        f"; needs --full before the merge ({reason})" if reason and not ran_full else ""
+    )
+
+
 def merge_rule_line(reason, full):
     """The table's header: which --full rule applied (covers.full_rule()), and whether this run was --full."""
     rule = f"needs --full: {reason}" if reason else "covers pick suffices"
@@ -537,8 +553,7 @@ def main():
     py = sys.executable
     changed = covers.changed_paths(merge_base, REPO) if merge_base else None
     todo = plan(changed, base_ref, args.full, given)
-    reason = full_reason(changed, base_ref)
-    checks.merge_rule = merge_rule_line(reason, args.full)
+    reason, checks.merge_rule, ran_full = merge_rule(changed, base_ref, args.full)
     print(f"[check-all] {checks.merge_rule}", flush=True)
     if args.full:
         print("[check-all] --full: every check and every probe script", flush=True)
@@ -670,11 +685,7 @@ def main():
         "check_all: "
         + ("FAIL" if failed else "PASS")
         + (f" ({alone} passed only alone, see the notes)" if alone else "")
-        + (
-            f"; needs --full before the merge ({reason})"
-            if reason and not args.full
-            else ""
-        )
+        + full_run_note(reason, ran_full)
     )
     return 1 if failed else 0
 

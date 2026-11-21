@@ -435,8 +435,9 @@ def pick(scripts, changed, repo=REPO):
 
 def full_rule(changed, scripts, into_generative=False, repo=REPO):
     """Why the change needs check_all.py --full before its merge, or None when the covers pick suffices (#417 slice
-    3): a merge into generative; a changed src/ file that no covers line of `scripts` (the probe scripts delugemu
-    runs) names; or a change to what the emulator checks run on or what picks them (emulator_files(): gen_emu.py,
+    3): a merge into generative; a changed firmware input (FIRMWARE: src/, lib/, the root CMakeLists.txt, the linker
+    script, the toolchain, ...) that no covers line of `scripts` (the probe scripts delugemu runs) names, for which
+    pick() runs only smoke and the scripts with no covers line; or a change to what the emulator checks run on or what picks them (emulator_files(): gen_emu.py,
     test_port_emu.py, deluge_probe.py, their imports and the scripts they name, the delugemu pin, the test port,
     check_all.py, covers.py). `changed` None (no diff) needs it too."""
     if into_generative:
@@ -449,7 +450,8 @@ def full_rule(changed, scripts, into_generative=False, repo=REPO):
             return f"{f} changed: the emulator checks run on it or it picks them"
     paths = [p for s in scripts for p in script_covers(s) or []]
     for f in sorted(changed):
-        if f.startswith("src/") and not any(matches(p, f) for p in paths):
+        firmware = any(matches(d, f) for d in FIRMWARE)
+        if firmware and not any(matches(p, f) for p in paths):
             return f"{f} is on no probe script's covers lines"
     return None
 
