@@ -116,3 +116,19 @@ otherwise.
   `writeBase()`/`repatch()` do: fine on the line after the flush, wrong under sounding voices. A swing interval that
   changes in the tick waits for the pump (`Transitions::swingIntervalFollows()`): `changeSwingInterval()` reschedules
   the internal clock while playing.
+
+## The steering log on the card (#448)
+
+- `firmware/capture_files.*` (`cardLog`) is the log's only consumer: a priority-30 repeating task with
+  `RESOURCE_SD`, added at Perform's entry (`cardLog.enter()`, in the entry job) and removed by `finish()` (the
+  teardown, before the swap). The tick may run inside any of its card calls (`routineForSD()`/`yield()` run the
+  playback task), never between them: so a chunk's bytes stay put until `took()`, a slot stays until `released()`,
+  and `beginPiece()` refuses to open over a kept piece's header the task hasn't taken yet.
+- `snprintf()` with a number (`%lu`) pulls newlib's stdio into the link, whose syscalls (`_write`, `_sbrk`…) the
+  firmware doesn't stub: the link fails with `undefined reference to _close` and friends. `%s`-only calls are fine
+  (GCC folds them into copies). Build numbers into strings by hand (`pathOf()`).
+- `cardLog` lives in `.sdram_bss` (its three `FIL`s are 1.7 KB): zeroed at boot, never constant-initialised, so every
+  member must read right as zero until `enter()` resets it (`taskAdded_`, not a `-1` task id).
+- A piece's file is its image: `PieceInfo` (the genre as its index in `allGenres()` and its version, the pointer
+  can't be stored), header records, records. The task rewrites the info at each flush with `bytes` = what reached
+  the card, always a step's end, which `readImage()` trusts after a power-off; past it the last step may be torn.

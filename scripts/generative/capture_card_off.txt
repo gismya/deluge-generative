@@ -1,0 +1,8 @@
+# #448: the card log OFF (hold card_log_off: the log takes every byte, nothing goes to the card) for the on/off
+# comparison with capture_card_on.txt. A measurement, not a check (no perform_ prefix).
+# covers: src/deluge/generative/firmware/capture_files.*
+start_state
+hold entropy
+hold card_log_off
+include capture_card_onoff_body.txt
+release card_log_off
