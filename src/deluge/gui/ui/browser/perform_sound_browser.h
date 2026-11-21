@@ -79,6 +79,8 @@ private:
 	bool overList_ = false;
 	/// SELECT on a file came while a preset preview still built: the choice is made once it has unwound.
 	bool chooseWhenFree_ = false;
+	/// The transport played at the last frame: a stop then previews the preset under the cursor.
+	bool wasPlaying_ = false;
 	static inline deluge::generative::perform::BrowserPreview preview_ =
 	    deluge::generative::perform::kDefaultBrowserPreview;
 };

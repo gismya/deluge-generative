@@ -183,6 +183,8 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false
+# The stop previews the preset under the cursor without a move
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=10
 encoder 3 1
 expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=SYNTHS\// within=10
 expect no_event gen_sound_press since=mark within=1

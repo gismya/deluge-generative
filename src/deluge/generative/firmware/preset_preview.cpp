@@ -200,6 +200,9 @@ void PresetPreview::freeShown() {
 	shown_ = PartOutput{};
 	shownPart_ = -1;
 	shownLane_ = Lane::None;
+#if ENABLE_SYSEX_TEST
+	reportFreeMemory("preset_preview_freed"); // against gen_mem preset_preview: what the preview held
+#endif
 }
 
 void PresetPreview::noteOn() {

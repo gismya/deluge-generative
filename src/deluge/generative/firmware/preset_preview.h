@@ -19,8 +19,8 @@
 // While stopped, the preset under a browser's cursor loads as the part would load it (buildPartOutput(), its load-time
 // settings, a Kit's other lanes as they are) in a live runner job, linked into Perform's song beside the part's own
 // Output, and plays one audition note. The part's Output, its picks, its previous sound, its sound controls and the
-// steering log never see it: a move frees it before the next loads, and a start or a close frees it at once, so BACK
-// leaves the part exactly as it was. A choice still preloads as a re-roll does.
+// steering log never see it: a move frees it before the next loads, a close frees it at once and a start on the
+// browser's next frame, so BACK leaves the part exactly as it was. A choice still preloads as a re-roll does.
 
 #pragma once
 

@@ -32,7 +32,8 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    Both options are needed: without `ENABLE_SYSEX_LOAD` the device ignores the next load until a power cycle, and
    without `ENABLE_SYSEX_TEST` nothing answers the scripts.
 
-   Then it waits up to 30 minutes for the lock (`--no-wait` fails at once instead), loads the build, waits for a
+   Then it waits up to 30 minutes for the lock (`--wait SECONDS` sets another limit, e.g. `--wait 3600`; `--wait`
+   alone is an argument error; `--no-wait` fails at once instead), loads the build, waits for a
    fresh boot, and runs each script. Done when every script prints `N expects, 0 failed` and the session exits 0.
    Report any failing line as printed, with the `got ...` lines under it. `--no-load` runs the scripts on the build
    already running.

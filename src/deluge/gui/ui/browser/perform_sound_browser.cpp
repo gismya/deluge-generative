@@ -108,6 +108,7 @@ bool PerformSoundBrowser::opened() {
 		outputTypeToLoad = OutputType::NONE;
 		qwertyVisible = true;
 		enteredText.clear();
+		wasPlaying_ = playbackHandler.isEitherClockActive();
 
 		// Start in the pick's folder, on the pick (spec §13.5).
 		const perform::BrowserStart start =
@@ -186,9 +187,14 @@ void PerformSoundBrowser::graphicsRoutine() {
 	if (samples()) {
 		return;
 	}
-	if (!perform::previewsPresets(preview_, playbackHandler.isEitherClockActive())) {
+	const bool playing = playbackHandler.isEitherClockActive();
+	if (!perform::previewsPresets(preview_, playing)) {
 		presetPreview.stop(); // a start frees the preview: presets preview only while stopped (spec §13.3)
 	}
+	else if (wasPlaying_) {
+		preview(); // the transport stopped: the preset under the cursor previews without a move
+	}
+	wasPlaying_ = playing;
 	presetPreview.service();
 	if (chooseWhenFree_ && !presetPreview.building()) {
 		// SELECT came while a preview still built: it has unwound, so the runner is free for the choice.
