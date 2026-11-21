@@ -322,6 +322,16 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.sounds.has("gen_sound_cancel part=1 stopped")).to_be_true();
 		});
 
+		it("is dropped at a restart's line, as at a stop (spec §13.2)", _ {
+			Playing t;
+			waitingSound(t, kAcid);
+			t.decideOne();
+			t.sounds.pieceRestarts(); // the adapter's restart, on the line
+			expect(t.sounds.waiting(kAcid)).to_be_false();
+			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+			expect(t.sounds.has("gen_sound_cancel part=1 restarted")).to_be_true();
+		});
+
 		it("is dropped at a transition's confirm, with a cancel in the core, and a preload running is cancelled", _ {
 			Playing t;
 			waitingSound(t, kAcid);

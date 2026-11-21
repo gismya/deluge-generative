@@ -104,6 +104,7 @@ enum class SoundTrace : uint8_t {
 	CancelWaiting,           ///< pressed again while waiting
 	CancelDropped,           ///< the core dropped it (a BACK tap, a full pending list)
 	CancelStopped,           ///< the transport stopped
+	CancelRestarted,         ///< a restart reached its line (spec §13.2)
 	CancelPreloadTransition, ///< a transition's confirm cancelled the preload running
 	CancelTransition,        ///< a transition's confirm dropped it
 	CancelTransitionDone,    ///< its preload ended Done after a transition's confirm, past its last boundary (#316)
@@ -153,6 +154,9 @@ struct SoundTraceText {
 		break;
 	case SoundTrace::CancelStopped:
 		cancel(" stopped");
+		break;
+	case SoundTrace::CancelRestarted:
+		cancel(" restarted");
 		break;
 	case SoundTrace::CancelPreloadTransition:
 		out.add("gen_sound_cancel preload transition");
@@ -373,6 +377,15 @@ public:
 	void playbackEnded() {
 		forEachWaitingSound([this](int32_t part) {
 			trace({.trace = SoundTrace::CancelStopped, .part = part});
+			drop(part);
+		});
+	}
+	/// A restart reached its line (spec §13.2): as at a stop, the core's pending list is gone, and any Sound event
+	/// still buffered, so every waiting sound is dropped. A sound still preloading goes on, as after a stop: once
+	/// loaded it waits for the new piece's next phrase line. In the tick: drop() frees nothing there.
+	void pieceRestarts() {
+		forEachWaitingSound([this](int32_t part) {
+			trace({.trace = SoundTrace::CancelRestarted, .part = part});
 			drop(part);
 		});
 	}

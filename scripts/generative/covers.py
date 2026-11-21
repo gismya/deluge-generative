@@ -164,6 +164,7 @@ BUILDERS = {
         "src/deluge/generative/perform/clip_page.*",
         "src/deluge/generative/perform/recipe_name.*",
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
+    "gen_restart_press": (),  # what the press did
     "gen_retire_referenced": (),
     "gen_rings": (),
     "gen_row_level": _GENRE,  # part and lane names
