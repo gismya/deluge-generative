@@ -12,10 +12,13 @@ A slot is an flock on FOLDER/slot-N.lock (~/.cache/deluge-generative/emu-slots/)
 DELUGE_EMU_SLOTS, default 6 (half of 12 cores, as check_all.py's --jobs). The kernel drops a dead process's flock, so a
 crashed run frees its slot. The emulator inherits the lock's file descriptor (EmuRun passes Slot.fd to it), so an
 emulator that outlives its runner keeps its slot until it exits. A run that finds the pool full says so, polls, and
-says how long it waited (WAITED, which check_all.py's table shows).
+says how long it waited (WAITED, which check_all.py's table shows). Waiters queue, first come first served: each holds
+an flock on its ticket, FOLDER/<time>-<pid>-<thread>.wait, only the oldest live one takes a freed slot, and a run
+that finds anyone waiting joins the queue rather than taking a free slot (#468: without it a run whose next emulator
+started right after its last took every freed slot, and a run waiting beside it never got one).
 
-Each take and release appends "TIME take|release SLOT PID" to FOLDER/slots.log. The CLI prints the slots held now and
-the most held at once, from the log (all of it, or the last --since seconds).
+Each take and release appends "TIME take|release SLOT PID" to FOLDER/slots.log. The CLI prints the slots held now, the runs
+waiting, and the most held at once, from the log (all of it, or the last --since seconds).
 """
 
 import argparse
@@ -24,6 +27,7 @@ import fcntl
 import os
 import re
 import sys
+import threading
 import time
 
 FOLDER = os.path.join(
@@ -32,6 +36,7 @@ FOLDER = os.path.join(
 SIZE_ENV = "DELUGE_EMU_SLOTS"
 DEFAULT_SIZE = 6
 LOG = "slots.log"
+WAIT = ".wait"  # a waiter's ticket file: FOLDER/<time joined>-<pid>-<thread>.wait
 POLL = 2.0  # s between tries while the pool is full
 # What a run that waited prints, and check_all.py reads into its table.
 WAITED = re.compile(r"waited (\d+) s for a real-time emulator slot")
@@ -91,20 +96,74 @@ def try_take(size, folder=FOLDER):
     return None
 
 
+def _locked(path):
+    """Whether a live process holds an flock on `path` (False for a file gone or unlocked)."""
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def waiters(folder=FOLDER):
+    """The live waiters' ticket files, oldest first. A ticket whose waiter died (no flock on it) is removed."""
+    live = []
+    for name in sorted(n for n in os.listdir(folder) if n.endswith(WAIT)):
+        path = os.path.join(folder, name)
+        if _locked(path):
+            live.append(path)
+        else:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+    return live
+
+
+def _ticket(folder):
+    """A ticket in the waiting queue: a file named by the time it joined, flocked as long as its waiter lives (made
+    under another name and renamed once locked, so no one takes it for a dead waiter's)."""
+    stem = f"{time.time_ns():020d}-{os.getpid()}-{threading.get_ident()}"
+    tmp = os.path.join(folder, stem + ".new")
+    fd = os.open(tmp, os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    path = os.path.join(folder, stem + WAIT)
+    os.rename(tmp, path)
+    return path, fd
+
+
 @contextlib.contextmanager
 def take(size=None, folder=FOLDER, out=print, poll=POLL):
-    """Holds a slot for the `with` block, waiting while the pool is full (saying so once, then how long it waited)."""
+    """Holds a slot for the `with` block, waiting while the pool is full (saying so once, then how long it waited).
+    Waiters queue, first come first served: a run takes a free slot at once only when no one waits, else it joins the
+    queue, and only the oldest waiter takes a freed slot. Without the queue a run whose next emulator starts right
+    after its last one ended took every freed slot, and another run waiting beside it never got one (#468)."""
     size = pool_size() if size is None else size
+    os.makedirs(folder, exist_ok=True)
     start = time.monotonic()
-    slot = try_take(size, folder)
+    slot = None if waiters(folder) else try_take(size, folder)
     if slot is None:
+        path, fd = _ticket(folder)
         out(
-            f"waiting for a real-time emulator slot: all {size} are in use ({SIZE_ENV} sets the pool; "
-            f"python3 scripts/generative/emu_slots.py shows them)"
+            f"waiting for a real-time emulator slot: all {size} are in use or others wait first ({SIZE_ENV} sets the "
+            "pool; python3 scripts/generative/emu_slots.py shows them)"
         )
-        while slot is None:
-            time.sleep(poll)
-            slot = try_take(size, folder)
+        try:
+            while slot is None:
+                queue = waiters(folder)
+                if not queue or queue[0] == path:
+                    slot = try_take(size, folder)
+                if slot is None:
+                    time.sleep(poll)
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+            os.close(fd)
         slot.waited = time.monotonic() - start
         out(
             f"waited {slot.waited:.0f} s for a real-time emulator slot (slot {slot.index} of {size})"
@@ -195,6 +254,7 @@ def main(argv=None):
     held = held_now(size)
     since = time.time() - args.since if args.since is not None else None
     print(f"{len(held)} of {size} real-time emulator slots held now ({FOLDER})")
+    print(f"{len(waiters()) if os.path.isdir(FOLDER) else 0} runs waiting for one")
     print(
         f"most held at once{' in that time' if since else ''}: {peak(read_log(), since)}"
     )

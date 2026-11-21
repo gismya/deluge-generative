@@ -75,6 +75,48 @@ class Take(unittest.TestCase):
         )
         self.assertTrue(any(emu_slots.WAITED.search(s) for s in self.said))
 
+    def test_a_waiter_goes_before_a_newcomer_when_a_slot_frees(self):
+        # #468: run A's next script took the freed slot 0.1 s after the release, every time, while run B polled
+        # every 2 s and never got one: the waiters queue, first come first served, and a newcomer joins the queue
+        first = self.take(size=1)
+        first.__enter__()
+        order = []
+
+        def waiter(name):
+            with self.take(size=1):
+                order.append(name)
+                time.sleep(0.2)
+
+        early = threading.Thread(target=waiter, args=("waited",))
+        early.start()
+        time.sleep(0.3)  # it waits, its ticket in the queue
+        first.__exit__(None, None, None)
+        late = threading.Thread(target=waiter, args=("newcomer",))
+        late.start()  # at once, as a run's next script starts right after its last ended
+        early.join(5)
+        late.join(5)
+        self.assertEqual(order, ["waited", "newcomer"])
+
+    def test_a_dead_waiters_ticket_holds_no_one_up(self):
+        # a waiter killed while it waits leaves its ticket file, unlocked: it doesn't count
+        os.makedirs(self.folder, exist_ok=True)
+        with open(os.path.join(self.folder, "0000000000000000001-999999.wait"), "w"):
+            pass
+        with self.take(size=1) as slot:
+            self.assertLess(slot.waited, 1)
+
+    def test_a_slot_taken_leaves_no_ticket(self):
+        first = self.take(size=1)
+        first.__enter__()
+        t = threading.Thread(target=lambda: self.take(size=1).__enter__())
+        t.start()
+        time.sleep(0.2)
+        first.__exit__(None, None, None)
+        t.join(5)
+        self.assertEqual(
+            [n for n in os.listdir(self.folder) if n.endswith(".wait")], []
+        )
+
     def test_another_process_holding_every_slot_counts(self):
         # flock is per open file and process: a holder in another process (another worktree's check_all) blocks too
         holder = subprocess.Popen(
