@@ -311,7 +311,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const size_t restartAt = piece.sink.restartedAt[0];
 			const std::vector<Event> first(piece.sink.events.begin(), piece.sink.events.begin() + restartAt);
 			const std::vector<Event> second(piece.sink.events.begin() + restartAt, piece.sink.events.end());
-			for (int32_t i = 0; i < std::min(piece.own.log.pieces(), 2); i++) {
+			for (int32_t i = 0; i < std::min<int32_t>(piece.own.log.pieces(), 2); i++) {
 				const SteeringLog::Piece logged = piece.own.log.piece(i);
 				auto replayed = replay(logged);
 				expect(replayed->done).to_be_true();
