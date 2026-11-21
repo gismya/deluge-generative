@@ -1629,6 +1629,85 @@ class ScriptNeeds(unittest.TestCase):
         self.assertFalse(needs.delugemu)
 
 
+class ScriptWrites(unittest.TestCase):
+    """A script's "# writes: GLOB" lines: the new files in SONGS/ and RECIPES/ a session lets it leave (#465)."""
+
+    def writes(self, text, included=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "perform_x.txt")
+            with open(path, "w") as fh:
+                fh.write(text)
+            if included is not None:
+                with open(os.path.join(tmp, "inc.txt"), "w") as fh:
+                    fh.write(included)
+            return dp.script_writes(path)
+
+    def test_no_writes_line_declares_nothing(self):
+        self.assertEqual(self.writes("start_state\n"), [])
+
+    def test_each_line_is_one_glob_spaces_and_all(self):
+        self.assertEqual(
+            self.writes(
+                "# writes: SONGS/GEN ACID TECHNO *\n# writes: RECIPES/*.XML\nstart_state\n"
+            ),
+            ["SONGS/GEN ACID TECHNO *", "RECIPES/*.XML"],
+        )
+
+    def test_an_included_file_declares_too(self):
+        self.assertEqual(
+            self.writes("include inc.txt\n", "# writes: SONGS/H19 *\n"),
+            ["SONGS/H19 *"],
+        )
+
+    def test_the_repo_scripts_that_save_declare_it(self):
+        # Every script with a save action names what it writes (the save actions grepped for #465).
+        saves = re.compile(
+            r"^(save song |expect event .*(gen_capture_end done|song_saved|gen_recipe_save \S+ saved))",
+            re.MULTILINE,
+        )
+        for name in sorted(os.listdir(HERE)):
+            if not name.endswith(".txt"):
+                continue
+            path = os.path.join(HERE, name)
+            text = "".join(t for _, t in dp.read_script(path))
+            if saves.search(text):
+                self.assertTrue(
+                    dp.script_writes(path), f"{name} saves with no # writes: line"
+                )
+
+
+class NewCardFiles(unittest.TestCase):
+    """Sorting a session's new SONGS/ and RECIPES/ files into declared and undeclared (#465)."""
+
+    def test_only_files_that_werent_there_before_count(self):
+        before = {"SONGS/Ttt.XML", "RECIPES/A.XML"}
+        after = before | {"SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"}
+        self.assertEqual(
+            dp.new_card_files(before, after, ["SONGS/GEN ACID TECHNO *"]),
+            (["SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"], []),
+        )
+
+    def test_a_file_no_glob_matches_is_undeclared(self):
+        self.assertEqual(
+            dp.new_card_files(set(), {"SONGS/SONG001.XML"}, ["SONGS/GEN *"]),
+            ([], ["SONGS/SONG001.XML"]),
+        )
+
+    def test_globs_match_regardless_of_case_as_fat_does(self):
+        self.assertEqual(
+            dp.new_card_files(
+                set(), {"RECIPES/acid techno.xml"}, ["RECIPES/ACID*.XML"]
+            ),
+            (["RECIPES/acid techno.xml"], []),
+        )
+
+    def test_a_glob_stays_in_its_folder(self):
+        self.assertEqual(
+            dp.new_card_files(set(), {"RECIPES/GEN A.XML"}, ["SONGS/*"]),
+            ([], ["RECIPES/GEN A.XML"]),
+        )
+
+
 class SessionCommandLine(unittest.TestCase):
     def test_events_needs_a_pattern(self):
         result = subprocess.run(

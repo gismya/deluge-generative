@@ -4,6 +4,7 @@
 # new Recipe's default name again rather than a letter variation.
 # gen_recipe_save full opened|saved|closed name=...; gen_recipe_check name= read= error= match= recipe= seed= takes=
 # sounds=.
+# writes: RECIPES/ACID TECHNO *
 # covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
 # covers: src/deluge/generative/firmware/card_text.* src/deluge/generative/core/recipe_file.*
 # covers: src/deluge/generative/core/xml_tags.h src/deluge/generative/perform/recipe_name.*

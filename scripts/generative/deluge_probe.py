@@ -27,6 +27,7 @@ See docs/hardware-measurements/deluge-usb-control.md on task/hardware-measuremen
 import argparse
 import collections
 import contextlib
+import fnmatch
 import json
 import os
 import random
@@ -734,6 +735,28 @@ def script_needs(path, text=None):
         raise ValueError(f'{path}: more than one "# needs: card" line: {cards}')
     card = os.path.join(os.path.dirname(path), *cards[0].split("/")) if cards else None
     return ScriptNeeds(len(cards) == len(needs), card)
+
+
+# "# writes: GLOB": a file the script may leave in a watched card folder (CARD_WATCHED), the rest of the line one glob
+# from the card's root (spaces are part of it), matched without regard to case as FAT names are
+WRITES = re.compile(r"^#\s*writes:\s*(.*?)\s*$")
+CARD_WATCHED = ("SONGS", "RECIPES")
+
+
+def script_writes(path):
+    """The globs of the "# writes:" lines in the script at `path` and the files it includes, in order."""
+    found = (WRITES.match(text.strip()) for _, text in read_script(path))
+    return [m.group(1) for m in found if m and m.group(1)]
+
+
+def new_card_files(before, after, globs):
+    """The files in `after` but not `before` (card paths like "SONGS/NAME.XML"), sorted, as (declared, undeclared):
+    declared ones match one of `globs`."""
+    declared, undeclared = [], []
+    for path in sorted(set(after) - set(before)):
+        hit = any(fnmatch.fnmatchcase(path.upper(), g.upper()) for g in globs)
+        (declared if hit else undeclared).append(path)
+    return declared, undeclared
 
 
 def _press(port, name, hold_ms=50):
@@ -1563,6 +1586,11 @@ def main():
     )
     ap.add_argument(
         "--no-load", action="store_true", help="session: use the running build"
+    )
+    ap.add_argument(
+        "--force-build-mismatch",
+        action="store_true",
+        help="session --no-load: run (with a warning) when the loaded build isn't this checkout's HEAD",
     )
     ap.add_argument(
         "--wait",
