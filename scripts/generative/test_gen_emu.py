@@ -1296,5 +1296,25 @@ class RenderAge(unittest.TestCase):
         self.assertEqual(len(log.call_args_list), 1)
 
 
+class GoldenScript(unittest.TestCase):
+    def test_the_script_picks_a_genre_that_has_a_golden(self):
+        with open(gen_emu.GOLDEN_SCRIPT) as fh:
+            genre = gen_emu.golden_genre(fh.read())
+        self.assertTrue(os.path.isfile(gen_emu.golden_song.golden_path(genre)))
+
+    def test_the_last_pick_genre_line_names_it(self):
+        text = "start_state\npick genre techno-acid\nfoo\npick genre techno-dub\n"
+        self.assertEqual(gen_emu.golden_genre(text), "techno-dub")
+        with self.assertRaises(ValueError):
+            gen_emu.golden_genre("start_state\n")
+
+    def test_the_script_saves_the_song_the_check_reads(self):
+        with open(gen_emu.GOLDEN_SCRIPT) as fh:
+            text = fh.read()
+        name = os.path.splitext(os.path.basename(gen_emu.GOLDEN_SONG))[0]
+        self.assertIn(f"\nsave song {name}\n", text)
+        self.assertIn(f"\nload song {gen_emu.GOLDEN_SONG}\n", text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -44,9 +44,10 @@ public:
 	static constexpr int32_t kMaxShortBuildGrooves = 2;
 
 	/// Starts `generator` on the Recipe, seed and takes from Start, with the Intro (spec §15.1), and calls the writer's
-	/// begin(). The song's End comes once the step index reaches `targetSteps`.
+	/// begin(). The song's End comes once the step index reaches `targetSteps`. `skipIntro` starts in the Groove, as
+	/// SHIFT+PLAY does: only the firmware check (spec §21.3) asks for it, to build a golden's case.
 	void begin(Generator& generator, const Recipe& recipe, uint32_t seed, const Takes& takes, int32_t targetSteps,
-	           SongWriter& writer);
+	           SongWriter& writer, bool skipIntro = false);
 	/// Decides up to `steps` more steps, writing what they play. A runner job calls it a chunk at a time and yields
 	/// between (spec §15.7). Once the Outro's last line is reached, the core is flushed and the writer finished.
 	/// @return whether the song is done.
