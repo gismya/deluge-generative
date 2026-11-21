@@ -118,7 +118,7 @@ void PerformAdapter::reportLog(bool stopped) const {
 	if (log_.pieces() == 0) {
 		return;
 	}
-	const SteeringLog::Piece piece = log_.piece(log_.pieces() - 1);
+	const SteeringLog::PieceSummary piece = log_.piece(log_.pieces() - 1);
 	const int32_t records = piece.recordCount(); // counted as written: no walk over the piece in the tick
 	const auto pieces = static_cast<long>(log_.pieces());
 	const auto used = static_cast<long>(log_.used());

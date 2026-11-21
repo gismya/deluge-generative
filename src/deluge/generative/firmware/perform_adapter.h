@@ -81,7 +81,6 @@ public:
 	/// Test builds time the piece's opening from here, with its header.
 	void pieceOpening() override;
 	/// A step of closing dropped pieces' room (spec §17.4); test builds time it (gen_log_compact).
-	void compactLog(SteeringLog& log) override;
 	/// The piece's header: the Current Recipe's picks and every param on the song and the roster (spec §17.2).
 	void logPieceHeader(SteeringLog& log) override;
 	/// A re-roll's new picks, from its waiting sound (spec §17.2).
@@ -352,7 +351,7 @@ private:
 	int32_t nextTempoSample_ = 0;
 	/// The steering log, over its 128 KB SDRAM buffer from entry to the teardown (spec §17.2, §20).
 	uint8_t* logBuffer_ = nullptr;
-	SteeringLog log_{nullptr, 0};
+	SteeringLog log_;
 	uint32_t restarts_ = 0;
 	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).
 	bool keepLog_ = false;

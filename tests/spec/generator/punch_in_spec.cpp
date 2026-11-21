@@ -83,7 +83,7 @@ std::vector<Event> onsFrom(const std::vector<Event>& events, int32_t from) {
 /// The commands of `kind` the last piece of `log` holds, in order.
 std::vector<LogRecord> commandsLogged(const SteeringLog& log, CommandKind kind) {
 	std::vector<LogRecord> out;
-	log.piece(log.pieces() - 1).forEachRecord([&](const LogRecord& record) {
+	image(log, log.pieces() - 1).piece().forEachRecord([&](const LogRecord& record) {
 		if (record.kind == RecordKind::Command && record.command.kind == kind) {
 			out.push_back(record);
 		}

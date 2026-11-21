@@ -358,12 +358,11 @@ void PerformView::assertRecordLed() {
 	const deluge::generative::perform::CaptureStatus capture = performAdapter.captureStatus();
 #if ENABLE_SYSEX_TEST
 	{
-		deluge::generative::perform::CaptureStatus reported = capture;
-		reported.usedPercent = 0; // moves with every record: gen_log reports the log's use
-		if (!(reported == captureShown_)) {
-			captureShown_ = reported;
-			TEST_EVENT("gen_capture piece=%d marked=%d full=%d marks=%ld", capture.piece ? 1 : 0,
-			           capture.marked ? 1 : 0, capture.full ? 1 : 0, static_cast<long>(capture.markedPieces));
+		if (!(capture == captureShown_)) {
+			captureShown_ = capture;
+			TEST_EVENT("gen_capture piece=%d marked=%d full=%d marks=%ld card_error=%d", capture.piece ? 1 : 0,
+			           capture.marked ? 1 : 0, capture.full ? 1 : 0, static_cast<long>(capture.markedPieces),
+			           capture.cardError ? 1 : 0);
 		}
 	}
 #endif

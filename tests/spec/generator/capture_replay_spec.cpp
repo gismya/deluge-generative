@@ -23,10 +23,7 @@ using namespace deluge::generative::compose;
 namespace {
 
 /// A log as Perform's: room for every piece a spec plays.
-struct Log {
-	std::vector<uint8_t> bytes = std::vector<uint8_t>(kPerformLogBytes);
-	SteeringLog log{bytes.data(), kPerformLogBytes};
-};
+struct Log : StoredLog {};
 
 /// A piece's replay, one step a call as a runner job makes them in chunks.
 struct Replayed {
@@ -186,8 +183,10 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			t.stop();
 
 			expect(log.log.pieces()).to_equal(2);
-			const SteeringLog::Piece out = log.log.piece(0);
-			const SteeringLog::Piece in = log.log.piece(1);
+			const PieceImage outImage = image(log.log, 0);
+			const SteeringLog::Piece out = outImage.piece();
+			const PieceImage inImage = image(log.log, 1);
+			const SteeringLog::Piece in = inImage.piece();
 			expect(out.ended() == PieceEnd::Transition).to_be_true();
 			// Every command kind but those never logged.
 			std::vector<bool> kinds(static_cast<size_t>(kLastCommandKind) + 1);
@@ -241,7 +240,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		it("with no steering", _ {
 			auto run = steered(24, {});
 			expect(run->log.log.pieces()).to_equal(1);
-			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			auto replayed = replay(piece);
 			expect(replayed->done).to_be_true();
 			expect(replayed->unpaired).to_equal(0U);
@@ -257,7 +257,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			                        {150, {CommandKind::SetHold, 0, kPress}},
 			                        {190, {CommandKind::SetHold, 0, kPress}},
 			                        {230, {CommandKind::End, 0, 1}}});
-			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			auto replayed = replay(piece);
 			expect(replayed->done).to_be_true();
 			const int32_t cut = agreedTick(piece);
@@ -275,7 +276,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			t.runBars(2 * phrase / kStepsPerBar);
 			expect(t.sink.starts).to_equal(1);
 			t.stop();
-			const SteeringLog::Piece out = log.log.piece(0);
+			const PieceImage outImage = image(log.log, 0);
+			const SteeringLog::Piece out = outImage.piece();
 			expect(out.ended() == PieceEnd::Transition).to_be_true();
 			bool onEnd = false;
 			out.forEachRecord([&](const LogRecord& r) {
@@ -317,7 +319,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const std::vector<Event> first(piece.sink.events.begin(), piece.sink.events.begin() + restartAt);
 			const std::vector<Event> second(piece.sink.events.begin() + restartAt, piece.sink.events.end());
 			for (int32_t i = 0; i < std::min<int32_t>(piece.own.log.pieces(), 2); i++) {
-				const SteeringLog::Piece logged = piece.own.log.piece(i);
+				const PieceImage loggedImage = image(piece.own.log, i);
+				const SteeringLog::Piece logged = loggedImage.piece();
 				auto replayed = replay(logged);
 				expect(replayed->done).to_be_true();
 				const int32_t cut = agreedTick(logged);
@@ -328,9 +331,10 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		});
 
 		it("up to where a full log cut the piece (spec §17.2)", _ {
-			// Room for the opening and a few dozen macro turns: the log fills partway through.
-			std::vector<uint8_t> bytes(sizeof(PieceStart) + 64 + 10 * kMaxCommandBytes + kDroppedReserve);
-			SteeringLog small(bytes.data(), static_cast<int32_t>(bytes.size()));
+			// A ring with room for a few dozen macro turns, and a card that stalls: the ring fills partway through.
+			StoredLog stalls(kLogHeaderBytes, 10 * kMaxCommandBytes + kDroppedReserve);
+			stalls.store.stalled = true;
+			SteeringLog& small = stalls.log;
 			std::vector<std::pair<int32_t, Command>> turns;
 			for (int32_t step = 4; step < 300; step += 3) {
 				turns.push_back({step, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(step % 90)}});
@@ -341,7 +345,9 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			run.log = &small;
 			run.steer = steerAt(turns);
 			const Result live = play(run, 32);
-			const SteeringLog::Piece piece = small.piece(0);
+			stalls.store.stalled = false;
+			const PieceImage pieceImage = image(small, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			expect(piece.cutAt()).to_be_greater_than(10);
 			auto replayed = replay(piece);
 			expect(replayed->done).to_be_true();
@@ -367,7 +373,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 				live.steer = steerAt({{driver.endQueuedAt(), {CommandKind::End, 0, 1}}});
 				run->live = play(live, driver.endTick() / kBarTicks + 4);
 				expect(run->live.ended).to_be_true();
-				const SteeringLog::Piece piece = run->log.log.piece(0);
+				const PieceImage pieceImage = image(run->log.log, 0);
+				const SteeringLog::Piece piece = pieceImage.piece();
 				expect(piece.ended() == PieceEnd::Outro).to_be_true();
 				auto replayed = replay(piece);
 				expect(replayed->endTick).to_equal(driver.endTick());
@@ -393,7 +400,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			t.runBars(3 * t.phraseSteps() / kStepsPerBar);
 			expect(t.sink.starts).to_equal(0);
 			t.stop();
-			const SteeringLog::Piece piece = log.log.piece(log.log.pieces() - 1);
+			const PieceImage pieceImage = image(log.log, log.log.pieces() - 1);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			const std::vector<LogRecord> read = recordsOf(piece);
 			expect(hasRecord(read, RecordKind::Waiting, CommandKind::Transition)).to_be_true();
 			expect(hasRecord(read, RecordKind::NotWaiting, CommandKind::Transition)).to_be_true();
@@ -407,7 +415,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 
 		it("with End tapped again to cancel it while it waits", _ {
 			auto run = steered(48, {{20, {CommandKind::End, 0, 1}}, {25, {CommandKind::End, 0, 0}}}, true);
-			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			const std::vector<LogRecord> read = recordsOf(piece);
 			expect(hasRecord(read, RecordKind::Waiting, CommandKind::End)).to_be_true();
 			expect(hasRecord(read, RecordKind::NotWaiting, CommandKind::ForceSection)).to_be_true();
@@ -420,7 +429,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 
 		it("with a waiting force replaced by End in their shared slot", _ {
 			auto run = steered(64, {{20, force(SectionKind::Break)}, {25, {CommandKind::End, 0, 1}}}, true);
-			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			const std::vector<LogRecord> read = recordsOf(piece);
 			expect(hasRecord(read, RecordKind::Waiting, CommandKind::ForceSection)).to_be_true();
 			expect(hasRecord(read, RecordKind::Waiting, CommandKind::End)).to_be_true();
@@ -455,7 +465,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 						run.log = &out->log.log;
 						run.steer = steerAt(commands);
 						out->live = play(run, 64);
-						const SteeringLog::Piece piece = out->log.log.piece(0);
+						const PieceImage pieceImage = image(out->log.log, 0);
+						const SteeringLog::Piece piece = pieceImage.piece();
 						auto replayed = replay(piece);
 						const int32_t cut = agreedTick(piece);
 						runs++;
@@ -475,7 +486,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const Recipe recipe = acidRecipe();
 			const int32_t swing = recipe.swing + 20;
 			auto run = steered(24, {{40, {CommandKind::SetSwing, 0, swing}}}, true);
-			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
 			auto replayed = replay(piece);
 			const int32_t cut = agreedTick(piece);
 			const std::vector<Note> live = notesBefore(pairNotes(run->live.events), cut);
@@ -507,7 +519,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			                        {80, {CommandKind::SetTempo, 0, recipe.tempo, static_cast<uint16_t>(4 * kBarTicks)}},
 			                        {90, {CommandKind::SetTempo, 0, recipe.tempo + 300, static_cast<uint16_t>(kBarTicks)}}},
 			                   true);
-			auto replayed = replay(run->log.log.piece(0));
+			auto replayed = replay(image(run->log.log, 0).piece());
 			const std::vector<TempoNode> expected = {
 			    {0, recipe.tempo, false}, // the song's own tempo, from its start
 			    {stepTick(20), recipe.tempo, false},
@@ -522,8 +534,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		});
 
 		it("starts a new track at each re-roll that played, with its picks, and keeps the old one for a dropped swap", _ {
-			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
-			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			StoredLog stored;
+			SteeringLog& log = stored.log;
 			PieceStart start;
 			start.recipe = acidRecipe();
 			start.seed = 3;
@@ -536,7 +548,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			log.appendSoundPath(2 * phrase, kAcid, 5, pickSlot(kAcid), "SYNTHS/ACID 5.XML");
 			log.appendSoundDropped(2 * phrase, kAcid);
 			log.endPiece(3 * phrase, PieceEnd::Stopped);
-			auto replayed = replay(log.piece(0));
+			auto replayed = replay(image(log, 0).piece());
 			const RecordingWriter& w = replayed->writer;
 			expect(w.picks.size()).to_equal(2U);
 			expect(w.picks.size() == 2U && w.picks[0].path == "SYNTHS/ACID 4.XML" && w.picks[0].token == 4).to_be_true();
@@ -544,8 +556,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		});
 
 		it("ends a part's lanes where its clip is cut or its new track starts: no node for the part comes late", _ {
-			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
-			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			StoredLog stored;
+			SteeringLog& log = stored.log;
 			PieceStart start;
 			start.recipe = acidRecipe();
 			start.recipe.macros.set(Macro::Motion, kMacroFull); // lanes that move all the time
@@ -557,7 +569,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			log.append(2 * phrase + 3, {CommandKind::SetSound, kAcid, 4});
 			log.appendSoundPath(2 * phrase + 3, kAcid, 4, pickSlot(kAcid), "SYNTHS/ACID 4.XML");
 			log.endPiece(4 * phrase, PieceEnd::Stopped);
-			auto replayed = replay(log.piece(0));
+			auto replayed = replay(image(log, 0).piece());
 			const RecordingWriter& w = replayed->writer;
 			expect(w.cuts.empty()).to_be_false();
 			expect(w.tracks.size()).to_equal(1U);
@@ -569,8 +581,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		});
 
 		it("writes a moved home's lanes again where it moves: each lane of the part that moved restates its value", _ {
-			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
-			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			StoredLog stored;
+			SteeringLog& log = stored.log;
 			PieceStart start;
 			start.recipe = acidRecipe();
 			start.recipe.macros.set(Macro::Motion, kMacroFull);
@@ -581,7 +593,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const int32_t at = 2 * phrase + 3;
 			log.append(at, {CommandKind::SetHome, kAcid, 40, 0x0005, Lane::None});
 			log.endPiece(3 * phrase, PieceEnd::Stopped);
-			auto replayed = replay(log.piece(0));
+			auto replayed = replay(image(log, 0).piece());
 			const RecordingWriter& w = replayed->writer;
 			expect(w.edits.size()).to_equal(1U);
 			expect(w.editNodes.size()).to_equal(1U);
@@ -616,7 +628,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 				Log log;
 				run.log = &log.log;
 				const Result live = play(run, 96);
-				const SteeringLog::Piece piece = log.log.piece(0);
+				const PieceImage pieceImage = image(log.log, 0);
+				const SteeringLog::Piece piece = pieceImage.piece();
 				// A budget a few bars past the empty song's.
 				const int64_t budget = estimateBarsBytes(*genre, 20);
 				auto writer = std::make_unique<RecordingWriter>();

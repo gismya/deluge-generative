@@ -298,6 +298,7 @@ void Generator::replay(const LogRecord& record) {
 		break;
 	case RecordKind::SoundPath:
 	case RecordKind::SoundDropped:
+	case RecordKind::Reached: // readers never hand one over
 		break;
 	}
 }

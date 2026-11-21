@@ -16,6 +16,7 @@
 #include "generative/core/steering_log.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
+#include "log_store.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -84,7 +85,7 @@ struct LogEntry {
 inline std::vector<LogEntry> loggedCommands(const SteeringLog& log) {
 	std::vector<LogEntry> out;
 	for (int32_t p = 0; p < log.pieces(); p++) {
-		log.piece(p).forEachRecord([&](const LogRecord& record) {
+		image(log, p).piece().forEachRecord([&](const LogRecord& record) {
 			if (record.kind == RecordKind::Command) {
 				out.push_back({record.step, record.command});
 			}
@@ -100,20 +101,19 @@ inline LogEntry logAt(const SteeringLog& log, int32_t i) {
 	return i >= 0 && i < static_cast<int32_t>(all.size()) ? all[static_cast<size_t>(i)] : LogEntry{};
 }
 
-/// A steering log for a spec (spec §17.2): room for `entries` commands besides a piece's opening, with a piece open,
-/// so a spec that calls the Generator itself logs too. A Perform driver given it opens its own pieces over that one.
+/// A steering log for a spec (spec §17.2), with its store, and a piece open, so a spec that calls the Generator itself
+/// logs too. A Perform driver given it opens its own pieces over that one. `entries`: commands logged between two
+/// drains at most (the harness drains after every driver call, as the card-log task runs between ticks).
 struct TestLog {
 	explicit TestLog(int32_t entries)
-	    : bytes(static_cast<size_t>(entries * kMaxCommandBytes + kOpeningRoom)),
-	      log(bytes.data(), static_cast<int32_t>(bytes.size())) {
+	    : stored(kLogHeaderBytes, std::max<int32_t>(entries * kMaxCommandBytes + kDroppedReserve, kLogRingBytes)),
+	      log(stored.log) {
 		log.beginPiece({});
 	}
 	TestLog(const TestLog&) = delete;
 	TestLog& operator=(const TestLog&) = delete;
-	/// A piece's opening, and a header with the picks a spec's sink adds.
-	static constexpr int32_t kOpeningRoom = 1024;
-	std::vector<uint8_t> bytes;
-	SteeringLog log;
+	StoredLog stored;
+	SteeringLog& log;
 };
 
 /// The Perform driver's steering with the harness as its adapter (perform/perform_steering.h): the driver, sink and
@@ -262,6 +262,7 @@ private:
 			steering_->sampleFill(*fillDown_);
 		}
 		due_ = now_ + driver_.advance(delta, magnitude, queue_, sink_);
+		drainLog(driver_.steeringLog()); // the card-log task runs between ticks
 		if (steering_ != nullptr && playing != nullptr) {
 			steering_->recordLanded(driver_.playing() != nullptr ? *driver_.playing() : *playing);
 		}
@@ -357,6 +358,7 @@ inline Result play(const Run& run, int32_t bars) {
 			run.steer(generator.nextStep(), queue);
 		}
 		int32_t wait = driver.advance(delta, run.magnitude, queue, sink);
+		drainLog(run.log);
 		if (run.watch) {
 			run.watch(generator);
 		}

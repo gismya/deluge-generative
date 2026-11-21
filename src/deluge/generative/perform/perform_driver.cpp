@@ -218,8 +218,8 @@ void PerformDriver::decideDue(SteeringQueue& queue, NoteSink& sink) {
 		if (pieceDue_) {
 			openPiece(sink); // outside the decision's time: the snapshot reads every param (H1, spec §20)
 		}
-		else if (log_ != nullptr && log_->compacting()) {
-			sink.compactLog(*log_); // a dropped piece's room, a bounded part a step, never on the step a piece opens
+		if (log_ != nullptr) {
+			log_->commitBefore(generator_->nextStep()); // the steps before are final: they may go to the card
 		}
 		int32_t soundsBefore[kMaxParts];
 		for (int32_t p = 0; p < kMaxParts; p++) {

@@ -79,9 +79,6 @@ public:
 
 	/// A piece is about to open: beginPiece() comes next. Test builds time the opening from here.
 	virtual void pieceOpening() {}
-	/// Once a step while dropped pieces' room is still to close, outside the decision (spec §17.4): a firmware sink
-	/// times it.
-	virtual void compactLog(SteeringLog& log) { log.compactStep(SteeringLog::kCompactStepBytes); }
 	/// A piece opens in `log` (beginPiece() has written its opening): the header's sound picks and param snapshot
 	/// (SteeringLog::addPick(), addSnapshot()), as the Outputs are now.
 	virtual void logPieceHeader(SteeringLog& /*log*/) {}
@@ -127,6 +124,7 @@ public:
 	/// Where pieces are logged (spec §17.2, §17.3), or nullptr for none. Each piece opens at its step 0's decision: a
 	/// start's, or a transition's start step, where the outgoing piece ends. A stop or the Outro's end ends it.
 	void setLog(SteeringLog* log) { log_ = log; }
+	[[nodiscard]] SteeringLog* steeringLog() const { return log_; }
 	/// The newest SetSound logged on `part` never played: a confirm dropped its swap after it landed (spec §12.9).
 	/// Logged on the last step decided, which is at or after the one it landed on.
 	void logSoundDropped(uint8_t part);

@@ -168,6 +168,7 @@ void ComposeDriver::replayed(const LogRecord& record) {
 		break;
 	case RecordKind::Waiting:
 	case RecordKind::NotWaiting:
+	case RecordKind::Reached: // readers never hand one over
 		break;
 	case RecordKind::SoundPath:
 		writer_->soundPick(static_cast<uint8_t>(record.command.target), static_cast<uint8_t>(record.command.value),

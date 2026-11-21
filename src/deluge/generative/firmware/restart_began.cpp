@@ -227,7 +227,7 @@ void RestartBegan::press() {
 	}
 	piece_ = at;
 	startsStopped_ = !playing;
-	const SteeringLog::Piece piece = log.piece(at);
+	const SteeringLog::Piece piece = log.newestHeader(); // the piece `at`: its header stays in RAM (spec §17.2)
 	const uint32_t parts = changedParts(piece);
 	if (parts == 0) {
 		TEST_EVENT("gen_restart_press began parts=0");
@@ -310,7 +310,7 @@ void RestartBegan::queueRestart() {
 }
 
 void RestartBegan::startStopped() {
-	const SteeringLog::Piece piece = performAdapter.steeringLog().piece(piece_);
+	const SteeringLog::Piece piece = performAdapter.steeringLog().newestHeader(); // piece_'s, until the next opens
 	restore(piece);
 	performAdapter.steering().restoreStopped(piece.start());
 	TEST_EVENT("gen_restart as_it_began stopped tempo=%ld energy=%ld", static_cast<long>(currentRecipe.recipe.tempo),
@@ -324,7 +324,7 @@ const PieceStart* RestartBegan::lands() {
 		dropBuilt(); // none: only AS IT BEGAN preloads
 		return nullptr;
 	}
-	const SteeringLog::Piece piece = performAdapter.steeringLog().piece(piece_);
+	const SteeringLog::Piece piece = performAdapter.steeringLog().newestHeader(); // piece_'s, until the next opens
 	restore(piece);
 	return &piece.start();
 }
