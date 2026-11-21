@@ -921,8 +921,9 @@ constexpr bool fitsPhrase(int32_t bars, int32_t phraseBars) {
 
 /// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that fits the
 /// phrase (fitsPhrase()), so a chord never straddles a phrase line; at most kMaxChordMoves moves, each between two
-/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid. Its Extension order
-/// tries each Extension once, the 6 after the 7 (extensionOrderValid()).
+/// different degrees of the 7; and a cadence target among them, or none. A loop (`loopChance` 0 or more) needs 2 whole
+/// chords in half a phrase. An empty slot is valid. Its Extension order tries each Extension once, the 6 after the 7
+/// (extensionOrderValid()).
 constexpr bool harmonyValid(const Genre& genre) {
 	if (!extensionOrderValid(genre.harmony.extensionOrder)) {
 		return false;
@@ -932,6 +933,13 @@ constexpr bool harmonyValid(const Genre& genre) {
 		return true;
 	}
 	if (!fitsPhrase(graph->barsPerChord, genre.phraseBars)) {
+		return false;
+	}
+	// A loop half a phrase long holds 2 whole chords or more, and every chance is per-mille.
+	if (graph->loopChance >= 0
+	    && (graph->loopChance > 1000 || graph->halfLoopChance < 0 || graph->halfLoopChance > 1000
+	        || graph->loopReturnChance < 0 || graph->loopReturnChance > 1000 || graph->barsPerChord == 0
+	        || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
 		return false;
 	}
 	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {
