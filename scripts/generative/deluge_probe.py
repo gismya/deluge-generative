@@ -271,8 +271,11 @@ IDLE_TIMEOUT = 10.0  # s an expect or a snapshot waits for the queued events by 
 class TestPort:
     """Client for the ENABLE_SYSEX_TEST port. Collects event and log lines while waiting for replies."""
 
-    def __init__(self, link, key=None):
+    def __init__(self, link, key=None, on_hardware=True):
         self.link = link
+        # False under delugemu: run_script() then skips "hardware_only expect" lines, counting them here
+        self.on_hardware = on_hardware
+        self.hardware_only_skipped = 0
         self.key = [] if key is None else [0x00] + pack_8to7(key.to_bytes(4, "little"))
         self.seq = 0
         self.events, self.log = [], []
@@ -995,6 +998,14 @@ def run_script(port, lines, out=print, on_start_state=None):
       expect no_event TEXT [within=S]              passes if no such event arrives for S seconds, counted the same way
       expect no_event TEXT since=mark [within=S]   the same, counting from the last "mark": also fails on one that
                                                    came before the previous expect's match
+      hardware_only expect ...                     the expect on a Deluge only: under delugemu (a port made with
+                                                   on_hardware=False) it prints a SKIP line and counts in
+                                                   port.hardware_only_skipped, not in the expects. For a timing or
+                                                   voice-count figure (gen_h16 voices=[1-9], gen_ext_tempo bpm=120),
+                                                   which the emulator's speed under host load decides as much as the
+                                                   firmware. It can't capture ((?P<name>...)). It moves the expect
+                                                   search only where it runs: a later expect that must not depend on
+                                                   it takes since=mark
       midi HEX...                                  sends one MIDI message from the host, e.g. "midi 90 3c 64", once
                                                    the firmware has run every queued event
       clock BPM | clock off                        starts (or stops) sending MIDI clock from the host in the
@@ -1072,10 +1083,13 @@ def script_events(events, seen, starts, pattern):
     ]
 
 
-def result_line(name, failed, total, error=None):
-    """A script's one-line result, as the hardware session and delugemu runs print it."""
-    return f"{name}: {total} expects, {failed} failed" + (
-        f" ({error})" if error else ""
+def result_line(name, failed, total, error=None, skipped=0):
+    """A script's one-line result, as the hardware session and delugemu runs print it. `skipped`: its hardware_only
+    expects a delugemu run skipped."""
+    return (
+        f"{name}: {total} expects, {failed} failed"
+        + (f", {skipped} hardware-only skipped" if skipped else "")
+        + (f" ({error})" if error else "")
     )
 
 
@@ -1118,6 +1132,12 @@ def run_one_script(port, script, out=print, events=None):
                 out(line)
 
 
+# The prefix of an expect that runs on the Deluge only: delugemu skips it (and counts it). For a timing or voice-count
+# figure, which the emulator's speed under host load decides as much as the firmware (#417); covers.py --check
+# refuses such an expect without it (covers.TIMING_FIELDS).
+HARDWARE_ONLY = "hardware_only"
+
+
 def _run_lines(
     port, lines, out, clock, stop_on_fail=False, on_start_state=None, counts=None
 ):
@@ -1140,6 +1160,46 @@ def _run_lines(
         if not line:
             continue
         word, _, rest = line.partition(" ")
+        shown, hardware_kind = (
+            line,
+            None,
+        )  # the line as its PASS or FAIL line shows it; see HARDWARE_ONLY
+        if word == HARDWARE_ONLY:
+            line = rest.strip()
+            word, _, rest = line.partition(" ")
+            if word != "expect":
+                raise ValueError(f"{where}: {HARDWARE_ONLY} goes only before an expect")
+            if "(?P<" in line:
+                raise ValueError(
+                    f"{where}: a {HARDWARE_ONLY} expect can't capture: delugemu skips it, so what reads the capture"
+                    " would differ"
+                )
+            what, _, text = rest.partition(" ")
+            event = what == "event" or (what == "next" and text.startswith("event "))
+            if event:
+                text, timeout, since_mark = _options(
+                    text.split()[1 if what == "next" else 0 :], where
+                )
+                kind = _text_kind(" ".join(text))
+                if kind is None:
+                    raise ValueError(
+                        f"{where}: a {HARDWARE_ONLY} expect event must start with its event's kind, a plain word"
+                        " (delugemu waits for one)"
+                    )
+            if not port.on_hardware and not event:
+                out(f"SKIP {where}: {HARDWARE_ONLY} {line}")
+                port.hardware_only_skipped += 1
+                continue
+            shown = (
+                f"{HARDWARE_ONLY} {line}"  # its PASS or FAIL line shows it as written
+            )
+            if not port.on_hardware:
+                # The wait stays (what follows waits as long as on the Deluge, and the search moves past the event);
+                # only the figures go unchecked: any event of its kind passes.
+                rest = f"event /^{kind}( |$)/ within={timeout:g}" + (
+                    " since=mark" if since_mark else ""
+                )
+                hardware_kind = kind
         if word in (
             "button",
             "pad",
@@ -1352,9 +1412,15 @@ def _run_lines(
                     f"  the queue before it took {waited:.1f} s of its within={timeout:g}: the expect got only a"
                     " last look"
                 )
+            if ok and hardware_kind:
+                detail = f"(delugemu: a {hardware_kind} came, its figures unchecked)"
+                port.hardware_only_skipped += 1
             out(
                 "{} {}: {} {}".format(
-                    "PASS" if ok else "FAIL", where, line, "" if ok else detail
+                    "PASS" if ok else "FAIL",
+                    where,
+                    shown,
+                    detail if not ok or hardware_kind else "",
                 ).rstrip()
             )
             for got in got_lines:
@@ -1597,7 +1663,7 @@ def main():
         print(exc)
         return 0 if a.command == "probe" else 1
 
-    port = TestPort(link, read_key(a))
+    port = TestPort(link, read_key(a), on_hardware=not a.udp)  # --udp is delugemu
     if a.command == "probe":
         probe(port, a.log_seconds)
         return 0
@@ -1629,7 +1695,11 @@ def test_port_command(ap, a, port):
             port.subscribe(False)
         if a.log:
             print("\n".join(port.log))
-        print(f"{total} expects, {failed} failed")
+        skipped = port.hardware_only_skipped
+        print(
+            f"{total} expects, {failed} failed"
+            + (f", {skipped} hardware-only skipped" if skipped else "")
+        )
         return 1 if failed else 0
     return 0
 

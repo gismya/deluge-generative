@@ -34,6 +34,14 @@ otherwise.
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
   `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
   never on.
+- A timing or voice-count figure (H16 `voices=`/`culls=`, H1's ns, `gen_ext_tempo bpm=`, the MIDI feedback rate)
+  measures delugemu's speed under host load as much as the firmware: such expects failed beside other agents' runs
+  and passed alone in about 20 PRs (#417). Write them `hardware_only expect ...`; `covers.py --check` fails one that
+  pins a `covers.TIMING_FIELDS` field without it, so a new script gets told. Under delugemu a `hardware_only expect
+  event` still waits for its kind (keep it starting with the kind), so a press after it comes no sooner than on the
+  Deluge; a `hardware_only` no_event or state expect is skipped. It can't capture, and it moves the event search only
+  where it matches: a `mark` right after one keeps a different place under delugemu. A field that any value matches
+  (`voices=\d+`, `gen_h16 culls=`) pins nothing and needs no prefix.
 - An `expect event` or `expect no_event` TEXT matches as one piece of the event's text: `gen_focus locked=-1`
   never matches `gen_focus part=-1 locked=-1`, so an `expect no_event` written that way passes whatever happens. Use
   the `/regex/` form (`/gen_focus part=-?[0-9]+ locked=-1/`) for fields that aren't adjacent, and run a new no_event

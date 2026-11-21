@@ -219,7 +219,9 @@ class EmuRun:
         listen = link.sock.getsockname()[1]
         send = free_udp_port()
         link.addr = ("127.0.0.1", send)
-        self.port = deluge_probe.TestPort(link)
+        self.port = deluge_probe.TestPort(
+            link, on_hardware=False
+        )  # skips hardware_only expects
         self.run_log = os.path.join(self.out, f"{self.tag}-boot{attempt}.log")
         cmd = [
             os.path.join(self.delugemu, "scripts", "run.sh"),
@@ -343,7 +345,8 @@ def protocol_checks(port, check):
 
 def run_scripts(emu, scripts, out=log, events=None):
     """Runs each script on the booted emulator, in order (deluge_probe.run_one_script(), as hardware_session.py
-    does). Returns [(script, failed, total, error)].
+    does). Returns [(script, failed, total, error, skipped)]: `skipped` counts its hardware_only expects, which the
+    emulator skips.
 
     A script error (a bad line, or no reply from the test port) counts as one more failed expect, after those the
     script ran (deluge_probe.ScriptStopped), and prints the script's last events of any kind. After no reply, the
@@ -354,6 +357,7 @@ def run_scripts(emu, scripts, out=log, events=None):
     pattern = deluge_probe.events_pattern(events)
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
+        skipped_before = emu.port.hardware_only_skipped
         try:
             failed, total = deluge_probe.run_one_script(
                 emu.port,
@@ -361,16 +365,18 @@ def run_scripts(emu, scripts, out=log, events=None):
                 out=lambda line, n=name: out(f"{n}: {line}"),
                 events=pattern,
             )
-            results.append((script, failed, total, None))
+            result, gone = (script, failed, total, None), False
         except deluge_probe.ScriptStopped as stop:
-            results.append((script, *stop.result()))
+            result = (script, *stop.result())
             out(f"{name}: ERROR {stop.error}")
-            if deluge_probe.link_failed(stop.error) or not emu.alive():
-                results += [
-                    (s, 1, 0, "skipped: the emulator stopped answering")
-                    for s in scripts[i + 1 :]
-                ]
-                break
+            gone = deluge_probe.link_failed(stop.error) or not emu.alive()
+        results.append((*result, emu.port.hardware_only_skipped - skipped_before))
+        if gone:
+            results += [
+                (s, 1, 0, "skipped: the emulator stopped answering", 0)
+                for s in scripts[i + 1 :]
+            ]
+            break
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
 
@@ -494,14 +500,18 @@ def main():
         log(f"ERROR {exc}")
         return 1
     log("summary:")
-    for script, f, t, e in results:
-        log(
-            f"  {os.path.basename(script)}: {t} expects, {f} failed"
-            + (f" ({e})" if e else "")
-        )
+    skipped = 0
+    for script, f, t, e, k in results:
+        log("  " + deluge_probe.result_line(os.path.basename(script), f, t, e, k))
         failed += f
         total += t
-    log(f"{total} checks, {failed} failed; logs in {out}")
+        skipped += k
+    # check_all.py's table note is this line's "N checks, M failed[, K hardware-only skipped]"
+    log(
+        f"{total} checks, {failed} failed"
+        + (f", {skipped} hardware-only skipped" if skipped else "")
+        + f"; logs in {out}"
+    )
     return 1 if failed else 0
 
 
