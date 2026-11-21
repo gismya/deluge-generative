@@ -105,3 +105,14 @@ otherwise.
   `perform_ringmod_sync.txt` covers it. A sound control may move a param where stock presets rarely sit, so it reaches
   stock paths nothing else exercises: suspect those before Generative code. To find the writer, give the suspect
   buffer a spare row, zero it, and after each render report (a TEST_EVENT) which call left it non-zero.
+- Restart AS IT BEGAN (`firmware/restart_began.*`): the press copies nothing from the log but the piece's index
+  (`SteeringLog::newestWithHeader()`); the line reads the header in place (`Piece::start()`, `pick()`,
+  `forEachSnapshot()`), before the restarted run's `openPiece()` throws the ended piece away, so `lands()` must run
+  inside `NoteSink::restartPiece()`, never later. Its preload builds every changed part in one live job and frees what
+  it built itself on a cancel or an error (`freePartOutput()`, task context): a later `retire()` would leave a
+  cancelled job's Outputs linked. Swaps go through `SoundSwaps::adoptRestarted()`, after `pieceRestarts()` dropped the
+  waiting sounds, so the part's incoming slot is free. The snapshot is written with `setCurrentValueBasicForSetup()`
+  only where a value differs, then the Sound is patched again (`performInitialPatching()`), as `SoundControls`
+  `writeBase()`/`repatch()` do: fine on the line after the flush, wrong under sounding voices. A swing interval that
+  changes in the tick waits for the pump (`Transitions::swingIntervalFollows()`): `changeSwingInterval()` reschedules
+  the internal clock while playing.

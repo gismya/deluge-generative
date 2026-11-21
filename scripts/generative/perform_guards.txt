@@ -7,6 +7,7 @@
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/firmware/restart_began.cpp
 # covers: src/deluge/playback/playback_handler.cpp src/deluge/generative/perform/capture.*
 start_state
 include perform_open.txt

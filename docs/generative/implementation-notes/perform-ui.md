@@ -216,4 +216,9 @@ otherwise.
   the pump remembers each ducked part's own Output and clip, so it lets go of a transition's outgoing roster too
   (`sink_.roster` is already the incoming one there). A logged-only state (stutter's `SetStutter`) has the same
   window: the steering keeps it (`stutterOn_`) and re-sends it at step 0.
-
+- RESTART ▸ has two rows, AS IT IS then AS IT BEGAN, and the submenu remembers its row too: a script that picks AS IT
+  BEGAN puts the submenu back on AS IT IS (`encoder 3 -20` inside it) before leaving, or `perform_restart.txt`'s
+  SELECT, SELECT picks AS IT BEGAN (`perform_restart_began.txt` does).
+- Trap (#413 part 2, merging #437): the restart's two flags and `stutterOn_` share the last padding byte before
+  `fillSent_`; they are 1-bit bitfields there. Another flag in that run grows the steering by 4 and breaks the pinned
+  size (Release build only): find padding elsewhere, or make it a bit beside them.

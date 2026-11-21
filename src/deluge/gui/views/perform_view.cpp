@@ -21,6 +21,7 @@ using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::restartBegan;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
@@ -121,8 +122,19 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 				if (transitions.preloading() && transitions.cancel()) {
 					TEST_EVENT("gen_back_tap transition");
 				}
-				else if (soundSwaps.cancelPreload()) {
-					TEST_EVENT("gen_back_tap preload");
+				else if (soundSwaps.preloadRunning()) {
+					// As for AS IT BEGAN's below: a tap while the cancel unwinds cancels nothing queued.
+					if (soundSwaps.cancelPreload()) {
+						TEST_EVENT("gen_back_tap preload");
+					}
+				}
+				else if (restartBegan.preloading()) {
+					// AS IT BEGAN's sounds: nothing restarts. A tap while that cancel unwinds does nothing, not cancel
+					// an unrelated queued action.
+					if (restartBegan.cancelPreload()) {
+						display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+						TEST_EVENT("gen_back_tap restart_preload");
+					}
 				}
 				else {
 					refusedWithPopup(performAdapter.steering().cancelNewest());

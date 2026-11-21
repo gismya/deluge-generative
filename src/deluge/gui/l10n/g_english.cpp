@@ -209,6 +209,7 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_HARD_CUT_AT_PHRASE, "Hard cut at phrase"},
         {STRING_FOR_CHANGE_PENDING, "Change pending"},
         {STRING_FOR_AS_IT_IS, "As it is"},
+        {STRING_FOR_AS_IT_BEGAN, "As it began"},
         {STRING_FOR_RESTART_CANCELLED, "Restart cancelled"},
         {STRING_FOR_COMPOSE, "Compose"},
         {STRING_FOR_FROM, "From"},

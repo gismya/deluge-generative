@@ -96,6 +96,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	dropUnmarked(); // the last piece, and any unmarked in the CAPTURE menu (spec §17.3, §17.4)
 	opened_++;
 	open_ = false;
+	newestWithHeader_ = -1;
 	current_ = false;
 	const int32_t at = alignUp(used_);
 	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > room()) {
@@ -117,6 +118,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	info.start = start;
 	used_ = at + static_cast<int32_t>(sizeof(PieceInfo));
 	pieces_++;
+	newestWithHeader_ = pieces_ - 1;
 	all_++;
 	open_ = true;
 	cut_ = false;
@@ -336,6 +338,7 @@ void SteeringLog::cutHeader() {
 	info.bytes = used_ - newest_;
 	info.cutAt = 0;
 	cut_ = true;
+	newestWithHeader_ = -1;
 }
 
 GEN_STEP_CODE void SteeringLog::cut(int32_t step) {
@@ -507,6 +510,7 @@ void SteeringLog::clear() {
 	used_ = 0;
 	pieces_ = 0;
 	newest_ = 0;
+	newestWithHeader_ = -1;
 	all_ = 0;
 	dropped_ = 0;
 	gapAt_ = -1;

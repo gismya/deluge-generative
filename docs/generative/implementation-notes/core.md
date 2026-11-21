@@ -39,7 +39,9 @@ otherwise.
   knows comes through `NoteSink::logPieceHeader()` and `logSoundPaths()` (`firmware/log_header.*`). A new steering
   command is logged with no log change: append its `CommandKind`, move `kLastCommandKind`, and have `apply()` return
   true where it lands (`steering_log_spec` round-trips every kind). Recipe state it changes reaches the header through
-  the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins.
+  the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins. A restart's line ends the piece and sets `pieceDue_`,
+  so the restarted run opens its own piece at its step 0 (spec §17.3); the sink's `restartPiece()` runs between the two,
+  where the ended piece's header is still the newest (AS IT BEGAN reads it there).
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
   (ADR 0005), so an effect done anywhere else is lost on replay. A decision that reads the pending list breaks replay
   unless the log says when that command waits: only Arc moves do today (`waitingMove()`, `lastGroovePhrase()`), and
