@@ -1,0 +1,91 @@
+# The audio output's margin (#449, spec §20): about 5.5 minutes of Perform with busy steering and two genre changes into
+# the heaviest genres, the card-write spike's load (#447) with its card log left out. Acid techno (1 min of busy
+# steering), BUILD INTO A DROP into Psytrance, 2.5 min of busy steering, HARD CUT AT PHRASE into Detroit techno (6 parts),
+# 1 min of busy steering, stop. Every 4 bars gen_audio gives the audio routine's entries, those after the TX ring ran
+# dry (underruns), the least audio left at an entry and the entries with under 0.5, 1 and 2 ms left; gen_render_gaps
+# gives the spike's spans between render starts, for comparison. `hold entropy` plays the same Recipe every run.
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+# needs: a Deluge for its timings, and about 5.5 minutes, so check_all.py skips it
+# For figures: --events 'gen_audio|gen_render_gaps|gen_h1 |gen_h16|gen_transition start'.
+# covers: src/deluge/io/midi/output_margin.h src/deluge/io/midi/test_port_render.*
+start_state
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+button F8 down
+wait 50
+button F8 up
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+report input
+include capture_h13_minute.txt
+expect playing=true within=100
+
+# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance-classic style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=0 within=120
+expect event gen_transition phase=idle within=60
+expect playing=true
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+wait 30000
+expect playing=true within=200
+
+# ---- TECHNO > DETROIT -> HARD CUT AT PHRASE ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre techno-detroit
+expect event /^gen_genre_pick techno-detroit row=DETROIT/
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm techno-detroit style=2 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=2 within=120
+expect event gen_transition phase=idle within=60
+expect playing=true
+include capture_h13_minute.txt
+expect playing=true within=100
+report input
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

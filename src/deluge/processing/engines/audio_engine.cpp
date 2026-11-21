@@ -38,6 +38,7 @@
 #include "io/debug/log.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_queue.h"
+#include "io/midi/output_margin.h"
 #include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/instrument/kit.h"
@@ -1237,6 +1238,9 @@ void routine() {
 
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
+#if ENABLE_SYSEX_TEST
+		TestPort::audioRoutineEntered(); // Generative mode (spec §20): the audio output's margin
+#endif
 		while (doSomeOutputting() && numRoutines < 2) {
 
 #ifndef USE_TASK_MANAGER
@@ -1248,6 +1252,11 @@ void routine() {
 			routine_();
 			numRoutines += 1;
 		}
+#if ENABLE_SYSEX_TEST
+		TestPort::audioRoutineLeft(deluge::io::midi::txSamplesQueued((uint32_t)getTxBufferCurrentPlace(),
+		                                                             i2sTXBufferPos, 4 * NUM_MONO_OUTPUT_CHANNELS,
+		                                                             SSI_TX_BUFFER_NUM_SAMPLES));
+#endif
 	}
 	else {
 		if (!sdRoutineLock) {

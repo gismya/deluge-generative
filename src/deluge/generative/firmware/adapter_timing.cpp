@@ -30,6 +30,8 @@ unsigned long ticksToNs(uint32_t ticks) {
 	return static_cast<unsigned long>(uint64_t{ticks} * 1'000'000'000 / DELUGE_CLOCKS_PER);
 }
 
+constexpr uint32_t kCountsPerUs = DELUGE_CLOCKS_PER / 1'000'000;
+
 DecisionTiming decisionTiming;
 ControlTiming controlTiming;
 
@@ -53,6 +55,21 @@ void ControlTiming::report(const char* ramps) {
 	               ? "freed"
 	               : performAdapter.output().partName(render.lastCulled, performAdapter.steering().rosterGenre()),
 	           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
+	// The audio output's margin (spec §20, #449): the routine's entries, those after the TX ring ran dry, the least
+	// audio left at one, and entries with under 0.5, 1 and 2 ms left and more.
+	const long marginMinUs =
+	    render.routineCalls == 0 ? 0L : render.marginMinCounts / static_cast<int32_t>(kCountsPerUs);
+	TEST_EVENT("gen_audio calls=%lu underruns=%lu margin_min_us=%ld margins=%lu/%lu/%lu/%lu",
+	           static_cast<unsigned long>(render.routineCalls), static_cast<unsigned long>(render.underruns),
+	           marginMinUs, static_cast<unsigned long>(render.margins[0]),
+	           static_cast<unsigned long>(render.margins[1]), static_cast<unsigned long>(render.margins[2]),
+	           static_cast<unsigned long>(render.margins[3]));
+	// The spike's measure (#447), for comparison: spans between render starts under 1, 2, 2.9, 5, 10 ms and more
+	TEST_EVENT("gen_render_gaps max_us=%lu gaps=%lu/%lu/%lu/%lu/%lu/%lu",
+	           static_cast<unsigned long>(render.renderGapMaxCounts / kCountsPerUs),
+	           static_cast<unsigned long>(render.renderGaps[0]), static_cast<unsigned long>(render.renderGaps[1]),
+	           static_cast<unsigned long>(render.renderGaps[2]), static_cast<unsigned long>(render.renderGaps[3]),
+	           static_cast<unsigned long>(render.renderGaps[4]), static_cast<unsigned long>(render.renderGaps[5]));
 	stepsSending_ = totalCounts_ = maxCounts_ = 0;
 }
 
