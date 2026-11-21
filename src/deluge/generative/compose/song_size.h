@@ -67,6 +67,14 @@ int32_t expectedBars(const Recipe& recipe, int32_t targetSteps);
 /// notesPerBar() and a node on each automation lane the parts' sets can move.
 int64_t estimateBytes(const Recipe& recipe, int32_t lengthSeconds);
 
+/// The size estimate of `bars` bars of `genre` (estimateBytes()'s, spec §15.9): kSongCosts.song, the clips' setup, and
+/// per bar the notes of notesPerBar() and a node on each automation lane the parts' sets can move.
+int64_t estimateBarsBytes(const Genre& genre, int32_t bars);
+
+/// A Capture song whose size estimate passes this ends at the next Section line, and the piece goes on in the next
+/// song (spec §17.5): a saved 10 MB song fails to load, 1 MB loads. About 25–30 minutes. (tuning)
+constexpr int64_t kSplitBudget = 2 * 1024 * 1024;
+
 /// The longest LENGTH, in kLengthStepSeconds steps up to kMaxLengthSeconds, whose estimate is at most `bytes`: the MAX
 /// of `TOO LONG: MAX 12:30` (spec §14.5). 0 when not even kMinLengthSeconds fits.
 int32_t longestFitting(const Recipe& recipe, int64_t bytes);

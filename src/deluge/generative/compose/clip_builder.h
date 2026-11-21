@@ -165,6 +165,45 @@ public:
 		writer_->end(tick, counts_.sounding);
 	}
 
+	/// A split (spec §17.5): the song ends at `tick`, a Section line, as finish() ends it, and the next song starts
+	/// there. A note still sounding (a Sustain's, held across the line) ends here and is struck again at `tick`, at its
+	/// velocity; each lane goes on in the next song from the value it has here.
+	template <typename Centre>
+	void split(int32_t tick, Centre centre) {
+		for (Open& open : open_) {
+			if (open.used && tick > open.noteOn.tick) {
+				const Event& on = open.noteOn;
+				writer_->note({on.tick, tick - on.tick, on.part, on.lane, on.pitch, on.velocity});
+				counts_.sounding |= partBit(on.part);
+			}
+		}
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (track.started) {
+				track.finish(*writer_, tick);
+				writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+			}
+		}
+		writer_->end(tick, counts_.sounding);
+		writer_->nextSong(tick);
+		counts_.sounding = 0;
+		for (Open& open : open_) {
+			open.noteOn.tick = open.used ? tick : open.noteOn.tick;
+		}
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (track.started) {
+				Track next;
+				next.id = track.id;
+				next.started = true;
+				next.value = track.value;
+				next.endTick = tick;
+				next.origin = tick;
+				track = next;
+			}
+		}
+	}
+
 	/// Notes that found no room for their note-on, or whose note-off never came by finish(): 0 unless the core broke
 	/// its note-off promise (spec §2.2). A note-off with no note-on is a muted note's and isn't counted.
 	[[nodiscard]] uint32_t unpaired() const { return counts_.unpaired; }
@@ -196,6 +235,7 @@ private:
 		bool moved = false;   ///< It has written a node: it moves.
 		int8_t value = 0;     ///< The value the curve has reached at `endTick`.
 		int32_t endTick = 0;  ///< Where the played curve ends so far.
+		int32_t origin = 0;   ///< Where its song starts: 0, or a split's line (spec §17.5).
 		// The thinning, first a bar at a time: the bar's points (ramp ends, and a ramp's start after a hold under a
 		// bar), each on a step line, from `from`, the last point the cone took, under a bar before the bar's first.
 		uint8_t barCount = 0;
