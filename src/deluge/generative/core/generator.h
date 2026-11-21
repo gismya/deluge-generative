@@ -432,8 +432,7 @@ public:
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
-	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
-	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
+	/// Capture's replay never stops on it: it runs the piece's span (ComposeDriver::beginReplay()).
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
 	/// transition or a restart waits: a restart lands on the end line at the latest, and the piece starts again there.
 	[[nodiscard]] bool ended() const {

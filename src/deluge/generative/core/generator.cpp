@@ -253,7 +253,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 namespace {
 
 /// What waits in an Arc move slot: the force or End (`slot` 0), or the transition (1); CancelNewest for nothing.
-Command waitingIn(const PendingList& pending, int32_t slot) {
+GEN_STEP_CODE Command waitingIn(const PendingList& pending, int32_t slot) {
 	const Command* waiting = pending.waiting({slot == 0 ? CommandKind::ForceSection : CommandKind::Transition});
 	return waiting != nullptr ? *waiting : Command{CommandKind::CancelNewest};
 }
