@@ -150,3 +150,9 @@ otherwise.
   preempt: any main-loop task over about 2.9 ms is an underrun. `gen_audio_late` blames the task the routine ran
   inside, or else the one that finished just before it; `TaskManager::currentID` starts at 0, not -1, so it can't tell
   a nested call apart, and the test port keeps its own caller (`TestPort::taskStarted()`).
+- A hand-written song on a card fixture: `start_state` after `load song` needs an instrument clip, so give the song
+  one (an audio-only song fails it, and the next script's too). Write each clip as the firmware does: an
+  `<instrumentClip>` with no `<soundParams>` froze in `ParamManager::getPatchCableSet()` during the load
+  (`song_audio_clip_no_params.txt`'s fixture, #448), as an audio clip with no `<params>` froze with E410. Run it in
+  delugemu first; a hang there shows as `no reply to test port command`, and `test_port_emu.py --gdb PORT` plus
+  `arm-none-eabi-gdb -batch -ex "target remote :PORT" -ex bt` names the freeze.

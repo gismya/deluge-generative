@@ -6,7 +6,8 @@
 start_state
 load song GENTEST/NOPARAMS.XML
 expect event song_loaded path=GENTEST/NOPARAMS.XML within=60
-# A second start_state, the load song exception in scripts.md: a song opens in whatever view it was saved in.
+# A second start_state, the load song exception in scripts.md: a song opens in whatever view it was saved in. The
+# song's synth clip is there for it: start_state needs an instrument clip, here and in the next script.
 start_state
 expect playing=false
 button PLAY down
