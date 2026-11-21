@@ -315,7 +315,7 @@ constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBi
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 1,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 2,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swing = 10},
     .phraseBars = 8,
     .parts = kParts,

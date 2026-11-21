@@ -318,7 +318,9 @@ int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {
 		// One note across the Build, ending on the Drop.
 		return arc_.section() == SectionKind::Build ? arc_.sectionSteps() * kTicksPerStep : 0;
 	case Lane::Fall:
-		return arc_.section() == SectionKind::Break ? lane.gateTicks : 0;
+		// One note across the Break, from its first step: a Fall sample of 2 s or more plays in CUT mode, and its
+		// note-off would cut it (spec §10.4).
+		return arc_.section() == SectionKind::Break ? arc_.sectionSteps() * kTicksPerStep : 0;
 	case Lane::Impact:
 		return arc_.dropStartsHere() ? lane.gateTicks : 0;
 	case Lane::Siren:
