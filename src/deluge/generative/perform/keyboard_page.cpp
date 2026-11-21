@@ -48,6 +48,14 @@ KeyboardPad keyboardPad(int32_t x, int32_t row) {
 	    && row < kFillFirstRow + kFillRows) {
 		return KeyboardPad::Fill;
 	}
+	if (x >= kLaneMuteColumn && x < kLaneMuteColumn + kLaneMuteColumns && row >= 0 && row < KeyboardPage::kRows
+	    && (x - kLaneMuteColumn) * KeyboardPage::kRows + row < kNumDrumLanes) {
+		return KeyboardPad::LaneMute;
+	}
+	if (x >= kPunchFirstColumn && x < kPunchFirstColumn + kPunchColumns && row >= 0
+	    && row * kPunchColumns + (x - kPunchFirstColumn) < kNumPunchPads) {
+		return KeyboardPad::Punch;
+	}
 	return KeyboardPad::None;
 }
 
@@ -74,6 +82,12 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row) {
 		break;
 	case KeyboardPad::Fill:
 		at.pad = FillHolds::padHolder(fillPad(x, row));
+		break;
+	case KeyboardPad::LaneMute:
+		at.pad = (x - kLaneMuteColumn) * KeyboardPage::kRows + row;
+		break;
+	case KeyboardPad::Punch:
+		at.punch = kPunchPads[row * kPunchColumns + (x - kPunchFirstColumn)];
 		break;
 	case KeyboardPad::None:
 		break;
@@ -127,6 +141,24 @@ void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 			out.cell[row][x] = {.look = Look::Fill, .lit = in.fill};
 		}
 	}
+	// A pad per lane the Drums part has; the rest of the two columns stay dark.
+	for (int32_t l = 0; l < std::min(in.drumLaneCount, kNumDrumLanes); l++) {
+		const int32_t key = PunchHolds::punchKey(PunchIn::LaneMute, in.drumLanes[l]);
+		out.cell[l % KeyboardPage::kRows][kLaneMuteColumn + l / KeyboardPage::kRows] = {
+		    .look = Look::LaneMute,
+		    .lit = in.punches != nullptr && in.punches->on(key),
+		    .held = in.punches != nullptr && in.punches->held(key),
+		};
+	}
+	for (int32_t i = 0; i < kNumPunchPads; i++) {
+		const int32_t key = PunchHolds::punchKey(kPunchPads[i], Lane::None);
+		out.cell[i / kPunchColumns][kPunchFirstColumn + i % kPunchColumns] = {
+		    .look = Look::Punch,
+		    .lit = in.punches != nullptr && in.punches->on(key),
+		    .held = in.punches != nullptr && in.punches->held(key),
+		    .punch = kPunchPads[i],
+		};
+	}
 }
 
 void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars + 1]) {
@@ -166,6 +198,60 @@ void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars +
 	if (page.focused >= 0) {
 		text.add(" part=").add(static_cast<int32_t>(page.focused));
 	}
+}
+
+void describePunches(const KeyboardPage& page, char (&out)[kPunchTextChars + 1]) {
+	Text text(out);
+	text.add("lanes=");
+	for (int32_t l = 0; l < kNumDrumLanes; l++) {
+		const KeyboardCell& cell = page.cell[l % KeyboardPage::kRows][kLaneMuteColumn + l / KeyboardPage::kRows];
+		if (cell.look == Look::LaneMute) {
+			text.add(cell.held ? "M" : cell.lit ? "m" : ".");
+		}
+	}
+	text.add(" punch=");
+	for (int32_t i = 0; i < kNumPunchPads; i++) {
+		constexpr const char* kOn[] = {"H", "S", "F", "D", "P"}; // kPunchPads' order
+		constexpr const char* kHeld[] = {"h", "s", "f", "d", "p"};
+		static_assert(sizeof(kOn) / sizeof(kOn[0]) == kNumPunchPads && sizeof(kHeld) == sizeof(kOn));
+		const KeyboardCell& cell = page.cell[i / kPunchColumns][kPunchFirstColumn + i % kPunchColumns];
+		text.add(cell.held ? kHeld[i] : cell.lit ? kOn[i] : ".");
+	}
+}
+
+bool PunchHolds::press(int32_t key, uint32_t now) {
+	const uint32_t bit = 1U << key;
+	if ((held_ & bit) != 0) {
+		return false;
+	}
+	held_ |= bit;
+	pressedAt_[key] = now;
+	wasOn_ = (on_ & bit) != 0 ? wasOn_ | bit : wasOn_ & ~bit;
+	if ((on_ & bit) != 0) {
+		return false;
+	}
+	on_ |= bit;
+	return true;
+}
+
+bool PunchHolds::release(int32_t key, uint32_t now, uint32_t tapTime) {
+	const uint32_t bit = 1U << key;
+	if ((held_ & bit) == 0) {
+		return false;
+	}
+	held_ &= ~bit;
+	// A tap on one that was off latches it; any other release lets it go.
+	if ((wasOn_ & bit) == 0 && now - pressedAt_[key] < tapTime) {
+		return false;
+	}
+	on_ &= ~bit;
+	return true;
+}
+
+void PunchHolds::refused(int32_t key, bool on) {
+	const uint32_t bit = 1U << key;
+	held_ &= ~bit;
+	on_ = on ? on_ | bit : on_ & ~bit;
 }
 
 void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t now, int32_t part) {
