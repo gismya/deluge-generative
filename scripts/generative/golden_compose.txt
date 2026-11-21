@@ -1,0 +1,75 @@
+# The firmware check and the Compose and Recipe-file smoke checks (spec §21.3), on one boot. Under "hold golden" the
+# Compose screen's genre roll makes Acid techno's golden case (its default Recipe at the goldens' seed, takes 0) and
+# BUILD composes it from the Groove, as the golden plays from SHIFT+PLAY. SAVE writes the Recipe file, which reads back
+# the same ("check recipe *"); BUILD → DISCARD SONG? → OK builds the song; it is saved and loaded back.
+# `gen_emu.py golden` runs this script, then reads SONGS/GOLDEN.XML and the Recipe file off the card and diffs the
+# song's notes against tests/spec/generator/goldens/<genre>.txt, the genre on the "pick genre" lines below.
+# needs: gen_emu.py golden (it reads the saved song and Recipe file off the card clone)
+# No covers lines: check_all.py runs gen_emu.py golden whenever it runs delugemu, as it runs smoke.
+start_state
+expect playing=false
+hold golden
+
+# ---- FROM ▸ → GENRE ▸ → TECHNO ▸ → ACID rolls the golden case on the Compose screen ----
+compose screen
+expect event gen_compose_screen opened
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll genre done within=30
+expect ui=sound_editor
+expect event /^gen_compose_seed rolled seed=\S+ takes=0,0,0,0,0,0 /
+
+# ---- A Recipe file round-trips: SAVE writes it, and it reads back as the Current Recipe ----
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full saved name=ACID TECHNO [0-9A-Z]{7} overwrite=0$/ within=10
+expect ui=sound_editor
+check recipe *
+expect event /^gen_recipe_check name=ACID TECHNO [0-9A-Z]{7} read=ok error=0 match=1 / within=10
+
+# ---- BUILD → DISCARD SONG? → OK composes it, from the Groove, into arranger view ----
+encoder 3 -20
+encoder 3 13
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event /^gen_compose done ran=1 / within=120
+expect event /^gen_compose_song notes=[1-9]\d* nodes=\d+ off_scale=0 name=GEN ACID TECHNO /
+expect ui=arranger within=10
+release golden
+
+# ---- The song saves and loads back ----
+save song GOLDEN
+expect event song_saved name=GOLDEN within=60
+load song SONGS/GOLDEN.XML
+expect event song_loaded path=SONGS/GOLDEN.XML within=60
+expect root_ui=arranger within=10

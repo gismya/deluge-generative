@@ -270,7 +270,12 @@ private:
 		ComposeWork& work = *work_;
 		const int32_t target = compose::targetSteps(seconds_, recipe.tempo);
 		work.writer.prepare(song, work.roster, *recipe.genre);
-		work.driver.begin(work.generator, recipe, currentRecipe.seed, currentRecipe.takes, target, work.writer);
+		bool skipIntro = false;
+#if ENABLE_SYSEX_TEST
+		skipIntro = TestPort::goldenHeld(); // the firmware check builds the golden case from the Groove (spec §21.3)
+#endif
+		work.driver.begin(work.generator, recipe, currentRecipe.seed, currentRecipe.takes, target, work.writer,
+		                  skipIntro);
 		progress_ = {0, compose::expectedBars(recipe, target)};
 		while (!work.driver.run(1)) {
 			if (work.writer.error() != Error::NONE) {

@@ -92,7 +92,8 @@ otherwise.
   a name but no file. Both fixed; rows in `docs/upstream-candidates.md`.
 - Test-port lines for scripts: `compose <seconds> [<genre>]` (opens COMPOSING and starts the job, until the Compose
   screen has BUILD), `save song <name>` (SONGS/<name>.XML through the stock save UI), and the holds `compose` (waits
-  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll).
+  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll), and `golden`
+  (#141: a genre roll makes the golden case and the build starts in the Groove, for `gen_emu.py golden`).
 
 ## The Compose screen (`gui/menu_item/generative/compose_screen.*`)
 

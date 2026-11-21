@@ -46,6 +46,19 @@ otherwise.
   `g_english.cpp` and `g_seven_segment.cpp` in the source tree, so every other build dir recompiles those and
   relinks once.
 
+## The firmware check (`gen_emu.py golden`, #141)
+
+- `golden_compose.txt` runs under `gen_emu.py golden`, not as a probe script: check_all only picks scripts named
+  `perform_*.txt` or `compose_*.txt`, and its name keeps it out so it doesn't run twice. It has no covers lines;
+  check_all runs it whenever it runs delugemu. `# needs: gen_emu.py` keeps it off hardware sessions.
+- The golden ends at its last line, not at 16 bars: Perform's stop ends what still sounds at the driver's clock (6132
+  or 6134), so a Drone note is shorter in the golden than in the song. Both sides cut there and drop notes within
+  `kMaxLean` of it. Muted notes are in the golden and never in a Compose song.
+- The song is read with the Recipe file: Kits are named after their part, synths after their preset, so a synth clip
+  maps to its part through the Recipe file's `sound` path. Instruments come in roster order.
+- To prove it fails, change the stream in `src/` (a velocity in the genre table), rebuild build-testport/ only and run
+  `gen_emu.py golden`: the goldens are the harness's, so they stay as committed.
+
 ## Theory review
 
 Each M2 genre slice runs the theory review (spec §21.5) once its genre plays. Build the harness, then summarise:

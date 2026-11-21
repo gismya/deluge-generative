@@ -2,6 +2,7 @@
 
     python3 scripts/generative/gen_emu.py smoke [--bars 8] [--no-leak]
     python3 scripts/generative/gen_emu.py leak [--cycles 2] [--cycle-script FILE]
+    python3 scripts/generative/gen_emu.py golden [--testport-elf ELF] [--keep-card]
     python3 scripts/generative/gen_emu.py capture --genre techno-acid --seed 7 --energy 40 --seconds 60
     python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
     python3 scripts/generative/gen_emu.py check WAV... --genre techno-dub --seconds 120 --mute 3
@@ -21,6 +22,15 @@ leak     the memory check (spec §13.8: memory after leaving matches memory befo
          before_entry / after_leave events. Fails unless, for every cycle after the first WARMUP_CYCLES, internal and
          external free memory after leaving equal their values before entry exactly.
 
+golden   the firmware check and the Compose and Recipe-file smoke checks (spec §21.3). On the test-port firmware
+         (build-testport/, built first unless --testport-elf), runs golden_compose.txt: under "hold golden" the Compose
+         screen rolls a genre's golden case (its default Recipe at the goldens' seed, takes 0), SAVE writes its Recipe
+         file and "check recipe *" reads it back, BUILD composes it from the Groove as the golden plays from
+         SHIFT+PLAY, and the song is saved as SONGS/GOLDEN.XML and loaded back. Then reads the song and the new Recipe
+         file off the card clone (golden_song.py) and checks the Recipe file is the golden's case and the song's notes
+         are the golden's (tests/spec/generator/goldens/<genre>.txt, the genre the script picks): both as the
+         golden's note lines, the notes that start more than kMaxLean before the golden's last tick, cut there. A
+         difference prints as a diff; both dumps are left in --out (golden-notes.txt, song-notes.txt).
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ (--build-dir; --elf: that one, built
          before, and nothing builds), writes a copy of its ELF beside the WAV whose Current Recipe and seed come from
          the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots it,
@@ -66,6 +76,7 @@ import argparse
 import array
 import collections
 import contextlib
+import difflib
 import fcntl
 import glob
 import hashlib
@@ -79,9 +90,12 @@ import sys
 import tempfile
 import time
 import wave
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deluge_probe
+import fat_image
+import golden_song
 import test_port_emu
 import theory_review
 
@@ -1204,6 +1218,117 @@ def smoke(args):
     return 1 if failed or leak_failed else 0
 
 
+GOLDEN_SCRIPT = os.path.join(HERE, "golden_compose.txt")
+GOLDEN_SONG = "SONGS/GOLDEN.XML"  # golden_compose.txt's "save song GOLDEN"
+RECIPE_FOLDER = "RECIPES"
+DIFF_LINES = 40  # of a failing diff, on the console; the whole dumps are in --out
+
+
+def golden_genre(script_text):
+    """The genre golden_compose.txt rolls: its last "pick genre" line's."""
+    picks = re.findall(r"^pick genre (\S+)$", script_text, re.MULTILINE)
+    if not picks:
+        raise ValueError("golden_compose.txt has no pick genre line")
+    return picks[-1]
+
+
+def new_recipe_files(card, master):
+    """The Recipe files on the card clone that the master card hasn't: what the script saved."""
+
+    def names(image):
+        with fat_image.FatImage(image) as fat:
+            return (
+                set(fat.listdir(RECIPE_FOLDER)) if fat.exists(RECIPE_FOLDER) else set()
+            )
+
+    return sorted(names(card) - names(master))
+
+
+def golden(args):
+    """The firmware check and the Compose and Recipe-file smoke checks (spec §21.3). Returns 0 if they pass."""
+    warn_pin(args)
+    elf = args.testport_elf or test_port_emu.build_testport()
+    with open(GOLDEN_SCRIPT) as fh:
+        genre = golden_genre(fh.read())
+    with open(golden_song.golden_path(genre)) as fh:
+        golden_text = fh.read()
+    failed = total = 0
+
+    def check(name, ok):
+        nonlocal failed, total
+        failed += 0 if ok else 1
+        total += 1
+        log("{} {}".format("PASS" if ok else "FAIL", name))
+
+    log(f"firmware check: {genre}'s golden case through Compose on {elf}")
+    os.makedirs(args.out, exist_ok=True)
+    run = test_port_emu.EmuRun(
+        elf, args.out, args.delugemu, args.qemu, args.card, keep_card=True, tag="golden"
+    )
+    try:
+        with run as emu:
+            results = test_port_emu.run_scripts(
+                emu,
+                [GOLDEN_SCRIPT],
+                out=lambda line: None if ": PASS " in line else log(line),
+            )
+        _, script_failed, script_total, error = results[0]
+        check(
+            f"golden_compose.txt: {script_total} expects, {script_failed} failed"
+            + (f" ({error})" if error else ""),
+            not script_failed and not error,
+        )
+        if script_failed or error:
+            return 1
+        with fat_image.FatImage(run.card) as fat:
+            song = fat.read_file(GOLDEN_SONG).decode()
+            recipes = new_recipe_files(run.card, args.card)
+            check(
+                f"one Recipe file saved ({', '.join(recipes) or 'none'})",
+                len(recipes) == 1,
+            )
+            if len(recipes) != 1:
+                return 1
+            recipe = fat.read_file(f"{RECIPE_FOLDER}/{recipes[0]}").decode()
+    except (RuntimeError, ValueError, OSError, golden_song.GoldenError) as exc:
+        check(f"firmware check ran ({exc})", False)
+        return 1
+    finally:
+        if not args.keep_card and os.path.exists(run.card):
+            os.unlink(run.card)
+    try:
+        problems, song_lines, golden_lines = golden_song.compare(
+            golden_text, song, recipe
+        )
+    except (golden_song.GoldenError, ET.ParseError) as exc:
+        check(f"the saved files read ({exc})", False)
+        return 1
+    for problem in problems:
+        log("  " + problem)
+    check(f"the Recipe file {recipes[0]} holds {genre}'s golden case", not problems)
+    for name, lines in (("song", song_lines), ("golden", golden_lines)):
+        with open(os.path.join(args.out, f"{name}-notes.txt"), "w") as fh:
+            fh.write("\n".join(lines) + "\n")
+    diff = list(
+        difflib.unified_diff(
+            golden_lines, song_lines, f"{genre} golden", GOLDEN_SONG, lineterm="", n=1
+        )
+    )
+    for line in diff[:DIFF_LINES]:
+        log("  " + line)
+    if len(diff) > DIFF_LINES:
+        log(
+            f"  ... {len(diff) - DIFF_LINES} more diff lines: golden-notes.txt and song-notes.txt in {args.out}"
+        )
+    check(
+        f"the saved song's notes are the golden's: {len(song_lines) // 2} notes in the song, "
+        f"{len(golden_lines) // 2} in the golden",
+        not diff,
+    )
+    log(f"{total} checks, {failed} failed; logs in {args.out}")
+    return 1 if failed else 0
+
+
 def check_capture_args(args):
     """Exits on arguments the capture would refuse only after its minutes-long build."""
     # The check's render covers the capture: at --tempo, or at the fastest a rolled Recipe can be. --no-check
@@ -1462,6 +1587,22 @@ def parser():
     add_leak_args(lk)
     lk.add_argument("--out", default=os.path.join(REPO, "build", "delugemu-smoke"))
 
+    g = sub.add_parser(
+        "golden",
+        parents=[common],
+        help="the firmware check: a golden's case through Compose, its saved song's notes against the golden",
+    )
+    g.add_argument(
+        "--testport-elf",
+        help="this ENABLE_SYSEX_TEST firmware instead of building build-testport/",
+    )
+    g.add_argument("--out", default=os.path.join(REPO, "build", "delugemu-golden"))
+    g.add_argument(
+        "--keep-card",
+        action="store_true",
+        help="keep the card clone (golden.img in --out)",
+    )
+
     recipe = argparse.ArgumentParser(add_help=False)
     add_recipe_args(recipe)
     c = sub.add_parser(
@@ -1519,9 +1660,13 @@ def main():
     if hasattr(args, "out"):
         args.out = os.path.abspath(args.out)  # run.sh runs in the delugemu checkout
     check_args(args)
-    command = {"smoke": smoke, "leak": leak, "capture": capture, "check": check_wavs}[
-        args.command
-    ]
+    command = {
+        "smoke": smoke,
+        "leak": leak,
+        "golden": golden,
+        "capture": capture,
+        "check": check_wavs,
+    }[args.command]
     sys.exit(command(args))
 
 
