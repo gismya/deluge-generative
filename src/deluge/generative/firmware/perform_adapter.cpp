@@ -19,6 +19,7 @@
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/perform_midi.h"
 #include "generative/firmware/retirements.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
@@ -69,11 +70,13 @@ void PerformAdapter::stopPiece() {
 		driver_.stop(sink_);
 	}
 	sink_.allNotesOff();
-	soundControls.restoreHomes(); // every sound back as its preset was, or as the player left it while stopped
+	sidechainPump.release(sink_.roster); // the next start's pump ducks again (spec §8.9)
+	soundControls.restoreHomes();        // every sound back as its preset was, or as the player left it while stopped
 }
 
 void PerformAdapter::dropSong() {
 	soundControls.forget();
+	sidechainPump.forget();
 	soundSwaps.forgetSong();
 	transitions.forget();
 	retirements.forget();

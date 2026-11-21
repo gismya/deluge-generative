@@ -46,6 +46,9 @@ bool PerformView::opened() {
 	thinDrivePart_ = -1;
 	macroHolds_ = {};
 	fillHolds_ = {};
+	punchHolds_.clear(); // and no punch-in on (PerformSteering::enter())
+	std::fill(std::begin(stockHeld_), std::end(stockHeld_), 0);
+	stockLayoutLoaded_ = false;
 #if ENABLE_SYSEX_TEST
 	shownRings_[0] = '\0';
 	shownKeyboard_[0] = '\0';
@@ -162,14 +165,28 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SESSION_VIEW || b == CLIP_VIEW || b == KEYBOARD) {
-		// SONG, CLIP and KEYBOARD switch the grid page; the gold knobs stay where they are (spec §13.5).
+		// SONG, CLIP and KEYBOARD switch the grid page; the gold knobs stay where they are. KEYBOARD on the KEYBOARD
+		// page flips to stock Performance view, and back (spec §13.5).
 		if (on) {
-			page_ = b == CLIP_VIEW ? Page::Clip : b == KEYBOARD ? Page::Keyboard : Page::Song;
-			TEST_EVENT("gen_page %s", page_ == Page::Clip ? "CLIP" : page_ == Page::Keyboard ? "KEYBOARD" : "SONG");
+			if (b == KEYBOARD && page_ == Page::Keyboard) {
+				if (inCardRoutine && !stockLayoutLoaded_) {
+					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // the layout's first load reads the card
+				}
+				page_ = Page::Performance;
+				enterPerformancePage();
+			}
+			else {
+				page_ = b == CLIP_VIEW ? Page::Clip : b == KEYBOARD ? Page::Keyboard : Page::Song;
+			}
+			TEST_EVENT("gen_page %s", page_ == Page::Clip          ? "CLIP"
+			                          : page_ == Page::Keyboard    ? "KEYBOARD"
+			                          : page_ == Page::Performance ? "PERFORMANCE"
+			                                                       : "SONG");
 			assertPageLeds();
 			refreshArcMap();
 			refreshFaders();
 			refreshKeyboardPage();
+			refreshPerformancePage();
 			refreshScreen();
 		}
 		return ActionResult::DEALT_WITH;
@@ -365,7 +382,19 @@ void setLedIfChanged(IndicatorLED led, bool on) {
 void PerformView::assertPageLeds() {
 	setLedIfChanged(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
 	setLedIfChanged(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
-	setLedIfChanged(IndicatorLED::KEYBOARD, page_ == Page::Keyboard);
+	// KEYBOARD: lit on the KEYBOARD page, blinking on stock Performance view (spec §13.5).
+	const bool keyboardBlinks = indicator_leds::getLedBlinkerIndex(IndicatorLED::KEYBOARD) != 255;
+	if (page_ == Page::Performance) {
+		if (!keyboardBlinks) {
+			indicator_leds::blinkLed(IndicatorLED::KEYBOARD);
+		}
+	}
+	else if (keyboardBlinks) {
+		indicator_leds::setLedState(IndicatorLED::KEYBOARD, page_ == Page::Keyboard); // stops the blink
+	}
+	else {
+		setLedIfChanged(IndicatorLED::KEYBOARD, page_ == Page::Keyboard);
+	}
 	setLedIfChanged(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
 	// CROSS-SCREEN: lit while the focused part is frozen (spec §13.5).
 	setLedIfChanged(IndicatorLED::CROSS_SCREEN_EDIT, partFrozen(focusedPart()));
@@ -401,6 +430,14 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		songPadAction(y, false);
 		refreshArcMap();
 		refreshFaders();
+	}
+	else if (velocity == 0 && performancePadHeld(x, y)) {
+		performancePadAction(x, y, false); // pressed on stock Performance view: its release goes there on any page
+	}
+	else if (page_ == Page::Performance) {
+		if (velocity != 0) {
+			performancePadAction(x, y, true);
+		}
 	}
 	else if (page_ == Page::Keyboard || (velocity == 0 && keyboardPadHeld(x, y))) {
 		// A KEYBOARD pad held when the page changed lets go there, as a part row does.
@@ -475,6 +512,9 @@ void PerformView::graphicsRoutine() {
 	refreshSidebar();
 	refreshArcMap();
 	refreshKeyboardPage();
+	if (AudioEngine::audioSampleTimer - performanceAt_ >= kFaderRefreshSamples) {
+		refreshPerformancePage(); // a knob or MIDI turn moves a column's value
+	}
 	if (AudioEngine::audioSampleTimer - fadersAt_ >= kFaderRefreshSamples) {
 		refreshFaders();
 	}

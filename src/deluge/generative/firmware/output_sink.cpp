@@ -20,6 +20,7 @@
 
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/riser_timing.h"
@@ -146,6 +147,12 @@ void OutputSink::play(const Event& event) {
 	case EventKind::Sound:
 		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
 		soundSwaps.swap(event);
+		if (sidechainPump.on()) {
+			sidechainPump.set(roster, true); // the part's new Output ducks too (spec §8.9)
+		}
+		break;
+	case EventKind::Pump:
+		sidechainPump.set(roster, event.pumps());
 		break;
 	}
 }

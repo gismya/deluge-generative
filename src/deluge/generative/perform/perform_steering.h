@@ -379,6 +379,10 @@ private:
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
 	bool fillShift_ = false;
+	/// The punch-ins on (PunchIns' fields), in what was padding: the steering's size moves PerformAdapter::sink_,
+	/// which the start step's modulo-8 `static_assert` pins (implementation-notes/perform-ui.md).
+	uint8_t punchEffects_ = 0;
+	uint16_t punchLanes_ = 0;
 	/// What the core's macros were steered with, and the KEYBOARD faders held: a start drops the queue.
 	MacroSteering macroSteering_;
 	uint32_t pieces_ = 0;
@@ -390,9 +394,6 @@ private:
 	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
 	/// step pins (PerformAdapter::incomingStarts()).
 	uint8_t octavePresses_ = 0;
-	/// The punch-ins on (PunchIns' fields): bytes in what was padding, as octavePresses_ is.
-	uint8_t punchEffects_ = 0;
-	uint16_t punchLanes_ = 0;
 };
 
 // ---- Definitions ----

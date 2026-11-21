@@ -153,8 +153,8 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 		std::copy_n(in.levels, kNumSoundControls, out.controls);
 		composePartTitle(in.title, out);
 	}
-	else if (in.page == GridPage::Keyboard) {
-		// MACROS: each macro's centre, and where the Arc has it (spec §13.5).
+	else if (in.page == GridPage::Keyboard || in.page == GridPage::Performance) {
+		// MACROS: each macro's centre, and where the Arc has it, on both of KEYBOARD's pages (spec §13.5).
 		out.macros = true;
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const auto macro = static_cast<Macro>(m);

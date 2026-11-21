@@ -147,8 +147,23 @@ private:
 #if ENABLE_SYSEX_TEST
 	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
 #endif
-	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it.
+	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it; KEYBOARD again flips to stock Performance view.
 	using Page = deluge::generative::perform::GridPage;
+	/// A punch-in pad on the KEYBOARD page (spec §8.9, §13.5): the 300 ms rule, a tap latching and a second tap or a
+	/// hold letting go. `lane` is the Drums lane a LaneMute pad stands for.
+	void punchPadAction(deluge::generative::PunchIn punch, deluge::generative::Lane lane, bool on);
+	/// The Drums part's lanes in its order, as the KEYBOARD page lays its mute pads out; the count, 0 with none.
+	int32_t drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const;
+	/// KEYBOARD's second page (spec §13.5): stock PerformanceView's song FX pads, its layout and logic hosted over
+	/// Perform (perform_view_performance.cpp). Loads the layout the first time in an entry.
+	void enterPerformancePage();
+	/// A main pad on the stock Performance view page, or a release of one pressed there whatever the page is now.
+	void performancePadAction(int32_t x, int32_t y, bool on);
+	/// Whether main pad (`x`, `y`) was pressed on the stock Performance view page and not let go yet.
+	[[nodiscard]] bool performancePadHeld(int32_t x, int32_t y) const { return (stockHeld_[x] >> y & 1) != 0; }
+	/// Renders stock PerformanceView's pads into the main pad cache, redrawing the rows that changed. On a press,
+	/// and a few times a second for a knob or MIDI turn of a column's param.
+	void refreshPerformancePage();
 	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
 	/// until let go; a FILL pad holds FILL.
 	void keyboardPadAction(int32_t x, int32_t y, bool on);
@@ -209,6 +224,7 @@ private:
 	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {};       ///< The last gen_faders text.
 	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};         ///< The last gen_clip text.
 	char shownKeyboard_[deluge::generative::perform::kKeyboardTextChars + 1] = {}; ///< The last gen_keyboard text.
+	char shownPunches_[deluge::generative::perform::kPunchTextChars + 1] = {};     ///< The last gen_punch text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -312,6 +328,15 @@ private:
 	deluge::generative::perform::FillHolds fillHolds_;
 	/// The KEYBOARD page's macro faders held, and since when (audioSampleTimer).
 	deluge::generative::perform::MacroFaderHolds macroHolds_;
+	/// The KEYBOARD page's punch-in pads: which are on, latched or held (spec §13.5).
+	deluge::generative::perform::PunchHolds punchHolds_;
+	/// Per column, a bit per row (firmware y) of the stock Performance view's pads pressed and not let go: their
+	/// releases go to it on any page, as a KEYBOARD pad's do.
+	uint8_t stockHeld_[kDisplayWidth] = {};
+	/// Stock PerformanceView's layout has been loaded in this entry (enterPerformancePage()).
+	bool stockLayoutLoaded_ = false;
+	/// When the stock Performance view page was last rendered (audioSampleTimer).
+	uint32_t performanceAt_ = 0;
 	/// soundSwaps.swaps() when the view last reacted to a swap: the gold knobs follow the part's new clip.
 	uint32_t seenSwaps_ = 0;
 	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
