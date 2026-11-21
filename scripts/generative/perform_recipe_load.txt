@@ -124,7 +124,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
-expect event gen_recipe_load version older file=1 genre=2
+expect event gen_recipe_load version older file=1 genre=3
 expect ui=context_menu
 button SELECT_ENC down
 wait 50

@@ -88,7 +88,7 @@ otherwise.
   - A version bump of techno-acid fails three delugemu scripts, not any harness spec: the Recipe-load fixtures
     (`scripts/generative/fixtures/recipe_load/RECIPES/LOAD OK`, `MISSING`, `BROKEN`) hold its current version, and
     `compose_recipe_load.txt`, `perform_recipe_load.txt` and `perform_generative_menu.txt` expect it
-    (`version=N`). Bump them with it (#423). The identity specs of House, Dub, Psytrance and Ambient pin their versions.
+    (`version=N`, `genre=N`). Bump them with it (#423). The identity specs of House, Dub, Psytrance and Ambient pin their versions.
   - A `kFormat` bump doesn't excuse a changed `fingerprint` line whose parenthesized text stayed the same: the
     fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits
     that text in `goldenText()` along with the `kFormat` bump.
