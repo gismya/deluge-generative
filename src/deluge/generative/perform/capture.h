@@ -110,10 +110,20 @@ void leaveMenu(const SteeringLog& log, LeaveMenu& out);
 /// The pieces `option` keeps, in set order: the first after `after` (-1 for the first), or -1 past the last.
 [[nodiscard]] int32_t nextKept(const SteeringLog& log, LeaveOption option, int32_t after);
 
-/// A Capture song's name (spec §17.7): Compose's (`GEN <GENRE> <seed code>`) plus ` LIVE`, and for the second song
-/// of a split piece on (`song` from 1) its number: `… LIVE 2`.
-constexpr int32_t kCaptureNameChars = 4 + kMaxGenreOledName + 1 + kSeedCodeChars + 5 + 4;
-void captureSongName(const Genre& genre, uint32_t seed, int32_t song, char (&out)[kCaptureNameChars + 1]);
+/// A Capture song's name (spec §17.7): Compose's (`GEN <GENRE> <seed code>`) plus ` LIVE`; with `letter` (0 none, 1
+/// for B up to kCaptureLetters - 1 for Z) the letter of a name the card had already, `… LIVE B`; and for a split
+/// piece's second song on (`song` from 1) its number, `… LIVE 2` or `… LIVE B 2`. Numbers are a piece's songs only.
+constexpr int32_t kCaptureLetters = 26; ///< None, then B to Z
+constexpr int32_t kCaptureNameChars = 4 + kMaxGenreOledName + 1 + kSeedCodeChars + 5 + 2 + 4;
+void captureSongName(const Genre& genre, uint32_t seed, int32_t letter, int32_t song,
+                     char (&out)[kCaptureNameChars + 1]);
+/// The letter whose set a song file `stem` (its name without the extension) is in, for Capture songs named `base`
+/// (captureSongName() with no letter and song 1, `GEN ACID TECHNO 1A2B3C4 LIVE`): `base` or `base N` is 0, `base B`
+/// or `base B N` is 1, and so on, any case. -1 for any other file.
+[[nodiscard]] int32_t captureLetterOf(const char* base, const char* stem);
+/// The first letter whose whole set is free (spec §17.7): bit L of `taken` set for each letter a file on the card is
+/// in. -1 when every one is taken.
+[[nodiscard]] int32_t freeCaptureLetter(uint32_t taken);
 
 /// The Capture screen's title (spec §17.7): `BUILDING 2 OF 3`, `SAVING 2 OF 3`; and after a failure `1 OF 3 SAVED`.
 /// It counts songs: a split piece adds one as it splits.

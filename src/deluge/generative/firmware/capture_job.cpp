@@ -169,6 +169,15 @@ private:
 		recipe_ = &start.recipe;
 		seed_ = start.seed;
 		pieceSong_ = 1;
+		// The piece's names (spec §17.7): the first letter none of whose songs is on the card, so numbers are only
+		// ever one piece's songs. Read once a piece: its own songs are its letter's.
+		char base[perform::kCaptureNameChars + 1];
+		perform::captureSongName(*genre_, seed_, 0, 1, base);
+		letter_ = perform::freeCaptureLetter(captureLettersTaken(base));
+		if (letter_ < 0) {
+			error_ = Error::FILE_ALREADY_EXISTS; // every letter's set is on the card
+			return JobOutcome::Failed;
+		}
 		SoundPicks picks;
 		char path[kMaxSoundPath];
 		for (int32_t slot = 0; slot < kPickSlots; slot++) {
@@ -292,7 +301,7 @@ private:
 	/// The song built is swapped in stopped, named and saved (spec §17.7). A failed save leaves it current, unsaved.
 	Error finishSong() {
 		char name[perform::kCaptureNameChars + 1];
-		perform::captureSongName(*genre_, seed_, pieceSong_, name);
+		perform::captureSongName(*genre_, seed_, letter_, pieceSong_, name);
 		building_->name.set(name);
 		stopForSwap();
 		deleteCurrentSong();
@@ -301,10 +310,9 @@ private:
 		showScreen();
 		stage_ = perform::CaptureStage::Saving;
 		renderUIsForOled();
-		char saved[kMaxSongFileName + 1];
-		const Error error = saveCurrentSong(name, saved); // a save once started finishes, BACK or not
+		const Error error = saveCurrentSong(name); // a save once started finishes, BACK or not
 		TEST_EVENT("gen_capture_song n=%ld of=%ld error=%d name=%s", static_cast<long>(song_),
-		           static_cast<long>(songs_), static_cast<int>(error), error == Error::NONE ? saved : name);
+		           static_cast<long>(songs_), static_cast<int>(error), name);
 		if (error != Error::NONE) {
 			return error;
 		}
@@ -344,6 +352,7 @@ private:
 	int32_t song_ = 0;      ///< The song being built or saved, from 1
 	int32_t songs_ = 0;     ///< Songs in all: a piece each, and one more at each split
 	int32_t pieceSong_ = 1; ///< The song's number in its piece: LIVE, LIVE 2…
+	int32_t letter_ = 0;    ///< The piece's letter: 0 none, 1 B… (perform::captureSongName())
 	int32_t saved_ = 0;
 	int32_t bars_ = 0;
 	int32_t expected_ = 0;

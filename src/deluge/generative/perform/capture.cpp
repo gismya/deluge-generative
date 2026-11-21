@@ -163,14 +163,70 @@ void leaveMenu(const SteeringLog& log, LeaveMenu& out) {
 	add(LeaveOption::Cancel);
 }
 
-void captureSongName(const Genre& genre, uint32_t seed, int32_t song, char (&out)[kCaptureNameChars + 1]) {
+void captureSongName(const Genre& genre, uint32_t seed, int32_t letter, int32_t song,
+                     char (&out)[kCaptureNameChars + 1]) {
 	char code[kSeedCodeChars + 1];
 	seedCode(seed, code);
 	Text text(out);
 	text.add("GEN ").add(genre.oledName).add(" ").add(code).add(" LIVE");
+	if (letter > 0 && letter < kCaptureLetters) {
+		const char mark[] = {' ', static_cast<char>('A' + letter), 0};
+		text.add(mark);
+	}
 	if (song > 1) {
 		text.add(" ").add(song);
 	}
+}
+
+namespace {
+
+char upper(char c) {
+	return c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
+}
+
+/// Whether `rest` is empty or ` N`, N one or more digits: a piece's first song or a later one.
+bool songNumber(const char* rest) {
+	if (rest[0] == 0) {
+		return true;
+	}
+	if (rest[0] != ' ' || rest[1] == 0) {
+		return false;
+	}
+	for (const char* c = rest + 1; *c != 0; c++) {
+		if (*c < '0' || *c > '9') {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+int32_t captureLetterOf(const char* base, const char* stem) {
+	int32_t i = 0;
+	for (; base[i] != 0; i++) {
+		if (upper(stem[i]) != upper(base[i])) {
+			return -1;
+		}
+	}
+	const char* rest = stem + i;
+	if (songNumber(rest)) {
+		return 0;
+	}
+	const char letter = upper(rest[1]);
+	if (rest[0] != ' ' || letter < 'B' || letter > 'Z' || (rest[2] != 0 && rest[2] != ' ')) {
+		return -1;
+	}
+	return songNumber(rest + 2) ? letter - 'A' : -1;
+}
+
+int32_t freeCaptureLetter(uint32_t taken) {
+	for (int32_t letter = 0; letter < kCaptureLetters; letter++) {
+		if ((taken & (1U << letter)) == 0) {
+			return letter;
+		}
+	}
+	return -1;
 }
 
 void captureTitle(CaptureStage stage, int32_t song, int32_t songs, char (&out)[kCaptureTitleChars + 1]) {

@@ -22,6 +22,7 @@
 #include "generative/perform/capture.h"
 #include "harness.h"
 #include <cppspec.hpp>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -273,15 +274,57 @@ describe capture_marks("Capture marks", $ {
 			expect(kept(b.log, LeaveOption::Marked) == std::vector<int32_t>{0}).to_be_true();
 		});
 
-		it("names a song GEN <GENRE> <seed code> LIVE, and a split piece's later songs LIVE 2, LIVE 3", _ {
-			char name[kCaptureNameChars + 1];
-			captureSongName(genres::technoAcid, 0x1A2B3C4, 1, name);
+		it("names a song GEN <GENRE> <seed code> LIVE, a split piece's later songs LIVE 2, and a clash LIVE B, B 2", _ {
 			char code[kSeedCodeChars + 1];
 			seedCode(0x1A2B3C4, code);
-			expect(std::string{name}).to_equal("GEN " + std::string{genres::technoAcid.oledName} + " " + code + " LIVE");
-			captureSongName(genres::technoAcid, 0x1A2B3C4, 3, name);
-			expect(std::string{name}).to_equal("GEN " + std::string{genres::technoAcid.oledName} + " " + code +
-			                                   " LIVE 3");
+			const std::string base = "GEN " + std::string{genres::technoAcid.oledName} + " " + code + " LIVE";
+			char name[kCaptureNameChars + 1];
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 0, 1, name);
+			expect(std::string{name}).to_equal(base);
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 0, 3, name);
+			expect(std::string{name}).to_equal(base + " 3");
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 1, 1, name);
+			expect(std::string{name}).to_equal(base + " B");
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 2, 2, name);
+			expect(std::string{name}).to_equal(base + " C 2");
+			captureSongName(genres::technoAcid, 0x1A2B3C4, kCaptureLetters - 1, 99, name);
+			expect(std::string{name}).to_equal(base + " Z 99");
+		});
+
+		it("fits the longest genre's name with a letter and a two-digit song number", _ {
+			for (const Genre* genre : allGenres()) {
+				char name[kCaptureNameChars + 1];
+				captureSongName(*genre, 0xFFFFFFFF, kCaptureLetters - 1, 99, name);
+				expect(std::strlen(name) < sizeof(name) - 1).to_be_true();
+				expect(std::string{name}.ends_with(" LIVE Z 99")).to_be_true();
+			}
+		});
+
+		it("finds which letter's set a song file is in: the name or its numbered songs, any case", _ {
+			const char* base = "GEN ACID TECHNO 1A2B3C4 LIVE";
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE")).to_equal(0);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE 2")).to_equal(0);
+			expect(captureLetterOf(base, "gen acid techno 1a2b3c4 live 12")).to_equal(0);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE B")).to_equal(1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE B 3")).to_equal(1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE z")).to_equal(25);
+			// Not Capture's: A isn't a letter it gives, nor two letters, a word, a bare space or another seed.
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE A")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE BB")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE MIX")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE ")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIVE B ")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4 LIV")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 9Z9Z9Z9 LIVE")).to_equal(-1);
+			expect(captureLetterOf(base, "GEN ACID TECHNO 1A2B3C4")).to_equal(-1);
+		});
+
+		it("takes the first letter whose whole set is free: none, then B, C, up to Z", _ {
+			expect(freeCaptureLetter(0)).to_equal(0);
+			expect(freeCaptureLetter(1U << 0)).to_equal(1);
+			expect(freeCaptureLetter((1U << 0) | (1U << 1) | (1U << 3))).to_equal(2); // a gap is taken
+			expect(freeCaptureLetter((1U << 1))).to_equal(0);
+			expect(freeCaptureLetter((1U << kCaptureLetters) - 1)).to_equal(-1);
 		});
 
 		it("titles the screen BUILDING n OF m, SAVING n OF m, and after a failure n OF m SAVED", _ {

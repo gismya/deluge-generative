@@ -25,14 +25,17 @@
 
 namespace deluge::generative::firmware {
 
-/// The longest song name saveCurrentSong() takes, with room for a clash's ` 9999`.
+/// The longest song name saveCurrentSong() takes.
 constexpr int32_t kMaxSongFileName = 48;
 
-/// Saves the current song in SONGS as `name`, as stock's save does (SaveSongUI::performSave()), never over a file: a
-/// name already on the card takes the firmware's next free variation (`NAME 2`, Browser's default-name rule). On
-/// success the song has the name it was saved as and SONGS as its folder, and `saved` holds the name. On failure the
-/// file it began is deleted (stock leaves a truncated one) and the song is as it was. Card work: task context, not
-/// in a card routine.
-Error saveCurrentSong(const char* name, char (&saved)[kMaxSongFileName + 1]);
+/// Saves the current song in SONGS as `name`, as stock's save does (SaveSongUI::performSave()), never over a file:
+/// FILE_ALREADY_EXISTS if `name` is on the card already (Capture picks a free name first, captureLettersTaken()). On
+/// success the song has `name` and SONGS as its folder. On failure the file it began is deleted (stock leaves a
+/// truncated one) and the song is as it was. Card work: task context, not in a card routine.
+Error saveCurrentSong(const char* name);
+
+/// Capture's names on the card (spec §17.7): bit L set for each letter L whose set (perform::captureLetterOf()) has a
+/// song file in SONGS, for songs named `base`. Errors read as nothing taken: the save then refuses a name it finds.
+uint32_t captureLettersTaken(const char* base);
 
 } // namespace deluge::generative::firmware

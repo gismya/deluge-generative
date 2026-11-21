@@ -18,7 +18,7 @@
 #include "generative/firmware/song_file.h"
 #include "extern.h"
 #include "fatfs/ff.h"
-#include "gui/ui/browser/default_name.h"
+#include "generative/perform/capture.h"
 #include "model/settings/runtime_feature_settings.h"
 #include "model/song/song.h"
 #include "storage/flash_storage.h"
@@ -26,7 +26,6 @@
 #include "util/functions.h"
 #include <cstdio>
 #include <cstring>
-#include <string>
 
 namespace deluge::generative::firmware {
 
@@ -43,52 +42,6 @@ int32_t songStemLength(const char* name) {
 	return static_cast<int32_t>(dot - name);
 }
 
-/// SONGS as nextDefaultName() reads it: the whole folder, straight from the card.
-class SongFolder final : public deluge::gui::browser::FileListView {
-public:
-	[[nodiscard]] std::string highestNumberedName(char const* prefix) const override {
-		std::string highest;
-		const auto prefixLength = static_cast<int32_t>(std::strlen(prefix));
-		forEachSong([&](const char* name, int32_t stem) {
-			if (stem <= prefixLength || strncasecmp(name, prefix, prefixLength) != 0) {
-				return;
-			}
-			for (int32_t i = prefixLength; i < stem; i++) {
-				if (name[i] < '0' || name[i] > '9') {
-					return;
-				}
-			}
-			if (highest.empty() || strcmpspecial(name, highest.c_str()) > 0) {
-				highest = name;
-			}
-		});
-		return highest;
-	}
-
-	/// Songs named by Capture never take letter variations (they aren't SONGnnn).
-	[[nodiscard]] uint32_t takenLetterSuffixes(char const* /*stem*/) const override { return 0; }
-
-private:
-	template <typename Found>
-	static void forEachSong(Found found) {
-		DIR dir;
-		if (f_opendir(&dir, kSongFolder) != FR_OK) {
-			return;
-		}
-		FILINFO info;
-		while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
-			if ((info.fattrib & AM_DIR) != 0 || info.fname[0] == '.') {
-				continue;
-			}
-			const int32_t stem = songStemLength(info.fname);
-			if (stem > 0) {
-				found(info.fname, stem);
-			}
-		}
-		f_closedir(&dir);
-	}
-};
-
 bool songExists(const char* name) {
 	char path[kMaxSongFileName + 16];
 	for (const char* extension : {".XML", ".Json"}) {
@@ -102,7 +55,37 @@ bool songExists(const char* name) {
 
 } // namespace
 
-Error saveCurrentSong(const char* name, char (&saved)[kMaxSongFileName + 1]) {
+uint32_t captureLettersTaken(const char* base) {
+	uint32_t taken = 0;
+	if (StorageManager::initSD() != Error::NONE) {
+		return taken;
+	}
+	DIR dir;
+	if (f_opendir(&dir, kSongFolder) != FR_OK) {
+		return taken; // no SONGS yet: every name is free
+	}
+	FILINFO info;
+	char stem[sizeof(info.fname)];
+	while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
+		if ((info.fattrib & AM_DIR) != 0 || info.fname[0] == '.') {
+			continue;
+		}
+		const int32_t length = songStemLength(info.fname);
+		if (length <= 0) {
+			continue;
+		}
+		std::memcpy(stem, info.fname, length);
+		stem[length] = 0;
+		const int32_t letter = perform::captureLetterOf(base, stem);
+		if (letter >= 0) {
+			taken |= 1U << letter;
+		}
+	}
+	f_closedir(&dir);
+	return taken;
+}
+
+Error saveCurrentSong(const char* name) {
 	Error error = StorageManager::initSD();
 	if (error != Error::NONE) {
 		return error;
@@ -111,17 +94,11 @@ Error saveCurrentSong(const char* name, char (&saved)[kMaxSongFileName + 1]) {
 	if (made != FR_OK && made != FR_EXIST) {
 		return fresultToDelugeErrorCode(made);
 	}
-	snprintf(saved, sizeof(saved), "%s", name);
-	if (songExists(saved)) {
-		// The firmware's normal rule for a name already taken (spec §17.7): its next free variation.
-		const std::string next = deluge::gui::browser::nextDefaultName(saved, "", SongFolder{});
-		if (next == saved || next.size() > kMaxSongFileName) {
-			return Error::FILE_ALREADY_EXISTS;
-		}
-		snprintf(saved, sizeof(saved), "%s", next.c_str());
+	if (std::strlen(name) > static_cast<size_t>(kMaxSongFileName) || songExists(name)) {
+		return Error::FILE_ALREADY_EXISTS;
 	}
 	char path[kMaxSongFileName + 16];
-	snprintf(path, sizeof(path), "%s/%s%s", kSongFolder, saved, writeJsonFlag ? ".Json" : ".XML");
+	snprintf(path, sizeof(path), "%s/%s%s", kSongFolder, name, writeJsonFlag ? ".Json" : ".XML");
 
 	// As SaveSongUI::performSave() writes a new file.
 	error = writeJsonFlag ? StorageManager::createJsonFile(path, smJsonSerializer, false, false)
@@ -136,7 +113,7 @@ Error saveCurrentSong(const char* name, char (&saved)[kMaxSongFileName + 1]) {
 		f_unlink(path); // stock leaves a truncated file; a pulled card refuses this too, and that's fine
 		return error;
 	}
-	currentSong->name.set(saved);
+	currentSong->name.set(name);
 	currentSong->dirPath.set(kSongFolder);
 	if (FlashStorage::defaultStartupSongMode == StartupSongMode::LASTSAVED) {
 		runtimeFeatureSettings.writeSettingsToFile();

@@ -1,8 +1,8 @@
 # Building on leave (#146, spec §13.8, §17.7) over the sysex test port: the leave menu's options follow the marks, and
 # a keep choice builds the kept pieces behind the teardown, one song at a time, saves each to SONGS/ as
-# GEN <GENRE> <seed code> LIVE (a name already on the card takes the next free variation, LIVE 2), and lands on the last
-# saved song in arranger view. The songs then load back on a Deluge with nothing else in memory. Writes two songs to
-# SONGS/ (their names below; a run on a Deluge deletes them after). Runs on a Deluge (deluge_probe.py session) or in
+# GEN <GENRE> <seed code> LIVE (a name already on the card takes a letter: LIVE B, LIVE C), and lands on the last
+# saved song in arranger view. The songs then load back on a Deluge with nothing else in memory. Writes three songs to
+# SONGS/ (GEN ACID TECHNO 3E9D8DZ LIVE, LIVE B and LIVE C; a run on a Deluge deletes them after). Runs on a Deluge (deluge_probe.py session) or in
 # delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # gen_leave_menu open: the menu is up. gen_capture_begin keep=N: Capture is queued behind the teardown (LeaveOption N).
@@ -97,8 +97,8 @@ expect event gen_left within=15 since=mark
 expect event gen_capture_begin keep=0 within=10 since=mark
 expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=[1-9]\d* cuts=[1-9]\d* tracks=1 dropped=0 / within=120 since=mark
 expect event /^gen_capture_song n=1 of=2 error=0 name=GEN .+ LIVE$/ within=60 since=mark
-expect event /^gen_capture_song n=2 of=2 error=0 name=GEN .+ LIVE 2$/ within=180 since=mark
-expect event /^gen_capture_end done songs=2 saved=2 .* name=GEN .+ LIVE 2$/ within=60 since=mark
+expect event /^gen_capture_song n=2 of=2 error=0 name=GEN .+ LIVE B$/ within=180 since=mark
+expect event /^gen_capture_end done songs=2 saved=2 .* name=GEN .+ LIVE B$/ within=60 since=mark
 expect ui=arranger within=10
 expect root_ui=arranger within=10
 expect playing=false
@@ -117,8 +117,29 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=false within=5
-load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE 2.XML
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE B.XML
 expect event /^song_loaded / within=60
+expect root_ui=arranger within=10
+
+# ---- The same seed captured again (hold entropy): LIVE and LIVE B are on the card, so its song is LIVE C ----
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+wait 2000
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+# LEAVE, KEEP: LAST first
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_capture_begin keep=3 within=20 since=mark
+expect event gen_capture_song n=1 of=1 error=0 name=GEN ACID TECHNO 3E9D8DZ LIVE C within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 .* name=GEN ACID TECHNO 3E9D8DZ LIVE C$/ within=30 since=mark
 expect root_ui=arranger within=10
 
 # ---- The scripts' shared leave keeps nothing after a piece: NOTHING, with no Capture and nothing written ----
