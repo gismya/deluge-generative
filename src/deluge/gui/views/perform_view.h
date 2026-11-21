@@ -313,6 +313,8 @@ private:
 	uint32_t seenSwaps_ = 0;
 	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
 	uint32_t seenStarts_ = 0;
+	/// The restarts seen (PerformAdapter::restarts()): the Arc map goes back to now when one lands.
+	uint32_t seenRestarts_ = 0;
 	/// What the SONG page keeps between frames (generative/perform/arc_map.h): the Arc plan and the queue as last
 	/// worked out, the X scroll and the now column's flash window.
 	deluge::generative::perform::ArcMapState arc_;

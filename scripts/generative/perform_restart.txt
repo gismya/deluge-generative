@@ -1,0 +1,197 @@
+# Restart AS IT IS (#413, spec §13.2, §13.5, §13.6) over the sysex test port: X+PLAY while playing queues a restart to
+# the next bar line (RESTART popup, RST in the status line), where the piece starts again at bar 1 with its Intro; BACK
+# or a second X+PLAY cancels it; it is refused while a transition is pending, and a transition is refused while it
+# waits; RESTART ▸ AS IT IS in the Perform menu does the same; stopped, X+PLAY is PLAY; under an external clock the
+# clock keeps running and the piece restarts on the master's bar line. Runs on a Deluge (deluge_probe.py session) or
+# in delugemu (test_port_emu.py). The external-clock part sends MIDI clock from the host. Start as after boot:
+# transport stopped, the current clip a synth or kit clip.
+#
+# Events: gen_restart_press queued|cancelled|refused|stopped: what X+PLAY or AS IT IS did. gen_restart as_it_is
+# tempo=: the restart reached its line and the piece started again. gen_section <SECTION> <n> clip_pos= bar=: a
+# Section started; clip_pos=0 is on the stock clips' bar line. Menus remember their last row, so a row is chosen from
+# the top (encoder 3 -9 first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE,
+# KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESTART.
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/generative/perform/perform_steering.h src/deluge/generative/perform/queue_text.*
+# covers: src/deluge/generative/core/steering.h src/deluge/generative/core/generator_steering.cpp
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/hid/buttons.cpp
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=10
+expect event gen_phrase bar= within=60
+
+# ---- X+PLAY while playing: queued to the next bar line, then the piece starts again from bar 1 with its Intro ----
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+expect event /^gen_status [^|]*\|>RST/ within=5
+expect event gen_restart as_it_is within=15
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+expect playing=true
+
+# ---- BACK cancels a waiting restart, and so does a second X+PLAY ----
+expect event gen_phrase bar= within=60
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+button BACK down
+wait 30
+button BACK up
+expect event gen_back_tap
+expect no_event gen_restart as_it_is within=8
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 200
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+expect event gen_restart_press cancelled
+expect no_event gen_restart as_it_is within=8
+expect playing=true
+
+# ---- A transition is refused while a restart waits (CHANGE PENDING), and the restart lands ----
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition request style=0 refused restart
+expect event gen_confirm regenerate style=0 result=1
+expect event gen_restart as_it_is within=15
+expect ui=generative_perform
+
+# ---- A restart is refused while a transition is pending: its preload held, then BACK cancels it ----
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press refused
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition_preload cancelled within=5
+expect no_event gen_restart as_it_is within=5
+
+# ---- RESTART ▸ AS IT IS: as X+PLAY, from the Perform menu, which closes ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -9
+encoder 3 6
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press queued
+expect ui=generative_perform
+expect event gen_restart as_it_is within=15
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+# Back to the top row, so a later script's `encoder 3 -5` still reaches the top
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -9
+button BACK down
+wait 30
+button BACK up
+expect ui=generative_perform
+
+# ---- Stopped, X+PLAY is PLAY: the Current Recipe from its Intro ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press stopped
+expect playing=true
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- External clock: the clock keeps running, and the piece starts again on the master's bar line ----
+hold ramps
+clock 120
+midi fa
+expect playing=true
+expect event gen_section INTRO 0 clip_pos=0 within=5
+expect event gen_phrase bar= within=60
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+expect event gen_restart as_it_is within=15
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+expect playing=true
+midi fc
+expect playing=false
+clock off
+release ramps

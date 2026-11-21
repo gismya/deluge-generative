@@ -359,6 +359,20 @@ public:
 	MenuItem* selectButtonPress() override { return confirmTransition(currentRecipe.recipe.genre); }
 };
 
+/// RESTART ▸ AS IT IS (spec §13.2, §13.6): as X+PLAY, the piece starts again at the next bar line from the Current
+/// Recipe as it is, or at once while stopped. The menu closes, so the popup and the queue show on the Perform page.
+/// AS IT BEGAN (the piece header's state, M4 Capture) is a second row beside it, pressing its own restart.
+class RestartAsItIsItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		soundEditor.exitCompletely();
+		performAdapter.pressRestart();
+		return NO_NAVIGATION;
+	}
+};
+
 /// A genre of GENRE ▸ (genre_rows.h). The genre playing is labelled `= REGEN`, and picking it regenerates; picking
 /// another is a genre change (spec §9.7, §13.6). Slots with no genre (a parent's row, or past the last) hide
 /// themselves.
@@ -387,6 +401,8 @@ private:
 
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
+PLACE_SDRAM_BSS RestartAsItIsItem restartAsItIsItem{l10n::String::STRING_FOR_AS_IT_IS};
+PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem}};
 PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
@@ -428,7 +444,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
     {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
-     &octavesMenu},
+     &octavesMenu, &restartMenu},
 };
 
 void refreshPerformMenu() {

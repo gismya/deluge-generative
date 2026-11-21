@@ -253,6 +253,15 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		stopAt_ = nextStep_ + transitionSteps(command);
 		return true;
 	}
+	case CommandKind::Restart:
+		// The piece decides nothing more: every note still sounding ends on this line, and the driver starts it again
+		// here (spec §13.2). Never logged: it ends the piece.
+		if (stopAt_ != kNever) {
+			return false;
+		}
+		stopAt_ = nextStep_;
+		restartLanded_ = true;
+		return false;
 	case CommandKind::SetFill: {
 		const std::span<const FillEntry> fills = genre_->fills;
 		if (command.value == kFillReleased) {
@@ -386,6 +395,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 			return true;
 		}
 		break;
+	case CommandKind::Restart:
+		// 0 cancels the one waiting; a press while one waits keeps it. Nothing once a transition or restart landed.
+		if (command.value == 0 || stopAt_ != kNever) {
+			pending_.cancel(command);
+			return true;
+		}
+		if (pending_.waiting(command) != nullptr) {
+			return true;
+		}
+		command.value = 1;
+		break;
 	case CommandKind::Transition:
 		if (command.value == kCancelTransition) {
 			pending_.cancel(command); // only while it waits: once landed it plays on (spec §9.7)
@@ -425,7 +445,8 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
 	case CommandKind::SetOctave:
-		return arc_.stepsToBarLine(); // spec §13.4, §7.3
+	case CommandKind::Restart:
+		return arc_.stepsToBarLine(); // spec §13.4, §7.3, §13.2
 	case CommandKind::Transition:
 		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop

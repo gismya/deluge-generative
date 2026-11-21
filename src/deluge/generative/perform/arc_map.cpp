@@ -60,8 +60,8 @@ int32_t nowPhrase(const Frame& frame) {
 	return frame.clock > 0 ? frame.clock / (frame.phraseSteps * kTicksPerStep) : 0;
 }
 
-/// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End or key change) or on
-/// part `part`'s row (its mute, solo, take, sound or octave shift).
+/// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End, key change, transition or
+/// restart) or on part `part`'s row (its mute, solo, take, sound or octave shift).
 bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 	for (const QueuedAction& action : frame.queued) {
 		if (action.landsAt / frame.phraseSteps != phrase) {
@@ -81,6 +81,7 @@ bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 		case CommandKind::End:
 		case CommandKind::SetKey:
 		case CommandKind::Transition:
+		case CommandKind::Restart:
 			if (part < 0) {
 				return true;
 			}

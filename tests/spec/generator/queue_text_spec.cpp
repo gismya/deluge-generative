@@ -127,6 +127,8 @@ describe queue_text("Queue text", $ {
 		expect(labelOf({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 128}))
 		    .to_equal(std::string{"BUILD"});
 		expect(labelOf({CommandKind::End, 0, 1})).to_equal(std::string{"OUTRO"});
+		expect(labelOf({CommandKind::Restart, 0, 1})).to_equal(std::string{"RESTART"});
+		expect(std::string{queueTag({CommandKind::Restart, 0, 1})}).to_equal(std::string{"RST"});
 		expect(labelOf({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)})).to_equal(std::string{"KEY D DORIAN"});
 	});
 

@@ -47,6 +47,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	stopAt_ = kNever;
+	restartLanded_ = false;
 	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();

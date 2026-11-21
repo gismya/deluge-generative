@@ -145,3 +145,8 @@ otherwise.
   draw, so they need no `Basis`. `octavePresses_` is a byte, in padding: the steering's size moves
   `PerformAdapter::sink_`, which the start step's modulo-8 `static_assert` in `incomingStarts()` pins (a `uint32_t`
   there broke it).
+- X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
+  CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
+  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, so scripts that count rows from the top
+  (`encoder 3 -5`) didn't move; a script that leaves the menu on a low row goes back to the top before closing it
+  (`perform_restart.txt`), since the menu remembers its row.

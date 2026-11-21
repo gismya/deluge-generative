@@ -149,6 +149,21 @@ public:
 	/// A tap on End: cancels it while it waits. Nothing to do when no End is armed or queued.
 	PressOutcome cancelEnd();
 
+	// ---- Restart (spec §13.2) ----
+
+	/// X+PLAY or RESTART ▸ AS IT IS while a piece plays: the piece starts again at the next bar line, from bar 1 with
+	/// its Intro, from the Current Recipe as it is then. Pressed again while it waits, it cancels; BACK does too.
+	/// Refused while a transition is pending (spec §12.9). Nothing to do while stopped, where the adapter starts the
+	/// piece as PLAY does.
+	PressOutcome pressRestart();
+	/// Whether a restart waits for its line: in the core's pending list, or pressed and not yet taken from the queue.
+	/// A transition request is refused meanwhile (TransitionLifecycle::request()).
+	[[nodiscard]] bool restartAhead() const;
+	/// The restart's line, from the adapter's NoteSink::restartPiece(): `generator` starts again from the Current
+	/// Recipe (AS IT IS), as a start does, and the steering with it (pieceStarts()). The adapter follows it with its
+	/// instance start (instanceStarts()), so a FILL or KEYBOARD fader still held plays from the new piece's start.
+	void restartAsItIs(Generator& generator);
+
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
 
@@ -476,6 +491,29 @@ PressOutcome PerformSteering<Adapter>::pressHold() {
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::forceSection(SectionKind kind) {
 	return steer({CommandKind::ForceSection, static_cast<uint8_t>(kind), 0});
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressRestart() {
+	if (gated(PressKind::Restart)) {
+		return PressOutcome::ChangePending;
+	}
+	return steer({CommandKind::Restart, 0, restartAhead() ? 0 : 1});
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::restartAhead() const {
+	if (const Command* pressed = queue_.newest(CommandKind::Restart, 0)) {
+		return pressed->value != 0;
+	}
+	const Generator* piece = playing();
+	return piece != nullptr && piece->restartWaiting();
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restartAsItIs(Generator& generator) {
+	generator.start(adapter().recipe(), adapter().seed(), adapter().takes());
+	pieceStarts(generator.recipe().macros);
 }
 
 template <typename Adapter>

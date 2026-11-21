@@ -139,6 +139,7 @@ enum class TransitionTrace : uint8_t {
 	RequestRefused,
 	RequestQueueFull,
 	RequestBusy,
+	RequestRestart, ///< refused: a restart waits for its line (spec §13.2)
 	CancelPreload,
 	CancelQueued,
 	CancelQueuedRefused,
@@ -184,6 +185,7 @@ struct TransitionTraceText {
 	case TransitionTrace::RequestRefused:
 	case TransitionTrace::RequestQueueFull:
 	case TransitionTrace::RequestBusy:
+	case TransitionTrace::RequestRestart:
 		out.add("request style=");
 		out.add(static_cast<int32_t>(style));
 		if (trace == TransitionTrace::RequestStarted) {
@@ -194,6 +196,9 @@ struct TransitionTraceText {
 		}
 		else if (trace == TransitionTrace::RequestBusy) {
 			out.add(" refused busy");
+		}
+		else if (trace == TransitionTrace::RequestRestart) {
+			out.add(" refused restart");
 		}
 		else {
 			out.add(" refused phase=");
@@ -404,6 +409,12 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 	}
 	if (phase_ == Phase::Committed || phase_ == Phase::Retiring) {
 		adapter().traced(Trace::RequestRefused, style);
+		return Request::Refused;
+	}
+	// One change at a time: a restart waiting for its line refuses it, as a pending transition refuses a restart
+	// (spec §13.2). CHANGE PENDING either way.
+	if (steering().restartAhead()) {
+		adapter().traced(Trace::RequestRestart, style);
 		return Request::Refused;
 	}
 	// Each roster a transition builds retires once: the outgoing one when the new one plays, or the incoming one if it
