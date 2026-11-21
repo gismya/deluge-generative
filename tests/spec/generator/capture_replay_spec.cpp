@@ -50,15 +50,9 @@ std::unique_ptr<Replayed> replay(const SteeringLog::Piece& piece, int32_t riserM
 	return out;
 }
 
-/// The first step past a piece's span: where it ended, or where the log was cut (spec §17.2).
-int32_t spanEnd(const SteeringLog::Piece& piece) {
-	return piece.cutAt() >= 0 && (piece.endStep() < 0 || piece.cutAt() < piece.endStep()) ? piece.cutAt()
-	                                                                                      : piece.endStep();
-}
-
 /// The notes both runs decided: those starting before the span's last step's decision tick, cut there.
 int32_t agreedTick(const SteeringLog::Piece& piece) {
-	return decisionTick(spanEnd(piece) - 1);
+	return decisionTick(piece.spanEnd() - 1);
 }
 
 /// A live run steered by `commands`, as Techno from its Intro (seed 3), and the log it wrote.
@@ -547,6 +541,71 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			expect(w.picks.size()).to_equal(2U);
 			expect(w.picks.size() == 2U && w.picks[0].path == "SYNTHS/ACID 4.XML" && w.picks[0].token == 4).to_be_true();
 			expect(w.tracks == std::vector<RecordingWriter::Track>{{kAcid, 4, stepTick(phrase)}}).to_be_true();
+		});
+
+		it("ends a part's lanes where its clip is cut or its new track starts: no node for the part comes late", _ {
+			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
+			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.recipe.macros.set(Macro::Motion, kMacroFull); // lanes that move all the time
+			start.seed = 3;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			log.append(phrase, {CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+			log.append(2 * phrase + 3, {CommandKind::SetSound, kAcid, 4});
+			log.appendSoundPath(2 * phrase + 3, kAcid, 4, pickSlot(kAcid), "SYNTHS/ACID 4.XML");
+			log.endPiece(4 * phrase, PieceEnd::Stopped);
+			auto replayed = replay(log.piece(0));
+			const RecordingWriter& w = replayed->writer;
+			expect(w.cuts.empty()).to_be_false();
+			expect(w.tracks.size()).to_equal(1U);
+			expect(w.lateNodes).to_equal(0);
+			const bool after = std::any_of(w.nodes.begin(), w.nodes.end(), [&](const auto& node) {
+				return node.first.part == kAcid && node.second.tick >= stepTick(2 * phrase + 3);
+			});
+			expect(after).to_be_true();
+		});
+
+		it("writes a moved home's lanes again where it moves: each lane of the part that moved restates its value", _ {
+			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
+			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.recipe.macros.set(Macro::Motion, kMacroFull);
+			start.seed = 3;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			const int32_t at = 2 * phrase + 3;
+			log.append(at, {CommandKind::SetHome, kAcid, 40, 0x0005, Lane::None});
+			log.endPiece(3 * phrase, PieceEnd::Stopped);
+			auto replayed = replay(log.piece(0));
+			const RecordingWriter& w = replayed->writer;
+			expect(w.edits.size()).to_equal(1U);
+			expect(w.editNodes.size()).to_equal(1U);
+			const int32_t tick = stepTick(at);
+			std::vector<Automated> before;
+			std::vector<Automated> restated;
+			for (size_t i = 0; i < w.nodes.size(); i++) {
+				const auto& [id, node] = w.nodes[i];
+				if (id.part != kAcid) {
+					continue;
+				}
+				if (i < w.editNodes[0] && std::find(before.begin(), before.end(), id) == before.end()) {
+					before.push_back(id);
+				}
+				if (i >= w.editNodes[0] && node.tick == tick) {
+					restated.push_back(id);
+				}
+				// Nothing for the part comes after the edit with a tick before it.
+				expect(i < w.editNodes[0] || node.tick >= tick).to_be_true();
+			}
+			expect(before.empty()).to_be_false();
+			for (const Automated& id : before) {
+				expect(std::find(restated.begin(), restated.end(), id) != restated.end()).to_be_true();
+			}
 		});
 
 		it("splits a song too big to load back at a Section line, and the next starts with that Section (§17.5)", _ {

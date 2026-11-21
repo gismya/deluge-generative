@@ -295,6 +295,43 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	           static_cast<long>(setCount_), static_cast<long>(boundCount_));
 }
 
+void SoundControls::moveToClip(int32_t part, InstrumentClip* clip) {
+	for (int32_t i = 0; i < setCount_; i++) {
+		Set& set = sets_[i];
+		if (set.part != part) {
+			continue;
+		}
+		set.clip = clip;
+		if (set.row >= 0) {
+			set.noteRow = clip->noteRows.getElement(set.row);
+			set.paramManager = &set.noteRow->paramManager;
+		}
+		else {
+			set.paramManager = &clip->paramManager;
+		}
+		for (int32_t b = set.first[0]; b < set.first[kNumSoundControls]; b++) {
+			if (AutoParam* param = paramOf(set, bound_[b])) {
+				param->setCurrentValueBasicForSetup(bound_[b].home);
+			}
+		}
+	}
+}
+
+std::optional<int32_t> SoundControls::moveHome(uint8_t part, Lane lane, uint16_t key, int32_t home) {
+	const Set* set = setOf(part, lane);
+	if (set == nullptr) {
+		return std::nullopt;
+	}
+	for (int32_t b = set->first[0]; b < set->first[kNumSoundControls]; b++) {
+		if (paramKey(bound_[b]) == key) {
+			const int32_t old = bound_[b].home;
+			bound_[b].home = home;
+			return old;
+		}
+	}
+	return std::nullopt;
+}
+
 bool SoundControls::uses(const Set& set, Needs needs) {
 	ParamManager& manager = *set.paramManager;
 	auto patched = [&](int32_t p) { return manager.getPatchedParamSet()->getValue(p); };

@@ -178,7 +178,10 @@ public:
 	bool beginEntry(const EntrySource& source, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
-	void leave(LeaveEnded ended);
+	///
+	/// `keep` is the leave menu's choice (spec §13.8). If it keeps a piece, the steering log outlives the teardown,
+	/// and Capture builds the kept pieces behind it (spec §17.7): beginCapture(), which frees the log when done.
+	void leave(LeaveEnded ended, perform::LeaveOption keep = perform::LeaveOption::Nothing);
 	/// The jobs beginEntry() and leave() submit, for the modal screen over them (GenerativeModalUI::open()).
 	[[nodiscard]] const Job& entryJob() const;
 	[[nodiscard]] const Job& leaveJob() const;
@@ -239,6 +242,11 @@ public:
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
 	/// The pieces played since Perform was entered (spec §17.2, §17.3): empty once it is left.
 	[[nodiscard]] const SteeringLog& steeringLog() const { return log_; }
+	/// Capture (spec §17.7): the log a leave that keeps pieces left alive past the teardown, until freeLog().
+	[[nodiscard]] SteeringLog& keptLog() { return log_; }
+	[[nodiscard]] bool logKept() const { return keepLog_; }
+	/// Capture is done with the log: its buffer goes.
+	void freeLog();
 	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
 	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
@@ -315,7 +323,10 @@ private:
 	/// Forgets Perform's song, roster and Generator, as the teardown starts.
 	void dropSong();
 	/// The teardown's task couldn't start: Perform's song is still whole and current, and Perform carries on.
-	void undoLeave() { steering_.undoLeave(); }
+	void undoLeave() {
+		keepLog_ = false;
+		steering_.undoLeave();
+	}
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9). They
 	/// alternate: each transition's new roster starts in the one not playing.
@@ -348,6 +359,8 @@ private:
 	uint8_t* logBuffer_ = nullptr;
 	SteeringLog log_{nullptr, 0};
 	uint32_t restarts_ = 0;
+	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).
+	bool keepLog_ = false;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;
