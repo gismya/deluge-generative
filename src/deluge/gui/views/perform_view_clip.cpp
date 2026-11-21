@@ -267,8 +267,8 @@ void PerformView::openPresetBrowser(int32_t part) {
 	}
 }
 
-void PerformView::chooseSound(int32_t part, const SoundPath& path) {
-	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
+void PerformView::chooseSound(int32_t part, const SoundChoice& choice) {
+	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, choice); }));
 	refreshClipPage();
 }
 

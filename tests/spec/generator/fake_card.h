@@ -111,6 +111,7 @@ struct FakeLoader final : SoundLoader {
 	std::set<std::string> missing;    ///< Paths that report Missing. Everything else loads.
 	std::set<std::string> cardErrors; ///< Paths that report CardError.
 	std::vector<std::string> tried;
+	std::vector<std::string> presets; ///< The paths tried as presets, in order.
 
 	LoadOutcome load(const char* path) {
 		tried.emplace_back(path);
@@ -119,7 +120,10 @@ struct FakeLoader final : SoundLoader {
 		}
 		return missing.contains(path) ? LoadOutcome::Missing : LoadOutcome::Loaded;
 	}
-	LoadOutcome loadPreset(const char* path) override { return load(path); }
+	LoadOutcome loadPreset(const char* path) override {
+		presets.emplace_back(path);
+		return load(path);
+	}
 	LoadOutcome loadSample(const char* path) override { return load(path); }
 };
 

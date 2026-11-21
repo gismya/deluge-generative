@@ -154,14 +154,15 @@ void PerformPresetBrowser::enterKeyPress() {
 		}
 		return;
 	}
-	deluge::generative::SoundPath path;
+	deluge::generative::SoundChoice choice;
+	deluge::generative::SoundPath& path = choice.path;
 	if (!path.set(currentDir.get(), item->filename.get())) {
 		display->displayPopup(deluge::l10n::get(deluge::l10n::String::STRING_FOR_PATH_TOO_LONG));
 		return; // a pick holds no longer path (spec §10.1): choose another
 	}
 	// Refused as choose() would refuse it (the runner busy freeing a swapped-out sound, a transition pending): the
 	// browser stays open on the preset, to choose again (spec §13.5).
-	const SoundSwaps::Press press = soundSwaps.canChoose(part_, path);
+	const SoundSwaps::Press press = soundSwaps.canChoose(part_, choice);
 	if (press != SoundSwaps::Press::Preloading) {
 		deluge::gui::refusedWithPopup(SoundSwaps::outcome(press));
 		TEST_EVENT("gen_browser refused part=%ld result=%d", static_cast<long>(part_), static_cast<int>(press));
@@ -170,7 +171,7 @@ void PerformPresetBrowser::enterKeyPress() {
 	const int32_t part = part_;
 	TEST_EVENT("gen_browser chose part=%ld path=%s", static_cast<long>(part), path.c_str());
 	closeBrowser();
-	performView.chooseSound(part, path);
+	performView.chooseSound(part, choice);
 }
 
 void PerformPresetBrowser::exitAction() {

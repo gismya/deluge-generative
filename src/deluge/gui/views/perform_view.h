@@ -112,7 +112,7 @@ public:
 	[[nodiscard]] int32_t shownPart() const;
 	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
 	/// or is refused with a popup.
-	void chooseSound(int32_t part, const deluge::generative::SoundPath& path);
+	void chooseSound(int32_t part, const deluge::generative::SoundChoice& choice);
 
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
