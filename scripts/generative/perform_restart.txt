@@ -83,6 +83,8 @@ expect no_event gen_restart as_it_is within=8
 expect playing=true
 
 # ---- A transition is refused while a restart waits (CHANGE PENDING), and the restart lands ----
+# Just after a phrase line, so the menu's presses all come before the restart's bar line
+expect event gen_phrase bar= within=60
 button X_ENC down
 wait 100
 button PLAY down
