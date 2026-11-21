@@ -118,4 +118,16 @@ expect playing=false within=5
 load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE 2.XML
 expect event /^song_loaded / within=60
 expect root_ui=arranger within=10
+
+# ---- The scripts' shared leave keeps nothing after a piece: NOTHING, with no Capture and nothing written ----
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+wait 2000
+mark now
+include perform_leave.txt
+expect no_event gen_capture_begin within=3 since=mark
 release all

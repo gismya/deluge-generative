@@ -182,5 +182,7 @@ otherwise.
   `playingPicks()`, restores the header snapshot for parts not re-rolled and `restoreEdits()` (each param's newest
   SetParam value or SetHome home), then `restart()`. No probe reaches a split (it needs a 2 MB piece): harness only.
 - Probe scripts that leave Perform take NOTHING: `perform_leave.txt` turns to the end and back one (NOTHING or LEAVE
-  is always before CANCEL; the OLED context menu clamps). The first option after a piece is a Capture.
+  is always before CANCEL). One detent a line: a stock context menu refuses a turn that would pass its end, so
+  `encoder 3 5` left it on LAST and every start_state leave ran a Capture and wrote a song to the card. The first
+  option after a piece is a Capture: a script that leaves any other way writes to SONGS/.
 

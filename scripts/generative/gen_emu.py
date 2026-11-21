@@ -1193,11 +1193,11 @@ def smoke(args):
         emu.tap("PLAY")
         check("PLAY stops", not emu.led("PLAY"))
         emu.tap("BACK", hold_ms=700)  # held: the leave menu (spec §13.8)
-        # NOTHING (or LEAVE, before any piece) is always the option before CANCEL: the menu clamps at its ends.
-        emu.s.encoder(3, 5)
-        emu.wait(200)
-        emu.s.encoder(3, -1)
-        emu.wait(200)
+        # NOTHING (or LEAVE, before any piece) is always the option before CANCEL. One detent at a time: the context
+        # menu refuses a turn that would pass its end.
+        for detents in (1, 1, 1, -1):
+            emu.s.encoder(3, detents)
+            emu.wait(200)
         emu.tap("SELECT_ENC")  # NOTHING: no Capture
         emu.card_quiet()
         check("BACK held, then LEAVE, leaves Perform", not emu.led("BACK"))

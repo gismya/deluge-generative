@@ -1,11 +1,14 @@
 # Shared by the Perform scripts (include perform_leave.txt) and start_state (deluge_probe.py runs it to leave
 # Perform, stopping at the first failed expect): from Perform, stopped or playing, hold BACK for the leave menu and
-# keep nothing (spec §13.8): NOTHING, or LEAVE before any piece, is always the option before CANCEL, and the menu
-# clamps at its ends. Lands on a new blank song in session view, with no Capture.
+# keep nothing (spec §13.8): NOTHING, or LEAVE before any piece, is always the option before CANCEL. One detent at a
+# time, three to reach the last of at most four options: the context menu refuses a turn that would pass its end
+# (a turn of 5 stays on the first option, LAST, which would start a Capture). Lands on a new blank song in session view, with no Capture.
 button BACK down
 expect ui=context_menu within=10
 button BACK up
-encoder 3 5
+encoder 3 1
+encoder 3 1
+encoder 3 1
 encoder 3 -1
 button 4 3 down
 wait 50
