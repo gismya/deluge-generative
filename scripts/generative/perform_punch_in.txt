@@ -44,14 +44,16 @@ button SHIFT up
 expect playing=true
 expect event gen_section GROOVE 0 clip_pos=0 within=5
 
-# ---- A tap on the Kick's mute latches it: the core mutes the Kick from the next undecided step ----
+# ---- A tap on the Kick's mute latches it: the core mutes the Kick from the next undecided step. The landing can
+# come before or after the release (since=mark: either order) ----
+mark
 pad 8 7 down
 wait 50
 pad 8 7 up
-expect event gen_punch_pad punch=0 lane=0 down on=1
-expect event gen_punch_landed lanes=1 effects=0 step=
-expect event gen_punch_pad punch=0 lane=0 up on=1
-expect event gen_punch lanes=m...... punch=.....
+expect event gen_punch_pad punch=0 lane=0 down on=1 since=mark
+expect event gen_punch_landed lanes=1 effects=0 step= since=mark
+expect event gen_punch_pad punch=0 lane=0 up on=1 since=mark
+expect event gen_punch lanes=m...... punch=..... since=mark
 
 # ---- HAT ROLL held 1.5 s: on while held, off on release ----
 pad 14 7 down
@@ -64,6 +66,7 @@ expect event gen_punch lanes=m...... punch=.....
 expect event gen_punch_landed lanes=1 effects=0 step=
 
 # ---- PUMP tapped on, with FLAM and DOUBLE KICK: several at once; a second tap lets each go ----
+mark
 pad 14 5 down
 wait 50
 pad 14 5 up
@@ -74,8 +77,8 @@ pad 14 6 up
 pad 15 6 down
 wait 50
 pad 15 6 up
-expect event gen_punch_landed lanes=1 effects=38 step=
-expect event gen_punch lanes=m...... punch=..FDP
+expect event gen_punch_landed lanes=1 effects=38 step= since=mark
+expect event gen_punch lanes=m...... punch=..FDP since=mark
 wait 400
 pad 14 5 down
 wait 50
