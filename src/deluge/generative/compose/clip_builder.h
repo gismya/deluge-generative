@@ -126,7 +126,9 @@ public:
 	/// Stock's stutter starts (`on`) or ends at `tick` (SetStutter, spec §17.2).
 	virtual void stutter(bool /*on*/, int32_t /*tick*/) {}
 	/// A split (spec §17.5): end() has ended one song at `tick`, and the next starts there, with that Section and the
-	/// replayed state at that step. Its notes, nodes, bases and end() follow.
+	/// replayed state at that step. Its notes, nodes, bases and end() follow. Only the tick comes here: the writer
+	/// rebuilds that state itself, so it keeps the picks (begin(), soundPick() and newTrack()), the homes and param
+	/// edits (paramEdit()) and the stutter (stutter()) from the calls before.
 	virtual void nextSong(int32_t /*tick*/) {}
 };
 

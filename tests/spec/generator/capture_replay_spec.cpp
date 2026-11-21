@@ -94,6 +94,17 @@ std::vector<Note> notesOf(const TransitionSink& sink, bool incoming) {
 
 constexpr uint8_t kAcid = 1; ///< Techno Acid's ACID: a synth part.
 
+std::vector<LogRecord> recordsOf(const SteeringLog::Piece& piece) {
+	std::vector<LogRecord> out;
+	piece.forEachRecord([&](const LogRecord& r) { out.push_back(r); });
+	return out;
+}
+
+bool hasRecord(const std::vector<LogRecord>& read, RecordKind kind, CommandKind command) {
+	return std::any_of(read.begin(), read.end(),
+	                   [&](const LogRecord& r) { return r.kind == kind && r.command.kind == command; });
+}
+
 /// Notes as a song at swing `songSwing` holds those played at `swing` from `from` on: each end moved by its swing
 /// difference (spec §17.6), on the Recipe's swing interval.
 std::vector<Note> swungFrom(std::vector<Note> notes, int32_t from, int32_t swing, int32_t songSwing, int32_t interval) {
@@ -377,6 +388,56 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 		// The Arc's look-ahead reads a force, End or transition while it waits (the chord walk, drop-outs, Throws), so
 		// the log says when each starts and stops waiting, and replay waits it from there (spec §2.6). Without that,
 		// Dub's chord walk differed in the phrase before a forced Build.
+		it("with a waiting transition cancelled: its slot empties (NotWaiting) and the piece plays on", _ {
+			TransitionPiece t;
+			Log log;
+			t.driver.setLog(&log.log);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			t.decideBefore(8);
+			expect(t.out->transitionWaiting()).to_be_true();
+			expect(t.lifecycle.cancel()).to_be_true();
+			t.runBars(3 * t.phraseSteps() / kStepsPerBar);
+			expect(t.sink.starts).to_equal(0);
+			t.stop();
+			const SteeringLog::Piece piece = log.log.piece(log.log.pieces() - 1);
+			const std::vector<LogRecord> read = recordsOf(piece);
+			expect(hasRecord(read, RecordKind::Waiting, CommandKind::Transition)).to_be_true();
+			expect(hasRecord(read, RecordKind::NotWaiting, CommandKind::Transition)).to_be_true();
+			expect(hasRecord(read, RecordKind::Command, CommandKind::Transition)).to_be_false();
+			auto replayed = replay(piece);
+			const int32_t cut = agreedTick(piece);
+			const std::vector<Note> live = notesBefore(notesOf(t.sink, false), cut);
+			expect(live.size()).to_be_greater_than(100U);
+			expect(notesBefore(replayed->writer.notes, cut) == live).to_be_true();
+		});
+
+		it("with End tapped again to cancel it while it waits", _ {
+			auto run = steered(48, {{20, {CommandKind::End, 0, 1}}, {25, {CommandKind::End, 0, 0}}}, true);
+			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const std::vector<LogRecord> read = recordsOf(piece);
+			expect(hasRecord(read, RecordKind::Waiting, CommandKind::End)).to_be_true();
+			expect(hasRecord(read, RecordKind::NotWaiting, CommandKind::ForceSection)).to_be_true();
+			expect(hasRecord(read, RecordKind::Command, CommandKind::End)).to_be_false();
+			auto replayed = replay(piece);
+			const int32_t cut = agreedTick(piece);
+			expect(notesBefore(replayed->writer.notes, cut) == notesBefore(pairNotes(run->live.events), cut))
+			    .to_be_true();
+		});
+
+		it("with a waiting force replaced by End in their shared slot", _ {
+			auto run = steered(64, {{20, force(SectionKind::Break)}, {25, {CommandKind::End, 0, 1}}}, true);
+			const SteeringLog::Piece piece = run->log.log.piece(0);
+			const std::vector<LogRecord> read = recordsOf(piece);
+			expect(hasRecord(read, RecordKind::Waiting, CommandKind::ForceSection)).to_be_true();
+			expect(hasRecord(read, RecordKind::Waiting, CommandKind::End)).to_be_true();
+			expect(hasRecord(read, RecordKind::Command, CommandKind::ForceSection)).to_be_false();
+			expect(hasRecord(read, RecordKind::Command, CommandKind::End)).to_be_true();
+			auto replayed = replay(piece);
+			const int32_t cut = agreedTick(piece);
+			expect(notesBefore(replayed->writer.notes, cut) == notesBefore(pairNotes(run->live.events), cut))
+			    .to_be_true();
+		});
+
 		it("with a force or End pressed at any step, or pressed and cancelled, in every genre", _ {
 			int32_t runs = 0;
 			int32_t differ = 0;
@@ -454,6 +515,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			                   true);
 			auto replayed = replay(run->log.log.piece(0));
 			const std::vector<TempoNode> expected = {
+			    {0, recipe.tempo, false}, // the song's own tempo, from its start
 			    {stepTick(20), recipe.tempo, false},
 			    {stepTick(20) + kBarTicks, recipe.tempo + 1000, true},
 			    {stepTick(60), recipe.tempo - 500, false},

@@ -305,6 +305,10 @@ void ComposeDriver::glideTempo(int32_t tick, int32_t tempo, int32_t length) {
 		tempoPlan_.glide(tick, tempo, 0);
 		return; // the external clock's per-bar tempo, unchanged
 	}
+	if (!tempoMoved_ && tick > songStart_) {
+		// The song's first tempo node holds its own tempo from its start, as a control lane's does.
+		writer_->tempo({songStart_, tempoPlan_.at(songStart_), false});
+	}
 	if (moving) {
 		// A glide cut short holds what it reached: its ramp ends here, or a tick before a jump.
 		writer_->tempo(length > 0 ? TempoNode{tick, from, true} : TempoNode{tick - 1, tempoPlan_.at(tick - 1), true});
