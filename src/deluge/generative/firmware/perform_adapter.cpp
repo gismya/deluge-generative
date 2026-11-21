@@ -19,6 +19,7 @@
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_midi.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
@@ -82,11 +83,19 @@ void PerformAdapter::restartPiece(Generator& generator) {
 	// as a stop puts them back. Its waiting sounds go with the core's pending list.
 	soundControls.restoreHomes();
 	soundSwaps.pieceRestarts();
-	steering_.restartAsItIs(generator);
+	// AS IT BEGAN: its sounds swap in and its param snapshot is written back, before the controls read their homes.
+	const PieceStart* began = restartBegan.lands();
+	const uint8_t interval = currentRecipe.recipe.swingInterval;
+	steering_.restartOnLine(generator, began);
+	if (currentRecipe.recipe.swingInterval != interval) {
+		transitions.swingIntervalFollows(); // in task context: the tick mustn't reschedule
+	}
 	pieceBegins();
 	instanceStarts();
 	restarts_++;
-	TEST_EVENT("gen_restart as_it_is tempo=%ld", static_cast<long>(currentRecipe.recipe.tempo));
+	TEST_EVENT("gen_restart %s tempo=%ld energy=%ld", began != nullptr ? "as_it_began" : "as_it_is",
+	           static_cast<long>(currentRecipe.recipe.tempo),
+	           static_cast<long>(currentRecipe.recipe.macros[Macro::Energy]));
 }
 
 void OutputSink::restartPiece(Generator& generator) {
@@ -127,6 +136,7 @@ void PerformAdapter::dropSong() {
 	soundControls.forget();
 	sidechainPump.forget();
 	soundSwaps.forgetSong();
+	restartBegan.forgetSong();
 	transitions.forget();
 	retirements.forget();
 	generator_ = nullptr;
@@ -303,6 +313,7 @@ void PerformAdapter::playbackEnded() {
 	if (active() && currentSong == song_) {
 		stopPiece();
 		soundSwaps.playbackEnded();
+		restartBegan.playbackEnded();
 		transitions.playbackEnded(); // a stop commits a transition (spec §12.9)
 	}
 	startInGroove_ = false;
@@ -325,6 +336,13 @@ void PerformAdapter::playOrStop(bool groove) {
 		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
 		return;
 	}
+	if (restartBegan.preloading()) {
+		// PLAY cancels AS IT BEGAN's start, as a transition's; a press while that cancel unwinds does nothing.
+		if (restartBegan.cancelPreload()) {
+			TEST_EVENT("gen_restart_press began_cancelled");
+		}
+		return;
+	}
 	if (active() && !leaving() && transitions.startWhenLoaded(groove)) {
 		return; // it starts when the incoming roster has loaded
 	}
@@ -334,6 +352,15 @@ void PerformAdapter::playOrStop(bool groove) {
 void PerformAdapter::pressRestart() {
 	using perform::PressOutcome;
 	if (!active() || leaving()) {
+		return;
+	}
+	if (restartBegan.preloading()) {
+		// AS IT BEGAN's sounds preloading is the restart ahead: pressed again (X+PLAY, AS IT BEGAN), it is cancelled,
+		// playing or stopped. A press while its cancel unwinds does nothing more.
+		if (restartBegan.cancelPreload()) {
+			TEST_EVENT("gen_restart_press began_cancelled");
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+		}
 		return;
 	}
 	if (!playbackHandler.playbackState) {
@@ -349,7 +376,11 @@ void PerformAdapter::pressRestart() {
 	}
 	const bool cancels = steering_.restartAhead();
 	const PressOutcome outcome = steering_.pressRestart();
-	TEST_EVENT("gen_restart_press %s", perform::refused(outcome) ? "refused" : cancels ? "cancelled" : "queued");
+	// landed: from its line's decision a restart can't be cancelled, and a press does nothing (spec §13.2).
+	TEST_EVENT("gen_restart_press %s", perform::refused(outcome)              ? "refused"
+	                                   : outcome == PressOutcome::NothingToDo ? "landed"
+	                                   : cancels                              ? "cancelled"
+	                                                                          : "queued");
 	if (gui::refusedWithPopup(outcome) || outcome != PressOutcome::Accepted) {
 		return;
 	}

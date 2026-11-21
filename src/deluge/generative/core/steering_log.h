@@ -267,6 +267,10 @@ public:
 	[[nodiscard]] int32_t capacity() const { return capacity_; }
 	/// Whether a piece is open for records.
 	[[nodiscard]] bool logging() const { return open_ && !cut_; }
+	/// The newest piece, if the last beginPiece() opened it and its header is whole: the piece playing, or the last
+	/// one played. -1 if the last one found no room to open, or its header was cut, and once cleared. A restart AS IT
+	/// BEGAN starts from it (spec §13.2).
+	[[nodiscard]] int32_t newestWithHeader() const { return newestWithHeader_; }
 
 	/// Forgets every piece.
 	void clear();
@@ -349,6 +353,7 @@ private:
 	int32_t gapBytes_ = 0;
 	int32_t src_ = 0;
 	int32_t newest_ = 0; ///< The newest piece's offset.
+	int32_t newestWithHeader_ = -1;
 	/// The current piece's state for writing: open, cut, its records' last step, and where that step's records began.
 	bool open_ = false;
 	bool cut_ = false;

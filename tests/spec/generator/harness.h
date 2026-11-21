@@ -502,7 +502,7 @@ struct StepwisePiece {
 			    !requires { &Sink::attach; }, "the sink's attach() must take (const PerformDriver&, const Hook&)");
 		}
 		if constexpr (requires { sink.restarts = [](Generator&) {}; }) {
-			sink.restarts = [this](Generator& instance) { restartAsItIs(instance); };
+			sink.restarts = [this](Generator& instance) { restartOnLine(instance); };
 		}
 		begin(start);
 	}
@@ -546,6 +546,13 @@ struct StepwisePiece {
 	/// steering with it, then a FILL or a KEYBOARD fader still held is sent again. A sink calls it from restartPiece().
 	void restartAsItIs(Generator& instance) {
 		steering.restartAsItIs(instance);
+		instanceStarts();
+	}
+	/// A restart's line as the adapter's, AS IT IS or AS IT BEGAN as pressed: AS IT BEGAN from the header of the
+	/// piece that played, when the driver logged one (Start::logEntries). A sink calls it from restartPiece().
+	void restartOnLine(Generator& instance) {
+		const bool logged = start_.logEntries > 0 && log.newestWithHeader() >= 0;
+		steering.restartOnLine(instance, logged ? &log.piece(log.newestWithHeader()).start() : nullptr);
 		instanceStarts();
 	}
 

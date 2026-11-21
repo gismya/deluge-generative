@@ -41,6 +41,12 @@
 
 namespace deluge::generative::perform {
 
+/// Where a restart starts the piece from (spec §13.2).
+enum class RestartFrom : uint8_t {
+	AsItIs,    ///< The Current Recipe as the player left it.
+	AsItBegan, ///< The piece's start state, from its header in the steering log (spec §17.2).
+};
+
 /// How a key change acted, for the test port.
 enum class KeySet : uint8_t { Stopped, Queued, Refused };
 
@@ -152,14 +158,19 @@ public:
 	// ---- Restart (spec §13.2) ----
 
 	/// X+PLAY or RESTART ▸ AS IT IS while a piece plays: the piece starts again at the next bar line, from bar 1 with
-	/// its Intro, from the Current Recipe as it is then. Pressed again while it waits, it cancels; BACK does too.
-	/// Refused while a transition is pending (spec §12.9). Nothing to do while stopped, where the adapter starts the
-	/// piece as PLAY does.
-	PressOutcome pressRestart();
-	/// Whether a restart is ahead: pressed and not yet taken from the queue, waiting in the core's pending list, or
-	/// landed and waiting for its line, where pieceStarts() empties the queue. A transition request is refused
-	/// meanwhile (TransitionLifecycle::request()).
-	[[nodiscard]] bool restartAhead() const;
+	/// its Intro, from the Current Recipe as it is then; with `from` AsItBegan (RESTART ▸ AS IT BEGAN, its sounds
+	/// loaded), from the piece's start state (restartOnLine()). Pressed again while it waits, it cancels; BACK does
+	/// too. Refused while a transition is pending (spec §12.9). Nothing to do while stopped, where the adapter starts
+	/// the piece as PLAY does.
+	PressOutcome pressRestart(RestartFrom from = RestartFrom::AsItIs);
+	/// AS IT BEGAN's sounds preload before its restart is pressed (the adapter's): a restart is ahead meanwhile.
+	void restartPreloads(bool preloading) { restartPreloading_ = preloading; }
+	/// Whether a restart is ahead: AS IT BEGAN's sounds preloading, pressed and not yet taken from the queue, waiting
+	/// in the core's pending list, or landed and waiting for its line, where pieceStarts() empties the queue. A
+	/// transition request is refused meanwhile (TransitionLifecycle::request()).
+	[[nodiscard]] bool restartAhead() const { return restartPreloading_ || restartQueued(); }
+	/// Where the restart ahead starts the piece from: what it was pressed with.
+	[[nodiscard]] RestartFrom restartFrom() const { return restartFrom_; }
 	/// A piece starts on `generator` from the Current Recipe, in Groove with `groove` (SHIFT+PLAY), and the steering
 	/// with it (pieceStarts()): PLAY from stop, and a restart's line. The adapter follows it with its instance start
 	/// (instanceStarts()), so a FILL or KEYBOARD fader still held plays from the new piece's start.
@@ -168,6 +179,14 @@ public:
 	/// shift) goes into the Current Recipe first, as the tick's recordLanded() would after the call, then
 	/// startFromCurrentRecipe() (AS IT IS). So a call that comes past the line plays what an on-time one does.
 	void restartAsItIs(Generator& generator);
+	/// The restart's line, from the adapter's NoteSink::restartPiece(): AS IT BEGAN from `began`, the header of the
+	/// piece that played, when it was pressed so and the piece has one (else AS IT IS). The Current Recipe becomes the
+	/// header's: its Recipe (macros, octave shifts, Part biases, key, tempo and swing among them), seed and takes, as
+	/// the piece began. The adapter restores the sounds and the params (spec §13.2).
+	void restartOnLine(Generator& generator, const PieceStart* began);
+	/// AS IT BEGAN while stopped, before the start: the Current Recipe becomes `began`'s, as restartOnLine() makes
+	/// it, and the song's swing interval and key follow (the adapter's swingIntervalChanged() and keyChanged()).
+	void restoreStopped(const PieceStart& began);
 
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
@@ -398,6 +417,10 @@ private:
 	[[nodiscard]] int32_t newestTake(int32_t part) const;
 	/// sampleFill()'s push, when FILL went down or up.
 	void sendFill(bool down);
+	/// A restart pressed and not yet taken from the queue, waiting in the core, or landed (restartAhead()).
+	[[nodiscard]] bool restartQueued() const;
+	/// The Current Recipe becomes `began`'s (AS IT BEGAN), and the menus read their values again.
+	void beginAgainFrom(const PieceStart& began);
 
 	/// First: the firmware's adapter keeps the queue at offset 20, which is baked into Generator::decideNextStep()'s
 	/// code (see PerformAdapter::steering_, and implementation-notes/core.md).
@@ -407,6 +430,10 @@ private:
 	bool leaving_ = false;
 	/// Stock's stutter is on (setStutter()), in what was padding: see punchEffects_.
 	bool stutterOn_ = false;
+	/// The restart ahead's (pressRestart()), and AS IT BEGAN's sounds preloading (restartPreloads()): one byte between
+	/// them, the last of the padding before fillSent_ (the steering's size is pinned, see punchEffects_).
+	RestartFrom restartFrom_ : 1 = RestartFrom::AsItIs;
+	bool restartPreloading_ : 1 = false;
 	/// The SetFill value last pushed in this instance: kFillReleased while FILL is up.
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
@@ -612,18 +639,23 @@ PressOutcome PerformSteering<Adapter>::forceSection(SectionKind kind) {
 }
 
 template <typename Adapter>
-PressOutcome PerformSteering<Adapter>::pressRestart() {
+PressOutcome PerformSteering<Adapter>::pressRestart(RestartFrom from) {
 	if (gated(PressKind::Restart)) {
 		return PressOutcome::ChangePending;
 	}
 	if (const Generator* piece = playing(); piece != nullptr && piece->restartLanded()) {
 		return PressOutcome::NothingToDo; // landed: it can't be cancelled, and the line empties the queue
 	}
-	return steer({CommandKind::Restart, 0, restartAhead() ? 0 : 1});
+	const bool cancels = restartQueued();
+	const PressOutcome outcome = steer({CommandKind::Restart, 0, cancels ? 0 : 1});
+	if (!cancels && outcome == PressOutcome::Accepted) {
+		restartFrom_ = from;
+	}
+	return outcome;
 }
 
 template <typename Adapter>
-bool PerformSteering<Adapter>::restartAhead() const {
+bool PerformSteering<Adapter>::restartQueued() const {
 	if (const Command* pressed = queue_.newest(CommandKind::Restart, 0)) {
 		return pressed->value != 0;
 	}
@@ -641,6 +673,38 @@ template <typename Adapter>
 void PerformSteering<Adapter>::restartAsItIs(Generator& generator) {
 	recordLanded(generator);
 	startFromCurrentRecipe(generator, false);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restartOnLine(Generator& generator, const PieceStart* began) {
+	const bool asItBegan = restartFrom_ == RestartFrom::AsItBegan && began != nullptr;
+	restartFrom_ = RestartFrom::AsItIs;
+	if (!asItBegan) {
+		restartAsItIs(generator);
+		return;
+	}
+	// Nothing that landed in the first run goes into the Current Recipe: the header's replaces it. The song's key
+	// follows the new piece's step 0 KeyScale event; its swing interval is the adapter's, outside the tick.
+	beginAgainFrom(*began);
+	startFromCurrentRecipe(generator, false);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restoreStopped(const PieceStart& began) {
+	beginAgainFrom(began);
+	const Recipe& recipe = adapter().recipe();
+	adapter().swingIntervalChanged(recipe.swingInterval);
+	adapter().keyChanged({recipe.keyRoot, recipe.scale});
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::beginAgainFrom(const PieceStart& began) {
+	// The same Recipe: its takes made stay (an earlier take can be played again), and so does every Part bias fader
+	// held, which instanceStarts() sends again as AS IT IS does.
+	adapter().recipe() = began.recipe;
+	adapter().seed() = began.seed;
+	adapter().takes() = began.takes;
+	pieces_++; // an open menu reads its key, takes and octaves again
 }
 
 template <typename Adapter>
