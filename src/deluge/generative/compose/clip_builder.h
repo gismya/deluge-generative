@@ -208,25 +208,50 @@ public:
 		}
 	}
 
-	/// A cut on `part` at `tick` (spec §17.6): a key change cuts its clip, or a re-roll starts its new track. Each of
-	/// the part's lanes ends there as split() ends it, its last node and base written, and goes on from the value it
-	/// has, from `tick`. So once the writer hears of the cut, every node it gets for the part is for the clip from
-	/// `tick`. Notes aren't touched: one that started before `tick` still goes to the clip it started in.
+	/// A cut on `part` at `tick` (spec §17.6): a key change cuts its clip, or a re-roll starts its new track. Each of the
+	/// part's lanes ends there as split() ends it, its last node and base written, and goes on from the value it has,
+	/// from `tick`. So once the writer hears of the cut, every node it gets for the part is for the clip from `tick`.
+	/// Notes aren't touched: one that started before `tick` still goes to the clip it started in.
 	template <typename Centre>
 	void cutPart(uint8_t part, int32_t tick, Centre centre) {
+		endPart(part, tick, centre, false);
+		resumePart(part, tick, false);
+	}
+	/// A home on `part` moves at `tick` (SetHome, spec §17.2): endPart() with `hold`, then the writer moves the home,
+	/// then resumePart() with `restate`. A lane that has a value but never moved gets its hold node first, so its
+	/// automation keeps the old home's value up to `tick`; each lane then writes its value again at `tick`, at the new
+	/// home.
+	template <typename Centre>
+	void endPart(uint8_t part, int32_t tick, Centre centre, bool hold) {
 		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
 			Track& track = tracks_[i];
 			if (!track.started || track.id.part != part) {
 				continue;
 			}
+			if (hold && !track.moved && tick > track.origin) {
+				track.moved = true;
+				track.write(*writer_, {track.origin, track.value}, false);
+			}
 			track.finish(*writer_, tick);
 			writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+		}
+	}
+	void resumePart(uint8_t part, int32_t tick, bool restate) {
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (!track.started || track.id.part != part) {
+				continue;
+			}
 			Track next;
 			next.id = track.id;
 			next.started = true;
 			next.value = track.value;
 			next.endTick = tick;
 			next.origin = tick;
+			if (restate && track.moved) {
+				next.moved = true;
+				next.write(*writer_, {tick, track.value}, false);
+			}
 			track = next;
 		}
 		partStart_[part] = tick;
@@ -286,6 +311,8 @@ private:
 		void move(SongWriter& writer, int32_t tick, int8_t value, bool snap);
 		/// The song ends at `tick`: the last node is written, a tick before it at the latest.
 		void finish(SongWriter& writer, int32_t tick);
+		/// A node at `p`, the cone's new anchor.
+		void write(SongWriter& writer, Point p, bool interpolated);
 
 	private:
 		/// A ramp's end, on a step line: buffered until its bar ends.
@@ -295,7 +322,6 @@ private:
 		void endBar(SongWriter& writer);
 		/// A point the cone's line may pass through.
 		void conePoint(SongWriter& writer, Point p);
-		void write(SongWriter& writer, Point p, bool interpolated);
 		/// The pending point gets its node, a tick before `before` at the latest.
 		void flushPending(SongWriter& writer, int32_t before);
 	};

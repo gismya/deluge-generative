@@ -574,6 +574,46 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			expect(after).to_be_true();
 		});
 
+		it("writes a moved home's lanes again where it moves: each lane of the part that moved restates its value", _ {
+			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
+			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.recipe.macros.set(Macro::Motion, kMacroFull);
+			start.seed = 3;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			const int32_t at = 2 * phrase + 3;
+			log.append(at, {CommandKind::SetHome, kAcid, 40, 0x0005, Lane::None});
+			log.endPiece(3 * phrase, PieceEnd::Stopped);
+			auto replayed = replay(log.piece(0));
+			const RecordingWriter& w = replayed->writer;
+			expect(w.edits.size()).to_equal(1U);
+			expect(w.editNodes.size()).to_equal(1U);
+			const int32_t tick = stepTick(at);
+			std::vector<Automated> before;
+			std::vector<Automated> restated;
+			for (size_t i = 0; i < w.nodes.size(); i++) {
+				const auto& [id, node] = w.nodes[i];
+				if (id.part != kAcid) {
+					continue;
+				}
+				if (i < w.editNodes[0] && std::find(before.begin(), before.end(), id) == before.end()) {
+					before.push_back(id);
+				}
+				if (i >= w.editNodes[0] && node.tick == tick) {
+					restated.push_back(id);
+				}
+				// Nothing for the part comes after the edit with a tick before it.
+				expect(i < w.editNodes[0] || node.tick >= tick).to_be_true();
+			}
+			expect(before.empty()).to_be_false();
+			for (const Automated& id : before) {
+				expect(std::find(restated.begin(), restated.end(), id) != restated.end()).to_be_true();
+			}
+		});
+
 		it("splits a song too big to load back at a Section line, and the next starts with that Section (§17.5)", _ {
 			for (const Genre* genre : {&genres::technoAcid, &genres::ambient}) {
 				Run run;

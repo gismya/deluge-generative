@@ -25,16 +25,38 @@
 #include "generative/compose/clip_builder.h"
 #include "generative/firmware/perform_song.h"
 
+class InstrumentClip;
 class NoteRow;
 class Song;
 
+namespace deluge::generative {
+class Chunks;
+}
+
 namespace deluge::generative::firmware {
+
+class ComposeSong;
+
+/// Where a Capture build hears that a song of a split piece is done (spec §17.5): it saves that song and frees it,
+/// then builds the next song's Outputs from `writer`'s picks and hands it to `writer` with restart().
+class CaptureHost {
+public:
+	virtual ~CaptureHost() = default;
+	/// The song ended at `tick` (end() came first) and the next starts there. @return an error to stop the build.
+	virtual Error nextSong(ComposeSong& writer, int32_t tick) = 0;
+};
 
 class ComposeSong final : public compose::SongWriter {
 public:
 	/// Before the driver's begin(): the private song and the roster buildPerformSong() made for it. Binds the parts'
 	/// sound controls (soundControls, which only Perform uses otherwise) for the automation.
 	void prepare(Song* song, Roster& roster, const Genre& genre);
+	/// Capture (spec §17.6), after prepare(): the piece's header picks and its genre's palette, for the new tracks a
+	/// re-roll starts, which read the card through `chunks`; `host` hears of splits.
+	void prepareCapture(const SoundPicks& picks, const Palette& palette, Chunks& chunks, CaptureHost& host);
+	/// A split's next song (spec §17.5), from `tick`: its Outputs built from playingPicks(), with restoreEdits()
+	/// applied. Binds them as prepare() does.
+	void restart(Song* song, Roster& roster, int32_t tick);
 	/// The build stopped before end(): lets go of the sound controls. The song is the caller's to free.
 	void abandon();
 
@@ -43,24 +65,75 @@ public:
 	void node(const compose::Automated& automated, const compose::Node& node) override;
 	void base(const compose::Automated& automated, int8_t value) override;
 	/// Every clip ends at `tick`; parts that never sounded are freed, and each clip left gets one arranger instance
-	/// from the start (spec §15.2).
+	/// from where it starts (spec §15.2). A pitched clip with a note outside the song's scale leaves scale mode (spec
+	/// §17.6).
 	void end(int32_t tick, uint32_t soundingParts) override;
 	int32_t sampleMicros(const Event& noteOn) override;
 
-	/// The first error a write met (no memory for a note or a node), or Error::NONE.
+	// Capture's calls (spec §17.6).
+	void cutClip(uint8_t part, int32_t tick) override;
+	void soundPick(uint8_t part, uint8_t token, int32_t slot, const char* path, int32_t length) override;
+	void newTrack(uint8_t part, uint8_t token, int32_t tick) override;
+	void tempo(const compose::TempoNode& node) override;
+	void paramEdit(const Command& edit, int32_t tick) override;
+	void nextSong(int32_t tick) override;
+
+	/// The sounds playing at a split: the header's picks, with each part's re-rolls that started a track.
+	[[nodiscard]] const SoundPicks& playingPicks() const { return playing_; }
+	/// Parts whose sound a re-roll replaced: the header's param snapshot isn't theirs any more.
+	[[nodiscard]] uint32_t rerolledParts() const { return rerolled_; }
+	/// A split's next song, before restart(): the param edits and homes heard so far, each param's newest, written
+	/// as its value on `roster` and `song` (spec §17.5).
+	void restoreEdits(const Roster& roster, Song& song) const;
+
+	/// The first error a write met (no memory for a note or a node, or a new track's card read), or Error::NONE.
 	[[nodiscard]] Error error() const { return error_; }
 	/// Notes and nodes written, for H19's figures.
 	[[nodiscard]] uint32_t notes() const { return notes_; }
 	[[nodiscard]] uint32_t nodes() const { return nodes_; }
 	/// Synth notes outside the song's scale, which got a row anyway rather than letting the firmware change the scale
-	/// (spec §15.8). 0 unless the core plays out of its scale.
+	/// (spec §15.8). 0 unless the core plays out of its scale, or a Capture's key changed.
 	[[nodiscard]] uint32_t offScale() const { return offScale_; }
+	/// Capture: clips cut, tracks started, and cuts or tracks dropped for want of room (kMaxSegments).
+	[[nodiscard]] uint32_t cuts() const { return cuts_; }
+	[[nodiscard]] uint32_t newTracks() const { return newTracks_; }
+	[[nodiscard]] uint32_t droppedSegments() const { return droppedSegments_; }
+	/// Capture: sounds a new track couldn't load, which fell back (spec §10.1).
+	[[nodiscard]] int32_t soundsMissing() const { return soundsMissing_; }
+
+	/// The clips one song may hold past one a part: key changes and re-rolls each add one for a part (spec §17.6).
+	static constexpr int32_t kMaxSegments = 96;
+	/// The param edits and homes a split song starts from (restoreEdits()): each param's newest.
+	static constexpr int32_t kMaxEdits = 64;
 
 private:
+	/// One clip of a part: from `start` (ticks from the piece's step 0) to the next one's start or the song's end.
+	struct Segment {
+		int32_t start = 0;
+		InstrumentClip* clip = nullptr;
+		Output* output = nullptr;
+		Drum* drums[kMaxLanesPerPart] = {};
+		int16_t previous = -1; ///< The part's clip before, or -1
+		bool sounding = false;
+	};
 	/// Adds a note to `row`, in position order. Notes arrive in the order they end, so one may start before a note
 	/// already there: a note never overlaps the next on its row, so the earlier one is cut where the later starts.
 	bool addNote(NoteRow& row, int32_t tick, int32_t length, int32_t velocity);
 	void fail(Error error);
+	/// Starts the segments: one a part, from `start`, each the roster's clip.
+	void beginSegments(int32_t start);
+	bool addSegment(uint8_t part, int32_t start, const PartOutput& output);
+	/// The clip `part`'s note at `tick` goes in: the newest that starts at or before it.
+	Segment* segmentAt(uint8_t part, int32_t tick);
+	/// Finishes one clip, `length` ticks long, and gives it its arranger instance at `position`.
+	bool finishClip(Segment& segment, int32_t position, int32_t length, bool synth);
+	/// Writes `value` from `tick` on `param`, whose clip starts at `start`: a held node at the clip's start first, if
+	/// it had none, so the clip plays its old value before `tick`.
+	bool writeEdit(AutoParam& param, ParamManager& manager, int32_t collection, int32_t slot, int32_t start,
+	               int32_t tick, int32_t from, int32_t value);
+	/// Where `target`'s clip starts now: a part's newest segment, or the song's start for the song's params.
+	[[nodiscard]] int32_t startOf(uint8_t target) const;
+	void remember(const Command& edit);
 
 	Song* song_ = nullptr;
 	Roster* roster_ = nullptr;
@@ -70,6 +143,25 @@ private:
 	uint32_t nodes_ = 0;
 	uint32_t offScale_ = 0;
 	bool bound_ = false;
+
+	// Capture.
+	CaptureHost* host_ = nullptr;
+	Chunks* chunks_ = nullptr;
+	const Palette* palette_ = nullptr;
+	SoundPicks picks_;   ///< The picks re-rolls have logged, by slot
+	SoundPicks playing_; ///< The picks whose tracks play
+	uint32_t rerolled_ = 0;
+	int32_t songStart_ = 0;
+	Segment segments_[kMaxSegments];
+	int32_t segmentCount_ = 0;
+	int16_t newest_[kMaxParts] = {};
+	Command edits_[kMaxEdits];
+	int32_t editCount_ = 0;
+	uint32_t cuts_ = 0;
+	uint32_t newTracks_ = 0;
+	uint32_t droppedSegments_ = 0;
+	int32_t soundsMissing_ = 0;
+	bool editedSounds_ = false;
 };
 
 } // namespace deluge::generative::firmware

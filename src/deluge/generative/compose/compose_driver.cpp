@@ -151,7 +151,14 @@ void ComposeDriver::replayed(const LogRecord& record) {
 			interval_ = command.value;
 			intervalTick_ = tick;
 			break;
-		case CommandKind::SetHome:
+		case CommandKind::SetHome: {
+			// The part's lanes write their value again from the new home, from `tick` (ClipBuilder::endPart()).
+			const auto centre = [this](const Automated& automated) { return centreOf(automated); };
+			clips_.endPart(command.target, tick, centre, true);
+			writer_->paramEdit(command, tick);
+			clips_.resumePart(command.target, tick, true);
+			break;
+		}
 		case CommandKind::SetParam:
 			writer_->paramEdit(command, tick);
 			break;

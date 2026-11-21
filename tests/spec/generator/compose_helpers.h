@@ -92,7 +92,11 @@ struct RecordingWriter final : SongWriter {
 		cutAt[part] = tick;
 	}
 	void tempo(const TempoNode& node) override { tempos.push_back(node); }
-	void paramEdit(const Command& edit, int32_t tick) override { edits.emplace_back(edit, tick); }
+	std::vector<size_t> editNodes; ///< nodes.size() at each paramEdit()
+	void paramEdit(const Command& edit, int32_t tick) override {
+		edits.emplace_back(edit, tick);
+		editNodes.push_back(nodes.size());
+	}
 	void stutter(bool on, int32_t tick) override { stutters.emplace_back(on, tick); }
 	void nextSong(int32_t tick) override { songs.push_back(tick); }
 
