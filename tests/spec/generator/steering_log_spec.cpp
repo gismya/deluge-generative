@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <vector>
@@ -47,8 +48,9 @@ std::vector<Command> everyCommand() {
 	std::vector<Command> out;
 	for (int32_t k = 0; k <= static_cast<int32_t>(kLastCommandKind); k++) {
 		const auto kind = static_cast<CommandKind>(k);
-		for (int32_t value : {0, 1, -1, 63, -64, 64, 300, -300, std::numeric_limits<int32_t>::max(),
-		                      std::numeric_limits<int32_t>::min()}) {
+		for (int32_t value :
+		     std::initializer_list<int32_t>{0, 1, -1, 63, -64, 64, 300, -300, std::numeric_limits<int32_t>::max(),
+		                                    std::numeric_limits<int32_t>::min()}) {
 			out.push_back({kind, static_cast<uint8_t>(k * 37), value});
 		}
 		out.push_back({kind, 255, 5, 65535, Lane::Riser});
