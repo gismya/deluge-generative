@@ -16,6 +16,9 @@
  */
 
 #include "generative/firmware/log_header.h"
+#if ENABLE_SYSEX_TEST
+#include "io/midi/test_port.h"
+#endif
 #include "generative/core/genre.h"
 #include "generative/firmware/sound_controls.h"
 #include "model/clip/instrument_clip.h"
@@ -141,6 +144,12 @@ int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t 
 				if (cable.destinationParamDescriptor.data == value.destination
 				    && static_cast<uint8_t>(cable.from) == value.source) {
 					if (cable.param.getCurrentValue() != value.value) {
+#if ENABLE_SYSEX_TEST
+						TEST_EVENT("gen_snapdiff out=%u lane=%d cable dest=%lu src=%u live=%ld fresh=%ld", block.output,
+						           static_cast<int>(block.lane), static_cast<unsigned long>(value.destination),
+						           value.source, static_cast<long>(value.value),
+						           static_cast<long>(cable.param.getCurrentValue()));
+#endif
 						cable.param.setCurrentValueBasicForSetup(value.value);
 						written++;
 					}
@@ -158,6 +167,11 @@ int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t 
 		std::memcpy(&value, values + p * static_cast<int32_t>(sizeof(int32_t)), sizeof value);
 		AutoParam& param = set->params[p];
 		if (param.getCurrentValue() != value) {
+#if ENABLE_SYSEX_TEST
+			TEST_EVENT("gen_snapdiff out=%u lane=%d coll=%u p=%ld live=%ld fresh=%ld", block.output,
+			           static_cast<int>(block.lane), block.collection, static_cast<long>(p), static_cast<long>(value),
+			           static_cast<long>(param.getCurrentValue()));
+#endif
 			param.resetInterpolationIncrement(); // a ramp still running mustn't carry on past the restore
 			param.setCurrentValueBasicForSetup(value);
 			written++;

@@ -1,0 +1,26 @@
+
+# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP ----
+include perform_transition_menu.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm psytrance-classic style=0 result=0
+expect event gen_transition_preload done error=0 parts=6 within=30
+expect event gen_transition start style=0 within=120
+expect event gen_transition phase=idle within=60

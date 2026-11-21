@@ -1,0 +1,107 @@
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast
+wait 110
+encoder 4 1 fast
+wait 110
+encoder 5 -1 fast

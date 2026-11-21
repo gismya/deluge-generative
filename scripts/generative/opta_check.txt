@@ -1,0 +1,50 @@
+# SPIKE #448 option A assumption 1 (not for merge): with no player edit at all, does each piece's header snapshot match
+# the presets Capture loads? Every param restoreSnapshot() writes is printed as gen_snapdiff. Piece 1: Acid with macro
+# steering; piece 2: a Start after a stop (the Outputs kept, the controls moved by piece 1); piece 3: BUILD INTO A DROP
+# into Psytrance (fresh Outputs) with the macros carried. All marked or last; Capture builds three songs (SONGS/, deleted
+# after by hand).
+start_state
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+button F8 down
+wait 50
+button F8 up
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+include opta_macros.txt
+include opta_macros.txt
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 / within=10
+include opta_macros.txt
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+include opta_transition.txt
+include opta_macros.txt
+wait 3000
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event /^gen_capture_end done songs=3 saved=3 / within=400 since=mark
