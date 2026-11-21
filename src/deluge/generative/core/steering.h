@@ -379,5 +379,7 @@ private:
 
 /// The steering log (steering_log.h): the core appends each command where it lands.
 class SteeringLog;
+/// How a piece opens, as its log's header holds it (steering_log.h).
+struct PieceStart;
 
 } // namespace deluge::generative

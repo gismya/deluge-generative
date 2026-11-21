@@ -426,6 +426,23 @@ bool SteeringLog::appendSoundPath(int32_t step, uint8_t part, uint8_t token, int
 	return write(step, record, static_cast<int32_t>(at - record));
 }
 
+GEN_STEP_CODE bool SteeringLog::appendWaiting(int32_t step, const Command& command, bool waits) {
+	if (!open_ || cut_) {
+		return false;
+	}
+	uint8_t record[kMaxCommandBytes];
+	uint8_t* at = record;
+	*at++ = waits ? kWaitingTag : kNotWaitingTag;
+	at = putVarint(at, static_cast<uint32_t>(step - lastStep_));
+	*at++ = static_cast<uint8_t>(command.kind);
+	if (waits) {
+		*at++ = command.target;
+		const auto value = static_cast<uint32_t>(command.value);
+		at = putVarint(at, (value << 1) ^ static_cast<uint32_t>(command.value >> 31));
+	}
+	return write(step, record, static_cast<int32_t>(at - record));
+}
+
 bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 	if (!open_ || part >= kMaxParts || landed_[part] < 0) {
 		return false;
@@ -561,12 +578,21 @@ const uint8_t* SteeringLog::Piece::decode(const uint8_t* at, int32_t step, LogRe
 		}
 		return at;
 	}
-	out.command.kind = static_cast<CommandKind>(tag & ~kExtended);
+	if (tag == kWaitingTag || tag == kNotWaitingTag) {
+		out.kind = tag == kWaitingTag ? RecordKind::Waiting : RecordKind::NotWaiting;
+		out.command.kind = static_cast<CommandKind>(*at++);
+		if (tag == kNotWaitingTag) {
+			return at;
+		}
+	}
+	else {
+		out.command.kind = static_cast<CommandKind>(tag & ~kExtended);
+	}
 	out.command.target = *at++;
 	uint32_t zigzag = 0;
 	at = getVarint(at, zigzag);
 	out.command.value = static_cast<int32_t>((zigzag >> 1) ^ (0u - (zigzag & 1)));
-	if ((tag & kExtended) != 0) {
+	if (out.kind == RecordKind::Command && (tag & kExtended) != 0) {
 		uint32_t length = 0;
 		at = getVarint(at, length);
 		out.command.length = static_cast<uint16_t>(length);

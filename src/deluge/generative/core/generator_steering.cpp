@@ -495,8 +495,16 @@ void Generator::landPending(SteeringLog* log) {
 		if (stepsToLine(command) != 0) {
 			return false;
 		}
-		if (apply(command) && log != nullptr) {
-			log->append(n, command);
+		if (apply(command)) {
+			if (log != nullptr) {
+				log->append(n, command);
+			}
+		}
+		else if (isArcMove(command) && log != nullptr) {
+			// Refused at its line, it still leaves its slot: replay must not keep waiting it (unreachable today).
+			log->appendWaiting(
+			    n, {command.kind == CommandKind::Transition ? CommandKind::Transition : CommandKind::ForceSection},
+			    false);
 		}
 		return true;
 	});

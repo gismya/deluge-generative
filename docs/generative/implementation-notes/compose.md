@@ -139,3 +139,22 @@ otherwise.
 - Test events: one line would pass the test port's 120-character event (it is cut, not dropped): `gen_compose_recipe`
   and `gen_compose_seed` split the Recipe between them.
 
+## Capture's replay (#145)
+
+- `ComposeDriver::beginReplay(generator, piece, writer, splitBudget)` replays one piece's span (to `endStep()`, or
+  `cutAt()` if earlier); `run()` applies each step's records through `Generator::decideReplayed()` (a template taking a
+  `next(LogRecord&)`), reading them with `SteeringLog::Piece::Reader`. A hard cut's Transition sits on `endStep()`
+  itself: the replay applies it there after the span (`endsAtTransition_`). It never stops on `ended()`.
+- Records stamped on step n but written after its decision (TransitionTempo, SoundDropped) are read before n's
+  decision in replay: harmless, apply() keeps nothing for them, and a drop then reaches `dropped_` before the Sound event
+  at stepTick(n).
+- Driver-side commands go to the writer from `ComposeDriver::replayed()`; Sound/KeyScale/Section from `shape()` in
+  `writeDue()`. The SongWriter's Capture calls (`cutClip`, `soundPick`, `newTrack`, `tempo`, `paramEdit`, `stutter`,
+  `nextSong`) default to nothing: `ComposeSong` (firmware) implements none yet (#146).
+- Split: `ClipBuilder::split()` ends notes still open (a Sustain) at the line and re-opens them there, and restarts each
+  lane from its value with `Track::origin` as its song start (the base rule `tick == origin`). The size check uses
+  `estimateBarsBytes()` plus a cut clip's or new track's setup (`songExtra_`).
+- Spec traps: `PieceStart` holds a whole Recipe, so a hand-built log needs `sizeof(PieceStart)` bytes beyond its
+  records, or `beginPiece()` opens nothing and `piece(0)` reads garbage (a segfault with no CppSpec output). A crashing
+  spec prints nothing: read the backtrace from `~/Library/Logs/DiagnosticReports/generator_specs-*.ips` (lldb hangs
+  here).

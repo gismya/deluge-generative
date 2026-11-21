@@ -22,10 +22,13 @@
 
 #pragma once
 
+#include "generative/compose/capture_timing.h"
 #include "generative/compose/clip_builder.h"
+#include "generative/compose/song_size.h"
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include <cstdint>
 
 namespace deluge::generative::compose {
@@ -48,6 +51,13 @@ public:
 	/// SHIFT+PLAY does: only the firmware check (spec §21.3) asks for it, to build a golden's case.
 	void begin(Generator& generator, const Recipe& recipe, uint32_t seed, const Takes& takes, int32_t targetSteps,
 	           SongWriter& writer, bool skipIntro = false);
+	/// Capture (spec §17.1): replays `piece` of a steering log from its header, each logged entry applied at its step
+	/// as it landed live (spec §2.6), up to the end of the piece's span: where it ended, or where the log was cut
+	/// (spec §17.2). No LENGTH rule: the log says where End landed. The log must not change until done. The song is
+	/// cut where the piece changes (spec §17.6), and split at a Section line once its size estimate passes
+	/// `splitBudget` bytes (spec §17.5).
+	void beginReplay(Generator& generator, const SteeringLog::Piece& piece, SongWriter& writer,
+	                 int64_t splitBudget = kSplitBudget);
 	/// Decides up to `steps` more steps, writing what they play. A runner job calls it a chunk at a time and yields
 	/// between (spec §15.7). Once the Outro's last line is reached, the core is flushed and the writer finished.
 	/// @return whether the song is done.
@@ -59,6 +69,8 @@ public:
 	/// The song's end, the Outro's last line, in ticks; 0 until done.
 	[[nodiscard]] int32_t endTick() const { return endTick_; }
 	[[nodiscard]] const ClipBuilder& clips() const { return clips_; }
+	/// Replay: the songs the piece became so far (spec §17.5), 1 until a split.
+	[[nodiscard]] int32_t songs() const { return songs_; }
 
 private:
 	/// Whether End goes on the queue before the next step's decision: the step index has reached the target, and the
@@ -73,6 +85,25 @@ private:
 	/// The sample Riser's note-on starts late, so its file ends on the Drop, at the Recipe's tempo (spec §9.5).
 	void timeRiser(Event& noteOn);
 	void finish();
+	/// Replay: the logged entries stamped on the next step, applied in its decision, with what the driver does
+	/// with them.
+	void decideReplayed();
+	/// Replay: a logged entry that isn't a command, or a driver-side command, on `step`.
+	void replayed(const LogRecord& record);
+	/// Replay: what the song does at an event the Compose shape ignores (spec §17.6, §17.5).
+	void shape(const Event& event);
+	/// Replay: a note played at another swing than the song's gets the difference built into its tick (spec §17.6).
+	void swingDifference(Event& note) const;
+	/// Replay: a tempo glide starts at `tick`, to `tempo` over `length` ticks: the song's tempo automation follows.
+	void glideTempo(int32_t tick, int32_t tempo, int32_t length);
+	/// Replay: the tempo automation's node for where a glide ends, if one waits, once the song reaches `tick`.
+	void tempoReaches(int32_t tick);
+	/// Replay: the song ends at a Section line, `tick`, and the next starts there (spec §17.5).
+	void split(int32_t tick);
+	/// The base of an automation lane that moves (ClipBuilder::finish()).
+	[[nodiscard]] int8_t centreOf(const Automated& automated) const;
+	/// The first step past the replayed span: no step from it on is decided.
+	[[nodiscard]] bool spanEnds() const;
 
 	Generator* generator_ = nullptr;
 	SongWriter* writer_ = nullptr;
@@ -84,6 +115,40 @@ private:
 	int32_t endTick_ = 0;
 	int32_t shortBuildGrooves_ = 0;
 	bool done_ = false;
+
+	// Replay (Capture).
+	bool replaying_ = false;
+	SteeringLog::Piece::Reader reader_;
+	/// The first step past the piece's span (spec §17.2): where it ended, or where the log was cut.
+	int32_t spanEnd_ = 0;
+	/// The piece ended at a transition's start step: a hard cut's entry sits on that step itself (spec §17.2).
+	bool endsAtTransition_ = false;
+	/// Parts whose newest SetSound a confirm dropped (SoundDropped): its Sound event starts no track.
+	uint8_t dropped_ = 0;
+	static_assert(kMaxParts <= 8, "dropped_ holds a bit a part");
+	/// The song's tempo, from its first (spec §17.6), as the log's glides move it.
+	GlidePlan tempoPlan_;
+	/// A tempo glide's end node waits for the song to reach it.
+	bool tempoEndDue_ = false;
+	/// Whether the song's tempo has moved: its tempo automation has a node.
+	bool tempoMoved_ = false;
+	/// The swing amount as the log's glides move it, changing on step lines as Perform's does (spec §12.7); the
+	/// swing interval, and the one before it changed at intervalTick_; the song's, the piece's first.
+	GlidePlan swingPlan_;
+	int32_t interval_ = 0;
+	int32_t intervalBefore_ = 0;
+	int32_t intervalTick_ = 0;
+	int32_t songSwing_ = 0;
+	int32_t songInterval_ = 0;
+	/// The key and scale that play, for the key changes that cut pitched clips.
+	uint8_t keyRoot_ = 0;
+	Scale scale_ = Scale::Minor;
+	/// Splits (spec §17.5): the budget, where the song being written starts, the setup it has gained since (a cut
+	/// clip's, a new track's), and the songs so far.
+	int64_t splitBudget_ = kSplitBudget;
+	int32_t songStart_ = 0;
+	int64_t songExtra_ = 0;
+	int32_t songs_ = 1;
 };
 
 } // namespace deluge::generative::compose
