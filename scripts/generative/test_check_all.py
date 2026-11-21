@@ -539,6 +539,168 @@ class HardwareOnlySkips(unittest.TestCase):
         self.assertNotIn("hardware-only", printed.getvalue())
 
 
+class SlotWaits(unittest.TestCase):
+    """A run that waited for a real-time emulator slot (emu_slots.py, #417) says so in its row, and the table sums
+    the waits."""
+
+    def setUp(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        patch = mock.patch.object(check_all, "LOGS", logs.name)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.checks = check_all.Checks()
+
+    def test_a_row_that_waited_says_how_long_after_its_note(self):
+        cmd = [
+            sys.executable,
+            "-c",
+            (
+                "print('[test-port-emu] waited 42 s for a real-time emulator slot (slot 0 of 6)');"
+                "print('3 checks, 0 failed; logs in o')"
+            ),
+        ]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.checks.run("delugemu a.txt", cmd, check_all.SCRIPT_RESULT)
+        self.assertEqual(
+            self.checks.rows[0][3],
+            "3 checks, 0 failed; waited 42 s for an emulator slot",
+        )
+
+    def test_a_row_with_no_detail_still_says_it_waited(self):
+        cmd = [
+            sys.executable,
+            "-c",
+            "print('waited 5 s for a real-time emulator slot (slot 1 of 2)')",
+        ]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.checks.run("leak check", cmd)
+        self.assertEqual(self.checks.rows[0][3], "waited 5 s for an emulator slot")
+
+    def test_a_row_that_didnt_wait_says_nothing_of_it(self):
+        cmd = [sys.executable, "-c", "print('3 checks, 0 failed')"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.checks.run("delugemu a.txt", cmd, check_all.SCRIPT_RESULT)
+        self.assertEqual(self.checks.rows[0][3], "3 checks, 0 failed")
+
+    def test_the_table_sums_the_waits_under_its_rows(self):
+        self.checks.rows = [
+            (
+                "delugemu a.txt",
+                "PASS",
+                1.0,
+                "3 checks, 0 failed; waited 42 s for an emulator slot",
+                "",
+            ),
+            ("delugemu b.txt", "PASS", 1.0, "4 checks, 0 failed", ""),
+            ("leak check", "PASS", 1.0, "waited 8 s for an emulator slot", ""),
+        ]
+        printed = io.StringIO()
+        with (
+            contextlib.redirect_stdout(printed),
+            mock.patch.dict(os.environ, {"DELUGE_EMU_SLOTS": "4"}),
+        ):
+            checks_failed = self.checks.table()
+        self.assertEqual(checks_failed, 0)
+        self.assertIn(
+            "waited for real-time emulator slots: 50 s in total, in 2 runs (pool of 4, DELUGE_EMU_SLOTS)",
+            printed.getvalue(),
+        )
+
+    def test_with_no_waits_the_table_says_nothing_of_them(self):
+        self.checks.rows = [("delugemu b.txt", "PASS", 1.0, "4 checks, 0 failed", "")]
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            self.checks.table()
+        self.assertNotIn("emulator slot", printed.getvalue())
+
+
+class MergeRuleHeader(unittest.TestCase):
+    """The table's header says which --full rule applied (covers.full_rule(), #417 slice 3)."""
+
+    def setUp(self):
+        logs = tempfile.TemporaryDirectory()
+        self.addCleanup(logs.cleanup)
+        with mock.patch.object(check_all, "LOGS", logs.name):
+            self.checks = check_all.Checks()
+        self.checks.rows = [("a", "PASS", 1.0, "", "")]
+
+    def table(self):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            self.checks.table()
+        return printed.getvalue().strip().splitlines()
+
+    def test_a_covers_pick_that_suffices(self):
+        self.checks.merge_rule = check_all.merge_rule_line(None, full=False)
+        self.assertEqual(self.table()[0], "merge rule: covers pick suffices")
+
+    def test_a_change_that_needs_full_says_why(self):
+        self.checks.merge_rule = check_all.merge_rule_line(
+            "check_all.py changed", full=False
+        )
+        self.assertEqual(
+            self.table()[0],
+            "merge rule: needs --full: check_all.py changed (this run isn't --full: run it with --full before the merge)",
+        )
+
+    def test_the_base_generative_is_a_merge_into_it(self):
+        with mock.patch.object(
+            check_all.covers, "full_rule", return_value=None
+        ) as rule:
+            check_all.full_reason(["docs/x.md"], "origin/generative")
+            self.assertTrue(rule.call_args.args[2])
+            check_all.full_reason(["docs/x.md"], "origin/m4-capture")
+            self.assertFalse(rule.call_args.args[2])
+            self.assertEqual(rule.call_args.args[0], ["docs/x.md"])
+
+    def test_no_merge_base_runs_everything_so_counts_as_a_full_run(self):
+        # changed None: plan() runs every check and script, so nothing asks for another run with --full
+        with mock.patch.object(
+            check_all.covers, "full_rule", return_value="the files changed are unknown"
+        ):
+            reason, line, ran_full = check_all.merge_rule(
+                None, "origin/m4-capture", full=False
+            )
+        self.assertTrue(ran_full)
+        self.assertEqual(reason, "the files changed are unknown")
+        self.assertEqual(
+            line,
+            "merge rule: needs --full: the files changed are unknown (this run is --full)",
+        )
+        self.assertEqual(check_all.full_run_note(reason, ran_full), "")
+
+    def test_a_pick_run_that_needs_full_says_so_on_the_last_line(self):
+        with mock.patch.object(check_all.covers, "full_rule", return_value="x changed"):
+            reason, line, ran_full = check_all.merge_rule(
+                ["x"], "origin/m4-capture", full=False
+            )
+        self.assertFalse(ran_full)
+        self.assertIn("this run isn't --full", line)
+        self.assertEqual(
+            check_all.full_run_note(reason, ran_full),
+            "; needs --full before the merge (x changed)",
+        )
+        with mock.patch.object(check_all.covers, "full_rule", return_value="x changed"):
+            reason, line, ran_full = check_all.merge_rule(
+                ["x"], "origin/m4-capture", full=True
+            )
+        self.assertEqual(check_all.full_run_note(reason, ran_full), "")
+
+    def test_a_full_run_says_it_was_one(self):
+        self.checks.merge_rule = check_all.merge_rule_line(
+            "check_all.py changed", full=True
+        )
+        self.assertEqual(
+            self.table()[0],
+            "merge rule: needs --full: check_all.py changed (this run is --full)",
+        )
+        self.checks.merge_rule = check_all.merge_rule_line(None, full=True)
+        self.assertEqual(
+            self.table()[0], "merge rule: covers pick suffices (this run is --full)"
+        )
+
+
 class FindBase(unittest.TestCase):
     def setUp(self):
         logs = tempfile.TemporaryDirectory()

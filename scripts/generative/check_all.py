@@ -4,8 +4,14 @@
 
 Run it from the host, in the checkout to check: it calls ./dbt itself. It runs what the change needs: the files changed
 since the merge base with origin/BASE (committed, staged, unstaged, untracked or deleted) pick the steps below and the
-probe scripts (#314). --full runs every step and every probe script whatever changed: the final run before a merge
-into generative or a milestone branch is --full. With no merge base, every step runs too. In order:
+probe scripts (#314). --full runs every step and every probe script whatever changed. With no merge base, every step
+runs too. Whether the final run before a merge must be --full is mechanical (covers.full_rule(), #417), and the
+table's first line says which rule applied: "needs --full: WHY" for a merge into generative, a changed firmware input
+(covers.FIRMWARE: src/, lib/, the build files, the toolchain) no probe script's "# covers:" line names, or a change to what the emulator checks run on or what picks them (gen_emu.py,
+test_port_emu.py, deluge_probe.py, their imports and the scripts they name, the delugemu pin, the test port,
+check_all.py, covers.py); else "covers pick suffices", and the run without --full is the one a merge into a milestone
+branch needs. A run that needs --full and wasn't says so on its last line too; a run with no merge base runs everything, so counts as
+--full. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
   1. every probe script's "# covers:" paths match a file, and name every src/ file that sends an event it expects;
@@ -42,7 +48,7 @@ src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CM
 build tasks), to what the emulator checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the
 delugemu pin) or decide what they run (check_all.py, covers.py), to a probe script or an include, or to a file a covers
 line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check, the
-firmware check and test_port_smoke.txt only (and every script with no covers line): --full, the final run before a merge, is the backstop.
+firmware check and test_port_smoke.txt only (and every script with no covers line), and needs --full before its merge.
 The table has a SKIP row for each step left out, with why, and a "not picked" row naming the probe scripts the change
 didn't pick.
 Every step runs even when an earlier one fails, except those that need a build that failed. Exits 1 on any failure.
@@ -53,7 +59,10 @@ when gh knows it, else the branch's upstream when it tracks another branch on or
 
 Emulator boots pick free UDP ports and retry, so a port another run holds doesn't kill a boot, and no two write the
 same card image or log file: that is what lets them run side by side. The probe scripts run in real time, so a
-busy machine can fail an expect that passes alone. An emulator check that fails beside the others therefore runs
+busy machine can fail an expect that passes alone. Every real-time emulator (the probe scripts, the leak check and the
+firmware check) takes a slot from a pool shared by every checkout on the host (emu_slots.py: DELUGE_EMU_SLOTS, default
+6) and waits while it is full: --jobs caps one run, the pool every run together. A row that waited says how long, and
+the table adds the waits up. An emulator check that fails beside the others therefore runs
 once more on its own when they are done, and that run's result counts: the table's note and the last line say it
 passed alone. The failed run's output is kept as NAME.together.log; the emulator's own logs (emu-NAME/ and the like)
 are the second run's. Logs: build/check_all/.
@@ -66,9 +75,10 @@ once. Configuring build/ for the test port yourself (for `--build release`) brea
 Times on the 12-core Mac with warm builds, at load averages of 10 to 25 from other work (#314): a change outside src/ and the probe scripts about 1 minute (the sanitized specs, and the unit tests
 for scripts/: 160 s with a cold sanitized build); a narrow src/ change 2 to 3 minutes plus the scripts it picks (a
 sidebar.cpp change: 120 to 170 s with smoke alone, 460 s once it picks perform_preset_browser.txt); --full 9.5 minutes
-(569 s, perform_preset_browser.txt's 5.5 minutes the longest path). A run with delugemu can pass an agent's 600 s Bash
-limit: start it in the background with its output in a file and poll the
-file. Each step prints a "[check-all] NAME: ..." line as it starts and another with its result as it ends, so the file
+(569 s, perform_preset_browser.txt's 5.5 minutes the longest path). With other agents' runs holding the emulator
+slots it takes far longer: #442's --jobs 1 run took 82 minutes. A run with delugemu can pass an agent's 600 s Bash
+limit: start it in the background (Bash's run_in_background with timeout 7200000; the default kills it at 30 minutes)
+with its output in a file and poll the file. Each step prints a "[check-all] NAME: ..." line as it starts and another with its result as it ends, so the file
 shows where the run is. Use --quick while iterating.
 """
 
@@ -87,6 +97,7 @@ from typing import NamedTuple
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import covers
+import emu_slots
 import pr_base
 import test_port_emu
 
@@ -224,6 +235,7 @@ def same_named(scripts):
 class Checks:
     def __init__(self):
         self.rows = []
+        self.merge_rule = None  # merge_rule_line(): the table's first line
         self.cost_rows = []  # run_together()'s jobs, each with the seconds of its run that counts
         os.makedirs(LOGS, exist_ok=True)
         for stale in glob.glob(os.path.join(LOGS, "*.together.log")):
@@ -293,7 +305,7 @@ class Checks:
             why = last[-1] if last else f"exit {code}"
             print(f"[check-all] {name}: SKIP ({why})", flush=True)
             return (name, "SKIP", seconds, why, log_path)
-        note = detail(text) if detail else ""
+        note = slot_wait_note(detail(text) if detail else "", text)
         ok = code == 0
         report = [
             f"[check-all] {name}: {'PASS' if ok else 'FAIL'} ({seconds:.0f} s) {note}"
@@ -317,6 +329,8 @@ class Checks:
 
     def table(self):
         width = max(len(r[0]) for r in self.rows)
+        if self.merge_rule:
+            print("\n" + self.merge_rule)
         print("\n" + f"{'check':<{width}}  result   time  note")
         for name, result, seconds, note, _ in self.rows:
             print(f"{name:<{width}}  {result:<6} {seconds:5.0f}s  {note}")
@@ -329,6 +343,16 @@ class Checks:
             print(
                 f"hardware-only expects skipped under delugemu: {sum(skips)}, in {len(skips)} scripts (they run on"
                 " the Deluge)"
+            )
+        waits = [int(m.group(1)) for r in self.rows if (m := SLOT_WAITS.search(r[3]))]
+        if waits:
+            try:
+                pool = f"pool of {emu_slots.pool_size()}"
+            except ValueError as exc:
+                pool = str(exc)
+            print(
+                f"waited for real-time emulator slots: {sum(waits)} s in total, in {len(waits)} runs ({pool}, "
+                f"{emu_slots.SIZE_ENV})"
             )
         return sum(1 for r in self.rows if r[1] == "FAIL")
 
@@ -364,6 +388,49 @@ def last_match(pattern):
 # table adds up (Checks.table()).
 SCRIPT_RESULT = last_match(r"\d+ checks, \d+ failed(?:, \d+ hardware-only skipped)?")
 HARDWARE_ONLY_SKIPS = re.compile(r"(\d+) hardware-only skipped")
+# A run that waited for a real-time emulator slot (emu_slots.py): its row's note ends with SLOT_WAIT.
+SLOT_WAIT = "waited {} s for an emulator slot"
+SLOT_WAITS = re.compile(r"waited (\d+) s for an emulator slot")
+
+
+def slot_wait_note(note, text):
+    """The row's note with how long the run waited for a real-time emulator slot, if it waited (each wait of the run,
+    added up: a script's boot retries keep their slot, so there is one)."""
+    waited = sum(int(n) for n in emu_slots.WAITED.findall(text))
+    if not waited:
+        return note
+    return "; ".join(n for n in (note, SLOT_WAIT.format(waited)) if n)
+
+
+def full_reason(changed, base_ref):
+    """covers.full_rule() for this run: why the change needs --full before its merge, or None."""
+    scripts = covers.probe_scripts(HERE)[0]
+    return covers.full_rule(changed, scripts, base_ref == "origin/generative", REPO)
+
+
+def merge_rule(changed, base_ref, full):
+    """(reason, the table's first line, ran_full) for this run: covers.full_rule()'s reason or None, and whether the
+    run checks everything, by --full or because with `changed` None (no merge base, no diff) plan() runs it all."""
+    reason = full_reason(changed, base_ref)
+    ran_full = full or changed is None
+    return reason, merge_rule_line(reason, ran_full), ran_full
+
+
+def full_run_note(reason, ran_full):
+    """What the last line adds when the change needs --full and this run wasn't one."""
+    return (
+        f"; needs --full before the merge ({reason})" if reason and not ran_full else ""
+    )
+
+
+def merge_rule_line(reason, full):
+    """The table's header: which --full rule applied (covers.full_rule()), and whether this run was --full."""
+    rule = f"needs --full: {reason}" if reason else "covers pick suffices"
+    if full:
+        return f"merge rule: {rule} (this run is --full)"
+    if reason:
+        return f"merge rule: {rule} (this run isn't --full: run it with --full before the merge)"
+    return f"merge rule: {rule}"
 
 
 # The ARM types row: its count line, or how to get a toolchain on a fresh clone.
@@ -447,8 +514,8 @@ def main():
     p.add_argument(
         "--full",
         action="store_true",
-        help="run every check and every probe script, whatever changed: the final run before a merge into "
-        "generative or a milestone branch",
+        help="run every check and every probe script, whatever changed: the final run before a merge when the "
+        'table\'s "merge rule" line says "needs --full"',
     )
     p.add_argument(
         "--jobs",
@@ -465,6 +532,10 @@ def main():
     args = p.parse_args()
     if args.jobs < 1:
         p.error("--jobs must be at least 1")
+    try:
+        emu_slots.pool_size()
+    except ValueError as exc:
+        p.error(str(exc))
     # Before anything runs: a bad --scripts stops the run here, not after the builds.
     given = [resolve_script(s) for s in args.scripts] if args.scripts else None
     if given and same_named(given):
@@ -482,6 +553,8 @@ def main():
     py = sys.executable
     changed = covers.changed_paths(merge_base, REPO) if merge_base else None
     todo = plan(changed, base_ref, args.full, given)
+    reason, checks.merge_rule, ran_full = merge_rule(changed, base_ref, args.full)
+    print(f"[check-all] {checks.merge_rule}", flush=True)
     if args.full:
         print("[check-all] --full: every check and every probe script", flush=True)
     elif changed is None:
@@ -612,6 +685,7 @@ def main():
         "check_all: "
         + ("FAIL" if failed else "PASS")
         + (f" ({alone} passed only alone, see the notes)" if alone else "")
+        + full_run_note(reason, ran_full)
     )
     return 1 if failed else 0
 

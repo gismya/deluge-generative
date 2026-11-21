@@ -6,6 +6,7 @@
 # song's notes against tests/spec/generator/goldens/<genre>.txt, the genre on the "pick genre" lines below.
 # writes: SONGS/GOLDEN.XML
 # writes: RECIPES/ACID TECHNO *
+# runs-via: gen_emu.py golden
 # needs: gen_emu.py golden (it reads the saved song and Recipe file off the card clone)
 # No covers lines: check_all.py runs gen_emu.py golden whenever it runs delugemu, as it runs smoke.
 start_state

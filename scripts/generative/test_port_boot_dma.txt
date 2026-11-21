@@ -6,5 +6,6 @@
 # delugemu doesn't chainload, so there it always passes: it is a hardware-only check, which check_all.py doesn't run
 # (it runs perform_*.txt and test_port_smoke.txt). Put it first in a hardware session that loads a build
 # (deluge_probe.py session --build ... test_port_boot_dma.txt ...): it reads what the load left.
+# runs-via: deluge_probe.py session --build ... (hardware only: first in a session that loads a build)
 report boot_dma
 expect event boot_dma running=0
