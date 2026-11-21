@@ -362,6 +362,11 @@ struct SustainSpec {
 	/// about two octaves wide (Ambient's Pad, spec §5.2). A Sustain voicing chords only, with no doubled root
 	/// (sustainValid()).
 	bool openVoicing = false;
+	/// With an open voicing: the per-mille chance, drawn on each bar line, that of the pairings that move the voices
+	/// least the voicing takes the one holding the most of them in place, so a shared note stays put and doesn't strike
+	/// (with holdsCommonTones). Otherwise it takes the first found, which may move a shared note an octave and strike
+	/// it there (Ambient's Pad: owner, round 2's HOLD, spec §5.2). 0 to 1000; only with openVoicing (sustainValid()).
+	uint16_t holdSharedChance = 0;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -1602,11 +1607,12 @@ constexpr bool dropOutsValid(const Genre& genre) {
 /// phrase (fitsPhrase()), and no anchored Extension or open voicing on a pedal, which voices none (pedalVoicing()).
 /// Only a Sustain holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes
 /// uncut, and only decideSustain() ends or extends them. Only a Sustain voices open, and doubles no root there
-/// (openVoicing()).
+/// (openVoicing()), and only an open voicing has a chance to hold its shared notes, at most 1000 per-mille.
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
-			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing) {
+			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing
+			    || part.sustain.holdSharedChance != 0) {
 				return false;
 			}
 			continue;
@@ -1619,6 +1625,9 @@ constexpr bool sustainValid(const Genre& genre) {
 			return false;
 		}
 		if (sustain.openVoicing && (sustain.pedal || sustain.doubleRoot)) {
+			return false;
+		}
+		if (sustain.holdSharedChance > 1000 || (sustain.holdSharedChance != 0 && !sustain.openVoicing)) {
 			return false;
 		}
 	}
