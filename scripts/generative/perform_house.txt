@@ -2,7 +2,7 @@
 # its 8- or 16-bar Build gliding from 125-135 to House's 120-126 BPM onto House's Drop. House then plays its Groove
 # (claps on 2 and 4, the offbeat bass, the stabs and Strings, the Lead answering in each bar's second half); a forced
 # Break keeps the Stab, the Strings and the closed hat; a forced Groove follows a phrase later, and a forced Build (4 or
-# 8 bars, without the kick and the Bass) rolls the Snare up to 32nds through the 1-beat Gap into a second Drop. gen_h1 (step
+# 8 bars, every part kept) rolls the Snare up to 32nds through the 1-beat Gap into a second Drop. gen_h1 (step
 # decisions) and gen_h16 (culls, the last culled voice's part, voices, the slowest render) report every 4 bars (about
 # 8 s); the runner reads them over the Groove and the second Drop, and stops if H1's mean passes 150 us or culled= ever
 # names DRUMS (a kick) or BASS. gen_mem: SDRAM free before entry, when Acid's roster is freed, and after leaving.
@@ -84,7 +84,7 @@ pad 17 7 up
 expect event gen_press force GROOVE
 expect event gen_section GROOVE within=40
 
-# ---- A forced Build: no kick or Bass, the Snare rolling to 32nds, a beat's Gap, then the second Drop ----
+# ---- A forced Build: every part kept, the Snare rolling to 32nds, a beat's Gap, then the second Drop ----
 pad 17 5 down
 wait 50
 pad 17 5 up

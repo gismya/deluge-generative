@@ -58,8 +58,8 @@ enum class Purpose : uint8_t {
 	ArpWalk,        ///< position: pick (Groove, phrase, pool entry), step within the pattern. A Random Arp's note
 	DropOut,   ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether, which).
 	           ///< Part kArcPart. Never keyed on the take
-	ChordLoop, ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether, back,
-	           ///< which, length, chord). Part kArcPart. Never keyed on the take
+	ChordLoop, ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
+	           ///< length, chord). Part kArcPart. Never keyed on the take
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

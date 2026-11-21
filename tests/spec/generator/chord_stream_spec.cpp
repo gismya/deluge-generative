@@ -112,15 +112,13 @@ constexpr Genre kCadences{
     .arc = {.introPhrases = 2, .groovePhrases = {4, 5}, .breakPhrases = {4, 4}, .buildBars = kPhraseBuild},
 };
 
-/// A looping walk (spec §7.4): a new loop on half the Drops, a third of them one heard before, a loop half a phrase
-/// long one time in three.
+/// A looping walk (spec §7.4): a new loop on 1 Drop in 3, half a phrase long one time in three.
 constexpr ChordGraph kLooping{.homePull = 10,
                               .moves = kMelodicMoves,
                               .cadenceTarget = 6,
                               .cadencePeriod = 4,
-                              .loopChance = 500,
-                              .halfLoopChance = 333,
-                              .loopReturnChance = 333};
+                              .loopChance = 333,
+                              .halfLoopChance = 333};
 constexpr Genre kLoops{.name = "looping", .parts = kRootBass, .harmony = {.graph = &kLooping}, .arc = kArc};
 
 /// The chords from one Drop to the next (the piece's start to the first): the chord on each bar line of the phrase
@@ -462,7 +460,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			expect(wholes).to_be_greater_than(halves);
 		});
 
-		it("draws a new loop on about half the Drops, and now and then goes back to one heard before, chord for chord", _ {
+		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before", _ {
 			int32_t drops = 0;
 			int32_t changes = 0;
 			int32_t returns = 0;
@@ -484,8 +482,8 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			}
 			expect(drops).to_be_greater_than(150);
 			// A new loop can draw the chords of the one before, or of one before that: the shares are approximate.
-			expect(changes * 100 / drops).to_be_between(35, 60);
-			expect(returns * 100 / drops).to_be_between(5, 30);
+			expect(changes * 100 / drops).to_be_between(20, 40);
+			expect(returns * 100 / drops).to_be_less_than(5);
 		});
 	});
 

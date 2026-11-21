@@ -306,7 +306,7 @@ constexpr ChordMove kHouseMoves[] = {
 /// 2 bars a chord, a repeat now and then so some last 4 and a few longer, the cadence on ♭VII every 4 chords (spec
 /// §4.5). The repeat weight has no cap and weighs most where the guard thins the other ways on: at 15 one bar in 7
 /// sat in a hold of 6 bars or more, at 8 one in 16. The chords loop (spec §7.4, round 2's S1): a 2- or 4-chord loop
-/// held through the Break and the Build, a new one on half the Drops, a third of those back to one played before.
+/// held through the Break and the Build, a new one on 1 Drop in 3.
 constexpr ChordGraph kHouseGraph{
     .homePull = 20,
     .moves = kHouseMoves,
@@ -314,9 +314,8 @@ constexpr ChordGraph kHouseGraph{
     .cadenceTarget = kVII,
     .cadencePeriod = 4,
     .barsPerChord = 2,
-    .loopChance = 500,
+    .loopChance = 333,
     .halfLoopChance = 333,
-    .loopReturnChance = 333,
 };
 
 constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Mixolydian};
@@ -358,10 +357,8 @@ constexpr Genre kHouse{
             // The breakdown is the Strings and the Stab over the closed hat. Its Density dips by 5, not 20: the
             // closed hat has no anchors.
             .breakKeeps = {.parts = partBit(kStabPart) | partBit(kStringsPart), .lanes = laneBit(Lane::ClosedHat)},
-            // Builds keep everything but the kick and the Bass, which return on the Drop (round 2's S4b). Lanes listed,
-            // not the Drums part: its bit would keep the kick.
-            .buildKeeps = {.parts = partBit(kStabPart) | partBit(kStringsPart) | partBit(kLeadPart),
-                           .lanes = static_cast<uint16_t>(0x7FFF & ~laneBit(Lane::Kick))},
+            // Builds play everything: no cut, so the kick and bass run on into the Gap.
+            .buildKeeps = kEverything,
             .buildCutBars = 0,
             .gap = GapLength::Beat,
             .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},

@@ -863,8 +863,8 @@ private:
 	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
 	/// @return The playing chord's degree from this step on.
 	int32_t walkChord(int32_t step);
-	/// walkChord() for a looping graph (spec §7.4), on the chord lines of its grid and on a Drop: moves to another
-	/// loop on a Drop, and draws each chord keyed on the loop and the bar in it, so every pass plays the same chords.
+	/// walkChord() for a looping graph (spec §7.4), on the chord lines of its grid and on a Drop: moves to a new loop
+	/// on a Drop, and draws each chord keyed on the loop and the bar in it, so every pass plays the same chords.
 	int32_t walkLoop(const ChordGraph& graph, int32_t step, int32_t current);
 	/// Voices the chord on `root` at the Extension level the Recipe's Complexity gives, within the genre's floor and
 	/// ceiling: on bar lines, and as a piece starts.
@@ -963,10 +963,9 @@ private:
 	/// crosses, so a jump leaves the walk where it is.
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
-	/// A looping graph's loop (spec §7.4): the one playing, and how many have been drawn (1 from the start). Moved only
+	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255). Moved only
 	/// on a Drop's chord line.
 	uint8_t chordLoop_ = 0;
-	uint8_t chordLoops_ = 1;
 	/// The playing chord, voiced on the last bar line (spec §7.4): the walk's degree is its root, `steps[0]`, and its
 	/// Extension level the Recipe's Complexity then, within the genre's floor and ceiling. Chords, Extensions and keys
 	/// change only on bar lines (a key change lands on a phrase line), so every part that plays chord tones reads it

@@ -106,7 +106,7 @@ describe house("House", $ {
 		}
 	});
 
-	it("loops a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 8, cadence ♭VII every 4, Extensions 1–2, no guarded chord, a new loop on half the Drops", _ {
+	it("loops a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 8, cadence ♭VII every 4, Extensions 1–2, no guarded chord, a new loop on 1 Drop in 3", _ {
 		const ChordGraph* graph = houseGenre.harmony.graph;
 		expect(graph != nullptr).to_be_true();
 		std::set<std::pair<int32_t, int32_t>> moves;
@@ -125,10 +125,9 @@ describe house("House", $ {
 		expect(graph->repeatWeight).to_equal(8);
 		expect(graph->cadenceTarget).to_equal(kVII);
 		expect(graph->cadencePeriod).to_equal(4);
-		// The loop (rules review S1, round 2): a new one on half the Drops, a third of those back to one played before.
-		expect(graph->loopChance).to_equal(int16_t{500});
+		// The loop (rules review S1, round 2's s1-loop): a new one on 1 Drop in 3.
+		expect(graph->loopChance).to_equal(int16_t{333});
 		expect(graph->halfLoopChance).to_equal(int16_t{333});
-		expect(graph->loopReturnChance).to_equal(int16_t{333});
 		// ♭VII weakened from i and ♭VI (#371), and no vii° or vi° (#367): the guard at 0.
 		for (const ChordMove& move : graph->moves) {
 			if (move.to == kVII && (move.from == kI || move.from == kVI)) {
@@ -610,7 +609,7 @@ describe house("House", $ {
 	});
 
 	context("its Arc (spec §4.5, §9)", _ {
-		it("takes its Arc from the brief and round 2: a 2-phrase Intro, Groove 4–8, Break 1–2 keeping Stab, Strings and Closed hat, Builds 4×1 and 8×2 without the kick and the Bass, and a 1-beat Gap", _ {
+		it("takes its Arc from the brief and round 2: a 2-phrase Intro, Groove 4–8, Break 1–2 keeping Stab, Strings and Closed hat, Builds 4×1 and 8×2 with no cut and a 1-beat Gap", _ {
 			const ArcSpec& arc = houseGenre.arc;
 			expect(arc.introPhrases).to_equal(2);
 			expect(arc.outroPhrases).to_equal(1);
@@ -626,14 +625,6 @@ describe house("House", $ {
 				builds[bars.bars] = bars.weight;
 			}
 			expect(builds == std::map<int32_t, int32_t>{{4, 1}, {8, 2}}).to_be_true();
-			expect(arc.buildKeeps.has(kBassPart, Lane::None)).to_be_false();
-			expect(arc.buildKeeps.has(kDrumsPart, Lane::Kick)).to_be_false();
-			for (int32_t part : {kStabPart, kStringsPart, kLeadPart}) {
-				expect(arc.buildKeeps.has(part, Lane::None)).to_be_true();
-			}
-			for (Lane lane : {Lane::Clap, Lane::ClosedHat, Lane::OpenHat, Lane::Snare, Lane::Riser}) {
-				expect(arc.buildKeeps.has(lane == Lane::Riser ? kFxPart : kDrumsPart, lane)).to_be_true();
-			}
 			expect(arc.buildCutBars).to_equal(0);
 			expect(arc.gap == GapLength::Beat).to_be_true();
 			expect(arc.roll.lane == Lane::Snare).to_be_true();
@@ -642,7 +633,7 @@ describe house("House", $ {
 			expect(cutAndGapUnderBuild(houseGenre)).to_be_true();
 		});
 
-		it("recedes to the Stab, the Strings and the closed hat in a Break, and Builds with everything but the kick and the Bass", _ {
+		it("recedes to the Stab, the Strings and the closed hat in a Break, and Builds with everything", _ {
 			int32_t buildSteps = 0;
 			int32_t breakNotes = 0;
 			std::set<int32_t> buildParts;
@@ -655,7 +646,6 @@ describe house("House", $ {
 					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
 					if (walked.steps[step].section == SectionKind::Build) {
 						buildParts.insert(e.part);
-						expect(e.part == kBassPart || (e.part == kDrumsPart && e.lane == Lane::Kick)).to_be_false();
 					}
 					if (walked.steps[step].section != SectionKind::Break || e.part == kFxPart) {
 						continue;
@@ -668,7 +658,7 @@ describe house("House", $ {
 			}
 			expect(buildSteps).to_be_greater_than(4 * kStepsPerBar);
 			expect(breakNotes).to_be_greater_than(0);
-			for (int32_t p : {kDrumsPart, kStabPart, kLeadPart}) {
+			for (int32_t p : {kDrumsPart, kBassPart, kStabPart, kLeadPart}) {
 				expect(buildParts.contains(p)).to_be_true();
 			}
 		});
