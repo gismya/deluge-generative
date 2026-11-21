@@ -71,7 +71,6 @@ public:
 		stage_ = perform::CaptureStage::Building;
 		building_ = nullptr;
 		bars_ = expected_ = 0;
-		saveFailed_ = false;
 		submitted_ = getSystemTicks();
 		for (int32_t i = perform::nextKept(log, keep, -1); i >= 0; i = perform::nextKept(log, keep, i)) {
 			songs_++;
@@ -177,29 +176,24 @@ private:
 				(slot < kMaxParts ? picks.part[slot] : picks.lane[slot - kMaxParts]).set(path);
 			}
 		}
-		// The palette the piece played from: the Current Recipe's for its genre, else the genre's read from the card.
-		const Palette* palette = &currentRecipe.palette();
+		// The palette the piece played from (picksPalette()): another genre's is read from the card first.
 		if (currentRecipe.recipe.genre != genre_) {
 			error_ = currentRecipe.stagePalette(*genre_);
 			if (error_ != Error::NONE) {
 				return JobOutcome::Failed;
 			}
-			palette = &currentRecipe.stagedPalette();
 		}
-		error_ = startSong(picks);
-		if (error_ != Error::NONE) {
-			return error_ == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
+		const Error started = startSong(picks);
+		if (started != Error::NONE) {
+			return stopBuild(started);
 		}
 		restoreSnapshot(piece, work_->roster, *genre_, *building_);
 
 		CaptureWork& work = *work_;
 		work.writer.prepare(building_, work.roster, *genre_);
-		work.writer.prepareCapture(picks, *palette, chunks, *this);
+		work.writer.prepareCapture(picks, picksPalette(), chunks, *this);
 		work.driver.beginReplay(work.generator, piece, work.writer);
-		const int32_t span = piece.cutAt() >= 0 && (piece.endStep() < 0 || piece.cutAt() < piece.endStep())
-		                         ? piece.cutAt()
-		                         : piece.endStep();
-		expected_ = std::max<int32_t>(span / kStepsPerBar, 1);
+		expected_ = std::max<int32_t>(piece.spanEnd() / kStepsPerBar, 1);
 		bars_ = 0;
 		while (!work.driver.run(1)) {
 			if (work.writer.error() != Error::NONE) {
@@ -212,6 +206,11 @@ private:
 				if (!sdramReserveFree()) {
 					return stopBuild(Error::INSUFFICIENT_RAM); // as a failed save (spec §17.7)
 				}
+#if ENABLE_SYSEX_TEST
+				if (waitWhileHeld(chunks)) {
+					return stopBuild(Error::ABORTED_BY_USER);
+				}
+#endif
 			}
 			if (chunks.boundary()) {
 				return stopBuild(Error::ABORTED_BY_USER);
@@ -221,12 +220,14 @@ private:
 			return stopBuild(work.writer.error());
 		}
 #if ENABLE_SYSEX_TEST
-		TEST_EVENT("gen_capture_piece songs=%ld notes=%lu nodes=%lu cuts=%lu tracks=%lu dropped=%lu off_scale=%lu",
+		TEST_EVENT("gen_capture_piece songs=%ld notes=%lu nodes=%lu cuts=%lu tracks=%lu dropped=%lu off_scale=%lu "
+		           "edits_dropped=%lu",
 		           static_cast<long>(work.driver.songs()), static_cast<unsigned long>(work.writer.notes()),
 		           static_cast<unsigned long>(work.writer.nodes()), static_cast<unsigned long>(work.writer.cuts()),
 		           static_cast<unsigned long>(work.writer.newTracks()),
 		           static_cast<unsigned long>(work.writer.droppedSegments()),
-		           static_cast<unsigned long>(work.writer.offScale()));
+		           static_cast<unsigned long>(work.writer.offScale()),
+		           static_cast<unsigned long>(work.writer.droppedEdits()));
 #endif
 		error_ = finishSong();
 		if (error_ != Error::NONE) {
@@ -235,10 +236,33 @@ private:
 		return chunks.cancelled() ? JobOutcome::Cancelled : JobOutcome::Done;
 	}
 
+#if ENABLE_SYSEX_TEST
+	/// Test hook: while the test port holds Compose ("hold compose"), the build waits after its first bar, as Compose's
+	/// does, so a script can press BACK on a song being built. @return whether it was cancelled meanwhile.
+	static bool waitWhileHeld(Chunks& chunks) {
+		if (!TestPort::composeHeld()) {
+			return false;
+		}
+		TEST_EVENT("gen_capture_held");
+		while (TestPort::composeHeld()) {
+			if (chunks.boundary()) {
+				return true;
+			}
+		}
+		return false;
+	}
+#endif
+
+	/// BACK is a cancel; anything else a failure, its error shown at the end.
+	static JobOutcome outcomeOf(Error error) {
+		return error == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
+	}
+
+	/// The build stops: the private song is thrown away in finished().
 	JobOutcome stopBuild(Error error) {
 		work_->writer.abandon();
 		error_ = error == Error::ABORTED_BY_USER ? Error::NONE : error;
-		return error == Error::ABORTED_BY_USER ? JobOutcome::Cancelled : JobOutcome::Failed;
+		return outcomeOf(error);
 	}
 
 	/// The next song's Outputs, from `picks`, built privately once the song before is freed: one song in RAM (spec
@@ -282,7 +306,6 @@ private:
 		TEST_EVENT("gen_capture_song n=%ld of=%ld error=%d name=%s", static_cast<long>(song_),
 		           static_cast<long>(songs_), static_cast<int>(error), error == Error::NONE ? saved : name);
 		if (error != Error::NONE) {
-			saveFailed_ = true;
 			return error;
 		}
 		saved_++;
@@ -326,7 +349,6 @@ private:
 	int32_t expected_ = 0;
 	perform::CaptureStage stage_ = perform::CaptureStage::Building;
 	uint32_t submitted_ = 0;
-	bool saveFailed_ = false;
 };
 
 CaptureJob job;

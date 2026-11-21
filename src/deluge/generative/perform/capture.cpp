@@ -96,12 +96,7 @@ namespace {
 /// Whether a piece has steps to build: some logged before its end, or before the log cut it. One still playing
 /// (the leave menu opens while it plays) counts unless the log cut its header.
 bool buildable(const SteeringLog::Piece& piece) {
-	const int32_t cut = piece.cutAt();
-	const int32_t end = piece.endStep();
-	if (cut == 0) {
-		return false;
-	}
-	return end != 0;
+	return piece.spanEnd() != 0;
 }
 
 } // namespace

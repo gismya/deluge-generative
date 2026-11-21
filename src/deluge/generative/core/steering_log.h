@@ -171,6 +171,9 @@ public:
 		[[nodiscard]] int32_t endStep() const;
 		/// Where logging stopped because the log was full: the first step not logged, or -1 (spec §17.2).
 		[[nodiscard]] int32_t cutAt() const;
+		/// The first step past its span (spec §17.2): where it ended, or where the log cut it if that came first. -1
+		/// while it plays uncut.
+		[[nodiscard]] int32_t spanEnd() const;
 		[[nodiscard]] bool marked() const;
 		/// All its bytes, and the header's (the opening and the header records).
 		[[nodiscard]] int32_t bytes() const;

@@ -104,9 +104,13 @@ public:
 	[[nodiscard]] int32_t soundsMissing() const { return soundsMissing_; }
 
 	/// The clips one song may hold past one a part: key changes and re-rolls each add one for a part (spec §17.6).
+	/// (tuning)
 	static constexpr int32_t kMaxSegments = 96;
-	/// The param edits and homes a split song starts from (restoreEdits()): each param's newest.
+	/// The param edits and homes a split song starts from (restoreEdits()): each param's newest (spec §17.5). Past
+	/// it, a param's first edit isn't kept for the next song (droppedEdits()). (tuning)
 	static constexpr int32_t kMaxEdits = 64;
+	/// Capture: params whose edits restoreEdits() can't give a split's next song (kMaxEdits).
+	[[nodiscard]] uint32_t droppedEdits() const { return droppedEdits_; }
 
 private:
 	/// One clip of a part: from `start` (ticks from the piece's step 0) to the next one's start or the song's end.
@@ -154,7 +158,9 @@ private:
 	SoundPicks playing_; ///< The picks whose tracks play
 	uint32_t rerolled_ = 0;
 	int32_t songStart_ = 0;
-	Segment segments_[kMaxSegments];
+	/// Each part's first clip, then the kMaxSegments more cuts and re-rolls start.
+	static constexpr int32_t kSegmentRoom = kMaxSegments + kMaxParts;
+	Segment segments_[kSegmentRoom];
 	int32_t segmentCount_ = 0;
 	int16_t newest_[kMaxParts] = {};
 	Command edits_[kMaxEdits];
@@ -162,6 +168,7 @@ private:
 	uint32_t cuts_ = 0;
 	uint32_t newTracks_ = 0;
 	uint32_t droppedSegments_ = 0;
+	uint32_t droppedEdits_ = 0;
 	int32_t soundsMissing_ = 0;
 	bool editedSounds_ = false;
 };

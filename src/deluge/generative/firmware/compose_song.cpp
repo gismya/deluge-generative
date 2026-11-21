@@ -60,7 +60,7 @@ void ComposeSong::prepare(Song* song, Roster& roster, const Genre& genre) {
 	rerolled_ = 0;
 	songStart_ = 0;
 	editCount_ = 0;
-	cuts_ = newTracks_ = droppedSegments_ = 0;
+	cuts_ = newTracks_ = droppedSegments_ = droppedEdits_ = 0;
 	soundsMissing_ = 0;
 	editedSounds_ = false;
 	beginSegments(0);
@@ -111,7 +111,7 @@ void ComposeSong::beginSegments(int32_t start) {
 }
 
 bool ComposeSong::addSegment(uint8_t part, int32_t start, const PartOutput& output) {
-	if (segmentCount_ == kMaxSegments) {
+	if (segmentCount_ == kSegmentRoom) {
 		droppedSegments_++;
 		return false;
 	}
@@ -337,7 +337,7 @@ void ComposeSong::cutClip(uint8_t part, int32_t tick) {
 		return;
 	}
 	const Segment old = segments_[newest_[part]];
-	if (segmentCount_ == kMaxSegments) {
+	if (segmentCount_ == kSegmentRoom) {
 		droppedSegments_++; // the part's notes stay in the clip they're in, out of scale mode if need be
 		return;
 	}
@@ -387,7 +387,7 @@ void ComposeSong::newTrack(uint8_t part, uint8_t /*token*/, int32_t tick) {
 	if (error_ != Error::NONE || chunks_ == nullptr) {
 		return;
 	}
-	if (segmentCount_ == kMaxSegments) {
+	if (segmentCount_ == kSegmentRoom) {
 		droppedSegments_++; // the part plays on with its old sound
 		return;
 	}
@@ -496,6 +496,9 @@ void ComposeSong::remember(const Command& edit) {
 	}
 	if (editCount_ < kMaxEdits) {
 		edits_[editCount_++] = edit;
+	}
+	else {
+		droppedEdits_++; // a split's next song starts this param from the header's value
 	}
 }
 

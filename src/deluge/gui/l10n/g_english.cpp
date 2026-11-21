@@ -179,7 +179,6 @@ PLACE_SDRAM_DATA Language english{
         {STRING_FOR_COMPOSE_TOO_LONG_ANY, "TOO LONG"},
         {STRING_FOR_LOAD_PRESET, "Load preset"},
         {STRING_FOR_OVERWRITE_QMARK, "Overwrite?"},
-        {STRING_FOR_LEAVE_PERFORM_QMARK, "Leave Perform?"},
         {STRING_FOR_LEAVE, "Leave"},
         {STRING_FOR_CANCEL, "Cancel"},
         {STRING_FOR_GENERATIVE_BUSY, "Busy"},

@@ -50,15 +50,9 @@ std::unique_ptr<Replayed> replay(const SteeringLog::Piece& piece, int32_t riserM
 	return out;
 }
 
-/// The first step past a piece's span: where it ended, or where the log was cut (spec §17.2).
-int32_t spanEnd(const SteeringLog::Piece& piece) {
-	return piece.cutAt() >= 0 && (piece.endStep() < 0 || piece.cutAt() < piece.endStep()) ? piece.cutAt()
-	                                                                                      : piece.endStep();
-}
-
 /// The notes both runs decided: those starting before the span's last step's decision tick, cut there.
 int32_t agreedTick(const SteeringLog::Piece& piece) {
-	return decisionTick(spanEnd(piece) - 1);
+	return decisionTick(piece.spanEnd() - 1);
 }
 
 /// A live run steered by `commands`, as Techno from its Intro (seed 3), and the log it wrote.

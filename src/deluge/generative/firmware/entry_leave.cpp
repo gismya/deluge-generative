@@ -432,7 +432,7 @@ void PerformAdapter::leave(LeaveEnded ended, perform::LeaveOption keep) {
 	teardown.prepare(ended, keep);
 	if (!runner.cancelAllThen(teardown)) {
 		// Only if teardown were already queued, which leaving() rules out: Perform carries on.
-		steering_.undoLeave();
+		undoLeave(); // the log stays Perform's too
 		if (ended != nullptr) {
 			ended(JobOutcome::Failed);
 		}

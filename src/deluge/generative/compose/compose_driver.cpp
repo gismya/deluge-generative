@@ -66,10 +66,7 @@ void ComposeDriver::beginReplay(Generator& generator, const SteeringLog::Piece& 
 	reader_ = piece.reader();
 	// The span: up to where the piece ended, or where the log was cut (spec §17.2). A piece still playing (none is
 	// once Perform has stopped) runs to its last record.
-	spanEnd_ = piece.endStep();
-	if (piece.cutAt() >= 0 && (spanEnd_ < 0 || piece.cutAt() < spanEnd_)) {
-		spanEnd_ = piece.cutAt();
-	}
+	spanEnd_ = piece.spanEnd();
 	if (spanEnd_ < 0) {
 		LogRecord record;
 		for (SteeringLog::Piece::Reader all = piece.reader(); all.next(record);) {
