@@ -30,7 +30,8 @@ constexpr uint32_t txSamplesQueued(uint32_t dmaAddr, uint32_t writeAddr, uint32_
 	return free == 0 ? ringFrames : ringFrames - free;
 }
 
-/// Generative mode (spec §20, the audio output's margin): how close the audio output came to running dry. When
+/// A test-port helper (ENABLE_SYSEX_TEST builds only use it, through io/midi/test_port_render.cpp). Generative mode
+/// (spec §20, the audio output's margin): how close the audio output came to running dry. When
 /// AudioEngine::routine() returns, the TX ring holds some audio the DMA has yet to play; nothing tops it up until the
 /// routine runs again. So the margin at the next entry is that audio's length less the time away, and a negative margin
 /// means the DMA ran out of new audio and replayed old samples: an underrun. The audio rendered ahead into the
