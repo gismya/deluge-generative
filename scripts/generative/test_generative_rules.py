@@ -44,6 +44,43 @@ class Strip(unittest.TestCase):
                 )
 
 
+def describe_findings(source):
+    """(line, message) for each spec-no-nested-describe finding in `source`, as main() strips it."""
+    text = rules.strip(source, keep_strings=False)
+    return list(rules.check_spec_nested_describe("tests/spec/x_spec.cpp", text))
+
+
+class SpecNestedDescribe(unittest.TestCase):
+    SPEC = (
+        "// clang-format off\n"
+        'describe x("x", $ {\n'
+        '\tcontext("a", _ {\n'
+        '\t\tit("b", _ { expect(1).to_equal(1); });\n'
+        "\t});\n"
+        "});\n"
+        "CPPSPEC_SPEC(x)\n"
+    )
+
+    def test_the_top_level_describe_and_context_pass(self):
+        self.assertEqual(describe_findings(self.SPEC), [])
+
+    def test_a_nested_describe_is_caught_with_its_line(self):
+        for call in ('describe("y", _ {', 'describe ("y", _ {'):
+            with self.subTest(call=call):
+                source = self.SPEC.replace('context("a", _ {', call)
+                self.assertEqual(
+                    describe_findings(source),
+                    [(3, "a nested describe( never runs in CppSpec: use context(")],
+                )
+
+    def test_one_in_a_comment_or_string_or_another_name_passes(self):
+        source = self.SPEC.replace(
+            "// clang-format off",
+            '// describe("y") was here\nconst char* t = "describe(";\nint redescribe(int); int a = redescribe(1);',
+        )
+        self.assertEqual(describe_findings(source), [])
+
+
 class PerformL10n(unittest.TestCase):
     def test_a_literal_passed_straight_is_caught(self):
         self.assertEqual(

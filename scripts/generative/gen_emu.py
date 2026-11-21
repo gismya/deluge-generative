@@ -1276,7 +1276,7 @@ def golden(args):
                 [GOLDEN_SCRIPT],
                 out=lambda line: None if ": PASS " in line else log(line),
             )
-        _, script_failed, script_total, error = results[0]
+        _, script_failed, script_total, error, _ = results[0]
         check(
             f"golden_compose.txt: {script_total} expects, {script_failed} failed"
             + (f" ({error})" if error else ""),

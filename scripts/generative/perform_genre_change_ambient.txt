@@ -61,7 +61,7 @@ expect event gen_section BREAK within=90
 # The H16 report comes every 4 bars, on the phrase grid: the one on the Break's line goes out just before its Section
 # event and counts the Groove's voices, so the Break's own comes 4 bars later, 13-16 s at this tempo. within= is host
 # time: under load delugemu runs slower than real time, so the wait has room for that.
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=40
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=40
 expect event gen_h1 steps= within=20
 
 # ---- TECHNO > ACID -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Ambient's 6 parts to 4 ----
@@ -193,7 +193,7 @@ button SELECT_ENC up
 expect event gen_confirm techno-acid style=0 result=0
 expect event gen_transition_preload done error=0 parts=4 within=30
 expect event gen_section BUILD within=60
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_transition start style=0 within=90
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10

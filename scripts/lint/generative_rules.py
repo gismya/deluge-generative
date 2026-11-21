@@ -12,6 +12,10 @@ no-stdio            no libc stdio in the portable code: in the firmware, `snprin
                     break the link.
 perform-l10n        Perform's UI passes no string literal to an OLED call as the text to show, also as an operand of a ?:
                     there (`displayPopup(on ? "ON" : "OFF")`) or wrapped onto the next line; shown text comes from l10n.
+spec-no-nested-describe
+                    no bare `describe(` in a harness spec (tests/spec/**/*_spec.cpp): inside the top-level
+                    `describe <name>(...)`, only `context(` registers a group; a nested `describe(` builds one nothing
+                    runs, so its `it`s vanish and the run still passes (#436).
 
 Comments are ignored by every rule, and string literals by all but perform-l10n.
 """
@@ -278,11 +282,22 @@ def check_perform_l10n(path, text):
                 )
 
 
+# A bare describe( call; the top-level `describe <name>(` declaration has its name in between.
+NESTED_DESCRIBE = re.compile(r"(?<![\w.>:])describe\s*\(")
+
+
+def check_spec_nested_describe(path, text):
+    for no, line in enumerate(text.splitlines(), 1):
+        if NESTED_DESCRIBE.search(line):
+            yield (no, "a nested describe( never runs in CppSpec: use context(")
+
+
 RULES = {
     "no-float": (check_no_float, False),
     "portable-includes": (check_portable_includes, True),
     "no-stdio": (check_no_stdio, False),
     "perform-l10n": (check_perform_l10n, True),
+    "spec-no-nested-describe": (check_spec_nested_describe, False),
 }
 
 

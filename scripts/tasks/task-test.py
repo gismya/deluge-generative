@@ -137,6 +137,11 @@ def main() -> int:
             return result
 
     build = cmake_build(build_dir, targets)
+    if build == 0 and args.no_run and generator:
+        # Which of the two build dirs it was: check_all.py builds only the sanitized one, so a binary run from the
+        # other is stale (#436). ctest runs the default config, Debug.
+        binary = f"{build_dir}/spec/generator/Debug/{GENERATOR_TARGET}"
+        print(f"built {binary}; one spec: {binary} <name>_spec --verbose")
     if build != 0 or args.no_run:
         return build
 
