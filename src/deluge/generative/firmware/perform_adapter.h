@@ -78,6 +78,8 @@ public:
 	void outgoingDrained() override;
 	/// A stop or jump cut its Throws short: its Space goes home (spec §11.4).
 	void outgoingThrowsCut() override;
+	/// Test builds time the piece's opening from here: beginPiece()'s move of the marked pieces with the header.
+	void pieceOpening() override;
 	/// The piece's header: the Current Recipe's picks and every param on the song and the roster (spec §17.2).
 	void logPieceHeader(SteeringLog& log) override;
 	/// A re-roll's new picks, from its waiting sound (spec §17.2).

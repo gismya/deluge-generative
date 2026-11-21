@@ -192,6 +192,8 @@ public:
 	[[nodiscard]] int32_t current() const { return current_ ? pieces_ - 1 : -1; }
 	/// The pieces marked, the current one among them.
 	[[nodiscard]] int32_t markedPieces() const;
+	/// The bytes the last beginPiece() moved down over pieces it threw away.
+	[[nodiscard]] int32_t moved() const { return moved_; }
 	/// Whether the newest piece stopped logging because the log was full, or found no room to open: new marks are
 	/// refused (spec §17.2).
 	[[nodiscard]] bool full() const { return cut_; }
@@ -253,6 +255,7 @@ private:
 	bool open_ = false;
 	bool cut_ = false;
 	bool current_ = false; ///< The newest piece is the current one (current()).
+	int32_t moved_ = 0;
 	bool inRecords_ = false;
 	int32_t lastStep_ = 0;
 	int32_t stepFrom_ = 0;

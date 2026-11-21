@@ -205,12 +205,14 @@ void SteeringLog::dropUnmarked() {
 	int32_t from = 0;
 	int32_t to = 0;
 	int32_t kept = 0;
+	moved_ = 0;
 	for (int32_t i = 0; i < pieces_; i++) {
 		const int32_t bytes = reinterpret_cast<const PieceInfo*>(buffer_ + from)->bytes;
 		const bool marked = reinterpret_cast<const PieceInfo*>(buffer_ + from)->marked;
 		if (marked) {
 			if (to != from) {
 				std::memmove(buffer_ + to, buffer_ + from, static_cast<size_t>(bytes));
+				moved_ += bytes;
 			}
 			newest_ = to;
 			used_ = to + bytes;

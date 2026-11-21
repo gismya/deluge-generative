@@ -32,8 +32,11 @@ This rests on the contract in [§6.3](06-randomness.md#63-the-contract). A harne
 
 ### 17.4 Marking
 
-- RECORD (or MIDI RECORD) marks the current piece to keep as a whole. The log keeps running until the piece ends, so music after the press is included.
+- RECORD (or MIDI RECORD) marks the current piece to keep as a whole. The log keeps running until the piece ends, so music after the press is included. It acts at once, never entering the core ([§13.5](13-perform.md#135-control-layout)).
+- The **current piece** is the newest: the one playing, or after a stop the last piece, so RECORD while stopped marks or unmarks the piece the leave menu offers as LAST. Before any piece RECORD shows NOTHING PLAYED. A piece that found no room to open leaves no current piece, so RECORD changes nothing then (and shows LOG FULL).
 - Pressing again unmarks it. The status line dot and the RECORD LED show whether the current piece is marked.
+- A mark refused because the log is full ([§17.2](#172-the-steering-log)) shows LOG FULL. An unmark is always taken. A piece cut because the log filled stays cut until it ends, even if room frees: replay can't resume a log with a gap, so marks stay refused and the dot and the LED blink until the next piece begins.
+- The **CAPTURE** menu ([§13.6](13-perform.md#136-perform-menu)) lists the pieces in the log, newest first, each numbered in set order with its genre and MARKED or `-`: the marked ones and the current one. A press toggles a piece's mark: the current one's as RECORD does. An earlier piece unmarked there stays in the log until the next piece begins, so a second press marks it again until then; when the next piece begins, every piece that isn't marked is thrown away, as the unmarked last piece is ([§17.3](#173-pieces)), and the pieces after it move down into its room. Pieces can only be cut from the log's end, so freeing an earlier one's room means moving the later ones (a `memmove` of up to the buffer's 128 KB, at the step the next piece opens on). The menu lists the newest 16 pieces; older ones are kept but not listed.
 - Several pieces can be marked in one set, and their logs share the buffer.
 - Marks and logs live in RAM only. A power-off or crash before leaving loses them.
 

@@ -5,12 +5,14 @@
 # the next piece begins, which throws it away. Runs on a Deluge (deluge_probe.py session) or in delugemu
 # (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
+# gen_log_piece ... moved= us=: a piece opened, and the bytes of marked pieces it moved down.
 # gen_mark marked|unmarked|log_full|no_piece piece= current= marks=: a press and what it did. gen_capture piece=
 # marked= full= marks=: the marks as the dot and the LED read them. gen_record_led off|on|blink. gen_peek_page and
 # gen_peek N LABEL|VALUE: the peek. Menus remember their last row, so a row is chosen from the top (encoder 3 -20
 # first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE,
 # SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART, CAPTURE.
 # covers: src/deluge/generative/perform/capture.* src/deluge/generative/core/steering_log.*
+# covers: src/deluge/generative/perform/perform_driver.*
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/playback/playback_handler.cpp
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/perform/oled_page.*
@@ -70,7 +72,7 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event /^gen_log_piece pieces=2 / within=10
+expect event /^gen_log_piece pieces=2 header=[0-9]+ used=[0-9]+ full=0 moved=0 us=[0-9]+$/ within=10
 expect event gen_capture piece=1 marked=0 full=0 marks=1 within=5
 expect event gen_record_led off within=5
 
@@ -127,7 +129,8 @@ button PLAY down
 wait 50
 button PLAY up
 expect playing=true
-expect event /^gen_log_piece pieces=2 / within=10
+# moved=: the marked piece's bytes, moved down over the unmarked one's room
+expect event /^gen_log_piece pieces=2 header=[0-9]+ used=[0-9]+ full=0 moved=[1-9][0-9]* us=[0-9]+$/ within=10
 expect event gen_capture piece=1 marked=0 full=0 marks=1 within=5
 button RECORD down
 wait 50

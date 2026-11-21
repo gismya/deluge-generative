@@ -34,8 +34,8 @@ namespace deluge::generative::perform {
 enum class MarkOutcome : uint8_t {
 	Marked,
 	Unmarked,
-	LogFull, ///< a mark refused: the log is full (spec §17.2), with the OLED message
-	NoPiece, ///< nothing to mark: no piece played yet, or the newest found no room to open
+	LogFull, ///< a mark refused: the log is full (spec §17.2), or so full the newest piece found no room to open
+	NoPiece, ///< nothing to mark: no piece played yet
 };
 
 /// RECORD (or MIDI RECORD): toggles the current piece's mark (spec §17.4).

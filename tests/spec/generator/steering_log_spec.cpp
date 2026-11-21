@@ -500,10 +500,12 @@ describe steering_log("The steering log", $ {
 			expect(b.log.markPiece(0, false)).to_be_true();
 			expect(b.log.pieces()).to_equal(3);
 			const int32_t before = b.log.used();
+			const int32_t later = b.log.piece(1).bytes() + b.log.piece(2).bytes();
 
 			b.log.beginPiece(startOf(4));
 			expect(b.log.pieces()).to_equal(3);
 			expect(b.log.used()).to_be_less_than(before); // the new piece's opening is smaller than the dropped piece
+			expect(b.log.moved()).to_equal(later);
 			expect(b.log.piece(0).start().seed).to_equal(2u);
 			expect(b.log.piece(1).start().seed).to_equal(3u);
 			expect(b.log.piece(2).start().seed).to_equal(4u);

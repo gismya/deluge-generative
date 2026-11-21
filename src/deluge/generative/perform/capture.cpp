@@ -28,7 +28,8 @@ MarkOutcome pressMark(SteeringLog& log) {
 
 MarkOutcome pressMark(SteeringLog& log, int32_t piece) {
 	if (piece < 0 || piece >= log.pieces()) {
-		return MarkOutcome::NoPiece;
+		// No current piece: none played yet, or the newest found no room to open, which the log being full says.
+		return log.full() ? MarkOutcome::LogFull : MarkOutcome::NoPiece;
 	}
 	const bool on = !log.piece(piece).marked();
 	if (!log.markPiece(piece, on)) {

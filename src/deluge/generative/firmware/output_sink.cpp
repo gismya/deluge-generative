@@ -242,19 +242,31 @@ void OutputSink::outgoingThrowsCut() {
 	TEST_EVENT("gen_outgoing_throws_cut");
 }
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// When the piece being opened began opening: gen_log_piece's us= counts from here.
+uint32_t pieceOpeningTicks = 0;
+} // namespace
+#endif
+
+void OutputSink::pieceOpening() {
+#if ENABLE_SYSEX_TEST
+	pieceOpeningTicks = getSystemTicks();
+#endif
+}
+
 void OutputSink::logPieceHeader(SteeringLog& log) {
 	const Generator* playing = performAdapter.driver().playing();
 	if (playing == nullptr || performAdapter.song_ == nullptr) {
 		return;
 	}
-#if ENABLE_SYSEX_TEST
-	const uint32_t started = getSystemTicks();
-#endif
 	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_);
-	// header: the newest piece's opening and header records, in bytes; us: what writing it cost in the tick.
-	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d us=%lu", static_cast<long>(log.pieces()),
+	// header: the newest piece's opening and header records, in bytes; moved: the bytes beginPiece() moved down over
+	// pieces thrown away (spec §17.4); us: what opening the piece, that move and the header cost in the tick.
+	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d moved=%ld us=%lu", static_cast<long>(log.pieces()),
 	           static_cast<long>(log.piece(log.pieces() - 1).headerBytes()), static_cast<long>(log.used()),
-	           log.full() ? 1 : 0, ticksToNs(getSystemTicks() - started) / 1000);
+	           log.full() ? 1 : 0, static_cast<long>(log.moved()),
+	           ticksToNs(getSystemTicks() - pieceOpeningTicks) / 1000);
 }
 
 void OutputSink::logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) {

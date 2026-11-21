@@ -1,0 +1,195 @@
+# H13 (spec §20, §17.4) on hardware: marked 5-minute pieces of busy steering until the 128 KB steering log is full. Each
+# piece starts, is marked at once (RECORD), plays 5 minutes of busy steering (capture_h13_minute.txt: a macro turn
+# about every 16th) and stops. Once the log fills, the piece playing is cut and the next marks are refused (gen_mark
+# log_full, the LOG FULL popup). About 45 minutes: a measurement, not a check (no perform_ prefix, so check_all.py
+# doesn't run it). Run with --events 'gen_log|gen_mark|gen_capture|gen_record_led'.
+# covers: src/deluge/generative/core/steering_log.* src/deluge/generative/perform/capture.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/playback/playback_handler.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button F8 down
+wait 50
+button F8 up
+# ---- Piece 1 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 2 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 3 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 4 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 5 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 6 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 7 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 8 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5
+
+# ---- Piece 9 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark (marked|log_full|no_piece) / within=5
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+include capture_h13_minute.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop / within=5

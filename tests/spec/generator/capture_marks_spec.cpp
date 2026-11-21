@@ -89,6 +89,17 @@ describe capture_marks("Capture marks", $ {
 		fill(c.log);
 		expect(pressMark(c.log) == MarkOutcome::Unmarked).to_be_true();
 		expect(pressMark(c.log) == MarkOutcome::LogFull).to_be_true();
+
+		// A piece with no room even to open: no current piece, and the press says the log is full.
+		Buffer d(1024);
+		d.log.beginPiece(startOf(genres::technoAcid));
+		pressMark(d.log);
+		fill(d.log);
+		d.log.endPiece(500, PieceEnd::Stopped);
+		d.log.beginPiece(startOf(genres::technoAcid));
+		expect(d.log.current()).to_equal(-1);
+		expect(pressMark(d.log) == MarkOutcome::LogFull).to_be_true();
+		expect(d.log.piece(0).marked()).to_be_true();
 	});
 
 	it("status: whether there is a current piece, whether it's marked, the marks, the log's use and whether it's full", _ {

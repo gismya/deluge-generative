@@ -77,6 +77,8 @@ public:
 
 	// ---- The steering log (spec §17.2) ----
 
+	/// A piece is about to open: beginPiece() comes next, which may move the marked pieces down (spec §17.4).
+	virtual void pieceOpening() {}
 	/// A piece opens in `log` (beginPiece() has written its opening): the header's sound picks and param snapshot
 	/// (SteeringLog::addPick(), addSnapshot()), as the Outputs are now.
 	virtual void logPieceHeader(SteeringLog& /*log*/) {}

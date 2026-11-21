@@ -262,6 +262,7 @@ void PerformDriver::openPiece(NoteSink& sink) {
 	start.first = generator_->arc().first();
 	start.onDrop = generator_->arc().opensOnDrop();
 	start.held = generator_->arc().held();
+	sink.pieceOpening();
 	log_->beginPiece(start);
 	if (log_->logging()) {
 		sink.logPieceHeader(*log_);
