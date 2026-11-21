@@ -20,6 +20,7 @@
 #include "definitions.h"
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
+#include "generative/core/golden_case.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/card_text.h"
 #include "io/midi/test_port.h"
@@ -180,6 +181,12 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	Recipe rolled = newRecipe(genre, freshEntropy());
 	uint32_t rolledSeed = freshEntropy();
 	uint32_t soundEntropy = freshEntropy();
+#if ENABLE_SYSEX_TEST
+	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
+		rolled = newRecipe(genre, golden_case::kEntropy);
+		rolledSeed = golden_case::kSeed;
+	}
+#endif
 #endif
 	const Genre& rolledGenre = *rolled.genre;
 	// Staged: the override, the picks and the Recipe replace the current ones only once all of them are in, so a card

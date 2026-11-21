@@ -10,6 +10,15 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
   - **CURRENT RECIPE**, only once one exists;
   - **GENRE** ▸, a submenu of the genres that opens on the Current Recipe's genre, or on the default genre ([§4.5](04-genres.md#45-v1-genres)) before one exists. A parent genre is one row (TECHNO ▸) that opens a submenu of its subgenres by their short names ([§4.4](04-genres.md#44-names-and-versions)). Picking one rolls a fresh Recipe: rolled facts, rolled sound picks, a new seed, takes at 0 and the genre's default macros;
   - **FILE...**, the Recipe load browser ([§16.5](16-recipe-files.md#165-load)).
+- In PERFORM FROM each row asks DISCARD SONG? ([§14.3](#143-replacing-the-song)): FILE... once a file is chosen, and OK
+  enters Perform on the file's Recipe, its missing sounds re-rolled ([§16.6](16-recipe-files.md#166-missing-sounds-and-sharing))
+  in the entry's build. CURRENT RECIPE enters on the Current Recipe as it is: nothing is rolled.
+- In COMPOSE FROM, CURRENT RECIPE opens the Compose screen ([§14.4](#144-the-compose-screen)) in the list's place. A
+  genre or a file reads the card first, with the working animation over the list (BACK cancels it, and the list stays
+  open with the Recipe as it was); then the screen opens in the list's place. The screen's FROM has GENRE ▸ and
+  FILE..., which work the same way and go back up to the screen.
+- PERFORM FROM, COMPOSE FROM and FROM open on the row they were on last, as a stock submenu does, or on their first
+  row when that one is hidden. GENRE ▸ opens on the Current Recipe's genre, as above.
 - The fonts have no "…" or "▸": write FILE..., and use the stock submenu arrow icon.
 
 ### 14.2 The Current Recipe
@@ -54,7 +63,8 @@ A stock-style menu that edits the Current Recipe before building. The Recipe sta
   offers another ([§10.7](10-sounds.md#107-when-sounds-load)); a lane's doesn't lean on the Closed hat's tag, as the
   Kit's re-roll does. The previous pick is the one before that row's last re-roll: SHIFT+push swaps the two, so a
   second SHIFT+push goes forward again. A new Current Recipe forgets them, wherever it comes from: a genre pick or
-  REGENERATE, here or in Perform, or a Recipe file's load. REGENERATE rolls as
+  REGENERATE, here or in Perform, or a Recipe file's load. A Perform sound swap on a part forgets that part's (and a
+  Kit's lanes') too; entering Perform from CURRENT RECIPE and leaving keeps the others. REGENERATE rolls as
   Perform's does ([§9.7](09-arc.md#97-transitions)): facts leaning on the key the Recipe has, every sound, the seed and
   the takes, with the macros kept.
 - After a cancelled or failed BUILD the screen is still open, unless the build had freed the player's song.

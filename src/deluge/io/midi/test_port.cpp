@@ -145,6 +145,7 @@ bool holdingCompose = false;        ///< See composeHeld()
 bool holdingComposeAlone = false;   ///< See composeAloneHeld()
 bool holdingComposeRoll = false;    ///< See composeRollHeld()
 bool holdingComposeReserve = false; ///< See composeReserveHeld()
+bool holdingGolden = false;         ///< See goldenHeld()
 bool pinningEntropy = false;        ///< See pinnedEntropy()
 uint32_t pinnedDraws = 0;           ///< Draws pinnedEntropy() has given since the hold went on
 
@@ -272,6 +273,9 @@ constexpr Hold kHolds[] = {
     {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
     /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
     {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
+    /// A genre roll makes the golden case and a Compose build starts in the Groove, or both as they are (see
+    /// goldenHeld())
+    {"golden", [](bool on) { holdingGolden = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.
     {"midi_fill",
@@ -957,9 +961,9 @@ void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
 	}
 }
 
-/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, until the Generative menu's COMPOSE
-/// (#140) does. The screen sends gen_compose_screen opened as it opens; gen_compose_screen refused why=perform says it
-/// can't (Perform is the root UI).
+/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, with no Recipe too, which the
+/// Generative menu's COMPOSE FROM never shows (its rows make one first). The screen sends gen_compose_screen opened
+/// as it opens; gen_compose_screen refused why=perform says it can't (Perform is the root UI).
 void openComposeScreenForTest() {
 	if (!deluge::gui::menu_item::generative::openComposeScreen()) {
 		event("gen_compose_screen refused why=perform");
@@ -1181,6 +1185,10 @@ bool composeRollHeld() {
 
 bool composeReserveHeld() {
 	return holdingComposeReserve;
+}
+
+bool goldenHeld() {
+	return holdingGolden;
 }
 
 bool preloadHeld() {

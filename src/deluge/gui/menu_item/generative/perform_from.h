@@ -15,11 +15,13 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// PERFORM FROM (spec §14.1): the full-screen stock submenu PERFORM opens. M1 has only GENRE ▸, the genres;
-// CURRENT RECIPE and FILE... arrive in M3 (§23.9).
+// PERFORM FROM (spec §14.1): the full-screen stock submenu PERFORM opens, with CURRENT RECIPE (once one exists),
+// GENRE ▸ and FILE.... Each asks DISCARD SONG? (spec §14.3), FILE... once the file is chosen.
 
 #pragma once
 
+#include "generative/core/recipe_file.h"
+#include "generative/perform/recipe_name.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/menu_item/menu_item.h"
 #include "gui/menu_item/submenu.h"
@@ -42,6 +44,14 @@ private:
 };
 
 /// The PERFORM FROM menu, opened with soundEditor.setup(nullptr, &performFromMenu).
-extern Submenu performFromMenu;
+extern Submenu& performFromMenu;
+
+/// Whether the sound editor shows PERFORM FROM or a menu under it: a Recipe file chosen in the load browser over it
+/// enters Perform (performFromFile()).
+bool performFromShowing();
+
+/// FILE...'s chosen file (spec §14.1, §14.3): asks DISCARD SONG?, whose OK enters Perform on the file. `file` and
+/// `name` must outlive the entry (the load browser's chosen file).
+void performFromFile(const deluge::generative::RecipeFile& file, const deluge::generative::perform::RecipeName& name);
 
 } // namespace deluge::gui::menu_item::generative

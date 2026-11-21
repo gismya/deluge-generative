@@ -92,12 +92,17 @@ otherwise.
   a name but no file. Both fixed; rows in `docs/upstream-candidates.md`.
 - Test-port lines for scripts: `compose <seconds> [<genre>]` (opens COMPOSING and starts the job, until the Compose
   screen has BUILD), `save song <name>` (SONGS/<name>.XML through the stock save UI), and the holds `compose` (waits
-  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll).
+  after the first bar), `compose_alone`, `compose_reserve`, `compose_roll` (waits after a genre roll), and `golden`
+  (#141: a genre roll makes the golden case and the build starts in the Groove, for `gen_emu.py golden`).
 
 ## The Compose screen (`gui/menu_item/generative/compose_screen.*`)
 
 - One stock `Submenu` (`composeScreen`) opened with `soundEditor.setup(nullptr, &composeScreen)`; `openComposeScreen()`
-  does it (the test port's `compose screen` until #140's COMPOSE). Its text (title, SCALE's short names, LENGTH's
+  does it (COMPOSE FROM's rows, and the test port's `compose screen`, the only way to it with no Recipe).
+  `showComposeScreen()` is how a source row shows it: from the screen's FROM it goes back up to the screen, from
+  COMPOSE FROM it closes the sound editor and opens it again on the screen, so BACK on the screen leaves rather than
+  going back to COMPOSE FROM. COMPOSE FROM and FROM share their GENRE ▸ (`composeGenres`) and FILE... items: a
+  stock `Submenu` keeps no parent, so one item can sit in two lists. Its text (title, SCALE's short names, LENGTH's
   `m:ss`, a pick's file name, `DRUMS: 8 LANES`) is portable, `generative/compose/compose_screen.*`, with
   `compose_screen_spec`. Lane names are `generative/core/lane_names.h`, shared with the Kit rows (`gen_sound` builds
   from it, so the scripts that expect `gen_sound` cover it).

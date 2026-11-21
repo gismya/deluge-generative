@@ -21,8 +21,8 @@
 // edit in place (the value blinks); TEMPO, SWING and LENGTH open the stock big-number editor, the macros the stock
 // continuous one. With no Current Recipe only FROM shows.
 //
-// Opened with soundEditor.setup(nullptr, &composeScreen), over the session or arranger view. The Generative menu's
-// COMPOSE (#140) will open it; until then the test port's "compose screen" line does.
+// Opened with soundEditor.setup(nullptr, &composeScreen), over the session or arranger view: by COMPOSE FROM's rows
+// (the Generative menu's COMPOSE), and by the test port's "compose screen" line, which can open it with no Recipe.
 
 #pragma once
 
@@ -34,6 +34,9 @@ namespace deluge::gui::menu_item::generative {
 
 /// The Compose screen.
 extern Submenu& composeScreen;
+/// COMPOSE FROM (spec §14.1): CURRENT RECIPE, GENRE ▸ and FILE..., each showing the Compose screen in its place.
+/// Opened with soundEditor.setup(nullptr, &composeFromMenu).
+extern Submenu& composeFromMenu;
 
 /// Opens the Compose screen over the current UI. False, with nothing opened, while Perform is the root UI.
 bool openComposeScreen();
@@ -47,8 +50,9 @@ void buildComposeRecipe();
 
 /// REGENERATE?'s OK (spec §14.4): rolls the Current Recipe again as a modal job over the screen.
 void regenerateComposeRecipe();
-/// A Recipe file chosen in the load browser (spec §16.5): it replaces the Current Recipe as a modal job over the
-/// screen, ready for BUILD. BUSY while the runner is busy.
+/// A Recipe file chosen in the load browser (spec §16.5): it replaces the Current Recipe as a modal job, ready for
+/// BUILD, and the Compose screen shows it (opened in COMPOSE FROM's place, or back up from a menu under it). BUSY while
+/// the runner is busy.
 void loadComposeRecipe(const deluge::generative::RecipeFile& file, const deluge::generative::perform::RecipeName& name);
 
 } // namespace deluge::gui::menu_item::generative

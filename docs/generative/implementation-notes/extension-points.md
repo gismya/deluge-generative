@@ -89,10 +89,11 @@ otherwise.
   Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
   a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
   (`endsHere()`), and its muted notes are already dropped there.
-- The Compose screen (#137, `gui/menu_item/generative/compose_screen.*`): #140's COMPOSE opens it with
-  `openComposeScreen()` (and COMPOSE FROM's CURRENT RECIPE does the same). SAVE and LOAD on the screen are the sound
-  editor's SAVE and LOAD branches (F19, `composeScreenShowing()`).
-- **FILE... (#140):** the load browser is `LoadRecipeUI` (`gui/ui/load/load_recipe_ui.*`); what a chosen file does
-  is `loadChosen()` there, by root UI. FILE... outside Perform and the Compose screen needs its own branch: read the
-  file with `firmware::readRecipeFile()`, then `CurrentRecipe::load()` (in a runner job, as
-  `firmware::beginRecipeLoad()` runs it) before entering Perform or opening the screen.
+- The Generative menu's lists (#140): a new source row is a `MenuItem` in `SourceMenu`'s list
+  (`gui/menu_item/generative/source_rows.h`), in PERFORM FROM (`perform_from.cpp`), COMPOSE FROM and the screen's
+  FROM (`compose_screen.cpp`). Perform entry from a new kind of source is an `EntrySource`
+  (`generative/firmware/entry_source.h`) and a branch at the start of `EntryJob::run()`. SAVE and LOAD on the screen
+  are the sound editor's SAVE and LOAD branches (F19, `composeScreenShowing()`).
+- What a file chosen in `LoadRecipeUI` does is `loadChosen()` (`gui/ui/load/load_recipe_ui.cpp`): PERFORM FROM under
+  it (`performFromShowing()`) asks DISCARD SONG?; Perform as root UI makes it a transition; otherwise the Compose
+  load (`loadComposeRecipe()`), which shows the screen. A new place to open the browser from adds a branch there.

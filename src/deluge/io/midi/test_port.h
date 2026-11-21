@@ -89,6 +89,10 @@ bool composeHeld();
 bool composeAloneHeld();
 bool composeRollHeld();
 bool composeReserveHeld();
+/// Test hook for the firmware check (spec §21.3): true from a "hold golden" line until "release golden". A genre roll
+/// then makes the genre's golden case (golden_case.h: its default Recipe, at the goldens' seed, takes 0), and a Compose
+/// build starts in the Groove, as the golden plays from SHIFT+PLAY, so the saved song holds the golden's notes.
+bool goldenHeld();
 /// Test hook for H2 (spec §20): true from a "hold ramps" line until "release ramps". Perform then drops its Control
 /// events, so the same piece can be timed with and without live ramps.
 bool rampsHeld();

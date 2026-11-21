@@ -76,11 +76,11 @@ struct CurrentRecipe {
 	Error rerollPart(int32_t part, Chunks* chunks = nullptr);
 	Error rerollLane(Lane lane, Chunks* chunks = nullptr);
 
-	/// A Recipe file's load outside Perform (spec §16.5, §16.6): the Compose screen's LOAD (and FILE..., #140). In
-	/// Perform a LOAD is a transition, stopped too (Transitions::load()). `file` becomes the Current Recipe, its macros
-	/// included, with its genre's palette override read as a genre pick reads it and each missing sound re-rolled from
-	/// that palette (`soundsReplaced` counts them). It remembers `fileName`. Errors as rollFromGenre(); on one, the
-	/// Current Recipe stays as it was.
+	/// A Recipe file's load outside Perform (spec §16.5, §16.6): the Compose screen's LOAD and FILE..., and PERFORM
+	/// FROM's FILE... (in the entry job). In Perform a LOAD is a transition, stopped too (Transitions::load()). `file`
+	/// becomes the Current Recipe, its macros included, with its genre's palette override read as a genre pick reads it
+	/// and each missing sound re-rolled from that palette (`soundsReplaced` counts them). It remembers `fileName`.
+	/// Errors as rollFromGenre(); on one, the Current Recipe stays as it was.
 	Error load(const RecipeFile& file, const perform::RecipeName& fileName, int32_t& soundsReplaced,
 	           Chunks* chunks = nullptr);
 

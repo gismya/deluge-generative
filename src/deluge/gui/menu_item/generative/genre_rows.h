@@ -39,6 +39,9 @@ struct GenreSlot {
 
 /// The genre at `slot`, or nullptr: a parent's row, or a slot past the last.
 const deluge::generative::Genre* genreAt(GenreSlot slot);
+/// The genre at `slot` for a genre item's push, or nullptr with the stock error shown: can't happen, a slot with no
+/// genre hides.
+const deluge::generative::Genre* genreOrError(GenreSlot slot);
 /// A genre item's label: the OLED name on a top-level row, the short name in a parent's submenu (spec §4.4).
 std::string_view genreLabel(GenreSlot slot);
 /// The genre GENRE ▸ opens on: the Current Recipe's, or the default genre before one exists (spec §14.1).

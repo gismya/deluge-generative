@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "generative/core/golden_case.h"
 #include "line_diff.h"
 #include "render/names.h"
 #include "stream_fingerprint.h"
@@ -30,12 +31,12 @@ namespace harness::goldens {
 /// is in that text; a change to how stream_fingerprint.h hashes or picks its pieces edits the text in goldenText().
 constexpr int32_t kFormat = 1;
 /// The seed, length and fingerprint size every golden is cut with.
-constexpr uint32_t kSeed = 1;
-constexpr uint32_t kEntropy = 0; ///< The default Recipe: the genre's new Recipe from entropy 0.
+constexpr uint32_t kSeed = deluge::generative::golden_case::kSeed;
+constexpr uint32_t kEntropy = deluge::generative::golden_case::kEntropy; ///< The genre's new Recipe from entropy 0.
 constexpr int32_t kBars = 16;
 /// From SHIFT+PLAY: the Groove at the Recipe's macros from the first bar, the part a retune by ear is about. The
 /// fingerprint's pieces cover the Intro, the rest of the Arc and other macros, scales and keys.
-constexpr bool kSkipIntro = true;
+constexpr bool kSkipIntro = deluge::generative::golden_case::kSkipIntro;
 constexpr uint32_t kFingerprintPieces = 60;
 
 /// Where a genre's golden lives in the repo: tests/spec/generator/goldens/<name>.txt.

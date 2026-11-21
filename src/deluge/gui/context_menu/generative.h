@@ -16,7 +16,7 @@
  */
 
 // Generative mode's context menus (spec §14.1, §14.3, §13.8), all stock context menus:
-//   GENERATIVE, opened by SHIFT+SONG in session view over the session view: PERFORM (COMPOSE comes in M3);
+//   GENERATIVE, opened by SHIFT+SONG in session view over the session view: PERFORM, COMPOSE;
 //   DISCARD SONG?, asked every time before Generative mode replaces the song: OK;
 //   REGENERATE? (the Compose screen's), from its REGENERATE: OK;
 //   LEAVE PERFORM?, opened by holding BACK in Perform: LEAVE, CANCEL (M4 adds Capture's keep options);
@@ -26,6 +26,7 @@
 #pragma once
 
 #include "generative/core/recipe_file.h"
+#include "generative/firmware/entry_source.h"
 #include "generative/perform/genre_menu.h"
 #include "generative/perform/recipe_name.h"
 #include "gui/context_menu/context_menu.h"
@@ -59,22 +60,19 @@ public:
 class DiscardSong final : public GenerativeContextMenu {
 public:
 	DiscardSong() = default;
-	/// The genre whose fresh Recipe Perform plays once the player says OK.
-	void setGenre(const generative::Genre* genre) {
-		genre_ = genre;
+	/// PERFORM FROM's pick (spec §14.1, §14.3): OK enters Perform on `source`'s Recipe.
+	void setPerform(const generative::firmware::EntrySource& source) {
+		source_ = source;
 		compose_ = false;
 	}
 	/// BUILD on the Compose screen (spec §14.5): OK builds the Current Recipe at the Compose screen's LENGTH.
-	void setCompose() {
-		genre_ = nullptr;
-		compose_ = true;
-	}
+	void setCompose() { compose_ = true; }
 	char const* getTitle() override;
 	std::span<char const*> getOptions() override;
 	bool acceptCurrentOption() override;
 
 private:
-	const generative::Genre* genre_ = nullptr;
+	generative::firmware::EntrySource source_;
 	bool compose_ = false;
 };
 

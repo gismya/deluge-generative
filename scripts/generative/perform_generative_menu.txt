@@ -1,0 +1,481 @@
+# The Generative menu (#140, spec §14.1, §14.2, §14.3) over the sysex test port, on the card fixtures/recipe_load:
+# SHIFT+SONG in Song view opens GENERATIVE with PERFORM and COMPOSE. COMPOSE FROM and PERFORM FROM list CURRENT RECIPE
+# (once one exists), GENRE ▸ and FILE.... Both modes start where the player left off: a Compose edit that was never
+# built (TEMPO, a KICK re-roll) plays in Perform from CURRENT RECIPE, and Perform's steering (the key, set stopped)
+# shows on the Compose screen from CURRENT RECIPE. A row's previous pick outlives Perform (ACID), but not a Perform
+# sound swap on its part (DRUMS: KICK has none, NO PREVIOUS SOUND). FILE... in PERFORM FROM asks DISCARD SONG? after the
+# file and enters on it, the version notice and missing sounds coming with the entry (BACK there changes nothing and
+# shows no notice); a file cut short is refused and the browser stays. In COMPOSE FROM and the screen's FROM it loads
+# the file and shows the screen; a genre roll cancelled with BACK leaves the list open and the Recipe as it was.
+# gen_from_menu perform|compose|screen current=0|1: a source menu opened, with or without CURRENT RECIPE.
+# gen_compose_screen opened; gen_compose_recipe <why> genre= tempo= swing= key= scale= macros=; gen_compose_pick
+# <row> path=; gen_recipe_roll <roll> done; gen_recipe_load opened at=|at=|chose name= genre= version=|replaced
+# sounds=; gen_perform_entered <genre>; gen_sound <part> <lane> <source> mode= prio= <path>; gen_start ... tempo=;
+# gen_key_set root= scale= stopped; gen_recipe_check name= read= error= match=; gen_recipe_load refused why=|version
+# older file=; gen_recipe_roll <roll> held|cancelled.
+# needs: card fixtures/recipe_load (its own card; test_port_emu.py builds it)
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/gui/menu_item/generative/perform_from.*
+# covers: src/deluge/gui/menu_item/generative/source_rows.* src/deluge/gui/menu_item/generative/compose_screen.*
+# covers: src/deluge/gui/menu_item/generative/genre_rows.* src/deluge/gui/ui/load/load_recipe_ui.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/compose_edits.*
+# covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/generative/firmware/entry_source.h
+# covers: src/deluge/gui/views/session_view.cpp src/deluge/gui/l10n/english.json
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/lane_names.h
+# covers: src/deluge/generative/perform/perform_steering.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/firmware/recipe_files.cpp src/deluge/generative/firmware/perform_song.cpp
+# covers: src/deluge/generative/firmware/sound_swaps.h src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: scripts/generative/fixtures/recipe_load/card.txt
+start_state
+expect playing=false
+
+# SHIFT+SONG from the clip goes to Song view
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+wait 1000
+
+# ---- No Current Recipe: COMPOSE FROM has GENRE ▸ and FILE...; ACID rolls one and the screen shows it ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu compose current=0 within=5
+expect ui=sound_editor
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll genre done within=30
+expect event /^gen_compose_recipe opened genre=techno-acid /
+expect event gen_compose_screen opened
+expect ui=sound_editor
+
+# ---- Edits that are never built: TEMPO to 130, KICK and ACID re-rolled ----
+encoder 3 -20
+encoder 3 3
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -999
+encoder 3 120
+expect event /^gen_compose_recipe tempo genre=techno-acid tempo=13000 /
+button BACK down
+wait 50
+button BACK up
+wait 300
+encoder 3 -20
+encoder 3 11
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll lane done within=30
+expect event /^gen_compose_pick KICK path=(?P<kick>SAMPLES\/.+)$/
+button BACK down
+wait 50
+button BACK up
+wait 300
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll part done within=30
+expect event /^gen_compose_pick ACID path=/
+button BACK down
+wait 50
+button BACK up
+wait 300
+# BACK on the screen leaves it: it is the sound editor's first menu, not COMPOSE FROM
+button BACK down
+wait 50
+button BACK up
+expect ui=session within=5
+wait 1000
+
+# ---- PERFORM FROM → CURRENT RECIPE → DISCARD SONG? → OK: Perform plays the unbuilt edits ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu perform current=1 within=5
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+mark now
+include perform_confirm.txt
+expect event /^gen_sound DRUMS KICK pick .* (?P=kick)$/ since=mark
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_start master=0 .* tempo=13000$/ within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- A Perform sound swap on DRUMS: the Compose screen's previous KICK pick goes with it (spec §14.4) ----
+include perform_new_sound_drums.txt
+expect event gen_sound_swap part=0 stopped within=30
+
+# ---- Perform steers the Current Recipe: KEY / SCALE to C MAJOR, stopped (as perform_menu.txt) ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+button BACK down
+wait 50
+button BACK up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -12
+expect event gen_key_set root=0 scale=0 stopped
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+include perform_leave.txt
+wait 1000
+
+# ---- COMPOSE FROM → CURRENT RECIPE: the screen shows the Recipe Perform left; ACID keeps its previous pick, KICK's
+# went with Perform's swap ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu compose current=1 within=5
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /^gen_compose_recipe opened genre=techno-acid tempo=13000 swing=-?\d+ key=0 scale=0 /
+expect event gen_compose_screen opened
+encoder 3 -20
+encoder 3 11
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 -20
+button SHIFT down
+wait 100
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SHIFT up
+expect event gen_compose_pick KICK none
+button BACK down
+wait 50
+button BACK up
+wait 300
+encoder 3 1
+button SHIFT down
+wait 100
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SHIFT up
+expect event /^gen_compose_pick ACID path=/
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+expect ui=session within=5
+wait 1000
+
+# ---- PERFORM FROM → FILE...: a file cut short is refused and the browser stays; LOAD OLDER, then BACK at DISCARD
+# SONG?: back in PERFORM FROM, no version notice, no entry, the Current Recipe as it was ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu perform current=1 within=5
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load opened at=LOAD BROKEN.XML within=10
+encoder 3 1
+encoder 3 -1
+expect event gen_recipe_load at=LOAD BROKEN.XML qwerty=0 within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /^gen_recipe_load refused why=unreadable error=\d+ file=LOAD BROKEN.XML$/ within=5
+expect ui=generative_load_recipe
+encoder 3 3
+expect event gen_recipe_load at=LOAD OLDER.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
+expect ui=context_menu
+button BACK down
+wait 50
+button BACK up
+expect event gen_from_menu perform current=1 within=5
+expect ui=sound_editor
+expect no_event gen_recipe_load version within=1
+expect no_event gen_entry within=1
+expect root_ui=session
+# The Current Recipe still has no file name: the browser opens on the first file again
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load opened at=LOAD BROKEN.XML within=10
+
+# ---- LOAD OLDER again, OK at DISCARD SONG?: the version notice, and Perform enters on the file ----
+encoder 3 3
+expect event gen_recipe_load at=LOAD OLDER.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
+expect ui=context_menu
+mark now
+include perform_confirm.txt
+expect event gen_recipe_load version older file=1 since=mark
+check recipe *
+expect event gen_recipe_check name=LOAD OLDER read=other_version error=0 match=1 within=10
+include perform_leave.txt
+wait 1000
+
+# ---- PERFORM FROM → FILE... on LOAD MISSING: its two missing sounds re-rolled in the entry's build ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu perform current=1 within=5
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load opened at=LOAD OLDER.XML within=10
+encoder 3 -2
+expect event gen_recipe_load at=LOAD MISSING.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect ui=context_menu
+mark now
+include perform_confirm.txt
+expect event gen_recipe_load replaced sounds=2 since=mark
+include perform_leave.txt
+wait 1000
+
+# ---- COMPOSE FROM → FILE...: LOAD MISSING loads (2 sounds replaced) and the screen shows it ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu compose current=1 within=5
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load opened at=LOAD MISSING.XML within=10
+encoder 3 1
+encoder 3 -1
+expect event gen_recipe_load at=LOAD MISSING.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll load done error=0 within=30
+expect event gen_recipe_load replaced sounds=2
+expect event /^gen_compose_recipe opened genre=techno-acid tempo=12345 swing=0 key=2 scale=1 /
+expect event gen_compose_screen opened
+expect ui=sound_editor
+
+# ---- The screen's FROM ▸ → FILE...: LOAD OK loads, back on the screen ----
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu screen current=0 within=5
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load opened at=LOAD MISSING.XML within=10
+encoder 3 1
+expect event gen_recipe_load at=LOAD OK.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll load done error=0 within=30
+expect event gen_compose_recipe loaded genre=techno-acid
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
+button BACK down
+wait 50
+button BACK up
+expect ui=session within=5
+wait 1000
+
+# ---- COMPOSE FROM → GENRE ▸ → ACID, cancelled with BACK while it rolls ("hold preload"): the list stays open, and the
+# Current Recipe is LOAD OK still ----
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu compose current=1 within=5
+encoder 3 5
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+hold preload
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_roll genre held within=10
+expect ui=generative_modal
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_roll genre cancelled error=0 within=10
+release preload
+expect ui=sound_editor
+expect no_event gen_compose_screen within=2
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+expect ui=session within=5
