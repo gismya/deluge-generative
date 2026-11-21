@@ -273,6 +273,8 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		stopAt_ = nextStep_;
 		restartLanded_ = true;
 		return false;
+	case CommandKind::SetStutter:
+		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
 	case CommandKind::SetPunch:
 		if (!punch_.set(command)) {
 			return false;

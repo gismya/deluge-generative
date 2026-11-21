@@ -178,5 +178,9 @@ otherwise.
   `stockHeld_`, so their release reaches stock on any page and `releaseLostHolds()` lets go of a swallowed one. Stock's
   own column editing opens `performanceView` as a UI, whose buttons change the root UI: it isn't reachable from
   Perform.
+- Logging (§17.2): `SetPunch` lands through `apply()` and logs generically; the stock page's param edits reach the log
+  through stock's `setCurrentValueInResponseToUserInput()` → F3's `playerEdited()` → a song-target `SetParam`.
+  Stutter isn't a param edit: `graphicsRoutine()` samples `UI_MODE_STUTTERING` each frame and pushes `SetStutter`
+  (logged only) on a change, so a gold knob's stutter is logged too.
 - `generative/firmware/pump.h` is the swaps' service pump, not the Pump punch-in: that is `sidechain_pump.*`.
 

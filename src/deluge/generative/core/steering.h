@@ -106,11 +106,15 @@ enum class CommandKind : uint8_t {
 	/// Lane::None. value: 1 on, 0 off, as the KEYBOARD page's hold or latch left it: the core resolves no press. Lands
 	/// on the next undecided step.
 	SetPunch,
+	/// Driver-side steering, logged only (spec §17.2): stock's stutter starts (value 1) or ends (0), from stock
+	/// Performance view's stutter column or a gold knob's push. Stutter isn't a param edit, so Capture needs it apart
+	/// from the stutter rate's SetParam. The core keeps nothing. Lands on the next undecided step.
+	SetStutter,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::SetPunch;
+constexpr CommandKind kLastCommandKind = CommandKind::SetStutter;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;

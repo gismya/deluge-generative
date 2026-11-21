@@ -335,6 +335,8 @@ private:
 	uint8_t stockHeld_[kDisplayWidth] = {};
 	/// Stock PerformanceView's layout has been loaded in this entry (enterPerformancePage()).
 	bool stockLayoutLoaded_ = false;
+	/// Stock's stutter as last logged (spec §17.2).
+	bool stutterLogged_ = false;
 	/// When the stock Performance view page was last rendered (audioSampleTimer).
 	uint32_t performanceAt_ = 0;
 	/// soundSwaps.swaps() when the view last reacted to a swap: the gold knobs follow the part's new clip.

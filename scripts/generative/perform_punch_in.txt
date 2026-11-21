@@ -11,7 +11,8 @@
 # pads. gen_punch_pad punch=<PunchIn> lane=<Lane> down|up on=0|1: a press or release and the pad's state after it.
 # gen_punch_landed lanes=<hex laneBit()s> effects=<hex, bit per PunchIn> step=: what the core plays from that step.
 # gen_pump on=0|1: the sidechain pump ducks the other parts or lets them go. gen_performance layout: stock's layout
-# loaded. gen_performance_pad x= y= down|up value=<knob pos> held=0|1: a stock pad, held=1 once latched.
+# loaded. gen_performance_pad x= y= down|up value=<knob pos> held=0|1: a stock pad, held=1 once latched. gen_stutter
+# on=0|1: stock's stutter started or ended, logged as SetStutter.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_keyboard.cpp src/deluge/gui/views/perform_view_performance.cpp
 # covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
@@ -116,11 +117,14 @@ pad 0 3 up
 expect event /^gen_performance_pad x=0 y=3 up value=-?[0-9]+ held=0/
 
 # ---- Stutter (x 15) held, then let go: hold only ----
+mark
 pad 15 4 down
-expect event gen_performance_pad x=15 y=4 down value=
+expect event gen_performance_pad x=15 y=4 down value= since=mark
+expect event gen_stutter on=1 since=mark
 wait 800
 pad 15 4 up
 expect event /^gen_performance_pad x=15 y=4 up value=-?[0-9]+ held=0/
+expect event gen_stutter on=0
 
 # ---- The sidebar stays live over it: a mute on the Bass row ----
 pad 16 6 down

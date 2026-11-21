@@ -202,6 +202,14 @@ public:
 	/// (instanceStarts()). @return false if Perform isn't in, the command names no punch-in, or the queue was full: the
 	/// pad stays as it was.
 	bool setPunch(PunchIn punch, Lane lane, bool on);
+	/// Stock's stutter started or ended (spec §17.2): logged where it lands, for Capture. @return false only if the
+	/// queue was full while a piece plays: the caller tries again. While stopped there is nothing to log.
+	bool logStutter(bool on) {
+		if (!entered_ || leaving_ || playing() == nullptr) {
+			return true;
+		}
+		return queue_.push({CommandKind::SetStutter, 0, on ? 1 : 0});
+	}
 	/// The punch-ins on, as the pads last set them.
 	[[nodiscard]] PunchIns punchIns() const { return {.lanes = punchLanes_, .effects = punchEffects_}; }
 	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
