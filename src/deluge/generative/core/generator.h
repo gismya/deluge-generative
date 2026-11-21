@@ -270,8 +270,17 @@ public:
 	[[nodiscard]] bool transitionWaiting() const { return pending_.has(CommandKind::Transition); }
 	/// The waiting transition's command, or nullptr.
 	[[nodiscard]] const Command* waitingTransition() const { return pending_.waiting({CommandKind::Transition}); }
-	/// Once the transition has landed, its start step: the Drop, the seam or the cut line. Otherwise -1.
+	/// Once the transition has landed, its start step: the Drop, the seam or the cut line; or a restart's line.
+	/// Otherwise -1.
 	[[nodiscard]] int32_t transitionStart() const { return stopAt_ == kNever ? -1 : stopAt_; }
+
+	// ---- A restart (spec §13.2) ----
+
+	/// Whether a restart waits in the pending list for its bar line: it can still be cancelled.
+	[[nodiscard]] bool restartWaiting() const { return pending_.has(CommandKind::Restart); }
+	/// Whether a restart has landed: the instance stopped deciding on its line (transitionStart()), and every note
+	/// still sounding ends there. The driver starts the piece again on that line.
+	[[nodiscard]] bool restartLanded() const { return restartLanded_; }
 	/// Whether the instance decides nothing more: it has reached its transition's start step. Its buffered events still
 	/// play (note-offs, hits leaning late) until isDrained().
 	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
@@ -400,9 +409,9 @@ public:
 	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
 	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
-	/// transition waits.
+	/// transition or a restart waits: a restart lands on the end line at the latest, and the piece starts again there.
 	[[nodiscard]] bool ended() const {
-		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting();
+		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting() && !restartWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -918,6 +927,8 @@ private:
 	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
 	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
 	bool hasSiren_ = false;
+	/// A restart landed on stopAt_ (spec §13.2), rather than a transition. Beside the other byte fields.
+	bool restartLanded_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
@@ -942,9 +953,9 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 3 + 5 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo, a sound and an "
-              "octave shift per part at once");
+static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, a restart, and a take, a mute, a solo, a "
+              "sound and an octave shift per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

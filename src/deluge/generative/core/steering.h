@@ -86,6 +86,12 @@ enum class CommandKind : uint8_t {
 	/// target: part. length: the Macro. value: the part's Part bias on that macro, in macro units, -kMacroFull to
 	/// kMacroFull (spec §3.3). Continuous, by part and macro, as SetMacro is: it lands on the next undecided step.
 	SetBias,
+	/// X+PLAY or RESTART ▸ AS IT IS (spec §13.2): value 1 queues a restart, 0 cancels the one waiting. Lands at the
+	/// next bar line, as a mute does: every note still sounding ends there, as on a Section line, and the instance
+	/// decides nothing more, as at a hard cut's line. The driver then starts the piece again from bar 1 with its Intro
+	/// (NoteSink::restartPiece()). It has a pending slot of its own, and once landed it can't be cancelled. Never
+	/// logged: it ends the piece.
+	Restart,
 	/// A tier 2 punch-in pad (spec §8.9, §13.5). target: PunchIn. lane: the Drums lane a LaneMute silences, else
 	/// Lane::None. value: 1 on, 0 off, as the KEYBOARD page's hold or latch left it: the core resolves no press. Lands
 	/// on the next undecided step.
@@ -141,7 +147,8 @@ constexpr bool isContinuous(CommandKind kind) {
 constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
 	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
-	       || kind == CommandKind::SetSound || kind == CommandKind::Transition || kind == CommandKind::SetOctave;
+	       || kind == CommandKind::SetSound || kind == CommandKind::Transition || kind == CommandKind::SetOctave
+	       || kind == CommandKind::Restart;
 }
 
 struct Command {
@@ -245,13 +252,14 @@ private:
 };
 
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
-/// the key change, one per part's take, one for the force and one for a transition; a later command replaces the one in
-/// its slot, so turning the key editor detent by detent queues only where it stops. A part's mute, solo, sound and
-/// octave shift have a slot each.
+/// the key change, one per part's take, one for the force, one for a transition and one for a restart; a later command
+/// replaces the one in its slot, so turning the key editor detent by detent queues only where it stops. A part's mute,
+/// solo, sound and octave shift have a slot each.
 class PendingList {
 public:
-	/// A key change, a force or End, a transition, and every part's take, mute, solo, sound and octave shift.
-	static constexpr int32_t kCapacity = 33;
+	/// A key change, a force or End, a transition, a restart, and every part's take, mute, solo, sound and octave
+	/// shift.
+	static constexpr int32_t kCapacity = 34;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.
@@ -312,13 +320,15 @@ public:
 	void clear() { count_ = 0; }
 
 private:
-	/// A key change and a transition have one slot each whatever their target, and a force or End share one; a take
-	/// has one per part.
+	/// A key change, a transition and a restart have one slot each whatever their target, and a force or End share one;
+	/// a take has one per part.
 	static constexpr bool sameSlot(const Command& a, const Command& b) {
 		if (movesSection(a.kind) || movesSection(b.kind)) {
 			return movesSection(a.kind) && movesSection(b.kind);
 		}
-		return a.kind == CommandKind::SetKey || a.kind == CommandKind::Transition ? a.kind == b.kind : a.sameKey(b);
+		return a.kind == CommandKind::SetKey || a.kind == CommandKind::Transition || a.kind == CommandKind::Restart
+		           ? a.kind == b.kind
+		           : a.sameKey(b);
 	}
 	/// Whether a command moves the Arc to another Section at its line: a force, or End's Outro.
 	static constexpr bool movesSection(CommandKind kind) {

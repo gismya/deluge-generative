@@ -156,6 +156,11 @@ otherwise.
 - Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
   broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
   firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
+- X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
+  CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
+  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
+  rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
+  (`perform_restart.txt`), since the menu remembers its row.
 - Punch-ins on the KEYBOARD page (#301, §8.9, §13.5): `perform::PunchHolds` (`keyboard_page.h`) is the pads' 300 ms
   rule, keyed by `punchKey()` (a LaneMute by its Lane, so a latched mute follows the lane across a genre change);
   `PerformView::punchPadAction()` calls `PerformSteering::setPunch()` and, if the queue refuses, `refused()`. The

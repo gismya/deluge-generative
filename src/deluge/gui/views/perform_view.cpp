@@ -499,6 +499,11 @@ void PerformView::graphicsRoutine() {
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
 	}
+	if (performAdapter.restarts() != seenRestarts_) {
+		// A restart landed (spec §13.2): a new piece plays from bar 1, so the Arc map shows its now. Focus stays.
+		seenRestarts_ = performAdapter.restarts();
+		arc_.scrollToNow();
+	}
 	if (performAdapter.playing()) {
 		keepFeedbackRunning(); // the live values' MIDI feedback (spec §13.7)
 	}

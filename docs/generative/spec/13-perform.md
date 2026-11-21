@@ -6,7 +6,8 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 - Perform builds its own `Song` from the Current Recipe, with one Output per part. It never layers onto the player's song.
 - Entry ([§14.3](14-entry-and-compose-screen.md#143-replacing-the-song)) builds it privately while the current song keeps playing, swaps it in **stopped**, and opens on the SONG page, waiting for PLAY.
-- Steering edits the Current Recipe itself, so the Recipe is always the current centre. Arc state, mutes, solos, holds, freezes and focus are **performance state**: never stored, and lost on stop or exit.
+- Steering edits the Current Recipe itself, so the Recipe is always the current centre. Arc state, mutes, solos, holds, freezes and focus are **performance state**: never stored, and lost on stop or exit. A restart ([§13.2](#132-transport-start-and-end)) loses them too, except focus.
+- A piece starts from PLAY, and from a **restart**: the same Recipe from bar 1. Either start reads the Current Recipe as the player left it, with the same seed, takes, sound picks and homes, so with no steering the Generator plays the same notes again.
 - A sound-control home is the param's value on the part's Output, so it lasts until that Output is replaced (genre change, Regenerate, LOAD, sound re-roll). Homes are never saved in a Recipe file.
 - The normal song, clip and arranger views can't be reached from Perform.
 
@@ -16,7 +17,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 - **Start.** PLAY from stop plays the genre's **Intro**, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Rise across it, then Groove at the next phrase line (Reset on its downbeat). SHIFT+PLAY skips the Intro and starts in Groove. Every start is fresh: the Arc resets and a new piece begins.
 - **Stop.** PLAY stops at once, the Deluge way: notes released, tails ring out. Every queued action is dropped, a key change included, so the next start plays the key the last piece played ([§2.6](02-architecture.md#26-steering-into-the-core)).
 - **End** queues the genre's **Outro** from the next phrase line, one phrase by default ([§9.3](09-arc.md#93-section-lengths)), with Close and Wash across it. Energy and Density fall and parts leave through their gates. The transport stops on the phrase line where the Outro ends. End is armed by holding its pad 0.6 s, and a tap cancels it while queued. Once the Outro plays, End does nothing. A Section forced to start on the line where the Outro ends cancels the ending: the transport keeps going in the forced Section.
-- X+PLAY (stock restart) is blocked.
+- **Restart AS IT IS.** X+PLAY, or RESTART ▸ AS IT IS in the Perform menu ([§13.6](#136-perform-menu)), with a RESTART popup. While playing, it queues to the **next bar line**: it shows in QUEUE as RESTART (`RST` in the status line) and on the SONG page's Section row, and BACK, or X+PLAY again (RESTART CANCELLED), cancels it until its line's step is decided, 12 ticks before the line ([§12.2](12-runtime.md#122-when-steps-are-decided)); from there it can't be cancelled, a second X+PLAY does nothing, and a press made then goes with the queue as the new piece starts, as at any start. On that line every note still sounding ends, as on a Section line (a hit leaning past the line goes, as at a stop), and the piece starts again at bar 1 **with the Intro**, as PLAY from stop does, from the Current Recipe as it is then, with a take or octave shift that landed on the line. The transport doesn't stop: under an external clock the clock keeps running, and the new piece's bar 1 is the master's bar line. Mutes, solos, forces, the Arc hold, freezes, a waiting End and every other queued action are cleared; sounds waiting for their line are dropped, and a sound still preloading lands at the new piece's next phrase line once loaded, as after a stop. Nothing else carries over from the first run (Arc counters, fill and drop-out draws, Groove lengths). Focus stays. While stopped, X+PLAY is PLAY. Refused with CHANGE PENDING while a transition is pending ([§12.9](12-runtime.md#129-instances-and-the-transition)), and a genre change, Regenerate or LOAD is refused the same way while a restart waits. AS IT BEGAN (the piece's start state from Capture's piece header, [§17](17-capture.md)) is M4's second restart.
 
 ### 13.3 Perform settings
 
@@ -33,6 +34,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Genre, Regenerate, Recipe LOAD | transition ([§9.7](09-arc.md#97-transitions)) |
 | Force a Section, hold | next phrase line / next undecided step |
 | End | next phrase line |
+| Restart AS IT IS (X+PLAY) | next bar line ([§13.2](#132-transport-start-and-end)) |
 | Part mute and solo | next bar. SHIFT = next undecided step |
 | Part octave shift | next bar |
 | Sound re-roll; back to previous sound | preload, then next phrase line |
@@ -100,7 +102,8 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 | Control | In Perform |
 |---|---|
-| PLAY / SHIFT+PLAY | Start with the Intro, or stop / start without the Intro. X+PLAY is blocked |
+| PLAY / SHIFT+PLAY | Start with the Intro, or stop / start without the Intro |
+| X+PLAY | restart AS IT IS ([§13.2](#132-transport-start-and-end)): playing, at the next bar line from bar 1 with the Intro; stopped, PLAY. A RESTART popup |
 | RECORD | Capture mark (LED on = marked, blinks when the log is full). SHIFT+RECORD stays RESAMPLE |
 | SYNC-SCALING / SHIFT+SYNC-SCALING | Fill while held, whatever the community setting: the genre's held-fill entry / a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)) |
 | TEMPO turn / SHIFT+turn | Recipe tempo / swing, gliding (needs the tempo hook, F4). TAP taps the Recipe tempo. SHIFT+TAP = metronome |
@@ -146,6 +149,7 @@ Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value 
 - SEED + TAKES ▸: titled with the seed code (`SEED 1A2B3C4`), one row per part with its take (1–16), the queued one or else the one playing. A turn steps from the take it shows as a Y turn does ([§13.5](#135-control-layout)): forward past the newest makes a new take, and back onto the take that plays cancels the queued one. NEW SEED is the Compose screen's only: a new seed mid-piece would also move the Arc's plan.
 - OCTAVES ▸: one row per pitched part (Drums and FX have none) with its octave shift (shown `+1`), the queued one or else the one playing. A row offers only the shifts its part takes ([§7.3](07-pitch.md#73-register)). A turn steps from the shift it shows as a SHIFT + Y turn does ([§13.5](#135-control-layout)), past the end with the same LOWEST or HIGHEST popup; back onto the shift that plays cancels the queued one. Stopped, the shift is the Recipe's at once.
 - RESET PART BIAS: the focused part's Part bias on every macro back to 0, or every part's with nothing focused ([§3.3](03-recipe.md#33-macros)). It acts at once and closes the menu.
+- RESTART ▸: AS IT IS, the restart X+PLAY makes ([§13.2](#132-transport-start-and-end)). The menu closes, so its popup and the queue show on the Perform page.
 - CAPTURE
 
 Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it. SHIFT + a main pad opens the sound editor there instead, as from Perform ([§13.7](#137-sound-editor-midi-and-external-tempo)).
