@@ -76,7 +76,7 @@ describe capture_marks("Capture marks", $ {
 		expect(pressMark(b.log) == MarkOutcome::Marked).to_be_true();
 	});
 
-	it("RECORD's mark is refused once the log is full, and its unmark isn't", _ {
+	it("RECORD's mark is refused once the log is full, unless the cut found the piece marked; its unmark isn't", _ {
 		Buffer b(1024);
 		b.log.beginPiece(startOf(genres::technoAcid));
 		fill(b.log);
@@ -87,8 +87,9 @@ describe capture_marks("Capture marks", $ {
 		c.log.beginPiece(startOf(genres::technoAcid));
 		pressMark(c.log);
 		fill(c.log);
+		// Marked when the log cut it: a second press puts the mark back, so a double press loses nothing.
 		expect(pressMark(c.log) == MarkOutcome::Unmarked).to_be_true();
-		expect(pressMark(c.log) == MarkOutcome::LogFull).to_be_true();
+		expect(pressMark(c.log) == MarkOutcome::Marked).to_be_true();
 
 		// A piece with no room even to open: no current piece, and the press says the log is full.
 		Buffer d(1024);

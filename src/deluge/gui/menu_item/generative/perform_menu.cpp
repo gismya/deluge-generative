@@ -539,9 +539,10 @@ void refreshPerformMenu() {
 	presses += performAdapter.steering().octavePresses();
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
-	// CAPTURE's rows move with the marks (RECORD under the menu) and the pieces.
+	// CAPTURE's rows move with the marks (RECORD under the menu), the pieces and each piece opened.
 	const SteeringLog& log = performAdapter.steeringLog();
 	presses += static_cast<uint32_t>(log.markedPieces()) << 8 | static_cast<uint32_t>(log.pieces()) << 16;
+	presses += log.opened() << 20; // a new piece can drop one and add one, keeping both counts
 	static Basis shownBasis;
 	if (shownBasis == basisNow(presses)) {
 		return;

@@ -77,8 +77,11 @@ public:
 
 	// ---- The steering log (spec §17.2) ----
 
-	/// A piece is about to open: beginPiece() comes next, which may move the marked pieces down (spec §17.4).
+	/// A piece is about to open: beginPiece() comes next. Test builds time the opening from here.
 	virtual void pieceOpening() {}
+	/// Once a step while dropped pieces' room is still to close, outside the decision (spec §17.4): a firmware sink
+	/// times it.
+	virtual void compactLog(SteeringLog& log) { log.compactStep(SteeringLog::kCompactStepBytes); }
 	/// A piece opens in `log` (beginPiece() has written its opening): the header's sound picks and param snapshot
 	/// (SteeringLog::addPick(), addSnapshot()), as the Outputs are now.
 	virtual void logPieceHeader(SteeringLog& /*log*/) {}
