@@ -89,9 +89,9 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 **OLED.** Only the stock 7, 9, 13 and 20 px fonts, no 5 px text. Popups are stock style.
 
-- **Status line, always shown.** Left: Section and count (the phrase within it, `n/m` when its length is planned, `n` for a Groove), and HELD (H when the right side leaves no room for it, nothing when it leaves none for H either). Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot: filled = marked, blinking = log full. A phrase bar underneath. STOPPED when stopped.
+- **Status line, always shown.** Left: Section and count (the phrase within it, `n/m` when its length is planned, `n` for a Groove), and HELD (H when the right side leaves no room for it, nothing when it leaves none for H either). Right: the next queued action as an inverted tag with its bar count (`>BR3`, plus `+` when more are queued), or bar.beat when nothing is queued. EXT when following an external clock. A Capture dot at the right end, once a piece has played: filled = the current piece is marked, hollow = it isn't, blinking = log full. It takes two characters, which HELD's room counts. A phrase bar underneath. STOPPED when stopped.
 - **The page follows the grid page.** SONG → ARC: now and the next 7 phrases as boxes (queued ones blink, Drop marked) and the Arc's next change, counted down to the step it starts on (a Build shorter than a phrase starts partway into the phrase before its Drop). CLIP → PART: the part's name and a synth part's preset (its file name; a Kit part has no one pick, each lane having its own sample, so it shows its name only), take n/m on the right (`T2/3`: the take playing of the takes made, a queued one counted, with `*` while frozen), and the six controls as bars (home plus a live tick), in two columns in the CLIP page's order, each labelled with its name's first three letters. KEYBOARD → MACROS: four bars, fill = centre, tick = where the Arc has it (while playing). Each row starts with the macro's initial and its centre in points (`E25`).
-- **SELECT turn** shows QUEUE (queued actions with their countdowns, soonest first: three lines, so with four or more it shows two and "+N MORE"; a label is cut short to fit beside its countdown in 21 characters), RECIPE or CAPTURE for 4 s. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
+- **SELECT turn** shows QUEUE (queued actions with their countdowns, soonest first: three lines, so with four or more it shows two and "+N MORE"; a label is cut short to fit beside its countdown in 21 characters), RECIPE or CAPTURE (THIS PIECE: MARKED, NOT MARKED or NONE; MARKED PIECES: the count; LOG: the share used, or FULL) for 4 s. The first turn shows QUEUE to the right and RECIPE to the left; later turns go round RECIPE, QUEUE, CAPTURE, right forward and left back. **SELECT push** opens the Perform menu ([§13.6](#136-perform-menu)).
 
 **Gold knobs.** Pages are stock everywhere, and the F page is remembered per target, as stock does. Perform owns the mod buttons, so pressing F1 again never turns the VU meter on over the mute column. Knob LEDs show the value; for macros, that's the centre.
 
@@ -105,7 +105,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 |---|---|
 | PLAY / SHIFT+PLAY | Start with the Intro, or stop / start without the Intro |
 | X+PLAY | restart AS IT IS ([§13.2](#132-transport-start-and-end)): playing, at the next bar line from bar 1 with the Intro; stopped, PLAY. A RESTART popup |
-| RECORD | Capture mark (LED on = marked, blinks when the log is full). SHIFT+RECORD stays RESAMPLE |
+| RECORD | Capture mark, toggled on a short press, playing or stopped ([§17.4](17-capture.md#174-marking)): LED on = marked, blinks when the log is full. Resampling and MIDI learn's flash own the LED while they run. SHIFT+RECORD stays RESAMPLE |
 | SYNC-SCALING / SHIFT+SYNC-SCALING | Fill while held, whatever the community setting: the genre's held-fill entry / a fresh pick ([§8.7](08-rhythm-and-expression.md#87-fill)) |
 | TEMPO turn / SHIFT+turn | Recipe tempo / swing, gliding (needs the tempo hook, F4). TAP taps the Recipe tempo. SHIFT+TAP = metronome |
 | SCALE | key and scale editor (below). The LED blinks while a key change is queued |
@@ -155,8 +155,8 @@ Stock look, opened by SELECT push (SHIFT+SELECT stays stock). Rows with a value 
 - OCTAVES ▸: one row per pitched part (Drums and FX have none) with its octave shift (shown `+1`), the queued one or else the one playing. A row offers only the shifts its part takes ([§7.3](07-pitch.md#73-register)). A turn steps from the shift it shows as a SHIFT + Y turn does ([§13.5](#135-control-layout)), past the end with the same LOWEST or HIGHEST popup; back onto the shift that plays cancels the queued one. Stopped, the shift is the Recipe's at once.
 - RESET PART BIAS: the focused part's Part bias on every macro back to 0, or every part's with nothing focused ([§3.3](03-recipe.md#33-macros)). It acts at once and closes the menu.
 - RESTART ▸: AS IT IS, the restart X+PLAY makes ([§13.2](#132-transport-start-and-end)). The menu closes, so its popup and the queue show on the Perform page.
+- CAPTURE ▸: the pieces in the steering log, newest first (`2 MELODIC TECHNO`, MARKED or `-`), a press toggling one's mark; NOTHING PLAYED before any piece ([§17.4](17-capture.md#174-marking)). The menu stays open.
 - BROWSER PREVIEW: Off, When stopped or Always ([§13.3](#133-perform-settings)), at once
-- CAPTURE
 
 Under the menu the playback and the gold knobs stay Perform's (F16), with their rings and blinking F7 and F8 LEDs. A pad press closes it. SHIFT + a main pad opens the sound editor there instead, as from Perform ([§13.7](#137-sound-editor-midi-and-external-tempo)).
 
@@ -185,7 +185,7 @@ Genre, Regenerate and a mid-set LOAD confirm with a choice: BUILD INTO A DROP, F
 | Command | In Perform |
 |---|---|
 | PLAY, FILL, SHIFT | as the panel button. PLAY starts with the Intro |
-| RECORD | Capture mark (a no-op until Capture) |
+| RECORD | Capture mark, as the panel's RECORD ([§17.4](17-capture.md#174-marking)) |
 | TAP | Recipe tempo, as below |
 | TRANSPOSE | queues a Recipe key change to the next phrase line: the played note's pitch class becomes the key, the scale is kept. Stopped, it sets the key at once, as the key editor does. Note-offs do nothing |
 | PLAYBACK_RESTART | blocked |

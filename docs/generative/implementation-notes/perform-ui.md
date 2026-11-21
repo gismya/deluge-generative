@@ -172,9 +172,21 @@ otherwise.
   firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
 - X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
   CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
-  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
-  rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
-  (`perform_restart.txt`), since the menu remembers its row.
+  `playOrStop()` is PLAY without it. RESTART ▸ comes after RESET PART BIAS, then CAPTURE ▸, and BROWSER PREVIEW is the
+  last row (`perform_lane_browser.txt` reaches it with `encoder 3 20`, so keep it last): rows are added before it, and
+  scripts that count from the top don't move. A script that leaves the menu on a low row goes back to the top before
+  closing it (`perform_restart.txt`), since the menu remembers its row.
+- Capture marks (#144, spec §17.4): RECORD and MIDI RECORD both reach `PlaybackHandler::recordButtonPressed()`
+  (the panel's on a short press's release), which under Perform calls `PerformAdapter::pressMark()`; SHIFT+RECORD
+  resamples before that and uses the press up. What a press does, the dot, the RECORD LED, the CAPTURE peek's lines
+  and the CAPTURE menu's rows are the portable `generative/perform/capture.h`, read from the `SteeringLog`
+  (`current()`, `markPiece()`, `markedPieces()`); `captureStatus()` feeds `OledInput::capture`. The LED is asserted
+  every frame in `assertRecordLed()`, except while resampling or in MIDI learn, which own it. An earlier piece
+  unmarked in CAPTURE ▸ stays in the log until the next `beginPiece()`, which only flags it dropped; the steps after
+  close its room 4 KB at a time (`compactStep()`, from `NoteSink::compactLog()`), never in one move in the tick (#439
+  R1). Offsets are logical while a move runs: read a piece's header or records only once `compacting()` is false.
+- The SELECT-turn peeks go round RECIPE, QUEUE, CAPTURE (`selectEncoderAction()`); the first turn is still QUEUE to
+  the right and RECIPE to the left, which `perform_sidebar.txt` relies on.
 - Punch-ins on the KEYBOARD page (#301, §8.9, §13.5): `perform::PunchHolds` (`keyboard_page.h`) is the pads' 300 ms
   rule, keyed by `punchKey()` (a LaneMute by its Lane, so a latched mute follows the lane across a genre change);
   `PerformView::punchPadAction()` calls `PerformSteering::setPunch()` and, if the queue refuses, `refused()`. The

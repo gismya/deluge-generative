@@ -17,9 +17,10 @@
 
 // The Perform menu (spec §13.6), stock look, opened by SELECT push in Perform: CANCEL CHANGE (only while a transition
 // can be cancelled), GENRE ▸ (the genre playing, labelled = REGEN), REGENERATE, KEY / SCALE ▸ (the key and scale
-// editor, which SCALE also opens), GLIDE, SEED + TAKES ▸, OCTAVES ▸, RESET PART BIAS, RESTART ▸ and BROWSER PREVIEW.
-// Both open with soundEditor.setup(nullptr, &menu), as the stock song-level menus do; the playback, pads' stock
-// shortcuts and the gold knobs (F16) stay live underneath.
+// editor, which SCALE also opens), GLIDE, SEED + TAKES ▸, OCTAVES ▸, RESET PART BIAS, RESTART ▸, CAPTURE ▸ (the
+// pieces in the steering log, a press toggling a mark, spec §17.4) and BROWSER PREVIEW. Both open with
+// soundEditor.setup(nullptr, &menu), as the stock song-level menus do; the playback, pads' stock shortcuts and the
+// gold knobs (F16) stay live underneath.
 
 #pragma once
 

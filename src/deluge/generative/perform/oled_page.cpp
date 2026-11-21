@@ -68,6 +68,8 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 	}
 
 	out.ext = in.ext;
+	out.dot = captureDot(in.capture);
+	out.dotBlinks = out.dot != CaptureDot::None && in.capture.full;
 	if (piece != nullptr) {
 		statusTag(in.arcState->queued(), in.clock, out.right);
 		out.tag = out.right[0] != '\0';
@@ -79,7 +81,8 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 	}
 	if (held) {
 		// HELD in full if it fits beside the right side, or else H, or nothing rather than overlap it.
-		const int32_t rightChars = length(out.right) + (out.ext ? 4 : 0) + 1;
+		const int32_t rightChars =
+		    length(out.right) + (out.ext ? 4 : 0) + (out.dot != CaptureDot::None ? kCaptureDotChars : 0) + 1;
 		const int32_t room = kQueueLineChars - rightChars - length(out.left);
 		if (1 + length(kStatusHeld) <= room) {
 			left.add(" ").add(kStatusHeld);
@@ -140,6 +143,14 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 		}
 		else {
 			Text(out.lines[0]).add(kNothingQueued);
+		}
+	}
+	else if (in.peek == OledPeek::Capture) {
+		CaptureLines capture;
+		captureLines(in.capture, capture);
+		for (int32_t i = 0; i < OledScreen::kLines; i++) {
+			Text(out.lines[i]).add(capture.label[i]);
+			Text(out.lineRight[i]).add(capture.value[i]);
 		}
 	}
 	else if (in.peek == OledPeek::Recipe) {

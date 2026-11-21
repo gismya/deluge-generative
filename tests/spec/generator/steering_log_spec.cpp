@@ -43,6 +43,39 @@ PieceStart startOf(uint32_t seed) {
 	return start;
 }
 
+/// Three marked pieces, seeds 1 to 3, each with a pick and two records, ended.
+void threeMarked(SteeringLog& log) {
+	for (uint32_t seed = 1; seed <= 3; seed++) {
+		log.beginPiece(startOf(seed));
+		log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
+		log.append(2, macro(Macro::Energy, static_cast<int32_t>(seed)));
+		log.append(5, macro(Macro::Density, static_cast<int32_t>(seed)));
+		log.mark(true);
+		log.endPiece(8, PieceEnd::Stopped);
+	}
+}
+/// Each piece's seed, in order.
+std::vector<uint32_t> seeds(const SteeringLog& log) {
+	std::vector<uint32_t> out;
+	for (int32_t i = 0; i < log.pieces(); i++) {
+		out.push_back(log.piece(i).start().seed);
+	}
+	return out;
+}
+/// Whether threeMarked()'s pieces from piece `first` on (two of them) have their pick and records as logged.
+bool twoIntact(const SteeringLog& log, int32_t first) {
+	bool intact = true;
+	for (int32_t i = first; i < first + 2; i++) {
+		const auto seed = static_cast<int32_t>(log.piece(i).start().seed);
+		char path[kMaxSoundPath];
+		intact = intact && log.piece(i).pick(pickSlot(1), path) && std::string{path} == "SYNTHS/GEN ACID";
+		const std::vector<LogRecord> read = records(log, i);
+		intact = intact && read.size() == 2 && read[0].command == macro(Macro::Energy, seed) && read[0].step == 2
+		         && read[1].command == macro(Macro::Density, seed) && read[1].step == 5
+		         && log.piece(i).recordCount() == 2;
+	}
+	return intact;
+}
 /// Every kind, with values at the edges of what each field holds.
 std::vector<Command> everyCommand() {
 	std::vector<Command> out;
@@ -426,6 +459,302 @@ describe steering_log("The steering log", $ {
 				kept++;
 			}
 			expect(kept).to_equal(10);
+		});
+	});
+
+	context("marks (§17.4)", _ {
+		it("marks and unmarks the current piece, playing or the last one after a stop", _ {
+			Buffer b(4096);
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.mark(true)).to_be_false(); // no piece yet
+			b.log.beginPiece(startOf(1));
+			expect(b.log.current()).to_equal(0);
+			expect(b.log.mark(true)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_true();
+			expect(b.log.markedPieces()).to_equal(1);
+			expect(b.log.mark(false)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_false();
+			b.log.endPiece(10, PieceEnd::Stopped);
+			expect(b.log.current()).to_equal(0); // the last piece, which the leave menu offers
+			expect(b.log.mark(true)).to_be_true();
+			b.log.beginPiece(startOf(2));
+			expect(b.log.pieces()).to_equal(2);
+			expect(b.log.current()).to_equal(1);
+			expect(b.log.piece(1).marked()).to_be_false();
+			expect(b.log.markedPieces()).to_equal(1);
+		});
+
+		it("refuses a mark once the log is full, but still takes an unmark", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.mark(true)).to_be_false(); // not marked when the log cut it
+			expect(b.log.piece(0).marked()).to_be_false();
+			expect(b.log.mark(false)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_false();
+		});
+
+		it("has no current piece when the next one found no room to open, so a press can't touch the marked ones", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(2));
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.mark(false)).to_be_false();
+			expect(b.log.piece(0).marked()).to_be_true();
+		});
+
+		it("drops an earlier unmarked piece at the next piece without moving anything, and marks it again until then", _ {
+			Buffer b(8192);
+			threeMarked(b.log);
+			// The first piece, unmarked from the CAPTURE menu: it stays until the next piece begins, and can be
+			// marked again until then, even with the log full.
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.markedPieces()).to_equal(2);
+			expect(b.log.markPiece(0, true)).to_be_true();
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.pieces()).to_equal(3);
+			const int32_t before = b.log.used();
+			const int32_t first = b.log.piece(0).bytes();
+
+			const uint32_t opened = b.log.opened();
+			b.log.beginPiece(startOf(4));
+			expect(b.log.opened()).to_equal(opened + 1);
+			expect(b.log.pieces()).to_equal(3);
+			expect(b.log.compacting()).to_be_true();
+			expect(b.log.droppedBytes()).to_be_greater_than(first - 1);
+			expect(b.log.droppedBytes()).to_be_less_than(first + 8); // its aligned room
+			expect(b.log.used()).to_be_greater_than(before); // nothing moved: the room isn't free yet
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 3, 4});
+			expect(b.log.current()).to_equal(2);
+			expect(b.log.markedPieces()).to_equal(2);
+		});
+
+		it("closes a dropped piece's room a bounded part a step while the new piece logs, marks and pieces intact", _ {
+			Buffer b(8192);
+			threeMarked(b.log);
+			b.log.markPiece(0, false);
+			b.log.beginPiece(startOf(4));
+			b.log.addPick(pickSlot(2), "SYNTHS/GEN NEW");
+			const int32_t dropped = b.log.droppedBytes();
+			const int32_t opened = b.log.used();
+			int32_t step = 0;
+			int32_t calls = 0;
+			bool intact = true;
+			while (b.log.compacting()) {
+				expect(b.log.append(step, macro(Macro::Motion, step))).to_be_true();
+				const int32_t moved = b.log.compactStep(64);
+				intact = intact && moved <= 64 + SteeringLog::openingBytes() && b.log.pieces() == 3 && seeds(b.log) == std::vector<uint32_t>{2, 3, 4}
+				         && b.log.piece(0).marked() && b.log.piece(1).marked() && !b.log.piece(2).marked()
+				         && b.log.current() == 2;
+				step++;
+				calls++;
+			}
+			expect(intact).to_be_true();
+			expect(calls).to_be_greater_than(2); // the move took several steps
+			expect(b.log.droppedBytes()).to_equal(0);
+			// The room is free: everything past the dropped piece came down by its bytes, records written meanwhile
+			// included.
+			expect(b.log.used()).to_be_less_than(opened);
+			expect(b.log.used() - (opened - dropped)).to_be_less_than(step * 4 + 1);
+			expect(twoIntact(b.log, 0)).to_be_true();
+			char path[kMaxSoundPath];
+			expect(b.log.piece(2).pick(pickSlot(2), path)).to_be_true();
+			expect(std::string{path}).to_equal(std::string{"SYNTHS/GEN NEW"});
+			// Offsets after the shift: the new piece keeps logging, reads back whole, and its count is right.
+			for (int32_t more = 0; more < 5; more++, step++) {
+				expect(b.log.append(step, macro(Macro::Motion, step))).to_be_true();
+			}
+			const std::vector<LogRecord> logged = records(b.log, 2);
+			expect(static_cast<int32_t>(logged.size())).to_equal(step);
+			expect(b.log.piece(2).recordCount()).to_equal(step);
+			bool inOrder = true;
+			for (int32_t i = 0; i < step; i++) {
+				inOrder = inOrder && logged[static_cast<size_t>(i)].step == i
+				          && logged[static_cast<size_t>(i)].command == macro(Macro::Motion, i);
+			}
+			expect(inOrder).to_be_true();
+			// And the next piece throws the new one (unmarked) away at once, from the end.
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(5));
+			expect(b.log.compacting()).to_be_false();
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 3, 5});
+		});
+
+		it("never stops a step inside a piece's opening, however many small pieces one step's budget reaches", _ {
+			for (int32_t extra : {2, 6, 40, 100}) {
+				Buffer b(8192);
+				threeMarked(b.log);
+				const int32_t kept = b.log.piece(1).bytes(); // a kept piece's room, about: the budget reaches past it
+				b.log.markPiece(0, false);
+				b.log.beginPiece(startOf(4));
+				int32_t step = 0;
+				bool intact = true;
+				while (b.log.compacting() && step < 200) {
+					b.log.append(step, macro(Macro::Motion, step));
+					step++;
+					b.log.compactStep(kept + extra);
+					intact = intact && seeds(b.log) == std::vector<uint32_t>{2, 3, 4}
+					         && b.log.piece(2).recordCount() == step && b.log.piece(0).recordCount() == 2
+					         && b.log.piece(1).recordCount() == 2;
+				}
+				expect(intact).to_be_true();
+				expect(b.log.compacting()).to_be_false();
+				expect(twoIntact(b.log, 0)).to_be_true();
+				const std::vector<LogRecord> logged = records(b.log, 2);
+				bool inOrder = static_cast<int32_t>(logged.size()) == step;
+				for (int32_t i = 0; inOrder && i < step; i++) {
+					inOrder = logged[static_cast<size_t>(i)].step == i
+					          && logged[static_cast<size_t>(i)].command == macro(Macro::Motion, i);
+				}
+				expect(inOrder).to_be_true();
+			}
+		});
+
+		it("keeps every logged step whole when the log cuts the new piece while a move is under way", _ {
+			for (int32_t budget : {1, 3, 7, 13, 40}) {
+				Buffer b(2048);
+				threeMarked(b.log);
+				b.log.markPiece(1, false);
+				b.log.beginPiece(startOf(4));
+				int32_t step = 0;
+				// Three records a step, a bounded move between steps, until the log cuts the piece.
+				while (b.log.logging()) {
+					for (int32_t r = 0; r < 3; r++) {
+						b.log.append(step, macro(static_cast<Macro>(r), step + r));
+					}
+					b.log.compactStep(budget);
+					step++;
+				}
+				b.log.finishCompaction();
+				expect(b.log.compacting()).to_be_false();
+				expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 3, 4});
+				const std::vector<LogRecord> logged = records(b.log, 2);
+				const int32_t cutAt = b.log.piece(2).cutAt();
+				expect(cutAt).to_be_greater_than(0);
+				expect(static_cast<int32_t>(logged.size())).to_equal(3 * cutAt);
+				expect(b.log.piece(2).recordCount()).to_equal(3 * cutAt);
+				bool whole = true;
+				for (size_t i = 0; i < logged.size(); i++) {
+					const auto r = static_cast<int32_t>(i % 3);
+					const auto at = static_cast<int32_t>(i / 3);
+					whole = whole && logged[i].step == at && logged[i].command == macro(static_cast<Macro>(r), at + r);
+				}
+				expect(whole).to_be_true();
+				expect(records(b.log, 1).size()).to_equal(2u); // the third piece, moved, intact
+			}
+		});
+
+		it("throws away the unmarked pieces at the end at once, an earlier dropped one among them", _ {
+			Buffer b(8192);
+			threeMarked(b.log);
+			b.log.markPiece(1, false);
+			b.log.markPiece(2, false);
+			const int32_t before = b.log.piece(0).bytes();
+			b.log.beginPiece(startOf(4));
+			expect(b.log.compacting()).to_be_false();
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 4});
+			expect(b.log.used()).to_be_less_than(before + 400);
+		});
+
+		it("drops the move under way when the piece it is closing ends up last, and logs on from there", _ {
+			Buffer b(8192);
+			threeMarked(b.log);
+			b.log.markPiece(1, false);
+			b.log.beginPiece(startOf(4)); // drops the second piece; the move starts
+			b.log.mark(true);
+			b.log.append(1, macro(Macro::Motion, 1));
+			b.log.compactStep(8);
+			expect(b.log.compacting()).to_be_true();
+			// The third and fourth pieces unmarked: at the next piece, everything from the second on goes at once.
+			b.log.markPiece(2, false);
+			b.log.markPiece(1, false);
+			b.log.endPiece(4, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(5));
+			expect(b.log.compacting()).to_be_false();
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{1, 5});
+			expect(b.log.append(2, macro(Macro::Energy, 7))).to_be_true();
+			expect(records(b.log, 1).size()).to_equal(1u);
+			expect(records(b.log, 0).size()).to_equal(2u);
+		});
+
+		it("opens no piece that finds no room while a dropped piece's room is still to close; the next one opens", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (step < 300 && b.log.append(step, macro(Macro::Energy, step))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(2));
+			b.log.mark(true);
+			while (b.log.append(step, macro(Macro::Energy, step))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.markPiece(0, false);
+			b.log.beginPiece(startOf(3));
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.full()).to_be_true();
+			expect(b.log.compacting()).to_be_true();
+			int32_t steps = 0;
+			while (b.log.compacting() && steps < 1000) {
+				b.log.compactStep(256);
+				steps++;
+			}
+			expect(b.log.compacting()).to_be_false();
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2});
+			b.log.beginPiece(startOf(4));
+			expect(b.log.current()).to_equal(1);
+			expect(b.log.full()).to_be_false();
+			expect(seeds(b.log)).to_equal(std::vector<uint32_t>{2, 4});
+		});
+
+		it("takes marks again after an unmarked earlier piece made room at the next piece", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (step < 60 && b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(2));
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.mark(true)).to_be_false(); // the current piece stays cut until it ends
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(3));
+			expect(b.log.pieces()).to_equal(1);
+			expect(b.log.full()).to_be_false();
+			expect(b.log.mark(true)).to_be_true();
+		});
+
+		it("puts back a mark the cut found: a second RECORD on a full log doesn't lose a piece that was marked", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.mark(false)).to_be_true();
+			expect(b.log.mark(true)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_true();
 		});
 	});
 

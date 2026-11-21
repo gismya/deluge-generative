@@ -107,8 +107,10 @@ public:
 
 	// ---- Pieces (spec §17.3): the Perform driver ----
 
-	/// A piece starts, from `start`. The newest piece, if it ended and isn't marked, is thrown away first (spec
-	/// §17.3). If even the opening doesn't fit, no piece opens: nothing logs until the next one.
+	/// A piece starts, from `start`. Every piece that ended and isn't marked is thrown away first (spec §17.3, §17.4):
+	/// the last piece at once, and one before it (unmarked in the CAPTURE menu) dropped, its room closed by
+	/// compactStep() over the steps that follow, never here. If even the opening doesn't fit, no piece opens: nothing
+	/// logs until the next one.
 	void beginPiece(const PieceStart& start);
 	/// Header records, after beginPiece() and before the piece's first record. A sound pick, by pickSlot(): an empty
 	/// path is skipped.
@@ -120,8 +122,26 @@ public:
 	uint8_t* snapshotSpace(int32_t length);
 	/// The current piece ends before `step`: its first step not played.
 	void endPiece(int32_t step, PieceEnd why);
-	/// Marks the newest piece to keep, or unmarks it (spec §17.4).
-	void mark(bool on);
+	/// Marks the current piece to keep, or unmarks it (spec §17.4). @return false, changing nothing, with no current
+	/// piece, or for a mark while the log is full(), unless the piece was marked when it was cut (a second press puts
+	/// back the mark the first took off).
+	bool mark(bool on);
+	/// Marks piece `i` or unmarks it: the current one as mark() does; an earlier one (the CAPTURE menu) stays in the
+	/// log until the next piece begins, so it can be marked again until then, full or not. @return false if refused.
+	bool markPiece(int32_t i, bool on);
+
+	/// Closes the room of dropped pieces by moving the pieces after them down, at most `maxBytes` a call: the Perform
+	/// driver calls it once a step, outside the decision (spec §17.4), while the newest piece keeps writing at the end.
+	/// It moves more, up to openingBytes() more, only to finish the last piece's opening it reached: an opening is
+	/// read whole.
+	/// @return the bytes moved.
+	int32_t compactStep(int32_t maxBytes);
+	/// A piece's opening: its info and its start's Recipe.
+	static int32_t openingBytes();
+	/// Every dropped piece's room closed at once: from task context only (a leave), never in the tick.
+	void finishCompaction() { compactStep(INT32_MAX); }
+	/// About 90 µs of SDRAM moves on a Deluge (spec §20): well inside a step beside its decisions.
+	static constexpr int32_t kCompactStepBytes = 4096;
 
 	// ---- Records, in step order within the piece ----
 
@@ -140,7 +160,9 @@ public:
 
 	// ---- Reading ----
 
-	/// One piece in the log, read in place.
+	/// One piece in the log, read in place. While compacting(), a piece the move is partway through is torn: read
+	/// only its opening then (start(), marked(), ended(), bytes() and the like), and its header and records once the
+	/// move is done (finishCompaction()).
 	class Piece {
 	public:
 		[[nodiscard]] const PieceStart& start() const;
@@ -152,6 +174,8 @@ public:
 		[[nodiscard]] bool marked() const;
 		/// All its bytes, and the header's (the opening and the header records).
 		[[nodiscard]] int32_t bytes() const;
+		/// Its records (forEachRecord() hands each over): counted as they are written.
+		[[nodiscard]] int32_t recordCount() const;
 		[[nodiscard]] int32_t headerBytes() const;
 		/// Copies the pick in `slot` into `out` (kMaxSoundPath), terminated. @return false, with `out` empty, if the
 		/// header has none.
@@ -222,12 +246,23 @@ public:
 		const uint8_t* base_;
 	};
 
+	/// The pieces in the log, dropped ones left out, in set order.
 	[[nodiscard]] int32_t pieces() const { return pieces_; }
 	[[nodiscard]] Piece piece(int32_t i) const;
+	/// Counts the pieces opened: a new piece can replace a dropped one and keep pieces() and the marks the same.
+	[[nodiscard]] uint32_t opened() const { return opened_; }
+	/// Whether dropped pieces' room is still to close (compactStep()), and their bytes.
+	[[nodiscard]] bool compacting() const { return gapAt_ >= 0 || dropped_ > 0; }
+	[[nodiscard]] int32_t droppedBytes() const;
+	/// The current piece, the newest: playing, or the last piece after it ended. -1 before any, or when the newest
+	/// found no room to open (the pieces left are marked ones, which a RECORD press doesn't touch).
+	[[nodiscard]] int32_t current() const { return current_ ? pieces_ - 1 : -1; }
+	/// The pieces marked, the current one among them.
+	[[nodiscard]] int32_t markedPieces() const;
 	/// Whether the newest piece stopped logging because the log was full, or found no room to open: new marks are
 	/// refused (spec §17.2).
 	[[nodiscard]] bool full() const { return cut_; }
-	/// Bytes in use, of capacity().
+	/// Bytes in use, of capacity(): a dropped piece's until compactStep() has closed its room.
 	[[nodiscard]] int32_t used() const { return used_; }
 	[[nodiscard]] int32_t capacity() const { return capacity_; }
 	/// Whether a piece is open for records.
@@ -249,15 +284,38 @@ private:
 		int32_t bytes;
 		int32_t endStep;
 		int32_t cutAt;
+		int32_t records;
 		uint16_t headerBytes;
 		PieceEnd ended;
 		bool marked;
+		bool dropped; ///< Thrown away (beginPiece()), its room not yet closed (compactStep()).
 		PieceStart start;
 	};
 
 	[[nodiscard]] PieceInfo& newest() const;
-	/// Piece `i`'s offset: each starts aligned for its PieceInfo.
+	/// Offsets are logical: where bytes were before the move under way. The move takes the bytes in
+	/// [gapAt_ + gapBytes_, src_) down by gapBytes_; the rest stay where they are.
+	[[nodiscard]] int32_t physical(int32_t at) const {
+		return gapAt_ >= 0 && at >= gapAt_ + gapBytes_ && at < src_ ? at - gapBytes_ : at;
+	}
+	[[nodiscard]] PieceInfo& infoAt(int32_t at) const { return *reinterpret_cast<PieceInfo*>(buffer_ + physical(at)); }
+	/// The piece after the one at `at` (any piece, dropped ones too).
+	[[nodiscard]] int32_t nextAt(int32_t at) const {
+		return at == gapAt_ ? at + gapBytes_ : alignUp(at + infoAt(at).bytes);
+	}
+	/// Whether the piece at `at` is dropped: the one the move is closing, whose opening may be overwritten, or one
+	/// flagged.
+	[[nodiscard]] bool droppedAt(int32_t at) const { return at == gapAt_ || infoAt(at).dropped; }
+	/// Piece `i`'s offset, dropped pieces left out: each starts aligned for its PieceInfo.
 	[[nodiscard]] int32_t offsetOf(int32_t i) const;
+	/// The offset of the last piece in the buffer, dropped or not, with `all_` > 0.
+	[[nodiscard]] int32_t lastAt() const;
+	/// Ends the buffer at `at`, a piece's offset: that piece and every one after it go.
+	void truncate(int32_t at);
+	/// Starts closing the first dropped piece's room. @return false with none.
+	bool startGap();
+	/// The move has reached the end: every offset past the gap comes down by its bytes, and the dropped piece goes.
+	void finishGap();
 	static constexpr int32_t alignUp(int32_t offset) {
 		constexpr auto a = static_cast<int32_t>(alignof(PieceInfo));
 		return (offset + a - 1) & ~(a - 1);
@@ -269,6 +327,8 @@ private:
 	/// Writes a header record (its bytes from `data`, if not nullptr), or cuts the piece at step 0. @return where its
 	/// bytes are, or nullptr.
 	uint8_t* writeHeader(uint8_t tag, const void* data, int32_t length);
+	/// Throws away every piece that isn't marked: those at the end at once, earlier ones dropped for compactStep().
+	void dropUnmarked();
 	/// The records' cut: the step `step` didn't fit, and its records go whole.
 	void cut(int32_t step);
 	/// A header that didn't fit: none of it stays, and the piece is cut at its step 0.
@@ -279,11 +339,22 @@ private:
 	uint8_t* buffer_;
 	int32_t capacity_;
 	int32_t used_ = 0;
-	int32_t pieces_ = 0;
+	int32_t pieces_ = 0;  ///< Dropped ones left out.
+	int32_t all_ = 0;     ///< Dropped ones too.
+	int32_t dropped_ = 0; ///< Flagged dropped, not yet the gap.
+	uint32_t opened_ = 0;
+	/// The move under way (compactStep()): the dropped piece at gapAt_ (-1 for none), its aligned bytes, and the read
+	/// cursor, from gapAt_ + gapBytes_ to used_.
+	int32_t gapAt_ = -1;
+	int32_t gapBytes_ = 0;
+	int32_t src_ = 0;
 	int32_t newest_ = 0; ///< The newest piece's offset.
 	/// The current piece's state for writing: open, cut, its records' last step, and where that step's records began.
 	bool open_ = false;
 	bool cut_ = false;
+	bool current_ = false;     ///< The newest piece is the current one (current()).
+	bool markedAtCut_ = false; ///< The current piece was marked when the log cut it: a mark may come back.
+	int32_t recordsFrom_ = 0;  ///< The newest piece's records before lastStep_'s.
 	bool inRecords_ = false;
 	int32_t lastStep_ = 0;
 	int32_t stepFrom_ = 0;

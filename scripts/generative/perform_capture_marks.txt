@@ -1,0 +1,145 @@
+# Capture marks (#144, spec §17.4, §13.5, §13.6) over the sysex test port: RECORD marks the current piece and again
+# unmarks it, playing or stopped (the last piece); before any piece it shows NOTHING PLAYED. The RECORD LED is on while
+# the piece is marked, the CAPTURE peek (SELECT turned right twice) says so, and the CAPTURE menu (the Perform menu's
+# last row) lists the pieces newest first, a press toggling a piece's mark. An earlier piece unmarked there stays until
+# the next piece begins, which throws it away. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_log_piece ... dropping= us=: a piece opened, and the bytes of dropped pieces whose room is still to close.
+# gen_log_compact moved= left= used= us=: a step's part of closing that room (at most about 4 KB a step), left=0 done.
+# gen_mark marked|unmarked|log_full|no_piece piece= current= marks=: a press and what it did. gen_capture piece=
+# marked= full= marks=: the marks as the dot and the LED read them. gen_record_led off|on|blink. gen_peek_page and
+# gen_peek N LABEL|VALUE: the peek. Menus remember their last row, so a row is chosen from the top (encoder 3 -20
+# first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE,
+# SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART, CAPTURE, BROWSER PREVIEW.
+# covers: src/deluge/generative/perform/capture.* src/deluge/generative/core/steering_log.*
+# covers: src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/playback/playback_handler.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/perform/oled_page.*
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/l10n/english.json
+# covers: src/deluge/gui/l10n/g_english.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Before any piece: nothing to mark ----
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark no_piece piece=-1 current=-1 marks=0 within=5
+
+# ---- The first piece: RECORD marks it, the LED comes on and CAPTURE says so ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+expect event gen_capture piece=1 marked=0 full=0 marks=0 within=5
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark marked piece=0 current=0 marks=1 within=5
+expect event gen_capture piece=1 marked=1 full=0 marks=1 within=5
+expect event gen_record_led on within=5
+encoder 3 1
+expect event gen_peek_page QUEUE within=15
+encoder 3 1
+expect event gen_peek_page CAPTURE within=15
+expect event gen_peek 0 THIS PIECE|MARKED within=5
+expect event gen_peek 1 MARKED PIECES|1 within=5
+# Pressed again, it unmarks the piece
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark unmarked piece=0 current=0 marks=0 within=5
+expect event gen_record_led off within=5
+expect event gen_peek 0 THIS PIECE|NOT MARKED within=5
+
+# ---- Stopped: RECORD marks the last piece, which stays marked when the next one begins ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark marked piece=0 current=0 marks=1 within=5
+expect event gen_record_led on within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 header=[0-9]+ used=[0-9]+ full=0 dropping=0 us=[0-9]+$/ within=10
+expect event gen_capture piece=1 marked=0 full=0 marks=1 within=5
+expect event gen_record_led off within=5
+
+# ---- CAPTURE ▸: the pieces newest first; a press on the earlier one unmarks it, and again marks it ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 8
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+# Row 1 (the second from the top) is piece 0, the earlier one
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark unmarked piece=0 current=1 marks=0 within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark marked piece=0 current=1 marks=1 within=5
+# The top row is the current piece: its press is RECORD's
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark marked piece=1 current=1 marks=2 within=5
+expect event gen_record_led on within=5
+# Unmark the earlier piece, out of the menu, back to the Perform menu's top row
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark unmarked piece=0 current=1 marks=1 within=5
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+expect ui=generative_perform
+
+# ---- The next piece throws the unmarked earlier one away; the marked one stays, now piece 0 ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+# The opening moves nothing: the unmarked piece is dropped (dropping=), and the steps after it close its room, the
+# marked piece moved down a bounded part a step
+expect event /^gen_log_piece pieces=2 header=[0-9]+ used=[0-9]+ full=0 dropping=[1-9][0-9]* us=[0-9]+$/ within=10
+expect event gen_capture piece=1 marked=0 full=0 marks=1 within=5
+expect event /^gen_log_compact moved=[0-9]+ left=0 used=[0-9]+ us=[0-9]+$/ within=10
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark marked piece=1 current=1 marks=2 within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

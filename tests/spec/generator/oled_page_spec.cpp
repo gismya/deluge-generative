@@ -42,6 +42,7 @@ struct Piece : StepwisePiece<> {
 	bool ext = false;
 	OledPeek peek = OledPeek::None;
 	GridPage page = GridPage::Song;
+	CaptureStatus capture;
 	PartTitleInput title{
 	    .part = kAcid, .parts = partCount(genres::technoAcid), .genre = &genres::technoAcid, .preset = kAcidPreset};
 	ControlLevel levels[kNumSoundControls] = {};
@@ -63,6 +64,7 @@ struct Piece : StepwisePiece<> {
 		in.arcState = &arc;
 		in.peek = peek;
 		in.page = page;
+		in.capture = capture;
 		in.title = title;
 		std::copy_n(levels, kNumSoundControls, in.levels);
 		return in;
@@ -159,6 +161,43 @@ describe oled_page("Perform's OLED", $ {
 		piece.pushAndDecide(mute(kAcid));
 		expect(piece.right()).to_equal(std::string{">MUT2B+"});
 		expect(piece.left()).to_equal(std::string{"GROOVE 1"});
+	});
+
+	it("status line: the Capture dot, hollow or filled, blinking when the log is full; HELD leaves it its room", _ {
+		Piece piece;
+		piece.decideBefore(8);
+		expect(piece.screen().dot == CaptureDot::None).to_be_true();
+		piece.capture = {.piece = true};
+		expect(piece.screen().dot == CaptureDot::Hollow).to_be_true();
+		piece.capture.marked = true;
+		expect(piece.screen().dot == CaptureDot::Filled).to_be_true();
+		expect(piece.screen().dotBlinks).to_be_false();
+		piece.capture.full = true;
+		expect(piece.screen().dotBlinks).to_be_true();
+		// Stopped, the last piece's dot still shows.
+		piece.stopped = true;
+		expect(piece.screen().dot == CaptureDot::Filled).to_be_true();
+		piece.stopped = false;
+		// The dot takes two characters: beside "1.1 EXT", HELD no longer fits and H does; beside a tag with more
+		// queued, nothing does.
+		piece.pushAndDecide(hold());
+		piece.ext = true;
+		expect(piece.left()).to_equal(std::string{"GROOVE 1 H"});
+		piece.pushAndDecide(force(SectionKind::Break));
+		piece.pushAndDecide({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+		expect(piece.right()).to_equal(std::string{">BR8+"});
+		expect(piece.left()).to_equal(std::string{"GROOVE 1"});
+	});
+
+	it("CAPTURE peek: this piece's mark, the pieces marked and the log's use", _ {
+		Piece piece;
+		piece.peek = OledPeek::Capture;
+		piece.capture = {.piece = true, .marked = true, .markedPieces = 2, .usedPercent = 34};
+		OledScreen screen = piece.screen();
+		expect(std::string{screen.lines[0]} + "|" + screen.lineRight[0]).to_equal(std::string{"THIS PIECE|MARKED"});
+		expect(std::string{screen.lines[1]} + "|" + screen.lineRight[1]).to_equal(std::string{"MARKED PIECES|2"});
+		expect(std::string{screen.lines[2]} + "|" + screen.lineRight[2]).to_equal(std::string{"LOG|34% USED"});
+		expect(screen.arc).to_be_false();
 	});
 
 	it("QUEUE peek: lists what is queued with its countdown, over whichever page is on", _ {
