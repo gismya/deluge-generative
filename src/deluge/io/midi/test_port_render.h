@@ -43,6 +43,26 @@ struct RenderTiming {
 	uint32_t drainedMax = 0;     ///< The most samples waiting in the routine (of the 128-sample TX buffer)
 	uint32_t lateClusters = 0;   ///< A playing voice's next Cluster wasn't loaded in time (the sound cuts)
 	uint32_t unloadedStarts = 0; ///< A voice's first Cluster wasn't loaded when it started or jumped
+	// The audio output's margin (spec §20, #449): at each entry to the audio routine, the audio the TX ring still held
+	// (io/midi/output_margin.h). Render starts alone don't show it, as one routine call may copy audio rendered
+	// earlier.
+	uint32_t routineCalls = 0;
+	uint32_t underruns = 0;              ///< Entries after the ring ran dry: the codec replayed old samples.
+	int32_t marginMinCounts = INT32_MAX; ///< The least audio left at an entry; negative once it ran dry.
+	uint32_t margins[4] = {};            ///< Entries with under 0.5, 1 and 2 ms left, and the rest (not underruns).
+	int32_t dmaDriftMax = 0;             ///< The DMA's largest move off the timer at an entry, in samples (dmaDrift()).
+	/// The task that finished last before each underrun's entry: the one that kept the routine away.
+	struct LateTask {
+		const char* name = nullptr;
+		bool nested = false; ///< The routine ran inside `name` (it called the routine), rather than after it.
+		uint32_t underruns = 0;
+		uint32_t runMaxCounts = 0; ///< Its longest run before an underrun.
+	};
+	LateTask lateTasks[4] = {};
+	/// The UI timers (TimerName) whose handler ran over 2 ms, and their longest run: the "ui routine" task's culprits.
+	static constexpr int32_t kUiTimers = 40;
+	uint16_t uiTimerSlow[kUiTimers] = {};
+	uint32_t uiTimerMaxCounts[kUiTimers] = {};
 };
 extern RenderTiming renderTiming;
 
@@ -52,6 +72,18 @@ void recordRender(uint32_t start, size_t numSamples);
 void recordDrained(size_t drained);
 /// #448: a Cluster a voice needed wasn't loaded: `playing` (mid-sound, it cuts) or at the voice's start.
 void clusterMissed(bool playing);
+/// The audio routine starts, at entry to AudioEngine::routine() (spec §20, the audio output's margin).
+/// `dmaFrame`: the frame of the TX ring the DMA reads.
+void audioRoutineEntered(uint32_t dmaFrame);
+/// The audio routine returns, with `queuedSamples` (txSamplesQueued()) in the TX ring and the DMA at `dmaFrame`.
+void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame);
+/// The scheduler starts task `name`, for the underruns' culprit: the task it runs inside (null at the top), to hand
+/// back to taskRan().
+const char* taskStarted(const char* name);
+/// The scheduler's task `name` ran for `counts` (getSystemTicks()), and `caller` (taskStarted()) runs again.
+void taskRan(const char* name, uint32_t counts, const char* caller);
+/// UITimerManager ran UI timer `timer`'s handler for `counts` (getSystemTicks()).
+void uiTimerRan(int32_t timer, uint32_t counts);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

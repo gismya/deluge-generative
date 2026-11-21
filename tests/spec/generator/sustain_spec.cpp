@@ -299,6 +299,38 @@ describe sustain("The Sustain flavour", $ {
 			}
 		});
 
+		it("with holdShared, breaks a tie for the least move by keeping the most voices in place", _ {
+			const Key key{.root = 9, .scale = Scale::Minor};
+			const Register reg = kOpenParts[0].reg;
+			const auto held = [](const Voicing& voicing, const Voicing& previous) {
+				int32_t count = 0;
+				for (int32_t i = 0; i < voicing.size; i++) {
+					count += std::count(previous.pitch, previous.pitch + previous.size, voicing.pitch[i]) != 0 ? 1 : 0;
+				}
+				return count;
+			};
+			int32_t differ = 0;
+			for (int32_t a = 0; a < 7; a++) {
+				for (int32_t b = 0; b < 7; b++) {
+					for (int32_t c = 0; c < 7; c++) {
+						for (int32_t level = 0; level < 3; level++) {
+							const Voicing first = openVoicing(voiceChord(Scale::Minor, a, level), key, reg, {});
+							const Voicing second = openVoicing(voiceChord(Scale::Minor, b, level), key, reg,
+							                                   {first.pitch, static_cast<size_t>(first.size)});
+							const std::span<const uint8_t> previous{second.pitch, static_cast<size_t>(second.size)};
+							const Chord chord = voiceChord(Scale::Minor, c, 2 - level);
+							const Voicing today = openVoicing(chord, key, reg, previous);
+							const Voicing holding = openVoicing(chord, key, reg, previous, true);
+							expect(holding.size).to_equal(today.size);
+							expect(held(holding, second)).to_be_greater_than(held(today, second) - 1);
+							differ += held(holding, second) > held(today, second) ? 1 : 0;
+						}
+					}
+				}
+			}
+			expect(differ).to_be_greater_than(0);
+		});
+
 		it("opens the first voicing of a seventh chord: the 7th and the 3rd an octave over the root", _ {
 			const Key key{.root = 9, .scale = Scale::Minor};
 			const Voicing first = openVoicing(voiceChord(Scale::Minor, 0, 1), key, kOpenParts[0].reg, {});
