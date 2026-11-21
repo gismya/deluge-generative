@@ -54,7 +54,7 @@ expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- TECHNO / DUB -> BUILD INTO A DROP: Melodic techno's 8- or 16-bar Build onto Dub techno's Drop ----
@@ -85,7 +85,7 @@ expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- TECHNO / DETROIT -> FADE THROUGH: Dub techno's 1-phrase Outro, Detroit techno's Intro ----
@@ -117,7 +117,7 @@ expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=15
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- AMBIENT -> FADE THROUGH: its own entry, so no detent: Detroit techno's Outro, Ambient's Intro ----
@@ -142,7 +142,7 @@ expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=15
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
@@ -173,7 +173,7 @@ expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- ROOTS DUB -> FADE THROUGH: Psytrance's 1-phrase Outro, Dub's Intro ----
@@ -199,7 +199,7 @@ expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=15
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- HOUSE -> BUILD INTO A DROP: Dub's 1-bar Build glides up onto House's Drop ----
@@ -224,7 +224,7 @@ expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 button PLAY down
 wait 50

@@ -30,7 +30,9 @@ class Generator(unittest.TestCase):
 
         reads = iter(goldens)
         err = io.StringIO()
+        self.printed = io.StringIO()
         with (
+            contextlib.redirect_stdout(self.printed),
             mock.patch.object(sys, "argv", ["test", *argv]),
             mock.patch.object(task_test.subprocess, "run", run),
             mock.patch.object(task_test.util, "get_git_root", lambda: "."),
@@ -111,6 +113,27 @@ class Generator(unittest.TestCase):
             self.assertEqual(code, code_in)
             self.assertNotIn("needs the bump", err)
             self.assertIn("goldens.py check failed: see above", err)
+
+    def test_no_run_names_the_binary_it_built(self):
+        # check_all.py builds only the sanitized dir: a binary run from the other one is stale (#436).
+        for argv, binary in (
+            (("--generator", "-n"), "build/tests/spec/generator/Debug/generator_specs"),
+            (
+                ("--generator", "--sanitize", "-n"),
+                "build/tests-sanitize/spec/generator/Debug/generator_specs",
+            ),
+        ):
+            with self.subTest(argv=argv):
+                _, commands, _ = self.run_task(*argv)
+                self.assertFalse([c for c in commands if c[0] == "ctest"])
+                self.assertIn(
+                    f"built {binary}; one spec: {binary} <name>_spec --verbose",
+                    self.printed.getvalue(),
+                )
+
+    def test_a_run_names_none(self):
+        self.run_task("--generator")
+        self.assertNotIn("built ", self.printed.getvalue())
 
 
 if __name__ == "__main__":

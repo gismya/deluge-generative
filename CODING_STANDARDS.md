@@ -1,7 +1,7 @@
 # Coding standards
 
 For reviewing Generative mode changes. The mechanical rules (no float, firmware includes or libc stdio in the
-Generator's portable code, no OLED string literals in Perform's UI) are the `generative-rules` hooks in
+Generator's portable code, no OLED string literals in Perform's UI, no nested `describe(` in a harness spec) are the `generative-rules` hooks in
 `.pre-commit-config.yaml`, which CI runs: leave them to the hooks. What follows are the judgement calls.
 
 ## Stock firmware edits
