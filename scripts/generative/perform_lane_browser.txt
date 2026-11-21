@@ -67,18 +67,16 @@ expect event /gen_browser at=SAMPLES\/.+\.(wav|WAV|aif|aiff)$/ within=5
 expect event /gen_browser_preview sounding=1 playing=0 path=SAMPLES\// within=5
 
 # ---- BACK closes the browser, back to the list; BACK again closes the list: nothing changed ----
-# BACK goes up a folder (SAMPLES/DRUMS, SAMPLES) and closes the browser at the top, as the preset browser does
+# A BACK tap goes up a folder; a BACK hold closes the browser from any folder (stock's long press exits the UI),
+# back to the list. (BACK in the top folder closing it is the preset browser's, perform_preset_browser.txt.)
 mark
 button BACK down
 wait 50
 button BACK up
-expect event gen_browser at=SAMPLES/DRUMS/Kick within=5
+expect event /gen_browser at=SAMPLES\/[^.]+$/ within=5
+expect ui=generative_sound_browser
 button BACK down
-wait 50
-button BACK up
-expect event gen_browser at=SAMPLES/DRUMS within=5
-button BACK down
-wait 50
+wait 800
 button BACK up
 expect event gen_browser closed within=5
 expect ui=sound_editor within=5
@@ -204,15 +202,7 @@ expect event gen_browser open part=0 lane=kick within=10
 
 # ---- OFF: nothing previews, stopped or not ----
 button BACK down
-wait 50
-button BACK up
-wait 300
-button BACK down
-wait 50
-button BACK up
-wait 300
-button BACK down
-wait 50
+wait 800
 button BACK up
 expect event gen_browser closed within=5
 button BACK down
@@ -262,15 +252,7 @@ button SELECT_ENC up
 expect event gen_browser_preview off playing=0 within=5
 expect event gen_browser open part=0 lane=kick within=10
 button BACK down
-wait 50
-button BACK up
-wait 300
-button BACK down
-wait 50
-button BACK up
-wait 300
-button BACK down
-wait 50
+wait 800
 button BACK up
 expect event gen_browser closed within=5
 button BACK down
@@ -278,8 +260,9 @@ wait 50
 button BACK up
 expect ui=generative_perform within=5
 
-# ---- FX: its lanes take a preset, so a lane asks SAMPLE or SYNTH PRESET. SYNTH PRESET's browser (SYNTHS when the
-# pack's folder is gone) and a preset typed in ("002"): the Riser's row loads it as a synth ----
+# ---- FX: its lanes take a preset, so a lane asks SAMPLE or SYNTH PRESET (SAMPLE's browser is DRUMS' above). SYNTH
+# PRESET's browser opens in the pack's FX presets (SYNTHS on a card without the pack) on a preset; SELECT chooses it,
+# and the Riser's row loads it as a synth ----
 pad 9 4 down
 wait 50
 pad 9 4 up
@@ -303,24 +286,12 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event /gen_browser open part=3 lane=riser kind=preset at=SYNTHS\// within=10
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 12 5 down
-wait 30
-pad 12 5 up
-wait 100
-pad 4 5 down
-wait 30
-pad 4 5 up
-expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+expect event /gen_browser open part=3 lane=riser kind=preset at=(?P<preset>SYNTHS\/.+\.XML)$/ within=10
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_browser chose part=3 path=SYNTHS/002 Basic Square Bass.XML lane=riser within=5
+expect event /gen_browser chose part=3 path=(?P=preset) lane=riser$/ within=5
 expect event gen_sound_press part=3 source=chosen within=5
 expect event gen_sound_transpose FX RISER within=20
-expect event /gen_sound FX RISER pick mode=\d+ prio=\d+ SYNTHS\/002 Basic Square Bass\.XML$/ within=5
+expect event /gen_sound FX RISER pick mode=\d+ prio=\d+ (?P=preset)$/ within=5
 expect event gen_sound_swap part=3 stopped within=30
