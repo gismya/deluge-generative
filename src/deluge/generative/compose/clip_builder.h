@@ -208,10 +208,10 @@ public:
 		}
 	}
 
-	/// A cut on `part` at `tick` (spec §17.6): a key change cuts its clip, or a re-roll starts its new track. Each of the
-	/// part's lanes ends there as split() ends it, its last node and base written, and goes on from the value it has,
-	/// from `tick`. So once the writer hears of the cut, every node it gets for the part is for the clip from `tick`.
-	/// Notes aren't touched: one that started before `tick` still goes to the clip it started in.
+	/// A cut on `part` at `tick` (spec §17.6): a key change cuts its clip, or a re-roll starts its new track. Each of
+	/// the part's lanes ends there as split() ends it, its last node and base written, and goes on from the value it
+	/// has, from `tick`. So once the writer hears of the cut, every node it gets for the part is for the clip from
+	/// `tick`. Notes aren't touched: one that started before `tick` still goes to the clip it started in.
 	template <typename Centre>
 	void cutPart(uint8_t part, int32_t tick, Centre centre) {
 		endPart(part, tick, centre, false);

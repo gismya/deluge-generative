@@ -186,7 +186,8 @@ std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster
 		auto* set = static_cast<PatchCableSet*>(found);
 		for (int32_t c = 0; c < set->numPatchCables; c++) {
 			PatchCable& cable = set->patchCables[c];
-			if (cable.destinationParamDescriptor.getJustTheParam() == id && static_cast<uint8_t>(cable.from) == source) {
+			if (cable.destinationParamDescriptor.getJustTheParam() == id
+			    && static_cast<uint8_t>(cable.from) == source) {
 				return LoggedParam{manager, &cable.param, collection, c};
 			}
 		}

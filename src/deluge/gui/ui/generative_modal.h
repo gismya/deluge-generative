@@ -41,6 +41,9 @@ public:
 	/// As open(), with the COMPOSING screen in place of the song's: a progress bar of bars rendered
 	/// (composeProgress()) and BACK = CANCEL (spec §14.5).
 	void openComposing(const deluge::generative::Job& job);
+	/// As openComposing(), for Capture's build on leave (spec §17.7): titled `BUILDING 2 OF 3` or `SAVING 2 OF 3`
+	/// (captureScreen()), with BACK = STOP.
+	void openCapture(const deluge::generative::Job& job);
 	/// The job ended: closes, if BACK or a new song's UI (setUIForLoadedSong()) hasn't already.
 	void jobEnded();
 
@@ -61,6 +64,7 @@ private:
 	void dismiss();
 	const deluge::generative::Job* job_ = nullptr;
 	bool composing_ = false;
+	bool capturing_ = false; ///< With composing_: Capture's screen
 };
 
 extern GenerativeModalUI generativeModalUI;

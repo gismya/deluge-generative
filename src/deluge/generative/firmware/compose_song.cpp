@@ -27,6 +27,7 @@
 #include "model/note/note_row.h"
 #include "model/output.h"
 #include "model/song/song.h"
+#include "modulation/params/param.h"
 #include "modulation/params/param_set.h"
 #include "processing/sound/sound_instrument.h"
 #include <algorithm>
@@ -371,9 +372,9 @@ void ComposeSong::cutClip(uint8_t part, int32_t tick) {
 }
 
 void ComposeSong::soundPick(uint8_t /*part*/, uint8_t /*token*/, int32_t slot, const char* path, int32_t length) {
-	SoundPath* pick = slot < kMaxParts                ? &picks_.part[slot]
+	SoundPath* pick = slot < kMaxParts               ? &picks_.part[slot]
 	                  : slot < kMaxParts + kNumLanes ? &picks_.lane[slot - kMaxParts]
-	                                                  : nullptr;
+	                                                 : nullptr;
 	if (pick == nullptr) {
 		return;
 	}
@@ -424,12 +425,12 @@ void ComposeSong::tempo(const compose::TempoNode& node) {
 	}
 	// Song-level tempo automation (spec §17.6), in hundredths of a BPM as UNPATCHED_TEMPO holds it.
 	ParamManager& manager = song_->paramManager;
-	AutoParam& param = manager.getUnpatchedParamSet()->params[params::UNPATCHED_TEMPO];
+	AutoParam& param = manager.getUnpatchedParamSet()->params[deluge::modulation::params::UNPATCHED_TEMPO];
 	if (param.setNodeAtPos(tick, node.tempo, node.interpolated) < 0) {
 		fail(Error::INSUFFICIENT_RAM);
 		return;
 	}
-	flagAutomated(manager, 0, params::UNPATCHED_TEMPO);
+	flagAutomated(manager, 0, deluge::modulation::params::UNPATCHED_TEMPO);
 	nodes_++;
 }
 

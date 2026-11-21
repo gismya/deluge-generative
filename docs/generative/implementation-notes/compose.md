@@ -150,7 +150,7 @@ otherwise.
   at stepTick(n).
 - Driver-side commands go to the writer from `ComposeDriver::replayed()`; Sound/KeyScale/Section from `shape()` in
   `writeDue()`. The SongWriter's Capture calls (`cutClip`, `soundPick`, `newTrack`, `tempo`, `paramEdit`, `stutter`,
-  `nextSong`) default to nothing: `ComposeSong` (firmware) implements none yet (#146).
+  `nextSong`) default to nothing for Compose; `ComposeSong` implements them for Capture (below).
 - Split: `ClipBuilder::split()` ends notes still open (a Sustain) at the line and re-opens them there, and restarts each
   lane from its value with `Track::origin` as its song start (the base rule `tick == origin`). The size check uses
   `estimateBarsBytes()` plus a cut clip's or new track's setup (`songExtra_`).
@@ -158,3 +158,29 @@ otherwise.
   records, or `beginPiece()` opens nothing and `piece(0)` reads garbage (a segfault with no CppSpec output). A crashing
   spec prints nothing: read the backtrace from `~/Library/Logs/DiagnosticReports/generator_specs-*.ips` (lldb hangs
   here).
+
+## Capture's build on leave (#146)
+
+- `firmware/capture_job.cpp`: one modal job builds every kept piece (`perform::nextKept()`), behind the teardown:
+  `LeaveJob::finished()` calls `beginCapture()` after its own `ended_` (which closes the teardown's modal; opened
+  before, the capture screen was closed by it). The log outlives `freeBlocks()` while `PerformAdapter::keepLog_`;
+  the job calls `freeLog()` at its end. `finishCompaction()` first: indices of kept pieces don't move with it.
+- A piece's song: `buildPerformSong()` from the header's picks (palette: the Current Recipe's for its genre, else
+  `stagePalette()`), `restoreSnapshot()` (#441's) before `ComposeSong::prepare()`, which reads the homes from the
+  restored values. Swapped in, saved (`song_file.cpp`, F13), and freed by the next song's blank swap. After every swap
+  `setUIForLoadedSong()` and the capture screen opens again, as Compose's fits-alone path does.
+- `ComposeSong` keeps per-part clip segments (`Segment`, `kMaxSegments`): a note goes to the segment its start tick
+  falls in (notes arrive at their note-off, maybe after a cut); a node goes to the newest, because the driver ends the
+  part's lanes before each `cutClip()`/`newTrack()` (`ClipBuilder::cutPart()`): without it the bar buffer delivered
+  nodes for the old clip after the cut. A cut clip is `setAudioInstrument(..., favourClip = old)` (params cloned,
+  no automation) and `SoundControls::moveToClip()` (homes kept); a new track is `buildPartOutput()` from the
+  re-roll's picks (card reads inside the replay, yielding through the job's `Chunks`) and `rebindPart()`.
+- SetHome: the driver calls `ClipBuilder::endPart(hold)`, `paramEdit()`, `resumePart(restate)`, so the node after the
+  home moves is written from the new home (`SoundControls::moveHome()`). A track started after a cut or split starts
+  at `partStart_`, not tick 0 (a #145 split bug this fixed).
+- Splits: `ComposeSong::nextSong()` calls `CaptureHost::nextSong()`: the job saves the song, builds the next from
+  `playingPicks()`, restores the header snapshot for parts not re-rolled and `restoreEdits()` (each param's newest
+  SetParam value or SetHome home), then `restart()`. No probe reaches a split (it needs a 2 MB piece): harness only.
+- Probe scripts that leave Perform take NOTHING: `perform_leave.txt` turns to the end and back one (NOTHING or LEAVE
+  is always before CANCEL; the OLED context menu clamps). The first option after a piece is a Capture.
+

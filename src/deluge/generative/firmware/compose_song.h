@@ -25,8 +25,10 @@
 #include "generative/compose/clip_builder.h"
 #include "generative/firmware/perform_song.h"
 
+class AutoParam;
 class InstrumentClip;
 class NoteRow;
+class ParamManager;
 class Song;
 
 namespace deluge::generative {
