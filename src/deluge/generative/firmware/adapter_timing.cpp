@@ -30,6 +30,8 @@ unsigned long ticksToNs(uint32_t ticks) {
 	return static_cast<unsigned long>(uint64_t{ticks} * 1'000'000'000 / DELUGE_CLOCKS_PER);
 }
 
+constexpr uint32_t kCountsPerUs = DELUGE_CLOCKS_PER / 1'000'000;
+
 DecisionTiming decisionTiming;
 ControlTiming controlTiming;
 
@@ -53,6 +55,33 @@ void ControlTiming::report(const char* ramps) {
 	               ? "freed"
 	               : performAdapter.output().partName(render.lastCulled, performAdapter.steering().rosterGenre()),
 	           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
+	// The audio output's margin (spec §20, #449): the routine's entries, those after the TX ring ran dry, the least
+	// audio left at one, entries with under 0.5, 1 and 2 ms left and more, and the DMA's largest move off the timer (in
+	// samples; near 0 says the margins are real time).
+	const long marginMinUs =
+	    render.routineCalls == 0 ? 0L : render.marginMinCounts / static_cast<int32_t>(kCountsPerUs);
+	TEST_EVENT("gen_audio calls=%lu underruns=%lu margin_min_us=%ld margins=%lu/%lu/%lu/%lu drift=%ld",
+	           static_cast<unsigned long>(render.routineCalls), static_cast<unsigned long>(render.underruns),
+	           marginMinUs, static_cast<unsigned long>(render.margins[0]),
+	           static_cast<unsigned long>(render.margins[1]), static_cast<unsigned long>(render.margins[2]),
+	           static_cast<unsigned long>(render.margins[3]), static_cast<long>(render.dmaDriftMax));
+	// Each underrun's culprit: the task the routine ran inside, or else the one that finished just before it (with its
+	// longest run then)
+	for (const TestPort::RenderTiming::LateTask& late : render.lateTasks) {
+		if (late.name != nullptr) {
+			TEST_EVENT("gen_audio_late task=%s %s underruns=%lu run_max_us=%lu", late.name,
+			           late.nested ? "inside" : "before", static_cast<unsigned long>(late.underruns),
+			           static_cast<unsigned long>(late.runMaxCounts / kCountsPerUs));
+		}
+	}
+	// The UI timers whose handler ran over 2 ms (TimerName's value), how often, and their longest run
+	for (int32_t timer = 0; timer < TestPort::RenderTiming::kUiTimers; timer++) {
+		if (render.uiTimerSlow[timer] > 0) {
+			TEST_EVENT("gen_audio_ui_timer timer=%ld over_2ms=%lu run_max_us=%lu", static_cast<long>(timer),
+			           static_cast<unsigned long>(render.uiTimerSlow[timer]),
+			           static_cast<unsigned long>(render.uiTimerMaxCounts[timer] / kCountsPerUs));
+		}
+	}
 	stepsSending_ = totalCounts_ = maxCounts_ = 0;
 }
 

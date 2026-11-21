@@ -135,3 +135,10 @@ otherwise.
   `BACK_MENU_EXIT` timer fires on the list); from a subfolder only the browser closes. Which one depends on the card
   (with the pack, an FX lane's SYNTH PRESET browser opens in a subfolder): follow the hold with one BACK tap, which on
   Perform with nothing queued does nothing (`perform_preset_preview.txt`).
+- Late audio (#449): the time between render starts and a render's length don't tell whether the audio ran dry. Only
+  `AudioEngine::routine()` copies rendered audio into the 2.9 ms TX ring, and a call may copy audio rendered earlier
+  without rendering. `gen_audio` measures the ring's margin at each entry, and `drift=` checks it against the DMA's own
+  position (`io/midi/output_margin.h`, its unit tests in `tests/unit/output_margin_tests.cpp`). The scheduler doesn't
+  preempt: any main-loop task over about 2.9 ms is an underrun. `gen_audio_late` blames the task the routine ran
+  inside, or else the one that finished just before it; `TaskManager::currentID` starts at 0, not -1, so it can't tell
+  a nested call apart, and the test port keeps its own caller (`TestPort::taskStarted()`).
