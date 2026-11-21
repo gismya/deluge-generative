@@ -182,7 +182,38 @@ otherwise.
   and the CAPTURE menu's rows are the portable `generative/perform/capture.h`, read from the `SteeringLog`
   (`current()`, `markPiece()`, `markedPieces()`); `captureStatus()` feeds `OledInput::capture`. The LED is asserted
   every frame in `assertRecordLed()`, except while resampling or in MIDI learn, which own it. An earlier piece
-  unmarked in CAPTURE ▸ stays in the log until the next `beginPiece()`, which moves the marked ones down
-  (`dropUnmarked()`): don't drop pieces from task context, the step writes the newest one by offset.
+  unmarked in CAPTURE ▸ stays in the log until the next `beginPiece()`, which only flags it dropped; the steps after
+  close its room 4 KB at a time (`compactStep()`, from `NoteSink::compactLog()`), never in one move in the tick (#439
+  R1). Offsets are logical while a move runs: read a piece's header or records only once `compacting()` is false.
 - The SELECT-turn peeks go round RECIPE, QUEUE, CAPTURE (`selectEncoderAction()`); the first turn is still QUEUE to
   the right and RECIPE to the left, which `perform_sidebar.txt` relies on.
+- Punch-ins on the KEYBOARD page (#301, §8.9, §13.5): `perform::PunchHolds` (`keyboard_page.h`) is the pads' 300 ms
+  rule, keyed by `punchKey()` (a LaneMute by its Lane, so a latched mute follows the lane across a genre change);
+  `PerformView::punchPadAction()` calls `PerformSteering::setPunch()` and, if the queue refuses, `refused()`. The
+  steering keeps what is on (stopped too) and re-sends it in `instanceStarts()`. The pads' test text is its own event,
+  `gen_punch` (`describePunches()`): probe scripts match `gen_keyboard` exactly (`perform_part_bias.txt` ends one
+  with `$`), so a new field there breaks them. The punch-in bytes sit in the padding after `fillShift_`: the
+  steering's size is pinned (the trap below); at the struct's end they grew it by 4 and broke the Release build.
+- Stock Performance view (KEYBOARD's second press, `Page::Performance`, `perform_view_performance.cpp`) is hosted, not
+  copied: Perform stays the root UI and calls stock `performanceView.padAction()` and `renderMainPads()` (into a
+  scratch image, diffed through `showMainPads()`), with no stock edit. Stock sets a param and starts stutter only
+  through `view.activeModControllableModelStack`, which must be the song (`onSong()` moves the knobs there for the
+  call when a part is focused), and its layout load reads stutter's options there too. The layout loads once per entry
+  (`enterPerformancePage()`, a card read: `REMIND_ME_OUTSIDE_CARD_ROUTINE` in the card routine), after clearing
+  `fxPress`'s held columns, which another song's session could have left. Stock pads pressed there are tracked in
+  `stockHeld_`, so their release reaches stock on any page and `releaseLostHolds()` lets go of a swallowed one. Stock's
+  own column editing opens `performanceView` as a UI, whose buttons change the root UI: it isn't reachable from
+  Perform.
+- Logging (§17.2): `SetPunch` lands through `apply()` and logs generically; the stock page's param edits reach the log
+  through stock's `setCurrentValueInResponseToUserInput()` → F3's `playerEdited()` → a song-target `SetParam`.
+  Stutter isn't a param edit: `graphicsRoutine()` samples `UI_MODE_STUTTERING` each frame and pushes `SetStutter`
+  (logged only) on a change, so a gold knob's stutter is logged too.
+- `generative/firmware/pump.h` is the swaps' service pump, not the Pump punch-in: that is `sidechain_pump.*`.
+- Trap (#437 R1): a driver-side effect the core switches on (Pump's ducking) must be let go at every instance start,
+  not only at a stop. A release made after the last instance's final decision (12 ticks before a restart's line or a
+  transition's start step) never reaches that instance, and a restart's `pieceStarts()` empties the queue: the off is
+  lost. `PerformAdapter::instanceStarts()` calls `sidechainPump.release()` before the steering re-sends what is on, and
+  the pump remembers each ducked part's own Output and clip, so it lets go of a transition's outgoing roster too
+  (`sink_.roster` is already the incoming one there). A logged-only state (stutter's `SetStutter`) has the same
+  window: the steering keeps it (`stutterOn_`) and re-sends it at step 0.
+

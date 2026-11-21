@@ -28,6 +28,7 @@ bool shiftOpensSoundEditor(GridPage page, int32_t x, int32_t row) {
 	case GridPage::Clip:
 		return row != kActionsRow || (x != kNewSoundPad && x != kSoundEditorPad);
 	case GridPage::Song:
+	case GridPage::Performance: // stock's own SHIFT: the printed param, on Perform's song FX or focused part
 		break;
 	}
 	return true;
