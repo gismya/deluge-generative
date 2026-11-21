@@ -73,10 +73,10 @@ struct Pinned {
 
 /// Each subgenre's steered fingerprint; a retune copies the printed value here (spec §21.2).
 const Pinned kPinned[] = {
-    {&genres::technoAcid, 0x505dec692a180ebbULL, 76223},
-    {&genres::technoDub, 0xb38078184182eb94ULL, 95566},
-    {&genres::technoMelodic, 0x472ded0b2606b601ULL, 87623},
-    {&genres::technoDetroit, 0xb6ea32874de7075bULL, 103237},
+    {&genres::technoAcid, 0xdd2ede83f9b43d51ULL, 76223},
+    {&genres::technoDub, 0xbcb5369ae4d992d6ULL, 95566},
+    {&genres::technoMelodic, 0x2108dd7765e3f1bfULL, 87623},
+    {&genres::technoDetroit, 0x7b9712703cdc1231ULL, 103237},
 };
 
 std::string hex(uint64_t value) {

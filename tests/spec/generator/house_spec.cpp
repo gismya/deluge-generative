@@ -77,7 +77,7 @@ describe house("House", $ {
 		expect(std::string(houseGenre.name)).to_equal(std::string("house"));
 		expect(std::string(houseGenre.oledName)).to_equal(std::string("HOUSE"));
 		expect(houseGenre.parent == nullptr).to_be_true();
-		expect(houseGenre.version).to_equal(2);
+		expect(houseGenre.version).to_equal(3);
 		expect(findGenre("house") == &houseGenre).to_be_true();
 		expect(partCount(houseGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {

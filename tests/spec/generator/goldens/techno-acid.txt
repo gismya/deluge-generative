@@ -1,10 +1,10 @@
 # techno-acid's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre techno-acid version 2
+genre techno-acid version 3
 recipe entropy 0: G minor, 125.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 ACID, 2 DRONE, 3 FX
-fingerprint 6efee21d65dc81f6, 1514111 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
+fingerprint 4f4f7668826df36e, 1514111 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
 
       0  1.1.1     SECTION  GROOVE 1
       0  1.1.1     KEY      G minor

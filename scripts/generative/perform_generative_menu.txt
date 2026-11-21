@@ -358,7 +358,7 @@ expect event gen_recipe_load at=LOAD MISSING.XML within=5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=3 within=5
 expect ui=context_menu
 mark now
 include perform_confirm.txt

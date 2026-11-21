@@ -6,6 +6,7 @@
 #include "render/render.h"
 
 #include "generative/core/genre.h"
+#include "generative/perform/one_shot.h"
 
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,8 @@ namespace fs = std::filesystem;
 constexpr float kTwoPi = 2.f * std::numbers::pi_v<float>;
 constexpr float kSampleGain = 0.5f;
 constexpr float kSynthGain = 0.2f;
+/// How long a CUT sample fades out after its note-off: a rough stand-in for the row's release.
+constexpr int64_t kCutReleaseFrames = kSampleRate / 100;
 
 int64_t frameAt(int32_t tick, int32_t tempo) {
 	// tempo is in hundredths of a BPM: 96 ticks per beat, so tick * 60 * 100 / (tempo * 96) seconds.
@@ -114,11 +117,14 @@ std::optional<Sample> readWav(const fs::path& path) {
 
 // ---- Voices ----
 
-/// One kit row: plays its sample once per hit (or a stand-in hit), each hit cutting the last.
+/// One kit row: plays its sample once per hit (or a stand-in hit), each hit cutting the last. A sample of 2 s or more
+/// stops at its note-off, as the firmware's CUT mode does; a shorter one plays out (spec §10.4).
 struct KitRow {
 	const Sample* sample = nullptr;
 	Lane lane = Lane::Kick;
 	bool playing = false;
+	bool cuts = false;        ///< The sample stops at its note-off (CUT).
+	int64_t releaseLeft = -1; ///< Frames left of the fade after a note-off, or -1 while held.
 	double position = 0;
 	float gain = 0;
 	// Stand-in state
@@ -128,7 +134,12 @@ struct KitRow {
 	uint32_t noise = 1;
 	float lastNoise = 0;
 
-	void strike(uint8_t velocity) {
+	void strike(const Sample* picked, uint8_t velocity) {
+		sample = picked;
+		cuts =
+		    sample != nullptr
+		    && !perform::playsOut(perform::sampleLengthMs(sample->frames.size(), static_cast<uint32_t>(sample->rate)));
+		releaseLeft = -1;
 		playing = true;
 		position = 0;
 		gain = kSampleGain * static_cast<float>(velocity) / 127.f;
@@ -138,11 +149,25 @@ struct KitRow {
 		noise = 0x1234567u + static_cast<uint32_t>(lane);
 	}
 
+	void noteOff() {
+		if (playing && cuts && releaseLeft < 0) {
+			releaseLeft = kCutReleaseFrames;
+		}
+	}
+
 	float next() {
 		if (!playing) {
 			return 0;
 		}
-		return sample != nullptr ? nextSample() : nextStandIn();
+		if (releaseLeft == 0) {
+			playing = false;
+			return 0;
+		}
+		float out = sample != nullptr ? nextSample() : nextStandIn();
+		if (releaseLeft > 0) {
+			out *= static_cast<float>(releaseLeft--) / static_cast<float>(kCutReleaseFrames);
+		}
+		return out;
 	}
 
 	float nextSample() {
@@ -388,10 +413,12 @@ Audio renderAudio(const Rendering& rendering, const SoundLibrary& library) {
 				if (e.kind == EventKind::NoteOn) {
 					KitRow& row = rows[static_cast<int32_t>(e.lane)];
 					const SoundPath& pick = rendering.sounds.lane[static_cast<int32_t>(e.lane)];
-					row.sample = load(pick.empty() ? nullptr : pick.c_str());
-					row.strike(e.velocity);
+					row.strike(load(pick.empty() ? nullptr : pick.c_str()), e.velocity);
 				}
-				continue; // one-shots play out; their note-offs do nothing
+				else if (e.kind == EventKind::NoteOff) {
+					rows[static_cast<int32_t>(e.lane)].noteOff(); // only a CUT sample stops
+				}
+				continue;
 			}
 			if (e.kind == EventKind::NoteOn) {
 				if (!warnedPart[e.part]) {
