@@ -51,14 +51,16 @@ struct RenderTiming {
 	int32_t marginMinCounts = INT32_MAX; ///< The least audio left at an entry; negative once it ran dry.
 	uint32_t margins[4] = {};            ///< Entries with under 0.5, 1 and 2 ms left, and the rest (not underruns).
 	int32_t dmaDriftMax = 0;             ///< The DMA's largest move off the timer at an entry, in samples (dmaDrift()).
-	/// The task that finished last before each underrun's entry: the one that kept the routine away.
+	/// The task that finished last before each underrun's entry: the one that kept the routine away. The first
+	/// kNamedLateTasks tasks each get a slot; the last slot counts any more as task "other".
+	static constexpr int32_t kNamedLateTasks = 4;
 	struct LateTask {
 		const char* name = nullptr;
 		bool nested = false; ///< The routine ran inside `name` (it called the routine), rather than after it.
 		uint32_t underruns = 0;
 		uint32_t runMaxCounts = 0; ///< Its longest run before an underrun.
 	};
-	LateTask lateTasks[4] = {};
+	LateTask lateTasks[kNamedLateTasks + 1] = {};
 	/// The UI timers (TimerName) whose handler ran over 2 ms, and their longest run: the "ui routine" task's culprits.
 	static constexpr int32_t kUiTimers = 40;
 	uint16_t uiTimerSlow[kUiTimers] = {};

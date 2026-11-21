@@ -235,6 +235,8 @@ struct PartState {
 	} sustain;
 };
 
+class ArcPlanner;
+
 class Generator {
 public:
 	/// Begins a piece: every counter and the Arc reset, and nothing pending (every start is fresh, spec §13.2). The
@@ -441,7 +443,8 @@ public:
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
 	/// demand from a copy of the Arc's counters and its keyed draws: no cache. Costs a step of Arc arithmetic per step
-	/// planned, so the SONG page asks only when a phrase line passes or the queue changes.
+	/// planned (2-7 ms on the Deluge, #454), so the SONG page asks only when a phrase line passes or the steering
+	/// changes, and spreads the work over frames with an ArcPlanner.
 	void planArc(ArcPlan& out) const;
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
@@ -680,6 +683,7 @@ private:
 	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
 	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
 	bool endAvoided(int32_t partIndex, const Step& step);
+	friend class ArcPlanner; // copies what planArc() moves on
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
@@ -1009,5 +1013,48 @@ static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");
+
+/// Generator::planArc() in slices (#454): begin() copies everything the plan reads from a piece, so advance() can go
+/// on in later frames while the piece steps on or is replaced, and ends with the plan planArc() gave at begin(). The
+/// SONG page plans a slice a frame: a whole planArc() at once kept the audio routine waiting past the output buffer.
+class ArcPlanner {
+public:
+	/// Starts planning `piece` as it is now; any plan under way is dropped.
+	void begin(const Generator& piece);
+	/// Plans up to `maxSteps` more steps. @return Whether the plan is done (plan() holds it); true at once if nothing
+	/// is under way.
+	bool advance(int32_t maxSteps);
+	[[nodiscard]] bool planning() const { return planning_; }
+	/// The plan: complete once advance() returned true.
+	[[nodiscard]] const ArcPlan& plan() const { return plan_; }
+
+private:
+	/// One step of the plan, into phrase `phrase` (counted from plan_.first).
+	void addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy);
+
+	struct Landing {
+		Command command;
+		int32_t step;
+	};
+	const Genre* genre_ = nullptr;
+	uint32_t seed_ = 0;
+	Macros centre_;
+	PartBiases bias_;
+	Landing landings_[PendingList::kCapacity];
+	int32_t waiting_ = 0;
+	/// The step a waiting force or End lands on, or -1: an Outro ends the piece unless one lands on the step after.
+	int32_t forceLands_ = -1;
+	/// The step a transition's new roster starts on: the landed one's, or where the waiting one's would be.
+	int32_t newRoster_ = 0;
+	int32_t step_ = 0;
+	bool ended_ = false;
+	bool planning_ = false;
+	Arc arc_;
+	MuteSolo mutes_;
+	Gates gates_[kMaxParts] = {};
+	int32_t energySum_[ArcPlan::kMaxPhrases] = {};
+	int32_t steps_[ArcPlan::kMaxPhrases] = {};
+	ArcPlan plan_;
+};
 
 } // namespace deluge::generative

@@ -38,20 +38,28 @@ uint32_t lastTaskCounts = 0;             ///< and its run
 const char* runningTask = nullptr;       ///< The innermost task running
 const char* callerOfLastStart = nullptr; ///< The task running when the last one started: the audio routine's caller
 
-/// An underrun: blame the task that called the routine, or else the one that finished just before it.
+/// An underrun: blame the task that called the routine, or else the one that finished just before it. Once the named
+/// slots are taken, the last slot counts the rest as task "other".
 void blameTask() {
-	const bool nested = callerOfLastStart != nullptr;
+	bool nested = callerOfLastStart != nullptr;
 	const char* name = nested ? callerOfLastStart : lastTaskName != nullptr ? lastTaskName : "?";
-	for (RenderTiming::LateTask& late : renderTiming.lateTasks) {
+	RenderTiming::LateTask* slot = &renderTiming.lateTasks[RenderTiming::kNamedLateTasks];
+	for (int32_t i = 0; i < RenderTiming::kNamedLateTasks; i++) {
+		RenderTiming::LateTask& late = renderTiming.lateTasks[i];
 		if (late.name == nullptr || (late.name == name && late.nested == nested)) {
-			late.name = name;
-			late.nested = nested;
-			late.underruns++;
-			if (!nested) {
-				late.runMaxCounts = std::max(late.runMaxCounts, lastTaskCounts);
-			}
-			return;
+			slot = &late;
+			break;
 		}
+	}
+	if (slot == &renderTiming.lateTasks[RenderTiming::kNamedLateTasks]) {
+		name = "other";
+		nested = false;
+	}
+	slot->name = name;
+	slot->nested = nested;
+	slot->underruns++;
+	if (!nested) {
+		slot->runMaxCounts = std::max(slot->runMaxCounts, lastTaskCounts);
 	}
 }
 } // namespace
