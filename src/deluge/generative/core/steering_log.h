@@ -125,8 +125,8 @@ public:
 	bool appendSoundPath(int32_t step, uint8_t part, uint8_t token, int32_t slot, const char* path);
 	/// The newest SetSound logged on `part` never played: its swap was dropped. Stamped no earlier than the record
 	/// before it, and inside the piece's span: a log cut since the SetSound still takes it, from the room kept for it
-	/// (kDroppedReserve). If even that is gone, the piece is cut at the SetSound's step instead, so no logged swap
-	/// is left that wasn't heard. Nothing is written when the SetSound itself was cut away.
+	/// (kDroppedReserve), which holds one for every part: a landing gets one drop. Nothing is written when the SetSound
+	/// itself was cut away, or for a landing already dropped.
 	bool appendSoundDropped(int32_t step, uint8_t part);
 
 	// ---- Reading ----
@@ -225,7 +225,12 @@ private:
 	/// Writes a header record (its bytes from `data`, if not nullptr), or cuts the piece at step 0. @return where its
 	/// bytes are, or nullptr.
 	uint8_t* writeHeader(uint8_t tag, const void* data, int32_t length);
+	/// The records' cut: the step `step` didn't fit, and its records go whole.
 	void cut(int32_t step);
+	/// A header that didn't fit: none of it stays, and the piece is cut at its step 0.
+	void cutHeader();
+	/// Writes a SoundDropped record for `part`, `delta` steps after the record before. The caller has made room.
+	void writeDropped(uint32_t delta, uint8_t part);
 
 	uint8_t* buffer_;
 	int32_t capacity_;
@@ -248,6 +253,10 @@ private:
 		int32_t before = 0;
 	};
 	LandedSound landed_[kMaxParts];
+	/// The parts whose SoundDropped sits on lastStep_, and the step each one's SetSound landed on: a cut of that step
+	/// writes them again on the step before (cut()), so a later record can't take the drop and leave its SetSound.
+	uint8_t dropsOnStep_ = 0;
+	int32_t dropLanding_[kMaxParts] = {};
 };
 
 template <typename Found>

@@ -113,6 +113,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	inRecords_ = false;
 	lastStep_ = 0;
 	stepBefore_ = 0;
+	dropsOnStep_ = 0;
 	stepFrom_ = used_;
 	for (LandedSound& landed : landed_) {
 		landed = LandedSound{};
@@ -124,7 +125,7 @@ uint8_t* SteeringLog::writeHeader(uint8_t tag, const void* data, int32_t length)
 		return nullptr;
 	}
 	if (used_ + 3 + length > room()) {
-		cut(0);
+		cutHeader();
 		return nullptr;
 	}
 	uint8_t* at = buffer_ + used_;
@@ -177,21 +178,41 @@ void SteeringLog::mark(bool on) {
 	}
 }
 
-void SteeringLog::cut(int32_t step) {
-	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2). A
-	// header cut partway goes whole too: a piece with half a snapshot can't be built.
+void SteeringLog::cutHeader() {
+	// A piece with half a snapshot can't be built: none of the header stays (spec §17.2).
 	PieceInfo& info = newest();
-	if (inRecords_) {
-		used_ = stepFrom_;
-		lastStep_ = stepBefore_;
+	used_ = newest_ + static_cast<int32_t>(sizeof(PieceInfo));
+	info.headerBytes = sizeof(PieceInfo);
+	info.bytes = used_ - newest_;
+	info.cutAt = 0;
+	cut_ = true;
+}
+
+void SteeringLog::cut(int32_t step) {
+	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2). The
+	// header stays: stepFrom_ is past it before the first record.
+	PieceInfo& info = newest();
+	used_ = stepFrom_;
+	lastStep_ = stepBefore_;
+	// A swap dropped on that step whose SetSound landed before it stays said, on the step before.
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		if ((dropsOnStep_ & (1 << p)) != 0 && dropLanding_[p] < step) {
+			writeDropped(0, static_cast<uint8_t>(p));
+		}
 	}
-	else {
-		used_ = newest_ + static_cast<int32_t>(sizeof(PieceInfo));
-		info.headerBytes = sizeof(PieceInfo);
-	}
+	dropsOnStep_ = 0;
 	info.bytes = used_ - newest_;
 	info.cutAt = step;
 	cut_ = true;
+}
+
+void SteeringLog::writeDropped(uint32_t delta, uint8_t part) {
+	uint8_t* at = buffer_ + used_;
+	*at++ = kSoundDroppedTag;
+	at = putVarint(at, delta);
+	*at++ = part;
+	used_ = static_cast<int32_t>(at - buffer_);
+	newest().bytes = used_ - newest_;
 }
 
 GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t length) {
@@ -201,6 +222,7 @@ GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t
 	if (!inRecords_ || step != lastStep_) {
 		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
+		dropsOnStep_ = 0;
 	}
 	if (used_ + length > room()) {
 		cut(step);
@@ -261,14 +283,11 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 	if (cut_) {
 		stamp = std::max(std::min(stamp, info.cutAt - 1), lastStep_);
 	}
-	uint8_t record[kMaxDroppedBytes];
-	uint8_t* at = record;
-	*at++ = kSoundDroppedTag;
-	at = putVarint(at, static_cast<uint32_t>(stamp - lastStep_));
-	*at++ = part;
-	const auto length = static_cast<int32_t>(at - record);
+	uint8_t delta[5]; // only to count the delta's bytes: the tag, the delta and the part
+	const auto length = static_cast<int32_t>(putVarint(delta, static_cast<uint32_t>(stamp - lastStep_)) - delta) + 2;
 	if (used_ + length > capacity_) {
-		// No room even in the reserve: the piece ends before the swap that was never heard.
+		// A guard: with one drop per landing the reserve can't run out (no SetSound lands once the records' room is
+		// gone, so at most one a part waits for its drop). Were it to, the piece ends before the swap never heard.
 		used_ = landed.from;
 		lastStep_ = landed.before;
 		info.bytes = used_ - newest_;
@@ -276,14 +295,17 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 		cut_ = true;
 		return false;
 	}
-	if (stamp != lastStep_) {
+	if (stamp != lastStep_ || !inRecords_) {
 		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
+		dropsOnStep_ = 0;
 	}
-	std::memcpy(buffer_ + used_, record, static_cast<size_t>(length));
-	used_ += length;
-	info.bytes = used_ - newest_;
+	writeDropped(static_cast<uint32_t>(stamp - lastStep_), part);
+	inRecords_ = true;
 	lastStep_ = stamp;
+	dropsOnStep_ |= static_cast<uint8_t>(1 << part);
+	dropLanding_[part] = landed.step;
+	landed_[part].step = -1; // one drop per landing: the reserve holds one per part
 	return true;
 }
 

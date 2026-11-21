@@ -256,7 +256,7 @@ describe steering_log("The steering log", $ {
 			expect(ordered).to_be_true();
 		});
 
-		it("writes no dropped record for a SetSound the cut took, and cuts at the SetSound when even the reserve is gone",
+		it("writes no dropped record for a SetSound the cut took, and one for every part's landing however full the log",
 		   _ {
 			Buffer cutAway(1024);
 			cutAway.log.beginPiece(startOf(1));
@@ -268,25 +268,26 @@ describe steering_log("The steering log", $ {
 			expect(cutAway.log.appendSoundDropped(step + 1, 2)).to_be_false();
 			expect(records(cutAway.log, 0).back().kind == RecordKind::Command).to_be_true();
 
+			// Every part's landing still waiting for its drop gets one from the reserve, however full the log is: no new
+			// SetSound lands once the records' room is gone, so at most one a part is waiting.
 			Buffer b(1024);
 			b.log.beginPiece(startOf(1));
-			b.log.append(5, macro(Macro::Density, 1));
-			b.log.append(6, macro(Macro::Density, 2));
-			b.log.append(6, {CommandKind::SetSound, 1, 4});
+			for (int32_t p = 0; p < kMaxParts; p++) {
+				b.log.append(6, {CommandKind::SetSound, static_cast<uint8_t>(p), 4});
+			}
 			step = 7;
 			while (b.log.append(step, macro(Macro::Energy, step))) {
 				step++;
 			}
-			int32_t drops = 0;
-			while (b.log.appendSoundDropped(step, 1)) {
-				drops++; // each takes some of the reserve: kDroppedReserve's worth at least
+			for (int32_t p = 0; p < kMaxParts; p++) {
+				expect(b.log.appendSoundDropped(step + 1000, static_cast<uint8_t>(p))).to_be_true();
 			}
-			expect(drops * 3 >= kDroppedReserve).to_be_true();
-			expect(b.log.piece(0).cutAt()).to_equal(6);
-			const std::vector<LogRecord> read = records(b.log, 0);
-			expect(read.size()).to_equal(1u); // step 6 went whole
-			expect(read.back().step).to_equal(5);
-			expect(b.log.append(step + 1, macro(Macro::Energy, 1))).to_be_false();
+			int32_t dropped = 0;
+			for (const LogRecord& r : records(b.log, 0)) {
+				dropped += r.kind == RecordKind::SoundDropped ? 1 : 0;
+			}
+			expect(dropped).to_equal(kMaxParts);
+			expect(b.log.piece(0).cutAt()).to_equal(step);
 		});
 
 		it("stamps a dropped record no earlier than the record before it", _ {
@@ -298,6 +299,54 @@ describe steering_log("The steering log", $ {
 			const std::vector<LogRecord> read = records(b.log, 0);
 			expect(read.back().kind == RecordKind::SoundDropped).to_be_true();
 			expect(read.back().step).to_equal(12);
+		});
+
+		it("keeps the whole header when the piece's first record is the one that doesn't fit", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
+			const int32_t left = 1024 - kDroppedReserve - b.log.used();
+			std::vector<uint8_t> snapshot(static_cast<size_t>(left - 3 - 2)); // 2 bytes stay: no record fits
+			b.log.addSnapshot(snapshot.data(), static_cast<int32_t>(snapshot.size()));
+			const int32_t header = b.log.piece(0).headerBytes();
+			expect(b.log.full()).to_be_false();
+			expect(b.log.append(5, macro(Macro::Energy, 1))).to_be_false();
+			expect(b.log.piece(0).cutAt()).to_equal(5);
+			expect(b.log.piece(0).headerBytes()).to_equal(header);
+			expect(b.log.used()).to_equal(header); // the header alone: the piece starts at 0
+			char path[kMaxSoundPath];
+			expect(b.log.piece(0).pick(pickSlot(1), path)).to_be_true();
+		});
+
+		it("keeps a drop when a later record on its step is the one that doesn't fit", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(3, {CommandKind::SetSound, 2, 9});
+			int32_t step = 4;
+			// Fill to within a wide command of the end, then a drop and a command on one step.
+			while (1024 - kDroppedReserve - b.log.used() > 2 * kMaxCommandBytes) {
+				b.log.append(step++, macro(Macro::Energy, 1));
+			}
+			b.log.append(step, macro(Macro::Energy, 2));
+			expect(b.log.appendSoundDropped(step, 2)).to_be_true();
+			const Command widest{CommandKind::SetHome, 255, std::numeric_limits<int32_t>::min(), 65535, Lane::Riser};
+			while (b.log.append(step, widest)) {}
+			expect(b.log.piece(0).cutAt()).to_equal(step);
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(read.back().kind == RecordKind::SoundDropped).to_be_true();
+			expect(read.back().step).to_equal(step - 1);
+			expect(read.back().command.target).to_equal(2);
+			expect(read.front().command.kind == CommandKind::SetSound).to_be_true();
+		});
+
+		it("writes one drop per landing", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(3, {CommandKind::SetSound, 2, 9});
+			expect(b.log.appendSoundDropped(4, 2)).to_be_true();
+			expect(b.log.appendSoundDropped(5, 2)).to_be_false();
+			b.log.append(8, {CommandKind::SetSound, 2, 10});
+			expect(b.log.appendSoundDropped(9, 2)).to_be_true();
 		});
 
 		it("cuts a piece whose header doesn't fit at its step 0", _ {
