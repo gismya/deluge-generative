@@ -156,3 +156,22 @@ otherwise.
 - Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
   broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
   firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
+- Punch-ins on the KEYBOARD page (#301, §8.9, §13.5): `perform::PunchHolds` (`keyboard_page.h`) is the pads' 300 ms
+  rule, keyed by `punchKey()` (a LaneMute by its Lane, so a latched mute follows the lane across a genre change);
+  `PerformView::punchPadAction()` calls `PerformSteering::setPunch()` and, if the queue refuses, `refused()`. The
+  steering keeps what is on (stopped too) and re-sends it in `instanceStarts()`. The pads' test text is its own event,
+  `gen_punch` (`describePunches()`): probe scripts match `gen_keyboard` exactly (`perform_part_bias.txt` ends one
+  with `$`), so a new field there breaks them. The punch-in bytes sit in the padding after `fillShift_`: the
+  steering's size is pinned (the trap below); at the struct's end they grew it by 4 and broke the Release build.
+- Stock Performance view (KEYBOARD's second press, `Page::Performance`, `perform_view_performance.cpp`) is hosted, not
+  copied: Perform stays the root UI and calls stock `performanceView.padAction()` and `renderMainPads()` (into a
+  scratch image, diffed through `showMainPads()`), with no stock edit. Stock sets a param and starts stutter only
+  through `view.activeModControllableModelStack`, which must be the song (`onSong()` moves the knobs there for the
+  call when a part is focused), and its layout load reads stutter's options there too. The layout loads once per entry
+  (`enterPerformancePage()`, a card read: `REMIND_ME_OUTSIDE_CARD_ROUTINE` in the card routine), after clearing
+  `fxPress`'s held columns, which another song's session could have left. Stock pads pressed there are tracked in
+  `stockHeld_`, so their release reaches stock on any page and `releaseLostHolds()` lets go of a swallowed one. Stock's
+  own column editing opens `performanceView` as a UI, whose buttons change the root UI: it isn't reachable from
+  Perform.
+- `generative/firmware/pump.h` is the swaps' service pump, not the Pump punch-in: that is `sidechain_pump.*`.
+
