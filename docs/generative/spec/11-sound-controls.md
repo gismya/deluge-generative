@@ -47,7 +47,7 @@ A control's offset from home is **macro layer + gesture layer + drift layer**, s
 **Macro layer.** One Generator-wide sign table. A genre weights each entry ×0..×2 and can never flip a sign. It reads **effective** Energy, so Section changes shade the sound with no extra rules.
 
 - A macro's entry is measured from the genre's default for that macro, so a fresh Recipe in a Groove plays every sound at home. At weight ×1, a macro 25 points from its default moves a control across its whole range on that side (*tuning*): a Techno Break, 10 points of Energy below the centre, is 40% darker, longer and wetter. Drive's ranges start at home, so its negative macro entry moves nothing: Drive only rises above home.
-- Every part gets the same macro offset. On Drums it moves the kit-wide controls, and on FX each lane's own ([§11.4](#114-gestures)).
+- Each part gets the macro offset at its own biased macros ([§3.3](03-recipe.md#33-macros)): with no Part bias every part gets the same offset. On Drums it moves the kit-wide controls, and on FX each lane's own ([§11.4](#114-gestures)). Drift stays shared: its depth and speed read the unbiased Motion.
 
 | | Brightness | Decay | Drive | Space | Wobble | Thin |
 |---|---|---|---|---|---|---|

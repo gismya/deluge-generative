@@ -373,6 +373,21 @@ public:
 	}
 };
 
+/// RESET PART BIAS: the focused part's Part biases back to 0, or every part's with nothing focused (spec §3.3,
+/// §13.6). It closes the menu, as REGENERATE's confirm does, so the faders and rings show the result at once.
+class ResetPartBiasItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		const int32_t part = performView.focusedPart();
+		performAdapter.steering().resetBias(part);
+		TEST_EVENT("gen_menu_reset_bias part=%ld", static_cast<long>(part));
+		soundEditor.exitCompletely();
+		return NO_NAVIGATION;
+	}
+};
+
 /// A genre of GENRE ▸ (genre_rows.h). The genre playing is labelled `= REGEN`, and picking it regenerates; picking
 /// another is a genre change (spec §9.7, §13.6). Slots with no genre (a parent's row, or past the last) hide
 /// themselves.
@@ -403,6 +418,7 @@ PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCE
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
 PLACE_SDRAM_BSS RestartAsItIsItem restartAsItIsItem{l10n::String::STRING_FOR_AS_IT_IS};
 PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem}};
+PLACE_SDRAM_BSS ResetPartBiasItem resetPartBiasItem{l10n::String::STRING_FOR_RESET_PART_BIAS};
 PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
@@ -444,7 +460,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
     {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
-     &octavesMenu, &restartMenu},
+     &octavesMenu, &resetPartBiasItem, &restartMenu},
 };
 
 void refreshPerformMenu() {

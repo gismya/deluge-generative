@@ -48,13 +48,14 @@ otherwise.
   `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
-  across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
-  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
-  the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
-  sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
-  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
-  part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
-  afresh; `refreshPerformMenu()` redraws the open item then.
+  across openings, so probe scripts choose a row from the top (`encoder 3 -20`, as `compose_screen.txt` does: `-5`
+  stopped short of the Perform menu's top once a script had left it on RESET PART BIAS, its 7th row, #303). The sound
+  editor's `setLedStates()` and its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady,
+  SCALE off and the page LEDs the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's
+  `graphicsRoutine()` runs under the sound editor, which can see the view underneath). A menu value held while it's open
+  (the edited key, a take row) records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started,
+  and the key presses or that part's take presses, BACK taps counting as both) and is read again when that moves, or
+  when its submenu opens afresh; `refreshPerformMenu()` redraws the open item then.
 - The Generative menu (§14.1): GENERATIVE is a context menu (`gui/context_menu/generative.*`); PERFORM FROM, COMPOSE
   FROM and the Compose screen's FROM are `SourceMenu`s (`gui/menu_item/generative/source_rows.h`) of CURRENT RECIPE
   (hidden until a Recipe exists), GENRE ▸ and FILE.... PERFORM FROM's rows all end in `DiscardSong::setPerform()` with
@@ -145,8 +146,18 @@ otherwise.
   draw, so they need no `Basis`. `octavePresses_` is a byte, in padding: the steering's size moves
   `PerformAdapter::sink_`, which the start step's modulo-8 `static_assert` in `incomingStarts()` pins (a `uint32_t`
   there broke it).
+- Part bias on the KEYBOARD faders and F8 (#303): `PerformSteering::holdFader()` / `keepFader()` /
+  `springFaderBack()` take the part the press steers (-1 for the Recipe level), which `MacroFaderHolds::part()`
+  remembers from the first pad down, so a release after the focus moved still lets go of the part it held. A row's
+  bias is `faderBias()` (`keyboard_page.h`). A part's fader hold is apart from the Recipe-level one in
+  `MacroSteering` (`holdBias()`, `biasHeldOn()`), so a knob turn still moves the centre. `onMacroPage()` no longer
+  needs the Recipe level: with a part focused, F8 turns its bias (`modEncoderAction()`), and the rings read
+  `biasedCentre()`.
+- Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
+  broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
+  firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
 - X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
   CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
-  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, so scripts that count rows from the top
-  (`encoder 3 -5`) didn't move; a script that leaves the menu on a low row goes back to the top before closing it
+  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
+  rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
   (`perform_restart.txt`), since the menu remembers its row.

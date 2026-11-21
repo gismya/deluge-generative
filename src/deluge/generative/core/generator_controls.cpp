@@ -61,16 +61,19 @@ template <typename MacroAt>
 
 } // namespace
 
-GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control) const {
-	// Effective, so Section offsets shade the sound with no rules of their own.
-	return macroLayerAt(*genre_, control, [this](Macro macro) { return effectiveMacro(macro); });
+GEN_STEP_CODE int32_t Generator::macroLayer(SoundControl control, int32_t part) const {
+	// Effective, so Section offsets shade the sound with no rules of their own; then the part's bias (spec §3.3).
+	return macroLayerAt(*genre_, control, [this, part](Macro macro) {
+		return part < 0 ? effectiveMacro(macro) : biasedOn(part, macro, effectiveMacro(macro));
+	});
 }
 
 int32_t Generator::centreLayer(uint8_t part, Lane lane, SoundControl control) const {
 	if (!takesMacroLayer(controlSetKindOf(genre_->parts[part].role, lane))) {
 		return 0;
 	}
-	const int32_t layer = macroLayerAt(*genre_, control, [this](Macro macro) { return recipe_.macros[macro]; });
+	const int32_t layer = macroLayerAt(
+	    *genre_, control, [this, part](Macro macro) { return biasedOn(part, macro, recipe_.macros[macro]); });
 	return std::clamp<int32_t>(layer, -kControlFull, kControlFull);
 }
 
@@ -408,7 +411,6 @@ void Generator::fallThrows() {
 	step.motion = driftLastMotion_;
 	const int32_t closeWash = closeWashLevel(last);
 	const int32_t rise = riseLevel();
-	const int32_t macro = lastSpaceMacro_;
 	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
 	for (int32_t i = 0; i < controlCount_; i++) {
 		ControlSet& set = controls_[i];
@@ -418,7 +420,7 @@ void Generator::fallThrows() {
 		countThrowOn(set);
 		int32_t drift[kNumSoundControls];
 		driftLayer(set, step, updateWalk(set, walkPoint, walkTowards), drift);
-		const int32_t sum = (takesMacroLayer(set.kind) ? macro : 0)
+		const int32_t sum = (takesMacroLayer(set.kind) ? lastSpaceMacro_[set.part] : 0)
 		                    + gestureLayer(set, SoundControl::Space, closeWash, rise) + drift[kSpace];
 		const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
 		sendControl(set, SoundControl::Space, target, stepTick(n), false);
@@ -460,10 +462,13 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
 		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
 	}
-	int32_t macro[kNumSoundControls];
+	// The macro layer, shared by every part with no Part bias; a biased part's sets take its own (spec §3.3).
+	int32_t shared[kNumSoundControls];
 	for (int32_t c = 0; c < kNumSoundControls; c++) {
-		macro[c] = macroLayer(static_cast<SoundControl>(c));
+		shared[c] = macroLayer(static_cast<SoundControl>(c), -1);
 	}
+	int32_t biased[kNumSoundControls];
+	int32_t biasedPart = -1;
 
 	for (int32_t i = 0; i < controlCount_; i++) {
 		ControlSet& set = controls_[i];
@@ -472,6 +477,18 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 		driftLayer(set, step, updateWalk(set, driftPoint_, driftTowards_), drift);
 		const bool gesturing = closeWash > 0 || rise > 0 || set.thrown >= 0;
 		const auto kind = static_cast<int32_t>(set.kind);
+		const int32_t* macro = shared;
+		if (recipe_.bias.any(set.part)) {
+			if (biasedPart != set.part) { // a part's sets are laid out together: worked out once per part
+				biasedPart = set.part;
+				for (int32_t c = 0; c < kNumSoundControls; c++) {
+					biased[c] = macroLayer(static_cast<SoundControl>(c), set.part);
+				}
+			}
+			macro = biased;
+		}
+		// What fallThrows() keeps for a stopped instance's Throws: the part's Space as this step played it.
+		lastSpaceMacro_[set.part] = static_cast<int16_t>(macro[static_cast<int32_t>(SoundControl::Space)]);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			const auto control = static_cast<SoundControl>(c);
 			if (!kSetMoves[kind][c]) {
@@ -493,7 +510,6 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	driftPoint_ += static_cast<uint32_t>(driftTowards_ / kDriftApart);
 	driftTowards_ %= kDriftApart;
 	driftLastMotion_ = static_cast<int16_t>(step.motion);
-	lastSpaceMacro_ = static_cast<int16_t>(macro[static_cast<int32_t>(SoundControl::Space)]);
 }
 
 } // namespace deluge::generative

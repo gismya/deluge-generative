@@ -186,6 +186,7 @@ describe restart("Restart", $ {
 		piece.steering.setMacro(Macro::Energy, piece.currentRecipe.macros[Macro::Energy] + 10);
 		piece.steering.pressTake(kAcid, 1);
 		piece.steering.pressOctave(kAcid, 1);
+		piece.steering.setBias(kAcid, Macro::Density, -12); // kept, as a Regenerate keeps it (keepsPartBias())
 		piece.decideBefore(2 * 64 + 1); // the take lands on the phrase line, the shift on its bar line
 		expect(piece.currentTakes.take[kAcid]).to_equal(1);
 		const int32_t line = restartAfter(piece, 2 * 64 + 20);
@@ -195,6 +196,7 @@ describe restart("Restart", $ {
 		StepwisePiece<> steered{{.recipe = piece.currentRecipe, .seed = piece.currentSeed, .takes = piece.currentTakes}};
 		steered.decideBefore(line);
 		steered.runToStepLine(line);
+		expect(piece.generator.recipe().bias.of(kAcid, Macro::Density)).to_equal(-12);
 		expect(before(afterRestart(piece.sink), line) == before(steered.sink.events, line)).to_be_true();
 	});
 

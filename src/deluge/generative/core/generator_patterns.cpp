@@ -133,7 +133,9 @@ GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t s
 	const Pattern& pattern = from.pool[from.state->entry];
 	int32_t patternStep = step % pattern.length;
 	const auto partId = static_cast<uint8_t>(part);
-	if (!plays(pattern, patternStep, partId, from.lane, *from.state, density)) {
+	// `density` is the shared one: each source thins at its own biased Density, and its rules plan their targets at
+	// theirs (spec §3.3).
+	if (!plays(pattern, patternStep, partId, from.lane, *from.state, biasedOn(part, Macro::Density, density))) {
 		return false;
 	}
 	if (pattern.importance[patternStep] == kAnchor) {
@@ -148,7 +150,7 @@ GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t s
 		}
 		DrawKey key = onPick(partKey(seed_, partId, from.lane, takes_.take[part], Purpose::Interplay), *from.state,
 		                     static_cast<uint16_t>(r), static_cast<uint32_t>(patternStep));
-		if (drawBelow(key, kFullStrength) < effectiveStrength(rule)) {
+		if (drawBelow(key, kFullStrength) < effectiveStrength(rule, part)) {
 			return false;
 		}
 	}
@@ -210,7 +212,7 @@ GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const
 		// The target's planned onsets in each half of this bar, at the Density now, with its pick of this step.
 		int32_t counts[2] = {};
 		for (int32_t s = 0; s < kStepsPerBar; s++) {
-			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.density) ? 1 : 0;
+			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.sharedDensity) ? 1 : 0;
 		}
 		// A non-zero tie makes the first half against, so the response comes after the call.
 		const int32_t mine = counts[half];
@@ -232,7 +234,7 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 	// and they never reach the anchor lookup.
 	bool anchorChecked = false;
 	for (const InterplayRule& rule : spec.rules) {
-		if (rule.kind != RuleKind::Avoid || effectiveStrength(rule) != kFullStrength) {
+		if (rule.kind != RuleKind::Avoid || effectiveStrength(rule, partIndex) != kFullStrength) {
 			continue;
 		}
 		// The short-cut, before the first rule's walk of its target: an anchor always plays, so a step the source
@@ -247,15 +249,16 @@ GEN_STEP_CODE bool Generator::avoided(int32_t partIndex, const Step& step) const
 			}
 			anchorChecked = true;
 		}
-		if (against(rule, step.index, step.density)) {
+		if (against(rule, step.index, step.sharedDensity)) {
 			return true;
 		}
 	}
 	return false;
 }
 
-GEN_STEP_CODE int32_t Generator::effectiveStrength(const InterplayRule& rule) const {
-	return deluge::generative::effectiveStrength(rule, recipe_.macros[Macro::Complexity],
+GEN_STEP_CODE int32_t Generator::effectiveStrength(const InterplayRule& rule, int32_t part) const {
+	return deluge::generative::effectiveStrength(rule,
+	                                             biasedOn(part, Macro::Complexity, recipe_.macros[Macro::Complexity]),
 	                                             genre_->defaults[Macro::Complexity]);
 }
 
@@ -291,7 +294,7 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
-		part.gates.crossBar(genre_->parts[p], step.density);
+		part.gates.crossBar(genre_->parts[p], biasedOn(p, Macro::Density, step.density)); // its own (spec §3.3)
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
 		// it held back enter late, after the parts (lateEntries).
@@ -342,8 +345,9 @@ GEN_STEP_CODE void Generator::lateEntries(const Step& step, uint8_t avoidedParts
 			// The note started earlier and lasts at least to the end of this bar: its remainder starts on the line.
 			// A shorter remainder is skipped.
 			if (note.onTick < step.tick && note.offTick >= barEnd) {
-				noteOn(p, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, step.energy),
-				           step.tick, note.offTick});
+				const int32_t energy = biasedOn(p, Macro::Energy, step.energy); // the part's own (spec §3.3)
+				noteOn(p, {note.lane, note.pitch, note.baseVelocity, velocity(note.baseVelocity, energy), step.tick,
+				           note.offTick});
 			}
 		});
 	}
@@ -385,7 +389,7 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			updatePick(pick, lane.pool, lane.band, static_cast<uint8_t>(partIndex), lane.lane, step);
 			const Pattern& pattern = lane.pool[pick.entry];
 			note.patternStep = step.index % pattern.length;
-			if (planned(partIndex, l, step.index, step.density)) {
+			if (planned(partIndex, l, step.index, step.sharedDensity)) {
 				note = {true, pattern.level[note.patternStep], lane.gateTicks, note.patternStep};
 			}
 		}
@@ -582,8 +586,8 @@ Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornament
 	// The live Complexity sets the chance between the genre's floor and ceiling (spec §8.2). Each draw is keyed on
 	// the pick and the step within the pattern, so a take re-rolls them, freeze holds them, and a Complexity turn
 	// only ever adds Ornaments on the way up.
-	int32_t rate = ornaments.rateFloor
-	               + (ornaments.rateCeiling - ornaments.rateFloor) * recipe_.macros[Macro::Complexity] / kMacroFull;
+	const int32_t complexity = biasedOn(partIndex, Macro::Complexity, recipe_.macros[Macro::Complexity]);
+	int32_t rate = ornaments.rateFloor + (ornaments.rateCeiling - ornaments.rateFloor) * complexity / kMacroFull;
 	DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), lane, takes_.take[partIndex], Purpose::Ornament);
 	if (!drawChance(onPick(key, pick, 0, static_cast<uint32_t>(patternStep)), rate)) {
 		return OrnamentKind::None;

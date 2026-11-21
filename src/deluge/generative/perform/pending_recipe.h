@@ -31,6 +31,13 @@ enum class HandoverMacros : uint8_t {
 	Pending, ///< the pending Recipe's: a LOAD keeps the file's
 };
 
+/// Whether the Recipe that comes in keeps the Part biases of the one playing (spec §3.3): a Regenerate (the live
+/// macros, the same genre, so the same roster) does; a genre change starts at the new Recipe's (0) and a LOAD at its
+/// file's. The one rule for the handover, the incoming instance's start step and a Regenerate while stopped.
+constexpr bool keepsPartBias(HandoverMacros macros, const Genre* incoming, const Genre* playing) {
+	return macros == HandoverMacros::Live && incoming == playing;
+}
+
 /// The pending Recipe, with its seed, takes and sound picks. The Current Recipe stays the playing one until the
 /// handover.
 ///
