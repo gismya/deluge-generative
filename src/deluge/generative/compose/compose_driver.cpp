@@ -21,7 +21,7 @@
 namespace deluge::generative::compose {
 
 void ComposeDriver::begin(Generator& generator, const Recipe& recipe, uint32_t seed, const Takes& takes,
-                          int32_t targetSteps, SongWriter& writer) {
+                          int32_t targetSteps, SongWriter& writer, bool skipIntro) {
 	generator_ = &generator;
 	writer_ = &writer;
 	queue_ = SteeringQueue{};
@@ -32,7 +32,7 @@ void ComposeDriver::begin(Generator& generator, const Recipe& recipe, uint32_t s
 	shortBuildGrooves_ = 0;
 	done_ = false;
 	// From Start, with the Intro, as an untouched Perform plays it (spec §15.1).
-	generator.start(recipe, seed, takes);
+	generator.start(recipe, seed, takes, skipIntro);
 	writer.begin(recipe);
 	clips_.begin(writer);
 }

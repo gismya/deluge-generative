@@ -4,6 +4,7 @@
 #include "generative/compose/compose_driver.h"
 #include "generative/compose/song_size.h"
 #include "generative/perform/riser_timing.h"
+#include "golden.h"
 #include "harness.h"
 
 #include "cppspec.hpp"
@@ -78,13 +79,13 @@ struct Composed {
 };
 
 std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0,
-                                      const Takes& takes = Takes{}) {
+                                      const Takes& takes = Takes{}, bool skipIntro = false) {
 	auto out = std::make_unique<Composed>();
 	out->target = target;
 	out->writer.riserMicros = riserMicros;
 	auto generator = std::make_unique<Generator>();
 	ComposeDriver driver;
-	driver.begin(*generator, recipe, seed, takes, target, out->writer);
+	driver.begin(*generator, recipe, seed, takes, target, out->writer, skipIntro);
 	// Each call decides one step.
 	bool done = false;
 	while (!done && out->sections.size() < 20000) { // a song that never ends fails below
@@ -751,6 +752,32 @@ describe compose_driver("The Compose driver", $ {
 					expect(agreed.sameNotes).to_be_true();
 					expectAgreed(self, agreed);
 				}
+			}
+		});
+
+		// The firmware check (spec §21.3, gen_emu.py golden) builds the golden case through Compose in delugemu, from
+		// the Groove as the golden plays it, and diffs the saved song's notes against the committed golden: the notes
+		// that start more than kMaxLean before the golden's last tick, cut there. This is the harness side of that diff.
+		it("from the Groove, plays each golden's notes, as the firmware check reads them back", _ {
+			for (const Genre* genre : goldens::goldenGenres()) {
+				const Recipe recipe = newRecipe(*genre, goldens::kEntropy);
+				auto composed = composeSong(recipe, goldens::kSeed, targetSteps(60, recipe.tempo), 0, Takes{},
+				                            goldens::kSkipIntro);
+				expect(composed->endQueuedAt).to_be_greater_than(goldens::kBars * kStepsPerBar);
+				Run run;
+				run.recipe = recipe;
+				run.seed = goldens::kSeed;
+				run.skipIntro = goldens::kSkipIntro;
+				const Result golden = play(run, goldens::kBars);
+				// Perform's stop ends what still sounds at its last tick, so the notes are cut there.
+				int32_t end = 0;
+				for (const Event& e : golden.events) {
+					end = std::max(end, e.tick);
+				}
+				expect(end).to_be_greater_than((goldens::kBars - 1) * kStepsPerBar * kTicksPerStep);
+				const std::vector<Note> expected = notesBefore(pairNotes(golden.events), end);
+				expect(expected.size()).to_be_greater_than(100U);
+				expect(notesBefore(composed->writer.notes, end) == expected).to_be_true();
 			}
 		});
 
