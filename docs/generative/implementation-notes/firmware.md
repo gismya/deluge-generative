@@ -54,6 +54,12 @@ otherwise.
   (each control's first param's range, 0 if it binds none). An event line is 120 bytes with its timestamp, so keep it
   short: a param count or lane names overflowed it.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
+- A lane sample of 2 s or more loads in CUT mode (`perform/one_shot.h`, §10.4), so its note-off stops it: a lane's
+  note length is what you hear, not the file's. Before #423 the Fall's 6-tick note cut the 8 s Downers to a beat
+  while the rough render, which played every sample out, rendered all 8 s. The render now follows the same rule, so a
+  short gate on a long sample shows in the render too. The Impact's descending kicks (3-4.3 s) are still cut by its
+  6-tick gate. Lane samples near 2 s sit on either side of it by a millisecond (`GEN Ride 2`, `GEN Ping 2`, Dub's
+  `GEN Riser Short` are 2000 ms: CUT).
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
 - A test hook can fault the card: "hold card_error" makes `CardFolders` and Perform's loaders fail with `SD_CARD`
