@@ -176,6 +176,23 @@ class SongNotes(unittest.TestCase):
         with self.assertRaises(g.GoldenError):
             g.read_note_data("0x00000000")
 
+    def test_a_note_that_doesnt_play_as_compose_writes_it_is_refused(self):
+        good = note_data((0, 6, 88))
+        for name, tail in (
+            ("lift", "3F14000000"),
+            ("probability", "4013000000"),
+            ("iterance", "4014000100"),
+            ("fill", "4014000001"),
+        ):
+            with (
+                self.subTest(name),
+                self.assertRaisesRegex(g.GoldenError, "not Compose's"),
+            ):
+                g.read_note_data(good[: -len(tail)] + tail)
+        # the second note's tail is checked too
+        with self.assertRaisesRegex(g.GoldenError, "note at 96"):
+            g.read_note_data(good + "00000060" + "00000006" + "58" + "4013000000")
+
     def test_rows_named_as_the_golden_names_them(self):
         sounds, _ = g.recipe_sounds(RECIPE)
         self.assertEqual(

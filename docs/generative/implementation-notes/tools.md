@@ -49,7 +49,8 @@ otherwise.
 ## The firmware check (`gen_emu.py golden`, #141)
 
 - `golden_compose.txt` runs under `gen_emu.py golden`, not as a probe script: check_all only picks scripts named
-  `perform_*.txt` or `compose_*.txt`, and its name keeps it out so it doesn't run twice. It has no covers lines;
+  `perform_*.txt` or `compose_*.txt`, so check_all doesn't list it as a probe script it can't run (its `# needs:`
+  line); `gen_emu.py golden` runs it. It has no covers lines;
   check_all runs it whenever it runs delugemu. `# needs: gen_emu.py` keeps it off hardware sessions.
 - The golden ends at its last line, not at 16 bars: Perform's stop ends what still sounds at the driver's clock (6132
   or 6134), so a Drone note is shorter in the golden than in the song. Both sides cut there and drop notes within

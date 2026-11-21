@@ -33,6 +33,9 @@ GOLDEN_LANES = ("Kick", "Snare", "Clap", "Rim", "HatC", "HatO", "Ride", "Crash",
                 "Fall", "Impact", "Siren")  # fmt: skip
 PITCH_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 NOTE_BYTES = 14  # noteDataWithSplitProb: position 4, length 4, velocity, lift, probability, iterance 2, fill
+# What Compose writes after the velocity on every note (ComposeSong::addNote(), spec §15.4): lift 64
+# (kDefaultLiftValue), probability 20 of 20 (always), no iterance, fill off. Anything else plays differently.
+COMPOSE_NOTE_TAIL = bytes([64, 20, 0, 0, 0])
 
 EVENT_LINE = re.compile(r"^\s*(\d+)\s+(\S+)\s+(\S+)\s+(.*?)\s*$")
 NOTE_ON = re.compile(r"^(\S+) on v(\d+)((?: ornament)?)((?: muted)?)$")
@@ -120,7 +123,8 @@ class Golden:
 
 
 def read_note_data(hex_text):
-    """The notes of a noteRow's noteDataWithSplitProb: [(position, length, velocity)]."""
+    """The notes of a noteRow's noteDataWithSplitProb: [(position, length, velocity)]. A note whose lift,
+    probability, iterance or fill isn't what Compose writes (COMPOSE_NOTE_TAIL) is refused: it would play otherwise."""
     if not hex_text.startswith("0x"):
         raise GoldenError(f"noteDataWithSplitProb without 0x: {hex_text[:20]}")
     data = bytes.fromhex(hex_text[2:])
@@ -128,6 +132,13 @@ def read_note_data(hex_text):
         raise GoldenError(
             f"noteDataWithSplitProb of {len(data)} bytes, not whole {NOTE_BYTES}-byte notes"
         )
+    for i in range(0, len(data), NOTE_BYTES):
+        tail = data[i + 9 : i + NOTE_BYTES]
+        if tail != COMPOSE_NOTE_TAIL:
+            raise GoldenError(
+                f"note at {int.from_bytes(data[i : i + 4], 'big')}: lift, probability, iterance and fill "
+                f"{tail.hex()}, not Compose's {COMPOSE_NOTE_TAIL.hex()}"
+            )
     return [
         (
             int.from_bytes(data[i : i + 4], "big"),
