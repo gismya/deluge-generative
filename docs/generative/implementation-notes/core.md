@@ -192,8 +192,8 @@ otherwise.
 - A gated part leaves a Drop phrase early when the Drop's lift decays under its gate (Psytrance's Lead left after bar
   10 at a 1-phrase decay). A longer `dropDecayPhrases` keeps it in, but `genre_data_spec` checks the decay fits the
   shortest Groove at Motion 50; Psytrance is its named exception (spec §9.3), and `psytrance_spec` shows the cut-off.
-- A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
-  ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
+- A Chord graph holds at most `kMaxChordMoves` (16, 8 before Ambient's round 2 took 12) moves (`harmonyValid()`).
+  It bounds only data: the walk loops over the moves once a chord change, and nothing is sized by it.
 - A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
   checking "no note in the against half" then passes with the rule's strength at 0. House's Lead has lead-ins in each
   bar's first half for Respond to thin; check a spec like that bites by running it once with the strength at 0.

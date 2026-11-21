@@ -107,6 +107,11 @@ otherwise.
   and `/` by a runtime divisor, each an `__aeabi_idivmod` call on the Cortex-A9 (about 1,000 a bar line). With slots
   fixed at 4, a pairing counts only when min(notes, voices) notes take a voice: a leftover note costs nothing, so it
   would otherwise stand in for a free voice. `leadVoicing()` itself is untouched, so no other genre moves.
+- `SustainSpec::holdSharedChance` (Ambient round 2's HOLD) only breaks `openVoicing()`'s least-move ties toward the
+  pairing that keeps the most voices in place. Its draw (`Purpose::HoldShared`) is made on every bar line, but a bar
+  with no chord change has a zero-move pairing anyway, so in effect it is per chord change. A tie moving a shared note
+  an octave was about one shared note in four over Ambient's pieces; the chance's spec plays copies of the genre at
+  0, 500 and 1000 (`padSharedTones()` in `ambient_spec`).
 - The Extension order is `HarmonySpec::extensionOrder` (`ExtensionOrder`, `core/pitch.h`), passed to `voiceChord()` by
   `voiceChordAt()` only: specs that call `voiceChord()` to check a genre's chords must pass the genre's order
   (`ambient_spec` passes `kNinthFirst`). `harmonyValid()` checks it with `extensionOrderValid()`.

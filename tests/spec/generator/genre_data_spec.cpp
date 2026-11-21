@@ -496,6 +496,19 @@ describe genre_data("Every built-in genre", $ {
 		expect(sustainValid(Genre{.name = "pad", .parts = pad})).to_be_true();
 	});
 
+	it("rejects a chance to hold shared notes off an open voicing, or over 1000 per-mille", _ {
+		const PartSpec open[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.openVoicing = true, .holdSharedChance = 1000}}};
+		expect(sustainValid(Genre{.name = "open", .parts = open})).to_be_true();
+		const PartSpec over[] = {
+		    {.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.openVoicing = true, .holdSharedChance = 1001}}};
+		expect(sustainValid(Genre{.name = "over", .parts = over})).to_be_false();
+		const PartSpec close[] = {{.role = Role::Pad, .flavour = Flavour::Sustain, .sustain = {.holdSharedChance = 500}}};
+		expect(sustainValid(Genre{.name = "close", .parts = close})).to_be_false();
+		const PartSpec stab[] = {{.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdSharedChance = 500}}};
+		expect(sustainValid(Genre{.name = "stab", .parts = stab})).to_be_false();
+	});
+
 	it("rejects a hold across Section lines on a part that isn't a Sustain, which only decideSustain() honours", _ {
 		const PartSpec stab[] = {
 		    {.role = Role::Chords, .flavour = Flavour::Stab, .sustain = {.holdsAcrossSections = true}}};
@@ -617,13 +630,17 @@ describe genre_data("Every built-in genre", $ {
 		constexpr ChordMove good[] = {{0, 6, 10}, {6, 0, 10}};
 		constexpr ChordMove offScale[] = {{0, 7, 10}};
 		constexpr ChordMove toItself[] = {{3, 3, 10}};
-		constexpr ChordMove nine[] = {{0, 1, 1}, {0, 2, 1}, {0, 3, 1}, {0, 4, 1}, {0, 5, 1},
-		                              {0, 6, 1}, {1, 0, 1}, {2, 0, 1}, {3, 0, 1}};
+		// kMaxChordMoves (16) and one more.
+		constexpr ChordMove tooMany[] = {{0, 1, 1}, {0, 2, 1}, {0, 3, 1}, {0, 4, 1}, {0, 5, 1}, {0, 6, 1},
+		                                 {1, 0, 1}, {2, 0, 1}, {3, 0, 1}, {4, 0, 1}, {5, 0, 1}, {6, 0, 1},
+		                                 {1, 2, 1}, {2, 3, 1}, {3, 4, 1}, {4, 5, 1}, {5, 6, 1}};
+		static_assert(std::size(tooMany) == kMaxChordMoves + 1);
+		expect(valid(std::span(tooMany).first(kMaxChordMoves), 6, 4)).to_be_true();
 		expect(valid(good, 6, 4)).to_be_true();
 		expect(valid(good, 6, 0)).to_be_true(); // no regular cadence: only the Drop cadence leans to the target
 		expect(valid(offScale, 6, 4)).to_be_false();
 		expect(valid(toItself, 6, 4)).to_be_false(); // a repeat is the repeat weight
-		expect(valid(nine, 6, 4)).to_be_false();
+		expect(valid(tooMany, 6, 4)).to_be_false();
 		expect(valid(good, 0, 4)).to_be_true();                // home may be the target
 		expect(valid(good, kNoCadenceTarget, 4)).to_be_true(); // or there is none
 		expect(valid(good, 7, 4)).to_be_false();

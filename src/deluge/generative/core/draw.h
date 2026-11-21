@@ -56,10 +56,12 @@ enum class Purpose : uint8_t {
 	ChordWalk,      ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Part kArcPart
 	VoiceJitter,    ///< position: the Sustain voicing note's VoicePlace. As DensityJitter, with no pick
 	ArpWalk,        ///< position: pick (Groove, phrase, pool entry), step within the pattern. A Random Arp's note
-	DropOut,   ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether, which).
-	           ///< Part kArcPart. Never keyed on the take
-	ChordLoop, ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
-	           ///< length, chord). Part kArcPart. Never keyed on the take
+	DropOut,    ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether, which).
+	            ///< Part kArcPart. Never keyed on the take
+	HoldShared, ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Whether an open
+	            ///< voicing holds its shared notes on this bar line (SustainSpec::holdSharedChance)
+	ChordLoop,  ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
+	            ///< length, chord). Part kArcPart. Never keyed on the take
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

@@ -317,9 +317,19 @@ GEN_STEP_CODE void Generator::decideSustain(int32_t partIndex, const Step& step)
 	PartState& part = parts_[partIndex];
 	PartState::Sustain& state = part.sustain;
 	const Register reg = partRegister(partIndex);
+	// Whether an open voicing keeps its shared notes in place on this line, or may move one an octave (spec §5.2).
+	bool holdShared = false;
+	if (spec.sustain.holdSharedChance != 0) {
+		DrawKey holdKey =
+		    partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex], Purpose::HoldShared);
+		holdKey.position[0] = static_cast<uint32_t>(arc_.section()) << 16 | arc_.occurrence();
+		holdKey.position[1] = static_cast<uint32_t>(arc_.phraseInSection());
+		holdKey.position[2] = static_cast<uint32_t>(arc_.barInPhrase());
+		holdShared = drawChance(holdKey, spec.sustain.holdSharedChance);
+	}
 	const Voicing voicing = spec.sustain.pedal ? pedalVoicing(key(), reg)
 	                        : spec.sustain.openVoicing
-	                            ? openVoicing(chord(), key(), reg, part.voicing.notes())
+	                            ? openVoicing(chord(), key(), reg, part.voicing.notes(), holdShared)
 	                            : leadVoicing(chord(), key(), reg, part.voicing.notes(), spec.sustain.doubleRoot);
 
 	// Density thins the voicing by each note's importance, read again on every bar line with the gate hysteresis

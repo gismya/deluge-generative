@@ -126,3 +126,19 @@ otherwise.
   press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
   that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
   presses whose handler refuses instead (`perform_recipe_save.txt`).
+- A preset preview's build reports none of a build's events (`gen_sound`, `gen_sound_level`, ...: each sits under
+  `if (!previewBuild())`, `card_sounds.h`), so `gen_sound ACID` expects see only the part's own loads; its own
+  `gen_preset_preview built ... path=` says what it loaded. Keep the event kind literal at the start of a
+  `TEST_EVENT` format: a `%s` prefix there hides the kind from `covers.py --check`, which fails check_all. `hold
+  preset_preview` parks every preview build at its start until it is cancelled or released.
+- Trap: a BACK hold whose press closed a browser at its top folder also closes the lane list under it (the
+  `BACK_MENU_EXIT` timer fires on the list); from a subfolder only the browser closes. Which one depends on the card
+  (with the pack, an FX lane's SYNTH PRESET browser opens in a subfolder): follow the hold with one BACK tap, which on
+  Perform with nothing queued does nothing (`perform_preset_preview.txt`).
+- Late audio (#449): the time between render starts and a render's length don't tell whether the audio ran dry. Only
+  `AudioEngine::routine()` copies rendered audio into the 2.9 ms TX ring, and a call may copy audio rendered earlier
+  without rendering. `gen_audio` measures the ring's margin at each entry, and `drift=` checks it against the DMA's own
+  position (`io/midi/output_margin.h`, its unit tests in `tests/unit/output_margin_tests.cpp`). The scheduler doesn't
+  preempt: any main-loop task over about 2.9 ms is an underrun. `gen_audio_late` blames the task the routine ran
+  inside, or else the one that finished just before it; `TaskManager::currentID` starts at 0, not -1, so it can't tell
+  a nested call apart, and the test port keeps its own caller (`TestPort::taskStarted()`).

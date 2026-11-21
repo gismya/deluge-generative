@@ -44,11 +44,12 @@ What each macro moves in v1:
 
 Energy no longer decides which notes play. That is Density's job. No macro moves Lean, Velocity spread or a part's Degree set.
 
-**Part bias.** Each part has a signed bias per macro, −50 to +50 (stored in macro units, 0 by default). The part plays every macro at its biased value: the shared value after the Arc (effective Energy and Density, the centre for Complexity and Motion), moved by the bias through one curve, the **knee**:
+**Part bias.** Each part has a signed bias per macro, −50 to +50 (stored in macro units, 0 by default). The part plays every macro at its biased value: the shared value after the Arc (effective Energy and Density, the centre for Complexity and Motion), moved by the bias through one curve, the **50/50 blend**: the mean of two curves.
 
-- Exactly `v + bias` while the end the bias heads for (50 for a bias up, 0 for one down) is at least K = min(50, max(10, 2·|bias|)) points away.
-- Inside that knee the bias shrinks in step with the room left: `bias · d / K` for `d` points from the end. The part reaches that end together with the shared value, and keeps following the Arc at at least half its speed there. From |bias| 25 the knee spans the whole range (headroom-proportional).
-- Integer only ([ADR 0004](../../adr/0004-generator-decisions-use-integer-math-only.md)); the identity at bias 0, monotonic, within 0–50. The owner picked it by ear from a prototype (#414) and may swap it: it is one function (`partBiased()`, `core/part_bias.h`).
+- The linear one, `v + bias`, clamped to 0–50.
+- The headroom-proportional one, which moves `v` by `bias / 50` of the room towards the end the bias heads for (50 for a bias up, 0 for one down): `v + bias · (50 − v) / 50` up, `v + bias · v / 50` down.
+- So through the middle a part moves about three quarters of its bias, and it reaches each end together with the shared value, so it keeps following the Arc there.
+- Integer only ([ADR 0004](../../adr/0004-generator-decisions-use-integer-math-only.md)); the identity at bias 0, monotonic, within 0–50. The owner picked it by ear from a prototype (#414; the knee hybrid before it) and may swap it: it is one function (`partBiased()`, `core/part_bias.h`).
 
 A part reads its biased value everywhere it reads a macro for its own notes and sound: velocity, thinning, its Density gate and late entries, the Complexity tier, lines, Answers, mutation, Ornament rate, the strength of its interplay rules, and its sound-control macro layer ([§11.3](11-sound-controls.md#113-three-layers)). An interplay rule plans its target at the target's own biased Density. What the parts share stays unbiased: the Arc, the chord walk and its Extensions, the Build roll's start, the automatic fill chance, Phrase accents, Groove length and drift ([§11.5](11-sound-controls.md#115-drift)). The SONG page's Arc plan and the MUTE pad's dim read each part's biased Density, so what they show is what plays ([§13.5](13-perform.md#135-control-layout)). Kit lanes follow their part: there is no bias per lane.
 

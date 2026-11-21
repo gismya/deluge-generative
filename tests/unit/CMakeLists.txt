@@ -101,6 +101,7 @@ add_executable(UnitTests
         fast_pythag_tests.cpp
         tick_interpolation_tests.cpp
         sysex_load_progress_tests.cpp
+        output_margin_tests.cpp
 )
 add_test(NAME UnitTests
         COMMAND UnitTests)

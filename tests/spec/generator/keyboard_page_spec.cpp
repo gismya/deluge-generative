@@ -3,6 +3,7 @@
 // the core as steering, logged where they land. The page is composed from a stepped piece as the Perform view
 // composes it, and described as the test port's gen_keyboard text from the same cells.
 
+#include "generative/core/part_bias.h"
 #include "generative/perform/arc_map.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
@@ -427,19 +428,21 @@ describe keyboard_page("The KEYBOARD page", $ {
 			Piece piece;
 			piece.runToStepLine(4);
 			piece.focused = 2;
-			// Row 2 from the top, level 6 of 8: 36 points. From the centre 25 that is +11, in the curve's linear middle.
+			// Row 2 from the top, level 6 of 8: 36 points. From the centre 25 that is +11, which the blend reaches with
+			// about 4/3 of it: 939 units (14.7 points).
 			piece.pressFader(kEnergyColumn, 2, 0);
 			piece.releaseFader(kEnergyColumn, 2, 100);
-			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(macroPoints(11));
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(939);
+			expect(biasFor(macroPoints(25), macroPoints(36))).to_equal(939);
 			expect(piece.text().substr(0, 6)).to_equal(std::string("E=6/5 "));
-			// The top row, 50: the knee holds a bias under +50 short of it, so only +50 puts the part there.
+			// The top row, 50: the curve holds a bias under +50 short of it, so only +50 puts the part there.
 			piece.pressFader(kEnergyColumn, 0, 200);
 			piece.releaseFader(kEnergyColumn, 0, 300);
 			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(kMacroFull);
-			// The bottom row, 0, the same way down, where the curve rounds the cut up: a unit short of -50 reaches 0.
+			// The bottom row, 0, the same way down, where the blend rounds down: 3 units short of -50 reaches 0.
 			piece.pressFader(kEnergyColumn, 7, 400);
 			piece.releaseFader(kEnergyColumn, 7, 500);
-			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(-kMacroFull + 1);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(-kMacroFull + 3);
 			// The centre's row, 25 at level 5: back to 0.
 			piece.pressFader(kEnergyColumn, 3, 600);
 			piece.releaseFader(kEnergyColumn, 3, 700);
@@ -455,7 +458,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 			piece.focused = 1;
 			piece.pressFader(kMotionColumn, 2, 0);
 			piece.decideMore(2);
-			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(macroPoints(11));
+			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(939); // see the tap case
 			expect(piece.currentRecipe.bias.of(1, Macro::Motion)).to_equal(0);
 			expect(piece.text().substr(18, 7)).to_equal(std::string("M=6h/5 "));
 			piece.focused = -1; // the release goes to the part the press held, whatever is focused by then

@@ -16,8 +16,9 @@
  */
 
 // Part bias's curve (spec §3.3): how a part's signed bias moves the value it plays a macro at. The owner picked the
-// knee hybrid by ear (#414) and may swap it after listening: partBiased() is the one function to change, and
-// biasFor() works from it whatever its shape, as long as it stays monotonic in the bias.
+// 50/50 blend of the linear and the headroom-proportional curves by ear (#414; the knee hybrid before it).
+// partBiased() is the one function to change, and biasFor() works from it whatever its shape, as long as it stays
+// monotonic in the bias.
 
 #pragma once
 
@@ -28,36 +29,28 @@
 
 namespace deluge::generative {
 
-/// The narrowest knee: a small bias eases into its end over the last 10 points, instead of hitting it (tuning).
-constexpr int32_t kPartBiasKneeMin = macroPoints(10);
-
 /// `shared`, the value every part plays a macro at (after the Arc, effectiveOn()), moved by a part's `bias`, both in
-/// macro units. The knee hybrid: exactly `shared + bias` while the end the bias heads for (50 up, 0 down) is at least
-/// K = min(50, max(10, 2·|bias|)) points away. Inside that knee the bias shrinks in step with the room left (bias·d/K
-/// for d from the end), so the part reaches the end together with the shared value and keeps following the Arc at
-/// half its speed or more. From |bias| 25 the knee spans the whole range (headroom-proportional). The identity at
-/// bias 0, monotonic in both arguments, within 0..kMacroFull. Integer only (ADR 0004).
+/// macro units. The 50/50 blend: the mean of the linear curve, `shared + bias` clamped to 0..kMacroFull, and the
+/// headroom-proportional one, which moves `shared` by bias/kMacroFull of the room towards the end the bias heads for
+/// (50 up, 0 down). So through the middle a part moves about three quarters of its bias, and it reaches each end
+/// together with the shared value. The identity at bias 0, monotonic in both arguments, within 0..kMacroFull, and
+/// one unit of `shared` moves it by one unit at most. Integer only (ADR 0004): one division, rounding down.
 constexpr int32_t partBiased(int32_t shared, int32_t bias) {
-	const int32_t o = std::clamp<int32_t>(bias, -kMacroFull, kMacroFull);
+	const int64_t o = std::clamp<int32_t>(bias, -kMacroFull, kMacroFull);
 	if (o == 0) {
 		return shared;
 	}
-	const int32_t magnitude = o < 0 ? -o : o;
-	const int32_t knee = std::min<int32_t>(kMacroFull, std::max<int32_t>(kPartBiasKneeMin, 2 * magnitude));
-	const int32_t room = o > 0 ? kMacroFull - shared : shared; // the distance to the end the bias heads for
-	if (room >= knee) {
-		return shared + o;
-	}
-	// Up rounds towards the shared value, down away from it (as the prototype); neither passes its end, since
-	// |bias| ≤ K.
-	if (o > 0) {
-		return shared + static_cast<int32_t>(int64_t{o} * room / knee);
-	}
-	return shared - static_cast<int32_t>((int64_t{magnitude} * room + knee - 1) / knee);
+	const int64_t full = kMacroFull;
+	const int64_t v = shared;
+	const int64_t linear = std::clamp<int64_t>(v + o, 0, full);
+	// The curved value times kMacroFull: up, v + o·(full − v)/full; down, v + o·v/full. Never negative, since |o| ≤
+	// full.
+	const int64_t curved = o > 0 ? full * v + o * (full - v) : full * v + o * v;
+	return static_cast<int32_t>((full * linear + curved) / (2 * full));
 }
 
 /// The bias that puts a part at `target` from `centre` (a KEYBOARD fader row, spec §13.5): the smallest one whose
-/// partBiased() reaches it, `target - centre` in the curve's linear middle. 0 when they are equal.
+/// partBiased() reaches it (about 4/3 of `target - centre` through the middle). 0 when they are equal.
 constexpr int32_t biasFor(int32_t centre, int32_t target) {
 	if (target == centre) {
 		return 0;

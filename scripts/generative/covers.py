@@ -94,8 +94,10 @@ BUILDERS = {
     "gen_arcmap": ("src/deluge/generative/perform/arc_map.*",),
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_audio_late": (),  # a scheduler task's name
     "gen_browser": (),
     "gen_browser_preview": (),  # the previewed path
+    "gen_preset_preview": (),  # built|cancelled|failed, the lane's name or -: literals beside it
     "gen_log": (),  # at=stop or at=phrase, literals beside it
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_performance_pad": (),  # down or up

@@ -289,7 +289,7 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Rest, .mask = {.lanes = laneBit(Lane::Kick)}, .beats = 4, .weight = 1},
 };
 
-/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves is 8), so
+/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves was 8), so
 /// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV through its colour move; in Major the
 /// same degrees read I–IV and so on in Mixolydian. Weights in the colour moves' units (20): i–♭VII and ♭VI–♭VII at half
 /// the others', so ♭VII doesn't take a third of minor bars (#371).
