@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<song firmwareVersion="4.1.4" earliestCompatibleFirmware="4.1.0" xScroll="0" xZoom="96" timePerTimerTick="459" timerTickFraction="1610612736" rootNote="0" inputTickMagnitude="1" swingAmount="0" sessionLayout="0">
+	<modeNotes><modeNote>0</modeNote><modeNote>2</modeNote><modeNote>4</modeNote><modeNote>5</modeNote><modeNote>7</modeNote><modeNote>9</modeNote><modeNote>11</modeNote></modeNotes>
+	<instruments>
+		<audioTrack name="LONG" inputChannel="0" colour="0"/>
+	</instruments>
+	<sessionClips>
+		<audioClip trackName="LONG" filePath="GENTEST/NOPARAMS.WAV" startSamplePos="0" pitchSpeedIndependent="0" isPlaying="1" length="192"/>
+	</sessionClips>
+</song>
