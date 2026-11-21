@@ -32,11 +32,10 @@ using namespace harness;
 
 namespace {
 
-/// A buffer of `bytes` and its log, with nothing in it.
-struct Buffer {
-	explicit Buffer(int32_t size) : bytes(static_cast<size_t>(size)), log(bytes.data(), size) {}
-	std::vector<uint8_t> bytes;
-	SteeringLog log;
+/// A log with a ring of `ring` bytes and its store, with nothing in it. Nothing drains unless a spec says so (or
+/// begins a piece through play()), so fill() fills the ring as a card stall would.
+struct Buffer : StoredLog {
+	explicit Buffer(int32_t ring) : StoredLog(kLogHeaderBytes, ring) {}
 };
 
 PieceStart startOf(const Genre& genre) {
@@ -84,6 +83,7 @@ std::vector<int32_t> kept(const SteeringLog& log, LeaveOption option) {
 
 /// A piece of `genre` that plays `steps` steps and stops, marked if `marked`.
 void play(SteeringLog& log, const Genre& genre, int32_t steps, bool marked) {
+	drainLog(&log); // the last piece's header is on the card before the next opens
 	log.beginPiece(startOf(genre));
 	log.append(0, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), 1});
 	log.mark(marked);
@@ -134,21 +134,27 @@ describe capture_marks("Capture marks", $ {
 		expect(d.log.piece(0).marked()).to_be_true();
 	});
 
-	it("status: whether there is a current piece, whether it's marked, the marks, the log's use and whether it's full", _ {
+	it("status: whether there is a current piece, whether it's marked, the marks, whether it's full and a card error", _ {
 		Buffer b(1024);
 		CaptureStatus status = captureStatus(b.log);
-		expect(status.piece || status.marked || status.full).to_be_false();
-		expect(status.usedPercent).to_equal(0);
+		expect(status.piece || status.marked || status.full || status.cardError).to_be_false();
 		b.log.beginPiece(startOf(genres::technoAcid));
 		pressMark(b.log);
 		status = captureStatus(b.log);
 		expect(status.piece && status.marked).to_be_true();
 		expect(status.markedPieces).to_equal(1);
-		expect(status.usedPercent).to_be_greater_than(0);
 		fill(b.log);
 		status = captureStatus(b.log);
 		expect(status.full).to_be_true();
-		expect(status.usedPercent).to_be_greater_than(90);
+		expect(status.cardError).to_be_false();
+		// A card error cuts the piece too, and says so.
+		Buffer c(1024);
+		c.store.failFrom = 0;
+		c.log.beginPiece(startOf(genres::technoAcid));
+		c.log.commitBefore(1);
+		c.store.drain();
+		status = captureStatus(c.log);
+		expect(status.full && status.cardError).to_be_true();
 	});
 
 	it("the dot: hollow for an unmarked piece, filled for a marked one, none before a piece, blinking when full", _ {
@@ -186,7 +192,7 @@ describe capture_marks("Capture marks", $ {
 		captureLines(captureStatus(b.log), lines);
 		expect(std::string{lines.label[0]} + "|" + lines.value[0]).to_equal(std::string{"THIS PIECE|NONE"});
 		expect(std::string{lines.label[1]} + "|" + lines.value[1]).to_equal(std::string{"MARKED PIECES|0"});
-		expect(std::string{lines.label[2]} + "|" + lines.value[2]).to_equal(std::string{"LOG|0% USED"});
+		expect(std::string{lines.label[2]} + "|" + lines.value[2]).to_equal(std::string{"LOG|ON CARD"});
 		b.log.beginPiece(startOf(genres::technoAcid));
 		captureLines(captureStatus(b.log), lines);
 		expect(std::string{lines.value[0]}).to_equal(std::string{"NOT MARKED"});
@@ -203,6 +209,7 @@ describe capture_marks("Capture marks", $ {
 		b.log.beginPiece(startOf(genres::technoAcid));
 		pressMark(b.log);
 		b.log.endPiece(64, PieceEnd::Stopped);
+		b.store.drain();
 		b.log.beginPiece(startOf(genres::technoMelodic));
 		expect(row(b.log, 0)).to_equal(std::string{"1 ACID TECHNO|MARKED"});
 		expect(row(b.log, 1)).to_equal(std::string{"2 MELODIC TECHNO|-"});
@@ -212,6 +219,7 @@ describe capture_marks("Capture marks", $ {
 		expect(pressMark(b.log, 0) == MarkOutcome::Marked).to_be_true();
 		pressMark(b.log, 0);
 		b.log.endPiece(64, PieceEnd::Stopped);
+		b.store.drain();
 		pressMark(b.log, 1);
 		b.log.beginPiece(startOf(genres::technoAcid));
 		expect(b.log.pieces()).to_equal(2);
@@ -228,6 +236,7 @@ describe capture_marks("Capture marks", $ {
 		it("no marks: LAST keeps the last piece, playing or stopped", _ {
 			Buffer b(16384);
 			play(b.log, genres::technoAcid, 40, false);
+			b.store.drain();
 			b.log.beginPiece(startOf(genres::technoMelodic)); // still playing as the menu opens
 			b.log.append(0, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), 1});
 			expect(menu(b.log)).to_equal(std::string{"LEAVE, KEEP:|LAST|NOTHING|CANCEL"});
@@ -268,6 +277,7 @@ describe capture_marks("Capture marks", $ {
 		it("a piece with nothing logged builds nothing: stopped on its first step, or its header cut", _ {
 			Buffer b(16384);
 			play(b.log, genres::technoAcid, 40, true);
+			b.store.drain();
 			b.log.beginPiece(startOf(genres::technoMelodic));
 			b.log.endPiece(0, PieceEnd::Stopped);
 			expect(menu(b.log)).to_equal(std::string{"KEEP: 1 MARKED|MARKED|NOTHING|CANCEL"});

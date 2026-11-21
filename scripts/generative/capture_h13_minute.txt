@@ -1,4 +1,4 @@
-# One minute of busy steering for capture_h13.txt (include only): Energy and Density each turned a fast detent
+# One minute of busy steering (include only): Energy and Density each turned a fast detent
 # (4 knob steps) every other 16th, alternating, sweeping up and down so every turn moves its macro: a record about
 # every step, as perform_steering_log.txt's busy steering. The macros must be on the gold knobs (F8).
 encoder 4 1 fast

@@ -18,6 +18,7 @@
 #if ENABLE_SYSEX_TEST
 
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/capture_files.h"
 #include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/sound_controls.h"
@@ -37,6 +38,7 @@ ControlTiming controlTiming;
 
 void ControlTiming::report(const char* ramps) {
 	closeStep();
+	cardLog.report(); // the card log's window and the streaming counters, before the reset below (#448)
 	TestPort::RenderTiming render = TestPort::renderTiming;
 	TestPort::renderTiming = {};
 	const auto renderMean =

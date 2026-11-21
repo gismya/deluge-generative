@@ -19,6 +19,7 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/sound_controls.h"
 #include "model/clip/instrument_clip.h"
+#include "model/global_effectable/global_effectable.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/song/song.h"
@@ -32,6 +33,8 @@
 #include <cstring>
 
 namespace deluge::generative::firmware {
+
+namespace params = deluge::modulation::params;
 
 namespace {
 
@@ -153,7 +156,13 @@ int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t 
 	auto* set = static_cast<ParamSet*>(collection);
 	const int32_t count = std::min<int32_t>(
 	    {static_cast<int32_t>(block.count), set->getNumParams(), length / static_cast<int32_t>(sizeof(int32_t))});
+	// The song's tempo is the piece's Recipe's and its tempo entries' (spec §17.6), not a param to write back: at a
+	// transition's start step it still holds the outgoing piece's glide.
+	const bool songTempo = block.output == kSongParams && block.collection == 0;
 	for (int32_t p = 0; p < count; p++) {
+		if (songTempo && p == params::UNPATCHED_TEMPO) {
+			continue;
+		}
 		int32_t value = 0;
 		std::memcpy(&value, values + p * static_cast<int32_t>(sizeof(int32_t)), sizeof value);
 		AutoParam& param = set->params[p];
@@ -222,7 +231,8 @@ int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, c
 	return written;
 }
 
-void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song) {
+void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song,
+                    uint8_t editedParts, bool songEdited) {
 	const int32_t parts = partCount(genre);
 	for (int32_t p = 0; p < parts; p++) {
 		log.addPick(pickSlot(p), picks.part[p].c_str());
@@ -230,11 +240,14 @@ void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& ros
 			log.addPick(pickSlot(lane.lane), picks.lane[static_cast<int32_t>(lane.lane)].c_str());
 		}
 	}
-	// Song params (song FX among them), then each part's Output, then its Kit's rows (spec §17.2).
-	logParams(log, kSongParams, Lane::None, song.paramManager);
+	// Song params (song FX among them), then each part's Output, then its Kit's rows (spec §17.2): only those edited
+	// since they loaded.
+	if (songEdited) {
+		logParams(log, kSongParams, Lane::None, song.paramManager);
+	}
 	for (int32_t p = 0; p < parts; p++) {
 		const PartOutput& part = roster.parts[p];
-		if (part.clip == nullptr) {
+		if (part.clip == nullptr || (editedParts & (1U << p)) == 0) {
 			continue;
 		}
 		const auto output = static_cast<uint8_t>(p);
@@ -247,6 +260,58 @@ void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& ros
 			}
 		}
 	}
+}
+
+int32_t editedOutput(const ParamManager* manager, const Roster& roster, const Genre& genre, Song& song) {
+	if (manager == nullptr) {
+		return -1;
+	}
+	if (manager == &song.paramManager) {
+		return kSongParams;
+	}
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const PartOutput& part = roster.parts[p];
+		if (part.clip == nullptr) {
+			continue;
+		}
+		if (manager == &part.clip->paramManager) {
+			return p;
+		}
+		for (const LaneSpec& lane : genre.parts[p].lanes) {
+			Drum* drum = part.drums[laneRow(lane.lane)];
+			NoteRow* row = drum != nullptr ? part.clip->getNoteRowForDrum(drum) : nullptr;
+			if (row != nullptr && manager == &row->paramManager) {
+				return p;
+			}
+		}
+	}
+	return -1;
+}
+
+uint8_t snapshotParts(const SteeringLog::Piece& piece, bool* song) {
+	uint8_t parts = 0;
+	*song = false;
+	piece.forEachSnapshot([&](const void* data, int32_t length) {
+		if (length < static_cast<int32_t>(sizeof(SnapshotBlock))) {
+			return;
+		}
+		SnapshotBlock block{};
+		std::memcpy(&block, data, sizeof block);
+		if (block.output == kSongParams) {
+			*song = true;
+		}
+		else if (block.output < kMaxParts) {
+			parts |= static_cast<uint8_t>(1U << block.output);
+		}
+	});
+	return parts;
+}
+
+void resetSongParams(Song& song) {
+	UnpatchedParamSet* set = song.paramManager.getUnpatchedParamSet();
+	const int32_t tempo = set->getValue(params::UNPATCHED_TEMPO);
+	GlobalEffectable::initParams(&song.paramManager); // as buildPerformSong() sets a Perform song up
+	set->params[params::UNPATCHED_TEMPO].setCurrentValueBasicForSetup(tempo);
 }
 
 void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token, const SoundPicks& picks,

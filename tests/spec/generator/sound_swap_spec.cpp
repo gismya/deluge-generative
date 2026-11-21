@@ -366,7 +366,7 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.sounds.playing[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
 			std::vector<LogRecord> logged;
-			entries.log.piece(entries.log.pieces() - 1).forEachRecord([&](const LogRecord& r) { logged.push_back(r); });
+			image(entries.log, entries.log.pieces() - 1).piece().forEachRecord([&](const LogRecord& r) { logged.push_back(r); });
 			const auto landed = std::find_if(logged.begin(), logged.end(), [](const LogRecord& r) {
 				return r.kind == RecordKind::Command && r.command.kind == CommandKind::SetSound;
 			});

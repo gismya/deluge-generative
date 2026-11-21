@@ -21,6 +21,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
+#include "generative/firmware/capture_files.h"
 #include "generative/firmware/capture_job.h"
 #include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
@@ -196,6 +197,12 @@ public:
 			playbackHandler.endPlayback();
 		}
 		performAdapter.dropSong();
+		// The pieces are on the card, each file closed (spec §17.2). With nothing for Capture, the folder is cleaned
+		// now: of everything for NOTHING, else of unmarked files (spec §17.4); Capture cleans after its builds.
+		cardLog.finish();
+		if (!performAdapter.logKept()) {
+			cardLog.clean(keep_ != perform::LeaveOption::Nothing);
+		}
 
 		// From here this mirrors stock ClearSong::acceptCurrentOption() (gui/context_menu/clear_song.cpp) on its
 		// stopped path, landing in session view (spec §13.8).
@@ -350,14 +357,16 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
-	// The steering log's one fixed buffer, in SDRAM: not the fast heap (spec §17.2, §20).
-	logBuffer_ = static_cast<uint8_t*>(GeneralMemoryAllocator::get().allocExternal(kPerformLogBytes));
+	// The steering log's buffer, in SDRAM: not the fast heap (spec §17.2, §20). Its pieces stream to the card.
+	constexpr int32_t logBytes = SteeringLog::bytesFor(kLogHeaderBytes, kLogRingBytes);
+	logBuffer_ = static_cast<uint8_t*>(GeneralMemoryAllocator::get().allocExternal(logBytes));
 	if (logBuffer_ == nullptr) {
 		freeBlocks();
 		return Error::INSUFFICIENT_RAM;
 	}
-	log_ = SteeringLog(logBuffer_, kPerformLogBytes);
+	log_ = SteeringLog(logBuffer_, kLogHeaderBytes, kLogRingBytes);
 	driver_.setLog(&log_);
+	cardLog.enter(log_); // marked pieces from before come back; a card error shows when a piece fails to store
 #if ENABLE_SYSEX_TEST
 	// Which heap each block landed in, so a probe can compare H1 between the two.
 	auto& allocator = GeneralMemoryAllocator::get();
@@ -374,7 +383,8 @@ Error PerformAdapter::allocateBlocks() {
 
 void PerformAdapter::freeLog() {
 	keepLog_ = false;
-	log_ = SteeringLog(nullptr, 0);
+	cardLog.forget();
+	log_ = SteeringLog();
 	if (logBuffer_ != nullptr) {
 		delugeDealloc(logBuffer_);
 		logBuffer_ = nullptr;
@@ -408,6 +418,8 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	song_ = song;
+	editedParts_ = 0; // every Output and the song as built (spec §17.2's header snapshot)
+	songEdited_ = false;
 	generator_ = blocks_[0];
 	steering_.enter(); // an empty queue, and a new Recipe: every take at 0 (spec §6.6)
 }

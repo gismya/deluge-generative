@@ -183,6 +183,11 @@ uint32_t RestartBegan::changedParts(const SteeringLog::Piece& piece) const {
 			parts |= 1U << p;
 		}
 	}
+	// An Output edited since the header was written, which the header holds no block for (it was as its preset loaded
+	// then, spec §17.2): built again from its preset, so it goes back as it began.
+	bool song = false;
+	const uint8_t inHeader = snapshotParts(piece, &song);
+	parts |= performAdapter.editedParts() & ~inHeader;
 	return parts;
 }
 
@@ -233,7 +238,7 @@ void RestartBegan::press() {
 	}
 	piece_ = at;
 	startsStopped_ = !playing;
-	const SteeringLog::Piece piece = log.piece(at);
+	const SteeringLog::Piece piece = log.newestHeader(); // the piece `at`: its header stays in RAM (spec §17.2)
 	const uint32_t parts = changedParts(piece);
 	if (parts == 0) {
 		TEST_EVENT("gen_restart_press began parts=0");
@@ -316,7 +321,7 @@ void RestartBegan::queueRestart() {
 }
 
 void RestartBegan::startStopped() {
-	const SteeringLog::Piece piece = performAdapter.steeringLog().piece(piece_);
+	const SteeringLog::Piece piece = performAdapter.steeringLog().newestHeader(); // piece_'s, until the next opens
 	restore(piece);
 	performAdapter.steering().restoreStopped(piece.start());
 	TEST_EVENT("gen_restart as_it_began stopped tempo=%ld energy=%ld", static_cast<long>(currentRecipe.recipe.tempo),
@@ -330,7 +335,7 @@ const PieceStart* RestartBegan::lands() {
 		dropBuilt(); // none: only AS IT BEGAN preloads
 		return nullptr;
 	}
-	const SteeringLog::Piece piece = performAdapter.steeringLog().piece(piece_);
+	const SteeringLog::Piece piece = performAdapter.steeringLog().newestHeader(); // piece_'s, until the next opens
 	restore(piece);
 	return &piece.start();
 }
@@ -346,6 +351,14 @@ void RestartBegan::restore(const SteeringLog::Piece& piece) {
 	}
 	builtParts_ = 0;
 	const int32_t written = restoreSnapshot(piece, adapter.sink_.roster, genre, *adapter.song_);
+	// What the header holds blocks for is as it was edited then; an edited song it holds no block for goes back to
+	// how it was built (spec §17.2).
+	bool song = false;
+	const uint8_t inHeader = snapshotParts(piece, &song);
+	if (!song && adapter.songEdited()) {
+		resetSongParams(*adapter.song_);
+	}
+	adapter.outputsEdited(inHeader, song);
 	TEST_EVENT("gen_restart_snapshot params=%ld", static_cast<long>(written));
 }
 

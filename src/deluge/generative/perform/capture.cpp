@@ -45,7 +45,7 @@ CaptureStatus captureStatus(const SteeringLog& log) {
 	out.marked = out.piece && log.piece(current).marked();
 	out.full = log.full();
 	out.markedPieces = log.markedPieces();
-	out.usedPercent = log.capacity() > 0 ? static_cast<int32_t>(int64_t{log.used()} * 100 / log.capacity()) : 0;
+	out.cardError = log.storeFailing();
 	return out;
 }
 
@@ -70,12 +70,7 @@ void captureLines(const CaptureStatus& status, CaptureLines& out) {
 	Text(out.label[1]).add("MARKED PIECES");
 	Text(out.value[1]).add(status.markedPieces);
 	Text(out.label[2]).add("LOG");
-	if (status.full) {
-		Text(out.value[2]).add("FULL");
-	}
-	else {
-		Text(out.value[2]).add(status.usedPercent).add("% USED");
-	}
+	Text(out.value[2]).add(status.cardError ? "CARD ERROR" : status.full ? "FULL" : "ON CARD");
 }
 
 void captureRow(const SteeringLog& log, int32_t piece, CaptureRow& out) {
@@ -83,7 +78,7 @@ void captureRow(const SteeringLog& log, int32_t piece, CaptureRow& out) {
 	if (piece < 0 || piece >= log.pieces()) {
 		return;
 	}
-	const SteeringLog::Piece shown = log.piece(piece);
+	const SteeringLog::PieceSummary shown = log.piece(piece);
 	const Genre* genre = shown.start().recipe.genre;
 	Text(out.label).add(piece + 1).add(" ").add(genre != nullptr ? genre->oledName : "");
 	Text(out.value).add(shown.marked() ? "MARKED" : "-");
@@ -95,7 +90,7 @@ namespace {
 
 /// Whether a piece has steps to build: some logged before its end, or before the log cut it. One still playing
 /// (the leave menu opens while it plays) counts unless the log cut its header.
-bool buildable(const SteeringLog::Piece& piece) {
+bool buildable(const SteeringLog::PieceSummary& piece) {
 	return piece.spanEnd() != 0;
 }
 
@@ -105,7 +100,7 @@ bool keeps(const SteeringLog& log, LeaveOption option, int32_t piece) {
 	if (piece < 0 || piece >= log.pieces()) {
 		return false;
 	}
-	const SteeringLog::Piece shown = log.piece(piece);
+	const SteeringLog::PieceSummary shown = log.piece(piece);
 	if (!buildable(shown)) {
 		return false;
 	}

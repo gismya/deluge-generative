@@ -107,3 +107,11 @@ otherwise.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
+
+## The harness's card (#448)
+
+- `log_store.h`: `MemoryLogStore` stands in for the card-log task. Hook and `play()` drain the driver's log after
+  every call, as the task runs between ticks; a spec that drives a `SteeringLog` itself drains (`store.drain()`) or
+  the ring fills (a stall) and a kept piece's header is never taken (the next piece doesn't open). Read pieces with
+  `harness::image(log, i)` (whole, the playing one too) or `store.stored(i)` (the file alone, through `readImage()`,
+  as Capture reads it). A `LogRecord`'s path points into its image: keep the `PieceImage` alive while reading it.

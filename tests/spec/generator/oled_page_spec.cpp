@@ -189,14 +189,14 @@ describe oled_page("Perform's OLED", $ {
 		expect(piece.left()).to_equal(std::string{"GROOVE 1"});
 	});
 
-	it("CAPTURE peek: this piece's mark, the pieces marked and the log's use", _ {
+	it("CAPTURE peek: this piece's mark, the pieces marked and a card error", _ {
 		Piece piece;
 		piece.peek = OledPeek::Capture;
-		piece.capture = {.piece = true, .marked = true, .markedPieces = 2, .usedPercent = 34};
+		piece.capture = {.piece = true, .marked = true, .markedPieces = 2, .cardError = true};
 		OledScreen screen = piece.screen();
 		expect(std::string{screen.lines[0]} + "|" + screen.lineRight[0]).to_equal(std::string{"THIS PIECE|MARKED"});
 		expect(std::string{screen.lines[1]} + "|" + screen.lineRight[1]).to_equal(std::string{"MARKED PIECES|2"});
-		expect(std::string{screen.lines[2]} + "|" + screen.lineRight[2]).to_equal(std::string{"LOG|34% USED"});
+		expect(std::string{screen.lines[2]} + "|" + screen.lineRight[2]).to_equal(std::string{"LOG|CARD ERROR"});
 		expect(screen.arc).to_be_false();
 	});
 

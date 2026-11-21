@@ -52,7 +52,7 @@ struct CaptureStatus {
 	bool marked = false; ///< the current piece is marked
 	bool full = false;   ///< the log is full: new marks are refused
 	int32_t markedPieces = 0;
-	int32_t usedPercent = 0;
+	bool cardError = false; ///< writing the log to the card failed since the piece began (spec §17.2)
 	bool operator==(const CaptureStatus&) const = default;
 };
 CaptureStatus captureStatus(const SteeringLog& log);

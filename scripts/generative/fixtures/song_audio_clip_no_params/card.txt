@@ -1,0 +1,4 @@
+# song_audio_clip_no_params.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card
+# plus GENTEST/NOPARAMS.XML (in this folder), a song written by hand whose audio clip has no <params>, a synth clip
+# for start_state (the pack's GEN Fall), and the factory 808 Kick as its sample.
+copy card:SAMPLES/DRUMS/Kick/808 Kick.wav -> GENTEST/NOPARAMS.WAV
