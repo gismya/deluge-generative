@@ -60,6 +60,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 #if ENABLE_SYSEX_TEST
 	macrosShown_ = generator_->recipe().macros;
 	biasShown_ = generator_->recipe().bias;
+	punchesShown_ = {}; // a start begins with none: the re-sent ones land on step 0
 #endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
@@ -156,6 +157,13 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			TEST_EVENT("gen_macro_landed macro=%ld units=%ld step=%ld", static_cast<long>(m),
 			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
+	}
+	if (const PunchIns& punches = generator_->punchIns();
+	    punches.lanes != punchesShown_.lanes || punches.effects != punchesShown_.effects) {
+		// A SetPunch (a KEYBOARD punch-in pad, or the steering's re-send at a start) landed on the last decided step.
+		punchesShown_ = punches;
+		TEST_EVENT("gen_punch_landed lanes=%x effects=%x step=%ld", static_cast<unsigned>(punches.lanes),
+		           static_cast<unsigned>(punches.effects), static_cast<long>(generator_->nextStep() - 1));
 	}
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		// A SetBias (an F8 turn with the part focused, a KEYBOARD fader, RESET PART BIAS) landed on the last decided

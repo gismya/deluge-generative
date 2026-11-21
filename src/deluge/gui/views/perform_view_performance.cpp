@@ -27,6 +27,25 @@
 using deluge::generative::firmware::performAdapter;
 using namespace perform_view_shared;
 
+namespace {
+
+/// Runs `act` with the knobs' mod controllable on the song. Stock's pads set a param, and start and end stutter, only
+/// through it, and its layout reads stutter's options there, as stock's own view keeps it on the song. Song FX act on
+/// the whole mix whatever is focused (spec §13.5): with a part's clip on the knobs (`clip`), they move to the song for
+/// `act` and back after it.
+template <typename Act>
+void onSong(InstrumentClip* clip, Act act) {
+	if (clip != nullptr) {
+		view.setActiveModControllableTimelineCounter(currentSong, false);
+	}
+	act();
+	if (clip != nullptr) {
+		view.setActiveModControllableTimelineCounter(clip, false);
+	}
+}
+
+} // namespace
+
 void PerformView::enterPerformancePage() {
 	if (stockLayoutLoaded_) {
 		return;
@@ -42,7 +61,10 @@ void PerformView::enterPerformancePage() {
 	}
 	performanceView.defaultEditingMode = false;
 	performanceView.editingParam = false;
-	performanceView.loadPerformanceViewLayout(); // reads the card the first time since power-on
+	onSong(partClip(focusedPart()), [] {
+		performanceView.loadPerformanceViewLayout(); // reads the card the first time since power-on
+	});
+	updateKnobIndicators();
 	stockLayoutLoaded_ = true;
 	TEST_EVENT("gen_performance layout");
 }
@@ -58,22 +80,17 @@ void PerformView::performancePadAction(int32_t x, int32_t y, bool on) {
 	else {
 		stockHeld_[x] &= static_cast<uint8_t>(~bit);
 	}
-	// Stock's pads set a param, and start and end stutter, only through the knobs' mod controllable, which stock's own
-	// view keeps on the song. Song FX act on the whole mix whatever is focused (spec §13.5): with a part focused, the
-	// knobs move to the song for the press and back after it.
-	const int32_t part = focusedPart();
-	InstrumentClip* clip = partClip(part);
+	InstrumentClip* clip = partClip(focusedPart());
+	onSong(clip, [&] {
+		performanceView.padAction(x, y, on ? 1 : 0);
+		if (on && performanceView.lastPadPress.isActive && performanceView.lastPadPress.xDisplay == x) {
+			// Stock's view shows the value on its OLED; over Perform's screen it is the knob popup.
+			view.displayModEncoderValuePopup(performanceView.lastPadPress.paramKind,
+			                                 performanceView.lastPadPress.paramID,
+			                                 performanceView.fxPress[x].currentKnobPosition);
+		}
+	});
 	if (clip != nullptr) {
-		view.setActiveModControllableTimelineCounter(currentSong, false);
-	}
-	performanceView.padAction(x, y, on ? 1 : 0);
-	if (on && performanceView.lastPadPress.isActive && performanceView.lastPadPress.xDisplay == x) {
-		// Stock's view shows the value on its OLED; over Perform's screen it is a popup.
-		view.displayModEncoderValuePopup(performanceView.lastPadPress.paramKind, performanceView.lastPadPress.paramID,
-		                                 performanceView.fxPress[x].currentKnobPosition);
-	}
-	if (clip != nullptr) {
-		view.setActiveModControllableTimelineCounter(clip, false);
 		updateKnobIndicators();
 	}
 	TEST_EVENT("gen_performance_pad x=%ld y=%ld %s value=%ld held=%d", static_cast<long>(x), static_cast<long>(y),
