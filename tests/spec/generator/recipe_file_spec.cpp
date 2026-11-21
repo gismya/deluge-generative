@@ -90,6 +90,9 @@ std::unique_ptr<RecipeFile> rolledFile(const Genre& genre, uint32_t entropy, Fak
 		// A shift the part takes, so the reload's clamp keeps it: -1, 0 or +1, where its range allows.
 		file->recipe.octave[p] =
 		    static_cast<int8_t>(octaveRange(genre.parts[p]).clamp(static_cast<int32_t>((entropy + p) % 3) - 1));
+		// A Part bias on some macros, both signs, in units that aren't whole points.
+		file->recipe.bias.set(p, static_cast<Macro>((entropy + p) % kNumMacros),
+		                      (p % 2 == 0 ? 1 : -1) * static_cast<int32_t>(25 * (entropy + 3 * p) + 7));
 	}
 	file->recipe.macros.set(Macro::Energy, 17 * 25 + entropy);
 	file->recipe.macros.set(Macro::Motion, kMacroFull);
@@ -184,6 +187,9 @@ describe recipe_file("Recipe files", $ {
 			expect(text.find("genreVersion=\"" + versionOf(genres::technoAcid) + "\"") != std::string::npos).to_be_true();
 			expect(text.find("tempo=\"13379\"") != std::string::npos).to_be_true();
 			expect(text.find("seed=\"" + std::to_string(saved->seed) + "\"") != std::string::npos).to_be_true();
+			// Part 1's bias, on Motion ((2 + 1) % 4): -(25 * 5 + 7), in units; its other macros' 0 too.
+			expect(text.find("motionBias=\"-132\"") != std::string::npos).to_be_true();
+			expect(text.find("energyBias=\"0\"") != std::string::npos).to_be_true();
 		});
 
 		it("holds nothing but the Recipe: no steering, homes, freezes, mutes, Arc or LENGTH", _ {
@@ -256,7 +262,7 @@ describe recipe_file("Recipe files", $ {
 			    "genre=\"techno-acid\" genreVersion=\"" + versionOf(acid)
 			        + "\" tempo=\"999999\" swing=\"-80\" swingInterval=\"9\" key=\"30\" mood=\"happy\"",
 			    "<part name=\"ACID\" take=\"40\" octave=\"9\" sound=\"SYNTHS/X.XML\" />\n"
-			    "<part name=\"drums\" take=\"1\" octave=\"-1\" />\n"
+			    "<part name=\"drums\" take=\"1\" octave=\"-1\" densityBias=\"-320\" motionBias=\"-99999\" />\n"
 			    "<part name=\"tuba\" take=\"1\" />\n<lane name=\"cowbell\" sound=\"A.wav\" />\n<extra />\n");
 			expect(parseRecipeFile(text, *loaded) == RecipeFileRead::Ok).to_be_true();
 			expect(loaded->recipe.tempo).to_equal(kMaxTempo);
@@ -280,6 +286,13 @@ describe recipe_file("Recipe files", $ {
 				if (!hasRegister(acid.parts[p].role)) {
 					expect(static_cast<int32_t>(loaded->recipe.octave[p])).to_equal(0);
 				}
+			}
+			// A Part bias is read in units and clamped to ±50 points; a part, or a macro, the file leaves out has 0.
+			expect(loaded->recipe.bias.of(0, Macro::Density)).to_equal(-macroPoints(5));
+			expect(loaded->recipe.bias.of(0, Macro::Motion)).to_equal(-kMacroFull);
+			expect(loaded->recipe.bias.of(0, Macro::Energy)).to_equal(0);
+			for (int32_t p = 1; p < partCount(acid); p++) {
+				expect(loaded->recipe.bias.any(p)).to_be_false();
 			}
 		});
 	});

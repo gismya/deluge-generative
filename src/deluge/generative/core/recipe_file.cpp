@@ -31,6 +31,8 @@ constexpr const char* kScaleNames[kNumScales] = {
 };
 
 constexpr const char* kMacroNames[kNumMacros] = {"energy", "density", "complexity", "motion"};
+/// A part's Part bias per macro (spec §3.3), in macro units.
+constexpr const char* kBiasNames[kNumMacros] = {"energyBias", "densityBias", "complexityBias", "motionBias"};
 
 /// A whole number's decimal text. 21 characters hold any int64_t with its sign and terminator.
 struct Number {
@@ -194,6 +196,13 @@ private:
 					    || !number(tag, "octave", -kMaxOctaveShift, kMaxOctaveShift, octave)) {
 						return false;
 					}
+					for (int32_t m = 0; m < kNumMacros; m++) {
+						int64_t bias = 0; // a file from before Part bias plays the Recipe value
+						if (!number(tag, kBiasNames[m], -kMacroFull, kMacroFull, bias)) {
+							return false;
+						}
+						out_.recipe.bias.set(p, static_cast<Macro>(m), static_cast<int32_t>(bias));
+					}
 					out_.takes.take[p] = static_cast<uint8_t>(take);
 					// A shift this part can't take (another genre version's Register, a hand edit) is clamped to the
 					// ones it can, so no note leaves MIDI's range (spec §7.3).
@@ -271,6 +280,9 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file) {
 		writer.attribute("name", genre.parts[p].name);
 		writeNumber(writer, "take", file.takes.take[p]);
 		writeNumber(writer, "octave", recipe.octave[p]);
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			writeNumber(writer, kBiasNames[m], recipe.bias.value[p][m]);
+		}
 		if (!file.sounds.part[p].empty()) {
 			writer.attribute("sound", Encoded(file.sounds.part[p].c_str()).text);
 		}

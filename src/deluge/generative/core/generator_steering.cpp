@@ -109,6 +109,12 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		}
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
+	case CommandKind::SetBias:
+		if (command.target >= partCount(*genre_) || command.biasMacro() >= kNumMacros) {
+			return false;
+		}
+		recipe_.bias.set(command.target, static_cast<Macro>(command.biasMacro()), command.value);
+		return true;
 	case CommandKind::SetKey: {
 		if (!validKeyChange(command)) {
 			return false;
@@ -583,7 +589,7 @@ void Generator::planArc(ArcPlan& out) const {
 		if (arc.stepInBar() == 0) {
 			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates[p].crossBar(genre.parts[p], density);
+				gates[p].crossBar(genre.parts[p], biasedOn(p, Macro::Density, density)); // as updateGates()
 			}
 		}
 		const Keeps keeps = genre.arc.keepsIn(arc.section());

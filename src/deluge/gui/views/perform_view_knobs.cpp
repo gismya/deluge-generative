@@ -60,13 +60,14 @@ uint8_t* knobMode() {
 } // namespace
 
 bool PerformView::onMacroPage() const {
-	// F8 holds the macros only at the Recipe level; a focused part's F8 is its own stock page (spec §13.5).
+	// F8 holds the macros at the Recipe level, and a focused part's Part biases, in place of its stock F8 page (spec
+	// §13.5).
 	uint8_t* mode = knobMode();
-	return focusedPart() < 0 && mode != nullptr && *mode == kMacroModButton;
+	return mode != nullptr && *mode == kMacroModButton;
 }
 
 void PerformView::modButtonAction(uint8_t whichButton, bool on) {
-	if (whichButton == kMacroModButton && focusedPart() < 0) {
+	if (whichButton == kMacroModButton) {
 		if (on) {
 			uint8_t* mode = knobMode();
 			if (mode == nullptr) {
@@ -213,7 +214,12 @@ int32_t PerformView::thinDriveRing(int32_t whichModEncoder) const {
 }
 
 int32_t PerformView::macroRing(int32_t whichModEncoder) const {
-	return currentRecipe.recipe.macros[knobMacro(whichModEncoder)] / kMacroUnitsPerKnobStep;
+	// The centre, or with a part focused where the part plays it: the centre moved by its bias (spec §13.5).
+	const Macro macro = knobMacro(whichModEncoder);
+	const int32_t part = focusedPart();
+	const int32_t units =
+	    part >= 0 ? performAdapter.steering().biasedCentre(part, macro) : currentRecipe.recipe.macros[macro];
+	return units / kMacroUnitsPerKnobStep;
 }
 
 bool PerformView::takeKnobRings() {
@@ -308,6 +314,17 @@ void PerformView::modEncoderAction(int32_t whichModEncoder, int32_t offset) {
 		return;
 	}
 	Macro macro = knobMacro(whichModEncoder);
+	if (const int32_t part = focusedPart(); part >= 0) {
+		// The focused part's Part bias, a detent at a time (spec §3.3, §13.5).
+		auto& steering = performAdapter.steering();
+		steering.setBias(part, macro, currentRecipe.recipe.bias.of(part, macro) + offset * kMacroUnitsPerKnobStep);
+		const int32_t bias = currentRecipe.recipe.bias.of(part, macro);
+		TEST_EVENT("gen_bias_knob part=%ld macro=%d bias=%ld", static_cast<long>(part), static_cast<int>(macro),
+		           static_cast<long>(bias));
+		updateKnobIndicators();
+		showBiasPopup(macro, steering.biasedCentre(part, macro), bias);
+		return;
+	}
 	int32_t value = currentRecipe.recipe.macros[macro] + offset * kMacroUnitsPerKnobStep;
 	performAdapter.steering().setMacro(macro, value);
 	TEST_EVENT("gen_macro_knob macro=%d", static_cast<int>(macro));
@@ -329,6 +346,17 @@ void PerformView::showMacroPopup(Macro macro, int32_t units) {
 	char popup[24];
 	snprintf(popup, sizeof(popup), "%s %d", deluge::l10n::get(kMacroNames[static_cast<int32_t>(macro)]),
 	         static_cast<int>(macroToPoints(units)));
+	display->displayPopup(popup);
+	if (screenShows()) { // under an overlay a redraw would restart its side scroller (refreshScreen())
+		renderUIsForOled();
+	}
+}
+
+void PerformView::showBiasPopup(Macro macro, int32_t units, int32_t bias) {
+	const int32_t points = bias < 0 ? -macroToPoints(-bias) : macroToPoints(bias);
+	char popup[24];
+	snprintf(popup, sizeof(popup), "%s %d %+d", deluge::l10n::get(kMacroNames[static_cast<int32_t>(macro)]),
+	         static_cast<int>(macroToPoints(units)), static_cast<int>(points));
 	display->displayPopup(popup);
 	if (screenShows()) { // under an overlay a redraw would restart its side scroller (refreshScreen())
 		renderUIsForOled();

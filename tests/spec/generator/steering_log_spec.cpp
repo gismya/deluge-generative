@@ -321,6 +321,23 @@ describe steering_log("The steering log", $ {
 			expect(read[0].step).to_equal(5);
 		});
 
+		it("logs a Part bias where it lands, and the next piece's header carries the bias (#303)", _ {
+			Recipe biased = acidRecipe();
+			biased.bias.set(1, Macro::Density, -640);
+			StepwisePiece<HeaderSink> piece{{.recipe = biased, .seed = 3, .skipIntro = true, .logEntries = 64}};
+			piece.decideBefore(4);
+			const Command bias{CommandKind::SetBias, 1, 960, static_cast<uint16_t>(Macro::Energy)};
+			piece.push(bias);
+			piece.decideBefore(6);
+			const std::vector<LogRecord> read = records(piece.log, 0);
+			expect(read.size()).to_equal(1u);
+			expect(read[0].step).to_equal(4);
+			expect(read[0].command == bias).to_be_true();
+			const PieceStart& start = piece.log.piece(0).start();
+			expect(start.recipe.bias.of(1, Macro::Density)).to_equal(-640);
+			expect(start.recipe.bias.of(1, Macro::Energy)).to_equal(0); // the header is step 0's, before it landed
+		});
+
 		it("starts a new piece at the next start, throwing the unmarked one away", _ {
 			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};
 			piece.decideBefore(4);

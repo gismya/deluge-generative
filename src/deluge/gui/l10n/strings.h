@@ -199,6 +199,7 @@ enum class String : size_t {
 	STRING_FOR_NEWER_GENRE,
 	STRING_FOR_SOUND_REPLACED,
 	STRING_FOR_SOUNDS_REPLACED,
+	STRING_FOR_RESET_PART_BIAS,
 
 	// gui/context_menu/audio_input_selector.cpp
 	STRING_FOR_LEFT_INPUT,

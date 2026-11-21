@@ -83,6 +83,9 @@ enum class CommandKind : uint8_t {
 	/// target: part, a pitched one. value: its octave shift, -kMaxOctaveShift to kMaxOctaveShift. Lands at the next
 	/// bar line, as a mute does; pressing the shift that plays cancels the one waiting (spec §7.3, §13.4).
 	SetOctave,
+	/// target: part. length: the Macro. value: the part's Part bias on that macro, in macro units, -kMacroFull to
+	/// kMacroFull (spec §3.3). Continuous, by part and macro, as SetMacro is: it lands on the next undecided step.
+	SetBias,
 	/// Driver-side steering (spec §17.2): a player edit to a param no sound control moves, from a knob, a fader, the
 	/// sound editor or MIDI. target: the part whose Output holds it, or kSongParams. lane: the Drums or FX lane whose
 	/// row holds it, or Lane::None. length: the param, keyed by the driver. value: the param's value. Continuous, by
@@ -127,7 +130,8 @@ constexpr int32_t kMaxSoundToken = 255;
 /// Continuous values coalesce by key, so a control gets at most one value per step. Discrete ones never do.
 constexpr bool isContinuous(CommandKind kind) {
 	return kind == CommandKind::SetMacro || kind == CommandKind::SetTempo || kind == CommandKind::SetSwing
-	       || kind == CommandKind::SetSwingInterval || kind == CommandKind::SetHome || kind == CommandKind::SetParam;
+	       || kind == CommandKind::SetSwingInterval || kind == CommandKind::SetHome || kind == CommandKind::SetBias
+	       || kind == CommandKind::SetParam;
 }
 
 /// Whether a command waits in the core's pending list for its line (spec §2.6), instead of landing on the next
@@ -150,11 +154,14 @@ struct Command {
 
 	/// SetHome and SetParam: the param, as the driver keys it on the part's Output.
 	[[nodiscard]] constexpr uint16_t homeParam() const { return length; }
+	/// SetBias: the macro whose Part bias it sets.
+	[[nodiscard]] constexpr uint16_t biasMacro() const { return length; }
 
 	[[nodiscard]] constexpr bool sameKey(const Command& other) const {
 		const bool byParam = kind == CommandKind::SetHome || kind == CommandKind::SetParam;
 		return kind == other.kind && target == other.target
-		       && (!byParam || (lane == other.lane && homeParam() == other.homeParam()));
+		       && (!byParam || (lane == other.lane && homeParam() == other.homeParam()))
+		       && (kind != CommandKind::SetBias || biasMacro() == other.biasMacro());
 	}
 	constexpr bool operator==(const Command&) const = default;
 };

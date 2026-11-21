@@ -38,6 +38,10 @@
 //   		name="acid"
 //   		take="2"
 //   		octave="0"
+//   		energyBias="0"
+//   		densityBias="-320"
+//   		complexityBias="0"
+//   		motionBias="0"
 //   		sound="SYNTHS/047 Basic Dirty Bass.XML" />
 //   	<lane
 //   		name="kick"
@@ -45,7 +49,8 @@
 //   </generativeRecipe>
 //
 // Tempo is in hundredths of a BPM, macros in their full-resolution units (kMacroUnitsPerPoint a point), a part's octave
-// shift in octaves (clamped on read to the part's octaveRange()). Parts go by
+// shift in octaves (clamped on read to the part's octaveRange()), its Part bias per macro in macro units (clamped on
+// read to ±kMacroFull; a file without them, from before Part bias, loads 0). Parts go by
 // their name in the genre table, lanes by their palette file name (lanePaletteName()). A part or lane with no pick
 // leaves out its sound. Nothing else is stored: no steering, sound-control homes, freezes, mutes, Arc position or
 // LENGTH (spec §16.1).

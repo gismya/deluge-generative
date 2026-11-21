@@ -160,6 +160,7 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 		}
 		// The Arc plans around the Recipe's centres: an Energy or Density turn moves the plan (spec §2.8).
 		key.macros = piece->recipe().macros;
+		key.bias = piece->recipe().bias;
 	}
 	if (key == key_) {
 		return false;

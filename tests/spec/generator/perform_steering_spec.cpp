@@ -19,6 +19,10 @@ struct Piece : StepwisePiece<> {
 	Piece() : StepwisePiece({.seed = 3, .skipIntro = true, .logEntries = 64}) {}
 	/// What the core plays for `macro` now: the SetMacro that last landed, or the Recipe's.
 	[[nodiscard]] int32_t corePlays(Macro macro) const { return driver.playing()->recipe().macros[macro]; }
+	/// What the core plays as `part`'s Part bias on `macro` now.
+	[[nodiscard]] int32_t corePlaysBias(int32_t part, Macro macro) const {
+		return driver.playing()->recipe().bias.of(part, macro);
+	}
 	/// Has the instance that plays decide `steps` more steps.
 	void decideMore(int32_t steps) { decideBefore(driver.playing()->nextStep() + steps); }
 };
@@ -192,6 +196,92 @@ describe perform_steering("The Perform driver's steering", $ {
 			piece.decideBefore(2);
 			expect(piece.corePlays(Macro::Energy)).to_equal(kHeld);
 			expect(piece.steering.centresMoved.size()).to_equal(size_t{1}); // MIDI feedback for the new centre
+		});
+	});
+
+	context("Part bias (spec §3.3, §13.5)", _ {
+		it("set by a knob turn, is the Recipe's at once and the core's from the next step; refused past the roster", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setBias(1, Macro::Energy, macroPoints(6));
+			expect(piece.currentRecipe.bias.of(1, Macro::Energy)).to_equal(macroPoints(6));
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Energy)).to_equal(macroPoints(6));
+
+			const PartBiases before = piece.currentRecipe.bias;
+			piece.steering.setBias(partCount(*piece.currentRecipe.genre), Macro::Energy, macroPoints(6));
+			piece.steering.setBias(-1, Macro::Energy, macroPoints(6));
+			expect(piece.currentRecipe.bias == before).to_be_true();
+		});
+
+		it("held on a fader, plays while held, across a piece start; a knob turn moves only the Recipe's", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(1, Macro::Density, -kHeld);
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+			expect(piece.currentRecipe.bias.of(1, Macro::Density)).to_equal(0);
+
+			piece.steering.setBias(1, Macro::Density, macroPoints(3)); // a knob turn while the fader holds it
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.of(1, Macro::Density)).to_equal(macroPoints(3));
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+
+			piece.playFromRecipe(true); // still held
+			piece.decideBefore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+
+			piece.steering.springBiasBack(1, Macro::Density); // a hold let go: back to the Recipe's
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(macroPoints(3));
+		});
+
+		it("tapped on a fader, is the Recipe's, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(2, Macro::Motion, macroPoints(9));
+			piece.steering.keepBias(2, Macro::Motion, macroPoints(9));
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.of(2, Macro::Motion)).to_equal(macroPoints(9));
+			expect(piece.corePlaysBias(2, Macro::Motion)).to_equal(macroPoints(9));
+			piece.playFromRecipe(true);
+			expect(piece.corePlaysBias(2, Macro::Motion)).to_equal(macroPoints(9));
+		});
+
+		it("held on a part's fader, leaves the Recipe level's centre to the knobs", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(1, Macro::Energy, macroPoints(5));
+			piece.steering.setMacro(Macro::Energy, macroPoints(30));
+			piece.decideMore(2);
+			expect(piece.corePlays(Macro::Energy)).to_equal(macroPoints(30));
+		});
+
+		it("RESET PART BIAS sets one part's biases to 0, or every part's", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setBias(1, Macro::Energy, macroPoints(6));
+			piece.steering.setBias(1, Macro::Motion, -macroPoints(6));
+			piece.steering.setBias(2, Macro::Density, macroPoints(4));
+			piece.steering.resetBias(1);
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.any(1)).to_be_false();
+			expect(piece.corePlaysBias(1, Macro::Energy)).to_equal(0);
+			expect(piece.corePlaysBias(1, Macro::Motion)).to_equal(0);
+			expect(piece.corePlaysBias(2, Macro::Density)).to_equal(macroPoints(4));
+			piece.steering.resetBias(-1);
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias == PartBiases{}).to_be_true();
+			expect(piece.driver.playing()->recipe().bias == PartBiases{}).to_be_true();
+		});
+
+		it("stopped, is the Recipe's at once, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.driver.stop(piece.sink);
+			piece.steering.setBias(1, Macro::Complexity, -macroPoints(8));
+			piece.playFromRecipe(true);
+			expect(piece.corePlaysBias(1, Macro::Complexity)).to_equal(-macroPoints(8));
 		});
 	});
 

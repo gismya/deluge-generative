@@ -52,3 +52,7 @@ otherwise.
 - `hold preload` also parks the Compose screen's card edits (`RollJob`, `gen_recipe_roll <roll> held`), so a script
   can BACK a LOAD or a roll while it runs (`compose_recipe_load.txt`). A playing LOAD's macros show as
   `gen_macro_landed` right after the start step: give the file macros unlike the live ones, or the check can't fail.
+- Part bias (#303): each `part` carries `energyBias`, `densityBias`, `complexityBias` and `motionBias` in macro units,
+  always written; read with a default of 0 and clamped to ±kMacroFull. Regenerate keeps the biases
+  (`CurrentRecipe::regenerate()`, `PerformSteering::handOver()` when the genre stays, `PerformDriver::switchToIncoming()`
+  through `carryOver()`); a genre change starts at 0; a LOAD plays the file's.

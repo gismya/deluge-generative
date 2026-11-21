@@ -93,7 +93,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	driftPoint_ = 0;
 	driftTowards_ = 0;
 	driftLastMotion_ = 0;
-	lastSpaceMacro_ = 0;
+	std::fill(std::begin(lastSpaceMacro_), std::end(lastSpaceMacro_), int16_t{0});
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -112,8 +112,9 @@ void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& 
 	      style == TransitionStyle::BuildIntoDrop);
 }
 
-void Generator::carryOver(const Macros& macros, bool held) {
+void Generator::carryOver(const Macros& macros, const PartBiases& bias, bool held) {
 	recipe_.macros = macros;
+	recipe_.bias = bias;
 	arc_.carryHold(held);
 }
 
@@ -262,6 +263,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	}
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
+	step.sharedDensity = step.density;
 	step.complexity = recipe_.macros[Macro::Complexity];
 	step.motion = recipe_.macros[Macro::Motion];
 	// The Intro and the first Groove share the first pick; Breaks and Builds keep what was playing.
@@ -288,7 +290,9 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	uint8_t avoidedParts = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		avoidedParts |= decidePart(p, step) ? partBit(p) : 0;
+		// Each part at its own Part bias (spec §3.3); the shared step above stays the Arc's, the fills' and the
+		// sound controls' drift.
+		avoidedParts |= decidePart(p, recipe_.bias.any(p) ? partStep(p, step) : step) ? partBit(p) : 0;
 	}
 	if (arc_.stepInBar() == 0) {
 		lateEntries(step, avoidedParts);
@@ -342,6 +346,15 @@ void Generator::skipTo(int32_t step) {
 #endif
 		nextStep_++;
 	}
+}
+
+GEN_STEP_CODE Generator::Step Generator::partStep(int32_t partIndex, const Step& step) const {
+	Step own = step;
+	own.energy = biasedOn(partIndex, Macro::Energy, step.energy);
+	own.density = biasedOn(partIndex, Macro::Density, step.density);
+	own.complexity = biasedOn(partIndex, Macro::Complexity, step.complexity);
+	own.motion = biasedOn(partIndex, Macro::Motion, step.motion);
+	return own;
 }
 
 GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
