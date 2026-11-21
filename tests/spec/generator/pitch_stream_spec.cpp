@@ -275,9 +275,9 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(keys.size()).to_equal(size_t{2}); // the starting key, then C on the line
 		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
 		expect(keys.back().keyRoot()).to_equal(uint8_t{0});
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
-		expect(log.at(0).command.target).to_equal(uint8_t{0});
+		expect(logSize(log)).to_equal(1);
+		expect(logAt(log, 0).step).to_equal(2 * kPhraseSteps);
+		expect(logAt(log, 0).command.target).to_equal(uint8_t{0});
 		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{0});
 		expect(result.refusedSteering).to_equal(0U);
 	});
@@ -296,10 +296,10 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(keys.back().tick).to_equal(stepTick(2 * kPhraseSteps));
 		expect(keys.back().keyRoot()).to_equal(uint8_t{2});
 		expect(keys.back().scale).to_equal(Scale::Phrygian);
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(2 * kPhraseSteps);
-		expect(log.at(0).command.target).to_equal(uint8_t{2});
-		expect(log.at(0).command.value).to_equal(static_cast<int32_t>(Scale::Phrygian));
+		expect(logSize(log)).to_equal(1);
+		expect(logAt(log, 0).step).to_equal(2 * kPhraseSteps);
+		expect(logAt(log, 0).command.target).to_equal(uint8_t{2});
+		expect(logAt(log, 0).command.value).to_equal(static_cast<int32_t>(Scale::Phrygian));
 		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{2});
 		expect(result.generator->recipe().scale).to_equal(Scale::Phrygian);
 		expect(result.refusedSteering).to_equal(0U);
@@ -309,8 +309,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 		StepwisePiece<> piece{{.logEntries = 4}};
 		piece.push(keyChange(5, Scale::Dorian));
 		piece.decideBefore(kPhraseSteps + 1);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(0); // step 0 is a phrase line too
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(0); // step 0 is a phrase line too
 		piece.restart();
 		piece.decideBefore(1);
 		piece.push(keyChange(5, Scale::Dorian));
@@ -319,8 +319,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 		expect(piece.generator.keyChangePending()).to_be_true();
 		piece.decideBefore(kPhraseSteps + 1);
 		expect(piece.generator.keyChangePending()).to_be_false();
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(kPhraseSteps);
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(kPhraseSteps);
 	});
 
 	it("cancels a waiting key change when the key that plays is chosen again, logging nothing", _ {
@@ -333,7 +333,7 @@ describe pitch_stream("Pitch in the event stream", $ {
 		                     {kPhraseSteps + 20, keyChange(9, Scale::Minor)}});
 		Result result = play(run, 40);
 		expect(only(result.events, EventKind::KeyScale).size()).to_equal(size_t{1}); // the starting key only
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 		expect(result.generator->recipe().keyRoot).to_equal(uint8_t{9});
 	});
 
@@ -359,8 +359,8 @@ describe pitch_stream("Pitch in the event stream", $ {
 		piece.decideBefore(2);
 		expect(piece.generator.keyChangePending()).to_be_true();
 		piece.decideBefore(kPhraseSteps + 1);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).command == keyChange(5, Scale::Dorian)).to_be_true();
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).command == keyChange(5, Scale::Dorian)).to_be_true();
 		expect(piece.generator.recipe().keyRoot).to_equal(uint8_t{5});
 	});
 

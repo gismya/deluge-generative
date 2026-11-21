@@ -82,11 +82,11 @@ describe mute_solo("Part mute and solo", $ {
 		TestLog entries(8);
 		SteeringLog& log = entries.log;
 		playSteered(4, {{5, mute(kAcid)}, {9, mute(kAcid)}, {10, solo(kDrums)}, {20, mute(kDrums, true)}}, &log);
-		expect(log.size()).to_equal(2);
-		expect(log.at(0).step).to_equal(kStepsPerBar);
-		expect(log.at(0).command == Command{CommandKind::SetSolo, kDrums, 1}).to_be_true();
-		expect(log.at(1).step).to_equal(20);
-		expect(log.at(1).command == Command{CommandKind::SetMute, kDrums, 1}).to_be_true();
+		expect(logSize(log)).to_equal(2);
+		expect(logAt(log, 0).step).to_equal(kStepsPerBar);
+		expect(logAt(log, 0).command == Command{CommandKind::SetSolo, kDrums, 1}).to_be_true();
+		expect(logAt(log, 1).step).to_equal(20);
+		expect(logAt(log, 1).command == Command{CommandKind::SetMute, kDrums, 1}).to_be_true();
 	});
 
 	it("is lost on stop: every start is fresh", _ {

@@ -36,8 +36,8 @@ Played playSteered(const Genre& genre, int32_t bars, std::vector<std::pair<int32
 	run.steer = steerAt(std::move(commands));
 	Played out;
 	out.sections = only(play(run, bars).events, EventKind::Section);
-	for (int32_t i = 0; i < log.size(); i++) {
-		out.log.push_back(log.at(i));
+	for (int32_t i = 0; i < logSize(log); i++) {
+		out.log.push_back(logAt(log, i));
 	}
 	return out;
 }

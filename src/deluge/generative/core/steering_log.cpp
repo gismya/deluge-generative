@@ -16,6 +16,7 @@
  */
 
 #include "generative/core/steering_log.h"
+#include <algorithm>
 #include <cstring>
 
 namespace deluge::generative {
@@ -90,7 +91,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	}
 	open_ = false;
 	const int32_t at = alignUp(used_);
-	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > capacity_) {
+	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > room()) {
 		newest_ = pieces_ > 0 ? offsetOf(pieces_ - 1) : 0;
 		cut_ = true; // no room even for its opening: nothing logs, and marks are refused
 		return;
@@ -111,14 +112,18 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	cut_ = false;
 	inRecords_ = false;
 	lastStep_ = 0;
+	stepBefore_ = 0;
 	stepFrom_ = used_;
+	for (LandedSound& landed : landed_) {
+		landed = LandedSound{};
+	}
 }
 
 uint8_t* SteeringLog::writeHeader(uint8_t tag, const void* data, int32_t length) {
 	if (!open_ || cut_ || inRecords_ || length > 0xFFFF) {
 		return nullptr;
 	}
-	if (used_ + 3 + length > capacity_) {
+	if (used_ + 3 + length > room()) {
 		cut(0);
 		return nullptr;
 	}
@@ -173,9 +178,17 @@ void SteeringLog::mark(bool on) {
 }
 
 void SteeringLog::cut(int32_t step) {
-	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2).
+	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2). A
+	// header cut partway goes whole too: a piece with half a snapshot can't be built.
 	PieceInfo& info = newest();
-	used_ = step == 0 && !inRecords_ ? newest_ + info.headerBytes : stepFrom_;
+	if (inRecords_) {
+		used_ = stepFrom_;
+		lastStep_ = stepBefore_;
+	}
+	else {
+		used_ = newest_ + static_cast<int32_t>(sizeof(PieceInfo));
+		info.headerBytes = sizeof(PieceInfo);
+	}
 	info.bytes = used_ - newest_;
 	info.cutAt = step;
 	cut_ = true;
@@ -186,9 +199,10 @@ GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t
 		return false;
 	}
 	if (!inRecords_ || step != lastStep_) {
+		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
 	}
-	if (used_ + length > capacity_) {
+	if (used_ + length > room()) {
 		cut(step);
 		return false;
 	}
@@ -206,7 +220,13 @@ GEN_STEP_CODE bool SteeringLog::append(int32_t step, const Command& command) {
 	}
 	uint8_t record[kMaxCommandBytes];
 	const int32_t length = encodeCommand(command, static_cast<uint32_t>(step - lastStep_), record);
-	return write(step, record, length);
+	if (!write(step, record, length)) {
+		return false;
+	}
+	if (command.kind == CommandKind::SetSound && command.target < kMaxParts) {
+		landed_[command.target] = {step, stepFrom_, stepBefore_};
+	}
+	return true;
 }
 
 bool SteeringLog::appendSoundPath(int32_t step, uint8_t part, uint8_t token, int32_t slot, const char* path) {
@@ -228,15 +248,43 @@ bool SteeringLog::appendSoundPath(int32_t step, uint8_t part, uint8_t token, int
 }
 
 bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
-	if (!open_ || cut_) {
+	if (!open_ || part >= kMaxParts || landed_[part].step < 0) {
 		return false;
 	}
-	uint8_t record[8];
+	PieceInfo& info = newest();
+	const LandedSound landed = landed_[part];
+	if (cut_ && landed.step >= info.cutAt) {
+		return false; // its SetSound went with the cut: nothing logged says it played
+	}
+	// After the SetSound and every record since; inside the span when the log was cut since.
+	int32_t stamp = std::max(step, lastStep_);
+	if (cut_) {
+		stamp = std::max(std::min(stamp, info.cutAt - 1), lastStep_);
+	}
+	uint8_t record[kMaxDroppedBytes];
 	uint8_t* at = record;
 	*at++ = kSoundDroppedTag;
-	at = putVarint(at, static_cast<uint32_t>(step - lastStep_));
+	at = putVarint(at, static_cast<uint32_t>(stamp - lastStep_));
 	*at++ = part;
-	return write(step, record, static_cast<int32_t>(at - record));
+	const auto length = static_cast<int32_t>(at - record);
+	if (used_ + length > capacity_) {
+		// No room even in the reserve: the piece ends before the swap that was never heard.
+		used_ = landed.from;
+		lastStep_ = landed.before;
+		info.bytes = used_ - newest_;
+		info.cutAt = landed.step;
+		cut_ = true;
+		return false;
+	}
+	if (stamp != lastStep_) {
+		stepBefore_ = lastStep_;
+		stepFrom_ = used_;
+	}
+	std::memcpy(buffer_ + used_, record, static_cast<size_t>(length));
+	used_ += length;
+	info.bytes = used_ - newest_;
+	lastStep_ = stamp;
+	return true;
 }
 
 // ---- Reading ----
@@ -251,27 +299,6 @@ int32_t SteeringLog::offsetOf(int32_t i) const {
 
 SteeringLog::Piece SteeringLog::piece(int32_t i) const {
 	return Piece(buffer_ + offsetOf(i));
-}
-
-int32_t SteeringLog::size() const {
-	int32_t count = 0;
-	for (int32_t p = 0; p < pieces_; p++) {
-		piece(p).forEachRecord([&](const LogRecord& record) { count += record.kind == RecordKind::Command ? 1 : 0; });
-	}
-	return count;
-}
-
-LogEntry SteeringLog::at(int32_t i) const {
-	LogEntry entry;
-	int32_t n = 0;
-	for (int32_t p = 0; p < pieces_; p++) {
-		piece(p).forEachRecord([&](const LogRecord& record) {
-			if (record.kind == RecordKind::Command && n++ == i) {
-				entry = {record.step, record.command};
-			}
-		});
-	}
-	return entry;
 }
 
 void SteeringLog::clear() {

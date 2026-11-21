@@ -270,9 +270,9 @@ describe octave("Octave shift", $ {
 		Result landed = playSteered(phraseBars + 2, {{3, octaveTo(kAcid, 1)}}, &log);
 		expect(landed.generator->octave(kAcid)).to_equal(1);
 		expect(landed.generator->octaveWaiting(kAcid)).to_equal(kNoOctaveWaiting);
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(kStepsPerBar);
-		expect(log.at(0).command == octaveTo(kAcid, 1)).to_be_true();
+		expect(logSize(log)).to_equal(1);
+		expect(logAt(log, 0).step).to_equal(kStepsPerBar);
+		expect(logAt(log, 0).command == octaveTo(kAcid, 1)).to_be_true();
 		// Before the bar line the stream is the plain one; from it on, the part's notes start an octave up. Every
 		// other event, the part's note-offs aside (a slid note rings over the line at its own pitch), is the same.
 		const int32_t line = kStepsPerBar * kTicksPerStep;
@@ -313,7 +313,7 @@ describe octave("Octave shift", $ {
 		Result result = playSteered(2, {{3, octaveTo(kAcid, 1)}, {5, octaveTo(kAcid, 0)}}, &log);
 		expect(result.generator->octave(kAcid)).to_equal(0);
 		expect(result.generator->octaveWaiting(kAcid)).to_equal(kNoOctaveWaiting);
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 	});
 
 	it("replaces a waiting shift with another", _ {
@@ -332,7 +332,7 @@ describe octave("Octave shift", $ {
 		run.steer = steerAt({{3, octaveTo(sub, -2)}});
 		Result refused = play(run, 2);
 		expect(refused.generator->octave(sub)).to_equal(0);
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 
 		Result started = play(shiftedRun(genre, sub, -2), 1);
 		expect(started.generator->octave(sub)).to_equal(-1);
@@ -351,7 +351,7 @@ describe octave("Octave shift", $ {
 		                            &log);
 		expect(result.generator->octave(kDrums)).to_equal(0);
 		expect(result.generator->octave(kAcid)).to_equal(0);
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 	});
 
 	it("starts each piece on the Recipe's shifts", _ {

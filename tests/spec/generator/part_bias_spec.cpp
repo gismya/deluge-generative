@@ -238,8 +238,8 @@ describe part_bias("Part bias", $ {
 		expect(result.generator->recipe().bias.of(1, Macro::Motion)).to_equal(-macroPoints(12));
 		expect(result.generator->recipe().bias.of(0, Macro::Density)).to_equal(kMacroFull);
 		int32_t logged = 0;
-		for (int32_t i = 0; i < log.size(); i++) {
-			logged += log.at(i).command.kind == CommandKind::SetBias ? 1 : 0;
+		for (int32_t i = 0; i < logSize(log); i++) {
+			logged += logAt(log, i).command.kind == CommandKind::SetBias ? 1 : 0;
 		}
 		expect(logged).to_equal(2);
 	});

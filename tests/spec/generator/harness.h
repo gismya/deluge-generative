@@ -64,6 +64,32 @@ inline perform::GlideLength glideLasting(int32_t ticks, int32_t phraseSteps) {
 
 class Hook;
 
+/// A logged command and its step, for a spec that reads the log as one list.
+struct LogEntry {
+	int32_t step = 0;
+	Command command;
+};
+
+/// Every command in the log's pieces, oldest first, as one list.
+inline std::vector<LogEntry> loggedCommands(const SteeringLog& log) {
+	std::vector<LogEntry> out;
+	for (int32_t p = 0; p < log.pieces(); p++) {
+		log.piece(p).forEachRecord([&](const LogRecord& record) {
+			if (record.kind == RecordKind::Command) {
+				out.push_back({record.step, record.command});
+			}
+		});
+	}
+	return out;
+}
+inline int32_t logSize(const SteeringLog& log) {
+	return static_cast<int32_t>(loggedCommands(log).size());
+}
+inline LogEntry logAt(const SteeringLog& log, int32_t i) {
+	const std::vector<LogEntry> all = loggedCommands(log);
+	return i >= 0 && i < static_cast<int32_t>(all.size()) ? all[static_cast<size_t>(i)] : LogEntry{};
+}
+
 /// A steering log for a spec (spec §17.2): room for `entries` commands besides a piece's opening, with a piece open,
 /// so a spec that calls the Generator itself logs too. A Perform driver given it opens its own pieces over that one.
 struct TestLog {

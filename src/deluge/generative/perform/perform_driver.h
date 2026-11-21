@@ -115,7 +115,6 @@ public:
 	/// Where pieces are logged (spec §17.2, §17.3), or nullptr for none. Each piece opens at its step 0's decision: a
 	/// start's, or a transition's start step, where the outgoing piece ends. A stop or the Outro's end ends it.
 	void setLog(SteeringLog* log) { log_ = log; }
-	[[nodiscard]] SteeringLog* log() const { return log_; }
 	/// The newest SetSound logged on `part` never played: a confirm dropped its swap after it landed (spec §12.9).
 	/// Logged on the last step decided, which is at or after the one it landed on.
 	void logSoundDropped(uint8_t part);
@@ -217,6 +216,9 @@ private:
 	void switchToIncoming(NoteSink& sink);
 	/// Starts the transition's tempo glide once the clock reaches it.
 	void glideIntoTransition(NoteSink& sink);
+	/// Logs a tempo glide the driver started itself, to `tempo`, ending at the playing instance's tick `endTick`, on
+	/// the last decided step (spec §17.2).
+	void logTransitionTempo(int32_t tempo, int32_t endTick);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 

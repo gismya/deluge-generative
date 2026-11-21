@@ -17,6 +17,7 @@
 
 #include "generative/firmware/log_header.h"
 #include "generative/core/genre.h"
+#include "generative/firmware/sound_controls.h"
 #include "model/clip/instrument_clip.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
@@ -36,6 +37,12 @@ void put(uint8_t*& at, const void* value, size_t size) {
 	at += size;
 }
 
+/// Whether main collection `c` of `paramManager` is its patch cables: a Sound's ParamManager holds unpatched params,
+/// patched params, then patch cables (ParamManager's getters); a song's or a Kit's only unpatched ones.
+bool isCableCollection(ParamManager& paramManager, int32_t c) {
+	return paramManager.getExpressionParamSetOffset() == 3 && c == 2;
+}
+
 /// One block for each of `paramManager`'s main collections: its param sets' values and its patch cables.
 void logParams(SteeringLog& log, uint8_t output, Lane lane, ParamManager& paramManager) {
 	const int32_t collections = paramManager.getExpressionParamSetOffset();
@@ -44,8 +51,7 @@ void logParams(SteeringLog& log, uint8_t output, Lane lane, ParamManager& paramM
 		if (collection == nullptr) {
 			continue;
 		}
-		// A Sound's ParamManager holds unpatched params, patched params, then patch cables (ParamManager's getters).
-		const bool cables = collections == 3 && c == 2;
+		const bool cables = isCableCollection(paramManager, c);
 		const int32_t count = cables ? static_cast<PatchCableSet*>(collection)->numPatchCables
 		                             : static_cast<ParamSet*>(collection)->getNumParams();
 		const int32_t bytes = cables ? count * kCableValueBytes : count * static_cast<int32_t>(sizeof(int32_t));
@@ -150,15 +156,13 @@ std::optional<Command> paramEdit(const ModelStackWithAutoParam& stack, int32_t v
 	}
 	const auto collection = static_cast<int32_t>(stack.summary - manager->summaries);
 	int32_t param = stack.paramId;
-	int32_t source = 0;
-	if (collection == 2 && manager->getExpressionParamSetOffset() == 3) {
+	PatchSource source{}; // 0 in the key: a param set's param has no source
+	if (isCableCollection(*manager, collection)) {
 		ParamDescriptor destination;
-		PatchSource from = PatchSource::NONE;
-		PatchCableSet::dissectParamId(static_cast<uint32_t>(stack.paramId), &destination, &from);
+		PatchCableSet::dissectParamId(static_cast<uint32_t>(stack.paramId), &destination, &source);
 		param = destination.getJustTheParam();
-		source = static_cast<int32_t>(from);
 	}
-	command.length = static_cast<uint16_t>(collection << 13 | (source & 0x1F) << 8 | (param & 0xFF));
+	command.length = SoundControls::paramKey(collection, source, param);
 	return command;
 }
 

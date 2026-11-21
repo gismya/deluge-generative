@@ -342,9 +342,9 @@ describe patterns("Patterns", $ {
 			expect(drums(b, 5 * kPhrase, kEnd) == drums(a, 5 * kPhrase, kEnd)).to_be_true();
 
 			// Logged where each take landed, not where it was pushed.
-			expect(log.size()).to_equal(2);
-			expect(log.at(0).step).to_equal(3 * kPhrase);
-			expect(log.at(1).step).to_equal(5 * kPhrase);
+			expect(logSize(log)).to_equal(2);
+			expect(logAt(log, 0).step).to_equal(3 * kPhrase);
+			expect(logAt(log, 1).step).to_equal(5 * kPhrase);
 		}
 	});
 

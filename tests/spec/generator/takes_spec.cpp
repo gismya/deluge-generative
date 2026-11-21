@@ -40,7 +40,7 @@ describe takes("Takes", $ {
 		Result result = playSteered(phraseBars + 1, {{3, take(kAcid, 2)}, {5, take(kAcid, 2)}}, &log);
 		expect(result.generator->take(kAcid)).to_equal(0);
 		expect(result.generator->takeWaiting(kAcid)).to_equal(-1);
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 	});
 
 	it("cancels a waiting take when the take that plays is pressed", _ {
@@ -49,7 +49,7 @@ describe takes("Takes", $ {
 		Result result = playSteered(phraseBars + 1, {{3, take(kAcid, 2)}, {5, take(kAcid, 0)}}, &log);
 		expect(result.generator->take(kAcid)).to_equal(0);
 		expect(result.generator->takeWaiting(kAcid)).to_equal(-1);
-		expect(log.size()).to_equal(0);
+		expect(logSize(log)).to_equal(0);
 	});
 
 	it("replaces a waiting take with another", _ {

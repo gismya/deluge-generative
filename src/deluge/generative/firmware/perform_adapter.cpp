@@ -89,15 +89,9 @@ void PerformAdapter::reportLog(bool stopped) const {
 	const auto header = static_cast<long>(piece.headerBytes());
 	const auto end = static_cast<long>(piece.endStep());
 	const auto cut = static_cast<long>(piece.cutAt());
-	const int full = log_.full() ? 1 : 0;
-	if (stopped) {
-		TEST_EVENT("gen_log at=stop pieces=%ld used=%ld piece=%ld header=%ld records=%ld end=%ld cut=%ld full=%d",
-		           pieces, used, bytes, header, static_cast<long>(records), end, cut, full);
-	}
-	else {
-		TEST_EVENT("gen_log at=phrase pieces=%ld used=%ld piece=%ld header=%ld records=%ld end=%ld cut=%ld full=%d",
-		           pieces, used, bytes, header, static_cast<long>(records), end, cut, full);
-	}
+	TEST_EVENT("gen_log at=%s pieces=%ld used=%ld piece=%ld header=%ld records=%ld end=%ld cut=%ld full=%d",
+	           stopped ? "stop" : "phrase", pieces, used, bytes, header, static_cast<long>(records), end, cut,
+	           log_.full() ? 1 : 0);
 }
 #endif
 
@@ -315,7 +309,8 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
 	}
 	else if (const auto edit = paramEdit(stack, value, sink_.roster, *currentRecipe.recipe.genre, *song_)) {
-		// Any other param edit is logged the same way, for Capture's automation (spec §17.2).
+		// Any other param edit is logged the same way, for Capture's automation (spec §17.2). A full queue loses the
+		// entry while the edit is still heard: Capture's song then misses it.
 		steering_.queue().push(*edit);
 	}
 }

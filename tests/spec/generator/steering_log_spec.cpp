@@ -80,7 +80,7 @@ struct HeaderSink final : perform::NoteSink {
 
 // clang-format off
 describe steering_log("The steering log", $ {
-	describe("records", _ {
+	context("records", _ {
 		it("reads back every command as it was logged, with its step", _ {
 			Buffer b(64 * 1024);
 			b.log.beginPiece(startOf(1));
@@ -134,7 +134,7 @@ describe steering_log("The steering log", $ {
 		});
 	});
 
-	describe("pieces", _ {
+	context("pieces", _ {
 		it("opens each piece with its Recipe, seed, takes, picks and snapshot", _ {
 			Buffer b(4096);
 			PieceStart start = startOf(42);
@@ -233,13 +233,84 @@ describe steering_log("The steering log", $ {
 			expect(b.log.append(0, macro(Macro::Energy, 1))).to_be_true();
 		});
 
+		it("says a swap was dropped even after the log was cut, inside the piece's span (§17.2)", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(3, {CommandKind::SetSound, 2, 9});
+			int32_t step = 4;
+			while (b.log.append(step, macro(Macro::Energy, step))) {
+				step++;
+			}
+			const int32_t cutAt = b.log.piece(0).cutAt();
+			expect(cutAt).to_equal(step);
+			// The drop comes later than the cut, a few steps on: stamped on the span's last step.
+			expect(b.log.appendSoundDropped(step + 3, 2)).to_be_true();
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(read.back().kind == RecordKind::SoundDropped).to_be_true();
+			expect(read.back().step).to_equal(cutAt - 1);
+			expect(read.back().command.target).to_equal(2);
+			bool ordered = true;
+			for (size_t i = 1; i < read.size(); i++) {
+				ordered = ordered && read[i].step >= read[i - 1].step;
+			}
+			expect(ordered).to_be_true();
+		});
+
+		it("writes no dropped record for a SetSound the cut took, and cuts at the SetSound when even the reserve is gone",
+		   _ {
+			Buffer cutAway(1024);
+			cutAway.log.beginPiece(startOf(1));
+			int32_t step = 0;
+			while (cutAway.log.append(step, macro(Macro::Energy, step))) {
+				step++;
+			}
+			expect(cutAway.log.append(step, {CommandKind::SetSound, 2, 9})).to_be_false();
+			expect(cutAway.log.appendSoundDropped(step + 1, 2)).to_be_false();
+			expect(records(cutAway.log, 0).back().kind == RecordKind::Command).to_be_true();
+
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(5, macro(Macro::Density, 1));
+			b.log.append(6, macro(Macro::Density, 2));
+			b.log.append(6, {CommandKind::SetSound, 1, 4});
+			step = 7;
+			while (b.log.append(step, macro(Macro::Energy, step))) {
+				step++;
+			}
+			int32_t drops = 0;
+			while (b.log.appendSoundDropped(step, 1)) {
+				drops++; // each takes some of the reserve: kDroppedReserve's worth at least
+			}
+			expect(drops * 3 >= kDroppedReserve).to_be_true();
+			expect(b.log.piece(0).cutAt()).to_equal(6);
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(read.size()).to_equal(1u); // step 6 went whole
+			expect(read.back().step).to_equal(5);
+			expect(b.log.append(step + 1, macro(Macro::Energy, 1))).to_be_false();
+		});
+
+		it("stamps a dropped record no earlier than the record before it", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(10, {CommandKind::SetSound, 0, 3});
+			b.log.append(12, macro(Macro::Energy, 1));
+			expect(b.log.appendSoundDropped(11, 0)).to_be_true();
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(read.back().kind == RecordKind::SoundDropped).to_be_true();
+			expect(read.back().step).to_equal(12);
+		});
+
 		it("cuts a piece whose header doesn't fit at its step 0", _ {
 			Buffer b(256);
 			b.log.beginPiece(startOf(1));
 			std::vector<uint8_t> snapshot(300);
+			b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
 			b.log.addSnapshot(snapshot.data(), static_cast<int32_t>(snapshot.size()));
 			expect(b.log.full()).to_be_true();
 			expect(b.log.piece(0).cutAt()).to_equal(0);
+			// None of its header stays: a pick without its snapshot can't be built.
+			char path[kMaxSoundPath];
+			expect(b.log.piece(0).pick(pickSlot(1), path)).to_be_false();
 			expect(b.log.append(0, macro(Macro::Energy, 1))).to_be_false();
 		});
 
@@ -247,8 +318,11 @@ describe steering_log("The steering log", $ {
 			Buffer b(1024);
 			b.log.beginPiece(startOf(1));
 			b.log.mark(true);
-			while (b.log.append(0, macro(Macro::Energy, 1))) {}
-			b.log.endPiece(1, PieceEnd::Stopped);
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
 			b.log.beginPiece(startOf(2));
 			expect(b.log.pieces()).to_equal(1);
 			expect(b.log.full()).to_be_true();
@@ -279,7 +353,7 @@ describe steering_log("The steering log", $ {
 		});
 	});
 
-	describe("Perform's pieces", _ {
+	context("Perform's pieces", _ {
 		it("logs a param edit on the next undecided step, one value per param a step", _ {
 			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};
 			piece.decideBefore(4);
@@ -404,6 +478,65 @@ describe steering_log("The steering log", $ {
 			expect(incoming.start().held).to_be_true();
 			expect(incoming.start().recipe.macros[Macro::Energy]).to_equal(11);
 			expect(incoming.ended() == PieceEnd::Playing).to_be_true();
+		});
+
+		it("logs the tempo glide into a transition's new Recipe, ending on the start step (§17.2 Glides)", _ {
+			Recipe playing = acidRecipe();
+			Recipe pending = acidRecipe();
+			pending.tempo = playing.tempo + 1500;
+			TransitionPiece t(playing, pending);
+			TestLog entries(256);
+			t.driver.setLog(&entries.log);
+			t.decideBefore(2);
+			entries.log.mark(true);
+			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+			t.runBars(4 * t.phraseSteps() / kStepsPerBar);
+			expect(t.sink.starts).to_equal(1);
+			std::vector<LogRecord> glides;
+			entries.log.piece(0).forEachRecord([&](const LogRecord& r) {
+				if (r.kind == RecordKind::Command && r.command.kind == CommandKind::TransitionTempo) {
+					glides.push_back(r);
+				}
+			});
+			expect(glides.size()).to_equal(1u);
+			if (glides.size() != 1u) {
+				return;
+			}
+			expect(glides[0].command.value).to_equal(pending.tempo);
+			expect(stepTick(glides[0].step) + glides[0].command.length).to_equal(t.sink.startAt);
+			// Applied, it changes nothing in the core: the outgoing Recipe's tempo stays the one that played.
+			StepwisePiece<> replay{{.recipe = playing, .seed = 3, .skipIntro = true}};
+			replay.decideBefore(2);
+			replay.push(glides[0].command);
+			replay.decideBefore(4);
+			expect(replay.generator.recipe().tempo).to_equal(playing.tempo);
+		});
+
+		it("logs the glide back when a cut is cancelled during its glide", _ {
+			Recipe playing = acidRecipe();
+			Recipe pending = acidRecipe();
+			pending.tempo = playing.tempo - 2000;
+			TransitionPiece t(playing, pending);
+			TestLog entries(256);
+			t.driver.setLog(&entries.log);
+			const int32_t phrase = t.phraseSteps();
+			t.confirmAt(3, TransitionStyle::Cut);
+			t.decideBefore(phrase - 4); // a bar's glide ends on the cut line: it has started
+			expect(t.lifecycle.cancel()).to_be_true();
+			t.runBars(2);
+			std::vector<LogRecord> glides;
+			entries.log.piece(entries.log.pieces() - 1).forEachRecord([&](const LogRecord& r) {
+				if (r.kind == RecordKind::Command && r.command.kind == CommandKind::TransitionTempo) {
+					glides.push_back(r);
+				}
+			});
+			expect(glides.size()).to_equal(2u);
+			if (glides.size() != 2u) {
+				return;
+			}
+			expect(glides[0].command.value).to_equal(pending.tempo);
+			expect(glides[1].command.value).to_equal(playing.tempo);
+			expect(glides[1].step >= glides[0].step).to_be_true();
 		});
 
 		it("keeps a marked outgoing piece, ended on its start step, with its Transition logged where it landed", _ {

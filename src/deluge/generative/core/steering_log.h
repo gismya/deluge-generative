@@ -76,17 +76,18 @@ struct LogRecord {
 	int32_t pathLength = 0;
 };
 
-/// A logged command and its step, for a spec that reads the log as one list.
-struct LogEntry {
-	int32_t step = 0;
-	Command command;
-};
-
 /// Perform's log: one fixed buffer in SDRAM, allocated on Perform entry (spec §17.2, §20).
 constexpr int32_t kPerformLogBytes = 128 * 1024;
 
 /// The bytes a command takes in the log, at most (encodeCommand()).
-constexpr int32_t kMaxCommandBytes = 16;
+constexpr int32_t kMaxCommandBytes = 1 + 5 + sizeof(Command::target) + 5 + 3 + sizeof(Command::lane);
+static_assert(kMaxCommandBytes == 16,
+              "the kind, the delta, the target, the value, the length and the lane at their widest");
+/// The bytes a SoundDropped record takes, at most: its tag, the delta, the part.
+constexpr int32_t kMaxDroppedBytes = 1 + 5 + 1;
+/// Room the log keeps for SoundDropped records alone, one per part: a full log still says a swap it logged never
+/// played (spec §17.2).
+constexpr int32_t kDroppedReserve = kMaxParts * kMaxDroppedBytes;
 
 /// Packs `command`, stamped `delta` steps after the record before it, into `out` (kMaxCommandBytes at least).
 /// @return the bytes written. Byte 0 is the kind, with bit 6 set when the length and lane follow; then the delta
@@ -122,7 +123,10 @@ public:
 	bool append(int32_t step, const Command& command);
 	/// A sound re-roll's new pick, logged with the SetSound that landed it: one record per pick slot.
 	bool appendSoundPath(int32_t step, uint8_t part, uint8_t token, int32_t slot, const char* path);
-	/// The newest SetSound logged on `part` never played: its swap was dropped.
+	/// The newest SetSound logged on `part` never played: its swap was dropped. Stamped no earlier than the record
+	/// before it, and inside the piece's span: a log cut since the SetSound still takes it, from the room kept for it
+	/// (kDroppedReserve). If even that is gone, the piece is cut at the SetSound's step instead, so no logged swap
+	/// is left that wasn't heard. Nothing is written when the SetSound itself was cut away.
 	bool appendSoundDropped(int32_t step, uint8_t part);
 
 	// ---- Reading ----
@@ -187,9 +191,6 @@ public:
 	/// Whether a piece is open for records.
 	[[nodiscard]] bool logging() const { return open_ && !cut_; }
 
-	/// Every command logged in the pieces held, oldest first, as one list: for specs.
-	[[nodiscard]] int32_t size() const;
-	[[nodiscard]] LogEntry at(int32_t i) const;
 	/// Forgets every piece.
 	void clear();
 
@@ -219,6 +220,8 @@ private:
 	}
 	/// Writes `length` bytes of a record stamped `step` from `data`, or cuts the piece at that step.
 	bool write(int32_t step, const uint8_t* data, int32_t length);
+	/// The bytes every record but a SoundDropped may fill.
+	[[nodiscard]] int32_t room() const { return capacity_ - kDroppedReserve; }
 	/// Writes a header record (its bytes from `data`, if not nullptr), or cuts the piece at step 0. @return where its
 	/// bytes are, or nullptr.
 	uint8_t* writeHeader(uint8_t tag, const void* data, int32_t length);
@@ -235,6 +238,16 @@ private:
 	bool inRecords_ = false;
 	int32_t lastStep_ = 0;
 	int32_t stepFrom_ = 0;
+	/// The step of the last record before lastStep_'s: a cut that drops lastStep_'s records goes back to it.
+	int32_t stepBefore_ = 0;
+	/// Each part's newest SetSound in the current piece: its step (-1 for none), where its step's records begin, and
+	/// the step before that, for appendSoundDropped().
+	struct LandedSound {
+		int32_t step = -1;
+		int32_t from = 0;
+		int32_t before = 0;
+	};
+	LandedSound landed_[kMaxParts];
 };
 
 template <typename Found>

@@ -184,9 +184,9 @@ describe perform_driver("The Perform driver", $ {
 		piece.push({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), macroPoints(10)});
 		int32_t landing = piece.generator.nextStep();
 		piece.runSteps(1);
-		expect(piece.log.size()).to_equal(1);
-		expect(piece.log.at(0).step).to_equal(landing);
-		expect(piece.log.at(0).command.value).to_equal(macroPoints(10));
+		expect(logSize(piece.log)).to_equal(1);
+		expect(logAt(piece.log, 0).step).to_equal(landing);
+		expect(logAt(piece.log, 0).command.value).to_equal(macroPoints(10));
 	});
 
 	it("ends every sounding note on stop, at the stop tick, and plays nothing after", _ {

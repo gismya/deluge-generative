@@ -40,13 +40,16 @@ struct SnapshotBlock {
 	uint16_t count;
 };
 static_assert(sizeof(SnapshotBlock) == 6);
-/// A patch cable in a snapshot block: its source, its destination (ParamDescriptor's data) and its amount.
+/// A patch cable in a snapshot block: its destination (ParamDescriptor's data), its amount and its source, packed in
+/// that order.
 struct CableValue {
 	uint32_t destination;
 	int32_t value;
 	uint8_t source;
 };
-constexpr int32_t kCableValueBytes = 9;
+constexpr int32_t kCableValueBytes =
+    sizeof(CableValue::destination) + sizeof(CableValue::value) + sizeof(CableValue::source);
+static_assert(kCableValueBytes == 9);
 
 /// The piece's header: the Current Recipe's sound picks, and every param on the song and on each part's Output and
 /// Kit rows, as they are now. In the tick, at the piece's step 0 decision.

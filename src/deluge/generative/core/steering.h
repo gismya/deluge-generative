@@ -91,11 +91,16 @@ enum class CommandKind : uint8_t {
 	/// row holds it, or Lane::None. length: the param, keyed by the driver. value: the param's value. Continuous, by
 	/// part, lane and param. Capture makes it automation; the core keeps nothing.
 	SetParam,
+	/// Logged only, by the Perform driver (spec §17.2): the tempo glide a transition starts by itself, into the
+	/// incoming Recipe's tempo across the Build, the Outro or a cut's Glide window, or back to the playing Recipe's on
+	/// a cancel. value: the target, hundredths of a BPM. length: its glide, in Generator ticks from the entry's step.
+	/// Never pushed; apply() keeps nothing, so the outgoing Recipe's tempo stays as it played.
+	TransitionTempo,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::SetParam;
+constexpr CommandKind kLastCommandKind = CommandKind::TransitionTempo;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;

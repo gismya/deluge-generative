@@ -28,13 +28,13 @@ describe home_edits("Home edits", $ {
 		expect(piece.queue.size()).to_equal(3);
 		const int32_t landing = piece.generator.nextStep();
 		piece.runSteps(1);
-		expect(piece.log.size()).to_equal(3);
-		for (int32_t i = 0; i < piece.log.size(); i++) {
-			expect(piece.log.at(i).step).to_equal(landing);
+		expect(logSize(piece.log)).to_equal(3);
+		for (int32_t i = 0; i < logSize(piece.log); i++) {
+			expect(logAt(piece.log, i).step).to_equal(landing);
 		}
-		expect(piece.log.at(0).command == home(1, Lane::None, 7, 150)).to_be_true();
-		expect(piece.log.at(1).command == home(1, Lane::None, 9, 200)).to_be_true();
-		expect(piece.log.at(2).command == home(2, Lane::Riser, 7, 300)).to_be_true();
+		expect(logAt(piece.log, 0).command == home(1, Lane::None, 7, 150)).to_be_true();
+		expect(logAt(piece.log, 1).command == home(1, Lane::None, 9, 200)).to_be_true();
+		expect(logAt(piece.log, 2).command == home(2, Lane::Riser, 7, 300)).to_be_true();
 	});
 
 	it("change nothing in the event stream", _ {

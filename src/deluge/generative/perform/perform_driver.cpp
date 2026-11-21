@@ -421,6 +421,7 @@ void PerformDriver::cancelIncoming(NoteSink& sink) {
 	incoming_ = nullptr;
 	if (transitionTempo_.started && generator_ != nullptr) {
 		glideTempo(generator_->recipe().tempo, cutGlideTicks_, sink);
+		logTransitionTempo(generator_->recipe().tempo, clock_ + cutGlideTicks_);
 	}
 	transitionTempo_.reset();
 	transitionFrom_ = -1;
@@ -460,6 +461,21 @@ void PerformDriver::glideIntoTransition(NoteSink& sink) {
 	planned.window = false;
 	glideTempo(planned.target, std::max<int32_t>(planned.to - clock_, 0), sink); // which times the Riser again
 	tempoStarting_ = false; // this call's ticks have gone by already: it counts from the clock now
+	if (incoming_ != nullptr) {
+		// Heard in the outgoing piece. An Instant cut's glide starts after the switch, 12 ticks before the cut line:
+		// the outgoing piece has ended by then, and the incoming one opens at the target tempo.
+		logTransitionTempo(planned.target, planned.to);
+	}
+}
+
+void PerformDriver::logTransitionTempo(int32_t tempo, int32_t endTick) {
+	const int32_t step = generator_->nextStep() - 1;
+	if (log_ == nullptr || step < 0) {
+		return;
+	}
+	// From the step's line, so a replay's glide ends where the live one does.
+	const int32_t ticks = std::clamp<int32_t>(endTick - stepTick(step), 0, UINT16_MAX);
+	log_->append(step, Command{CommandKind::TransitionTempo, 0, tempo, static_cast<uint16_t>(ticks)});
 }
 
 void PerformDriver::switchToIncoming(NoteSink& sink) {
