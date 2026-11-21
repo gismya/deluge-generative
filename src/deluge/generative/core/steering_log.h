@@ -245,17 +245,13 @@ private:
 	int32_t stepFrom_ = 0;
 	/// The step of the last record before lastStep_'s: a cut that drops lastStep_'s records goes back to it.
 	int32_t stepBefore_ = 0;
-	/// Each part's newest SetSound in the current piece: its step (-1 for none), where its step's records begin, and
-	/// the step before that, for appendSoundDropped().
-	struct LandedSound {
-		int32_t step = -1;
-		int32_t from = 0;
-		int32_t before = 0;
-	};
-	LandedSound landed_[kMaxParts];
+	/// The step each part's newest SetSound landed on in the current piece, logged or refused (-1 for none, or once
+	/// dropped), for appendSoundDropped(). beginPiece() sets it.
+	int32_t landed_[kMaxParts] = {};
 	/// The parts whose SoundDropped sits on lastStep_, and the step each one's SetSound landed on: a cut of that step
 	/// writes them again on the step before (cut()), so a later record can't take the drop and leave its SetSound.
 	uint8_t dropsOnStep_ = 0;
+	static_assert(kMaxParts <= 8, "dropsOnStep_ holds a bit a part");
 	int32_t dropLanding_[kMaxParts] = {};
 };
 

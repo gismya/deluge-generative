@@ -339,6 +339,33 @@ describe steering_log("The steering log", $ {
 			expect(read.front().command.kind == CommandKind::SetSound).to_be_true();
 		});
 
+		it("writes no drop for a SetSound the cut refused, and none for the landing before it, which was heard", _ {
+			for (const bool triggersTheCut : {false, true}) {
+				Buffer b(1024);
+				b.log.beginPiece(startOf(1));
+				b.log.append(3, {CommandKind::SetSound, 2, 9}); // lands and plays
+				int32_t step = 4;
+				while (1024 - kDroppedReserve - b.log.used() >= 4) { // a macro of 1 a step on takes 4 bytes
+					b.log.append(step++, macro(Macro::Energy, 1));
+				}
+				expect(b.log.full()).to_be_false();
+				const Command widest{CommandKind::SetHome, 255, std::numeric_limits<int32_t>::min(), 65535, Lane::Riser};
+				if (!triggersTheCut) {
+					while (b.log.append(step, widest)) {} // cut by another record first
+					step += 10;
+				}
+				// The next SetSound on part 2 is refused, and a confirm drops that swap.
+				expect(b.log.append(step, {CommandKind::SetSound, 2, 11})).to_be_false();
+				expect(b.log.full()).to_be_true();
+				expect(b.log.appendSoundDropped(step + 1, 2)).to_be_false();
+				bool dropped = false;
+				for (const LogRecord& r : records(b.log, 0)) {
+					dropped = dropped || r.kind == RecordKind::SoundDropped;
+				}
+				expect(dropped).to_be_false();
+			}
+		});
+
 		it("writes one drop per landing", _ {
 			Buffer b(1024);
 			b.log.beginPiece(startOf(1));

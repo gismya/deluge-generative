@@ -36,6 +36,17 @@ GEN_STEP_CODE uint8_t* putVarint(uint8_t* out, uint32_t value) {
 	return out;
 }
 
+/// The bytes putVarint() writes for `value`.
+constexpr int32_t varintLength(uint32_t value) {
+	int32_t bytes = 1;
+	while (value >= 0x80) {
+		value >>= 7;
+		bytes++;
+	}
+	return bytes;
+}
+static_assert(2 + varintLength(UINT32_MAX) == kMaxDroppedBytes, "a SoundDropped record at its widest");
+
 const uint8_t* getVarint(const uint8_t* at, uint32_t& value) {
 	value = 0;
 	for (int32_t shift = 0;; shift += 7) {
@@ -115,8 +126,8 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	stepBefore_ = 0;
 	dropsOnStep_ = 0;
 	stepFrom_ = used_;
-	for (LandedSound& landed : landed_) {
-		landed = LandedSound{};
+	for (int32_t& landed : landed_) {
+		landed = -1;
 	}
 }
 
@@ -237,18 +248,20 @@ GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t
 }
 
 GEN_STEP_CODE bool SteeringLog::append(int32_t step, const Command& command) {
-	if (!open_ || cut_) {
+	if (!open_) {
+		return false;
+	}
+	// A SetSound is its part's newest landing even when it doesn't fit: its step is then at or past the cut, so a
+	// drop of it writes nothing, and none goes to the landing before it, which was heard.
+	if (command.kind == CommandKind::SetSound && command.target < kMaxParts) {
+		landed_[command.target] = step;
+	}
+	if (cut_) {
 		return false;
 	}
 	uint8_t record[kMaxCommandBytes];
 	const int32_t length = encodeCommand(command, static_cast<uint32_t>(step - lastStep_), record);
-	if (!write(step, record, length)) {
-		return false;
-	}
-	if (command.kind == CommandKind::SetSound && command.target < kMaxParts) {
-		landed_[command.target] = {step, stepFrom_, stepBefore_};
-	}
-	return true;
+	return write(step, record, length);
 }
 
 bool SteeringLog::appendSoundPath(int32_t step, uint8_t part, uint8_t token, int32_t slot, const char* path) {
@@ -270,12 +283,12 @@ bool SteeringLog::appendSoundPath(int32_t step, uint8_t part, uint8_t token, int
 }
 
 bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
-	if (!open_ || part >= kMaxParts || landed_[part].step < 0) {
+	if (!open_ || part >= kMaxParts || landed_[part] < 0) {
 		return false;
 	}
 	PieceInfo& info = newest();
-	const LandedSound landed = landed_[part];
-	if (cut_ && landed.step >= info.cutAt) {
+	const int32_t landed = landed_[part];
+	if (cut_ && landed >= info.cutAt) {
 		return false; // its SetSound went with the cut: nothing logged says it played
 	}
 	// After the SetSound and every record since; inside the span when the log was cut since.
@@ -283,19 +296,18 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 	if (cut_) {
 		stamp = std::max(std::min(stamp, info.cutAt - 1), lastStep_);
 	}
-	uint8_t delta[5]; // only to count the delta's bytes: the tag, the delta and the part
-	const auto length = static_cast<int32_t>(putVarint(delta, static_cast<uint32_t>(stamp - lastStep_)) - delta) + 2;
+	const int32_t length = 2 + varintLength(static_cast<uint32_t>(stamp - lastStep_)); // the tag, delta and part
 	if (used_ + length > capacity_) {
 		// A guard: with one drop per landing the reserve can't run out (no SetSound lands once the records' room is
-		// gone, so at most one a part waits for its drop). Were it to, the piece ends before the swap never heard.
-		used_ = landed.from;
-		lastStep_ = landed.before;
-		info.bytes = used_ - newest_;
-		info.cutAt = landed.step;
-		cut_ = true;
+		// gone, so at most one a part waits for its drop). Were it to, nothing more logs; nothing is rewound, so the
+		// drops already written stay.
+		if (!cut_) {
+			info.cutAt = lastStep_ + 1;
+			cut_ = true;
+		}
 		return false;
 	}
-	if (stamp != lastStep_ || !inRecords_) {
+	if (stamp != lastStep_) {
 		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
 		dropsOnStep_ = 0;
@@ -304,8 +316,8 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 	inRecords_ = true;
 	lastStep_ = stamp;
 	dropsOnStep_ |= static_cast<uint8_t>(1 << part);
-	dropLanding_[part] = landed.step;
-	landed_[part].step = -1; // one drop per landing: the reserve holds one per part
+	dropLanding_[part] = landed;
+	landed_[part] = -1; // one drop per landing: the reserve holds one per part
 	return true;
 }
 
