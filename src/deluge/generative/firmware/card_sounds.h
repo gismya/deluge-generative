@@ -92,6 +92,11 @@ void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song);
 /// `gen_sound_delay <part> <lane> sync= type= pingpong= analog= feedback=`: the fields a setup wrote and the feedback
 /// home in menu units, for a sound or kit with one.
 void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane);
+/// Test builds: the prefix of every event an Output's build reports (gen_sound, gen_sound_level, ...): "preview_" while
+/// the preset preview builds one (spec §13.3), so a script's gen_sound expects see only the part's own sounds. One
+/// build runs at a time (the runner's), so it is set around a build and read by its events.
+[[nodiscard]] const char* buildEventPrefix();
+void setPreviewBuild(bool preview);
 #endif
 
 /// A Sound's post-FX volume knob, which a part's `.volume` scales (spec §10.6).

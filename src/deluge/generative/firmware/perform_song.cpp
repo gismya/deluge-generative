@@ -331,7 +331,7 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(part, lane), *song);
 		// An FX lane's synth keeps its saved transpose (spec §10.6).
-		TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
+		TEST_EVENT("%sgen_sound_transpose %s %s saved=%ld played=%ld", buildEventPrefix(), part.name, laneName(lane),
 		           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
 	}
 	else {
@@ -341,7 +341,8 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 #if ENABLE_SYSEX_TEST
 	if (part.volume != 100) { // a Kit part's volume scales each row's knob (spec §10.6)
-		TEST_EVENT("gen_row_level %s %s volume=%d played=%ld", part.name, laneName(lane), static_cast<int>(part.volume),
+		TEST_EVENT("%sgen_row_level %s %s volume=%d played=%ld", buildEventPrefix(), part.name, laneName(lane),
+		           static_cast<int>(part.volume),
 		           static_cast<long>(drum->paramFinalValues[params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL]));
 	}
 #endif
@@ -357,8 +358,8 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 #endif
 	if (played) {
-		TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
-		           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
+		TEST_EVENT("%sgen_sound %s %s %s mode=%d prio=%d %s", buildEventPrefix(), part.name, laneName(lane),
+		           sourceName(load.source), static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
 		           load.source == SoundSource::Silent ? "-" : loader.lastPath());
 	}
 	*rowOut = drum;
@@ -493,17 +494,18 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
 	}
 	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
-	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
-	           static_cast<long>(synth->transpose));
+	TEST_EVENT("%sgen_sound_transpose %s - saved=%ld played=%ld", buildEventPrefix(), part.name,
+	           static_cast<long>(savedTranspose), static_cast<long>(synth->transpose));
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
-	TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
+	TEST_EVENT("%sgen_sound_level %s volume=%d %s played=%ld preset=%ld", buildEventPrefix(), part.name,
+	           static_cast<int>(part.volume),
 	           playedLevel < presetLevel   ? "lower"
 	           : playedLevel > presetLevel ? "higher"
 	                                       : "same",
 	           static_cast<long>(playedLevel), static_cast<long>(presetLevel));
 #endif
-	TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
-	           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
+	TEST_EVENT("%sgen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", buildEventPrefix(), part.name,
+	           sourceName(load.source), static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
 	           static_cast<int>(out->clip->arpSettings.mode),
 	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
 	           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()

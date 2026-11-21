@@ -1,0 +1,272 @@
+# Perform's preset preview (#443, spec §13.3, §13.5) over the sysex test port: stopped, with BROWSER PREVIEW at WHEN
+# STOPPED (the default) or ALWAYS, the preset under the preset browser's cursor (and an FX lane's SYNTH PRESET browser's)
+# loads into an Output of the part beside its own and plays one audition note; a move frees it before the next loads,
+# and BACK leaves the part as it was: no sound press, swap, sound-control rebind or pick. A choice after previews (here
+# while a preview still builds, under "hold preset_preview") preloads and swaps in as today, and SHIFT + SYNTH then
+# brings back the pick from before, not a previewed one. A start frees a preview, and while playing presets don't
+# preview, at ALWAYS too. OFF previews nothing. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4 (y 4). The QWERTY keyboard's digits
+# are row y 5, '1' to '0' at x 3 to 12. gen_preset_preview built|cancelled|failed part= error= ms= path=: a preview's
+# build ended; held part=: a build waits under the hold; note part= lane=<lane or ->: its note on; note_off part=; freed
+# part=: the Output freed. A preview's build reports its sounds as preview_gen_sound (gen_sound is the part's own).
+# gen_browser_preview off playing=0|1: nothing previews. The Perform menu's last row is BROWSER PREVIEW (encoder 3 20
+# reaches it), gen_browser_preview_setting <0 off|1 when stopped|2 always>.
+# covers: src/deluge/generative/firmware/preset_preview.* src/deluge/generative/perform/preset_preview.h
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.* src/deluge/generative/perform/sound_browser.*
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.h
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.*
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Lock ACID (double tap its row on the SONG page), stopped ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+mark
+
+# ---- SYNTH: the browser opens on ACID's pick and previews it: built beside ACID, one note ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event /gen_browser open part=1 pick=(?P<pick>SYNTHS\/.+\.XML) at=(?P=pick)$/ within=10
+expect ui=generative_sound_browser
+expect event /preview_gen_sound ACID - pick mode=\d+ prio=\d+ arp=\d+ (?P=pick) / within=10
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=5
+expect event gen_preset_preview note part=1 lane=-
+expect event gen_mem preset_preview
+
+# ---- A move: that preview is freed, the next preset builds and plays; its note lets go after a second ----
+encoder 3 1
+expect event /gen_browser at=(?P<next>SYNTHS\/.+\.XML)$/ within=5
+expect event gen_preset_preview freed part=1 within=5
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=next)$/ within=10
+expect event gen_preset_preview note part=1 lane=-
+expect event gen_preset_preview note_off part=1 within=5
+
+# ---- Typing "002" moves three times: the newest previews ----
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=SYNTHS\/002 Basic Square Bass\.XML$/ within=10
+
+# ---- BACK in SYNTHS closes it: the preview is freed, and ACID was never touched ----
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+expect event gen_preset_preview freed part=1 within=5
+expect ui=generative_perform
+expect playing=false
+expect no_event gen_sound_press since=mark within=1
+expect no_event gen_sound_swap since=mark within=1
+expect no_event gen_controls rebind since=mark within=1
+expect no_event /^gen_sound ACID / since=mark within=1
+
+# ---- SYNTH again opens on the same pick. SELECT while a preview builds (held): the build is cancelled, and the
+# choice preloads and swaps in as it does today, at once while stopped ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event /gen_browser open part=1 pick=(?P=pick) at=(?P=pick)$/ within=10
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=10
+hold preset_preview
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 9 5 down
+wait 30
+pad 9 5 up
+expect event gen_browser at=SYNTHS/007 Detuned Saw Bass.XML within=10
+expect event gen_preset_preview held part=1 within=5
+mark
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_preset_preview cancelled part=1 within=5
+expect event gen_browser chose part=1 path=SYNTHS/007 Detuned Saw Bass.XML within=5
+release preset_preview
+expect ui=generative_perform
+expect event gen_sound_press part=1 source=chosen
+expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/007 Detuned Saw Bass.XML within=10
+expect event gen_sound_swap part=1 stopped within=30
+expect no_event gen_preset_preview built since=mark within=1
+
+# ---- SHIFT + SYNTH: the previous sound is the pick from before, never a previewed preset ----
+button SHIFT down
+wait 50
+button SYNTH down
+wait 50
+button SYNTH up
+wait 50
+button SHIFT up
+expect event gen_sound_press part=1 source=previous within=5
+expect event /^gen_sound ACID - pick mode=\d+ prio=\d+ arp=\d+ (?P=pick) / within=10
+expect event gen_sound_swap part=1 stopped within=30
+
+# ---- A start frees the preview, and while playing presets don't preview ----
+button SYNTH down
+wait 50
+button SYNTH up
+expect event /gen_browser open part=1 pick=(?P=pick) at=(?P=pick)$/ within=10
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_preset_preview freed part=1 within=5
+mark
+encoder 3 1
+expect event gen_browser_preview off playing=1 within=5
+expect no_event gen_preset_preview built since=mark within=2
+button BACK down
+wait 800
+button BACK up
+expect ui=generative_perform within=5
+
+# ---- ALWAYS: presets still don't preview while playing; stopped, they do ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 5
+expect event gen_browser_preview_setting 2
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+mark
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser_preview off playing=1 within=5
+expect event /gen_browser open part=1 / within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+encoder 3 1
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=SYNTHS\// within=10
+expect no_event gen_sound_press since=mark within=1
+button BACK down
+wait 800
+button BACK up
+expect ui=generative_perform within=5
+expect event gen_preset_preview freed part=1 within=5
+
+# ---- FX: SYNTH PRESET's browser previews on the lane's row of a Kit built beside FX's ----
+pad 9 4 down
+wait 50
+pad 9 4 up
+wait 50
+pad 9 4 down
+wait 50
+pad 9 4 up
+expect event gen_focus part=3 locked=3
+mark
+button KIT down
+wait 50
+button KIT up
+expect event gen_lane_list part=3 rows=reroll,riser+preset,fall+preset,impact+preset within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+expect ui=sound_editor
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser open part=3 lane=riser kind=preset at=(?P<fx>SYNTHS\/.+\.XML)$/ within=10
+expect event /gen_preset_preview built part=3 error=0 ms=\d+ path=(?P=fx)$/ within=20
+expect event gen_preset_preview note part=3 lane=riser
+expect event gen_mem preset_preview
+button BACK down
+wait 800
+button BACK up
+expect event gen_browser closed within=5
+expect event gen_preset_preview freed part=3 within=5
+# The hold's timer closes the lane list too when the press closed the browser (at SYNTHS, a card without the pack);
+# from the pack's FX folder only the browser closes. Either way one BACK tap more leaves Perform on top: on Perform,
+# with nothing queued, it does nothing.
+wait 500
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+expect no_event gen_sound_press since=mark within=1
+expect no_event gen_sound_swap since=mark within=1
+expect no_event /^gen_sound FX / since=mark within=1
+
+# ---- OFF: nothing previews ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+expect event gen_browser_preview_setting 0
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+mark
+button SYNTH down
+wait 50
+button SYNTH up
+expect event gen_browser_preview off playing=0 within=5
+encoder 3 1
+expect event gen_browser_preview off playing=0 within=5
+expect no_event gen_preset_preview built since=mark within=2
+button BACK down
+wait 800
+button BACK up
+expect ui=generative_perform within=5

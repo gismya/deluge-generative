@@ -22,6 +22,7 @@
 #include "generative/core/recipe.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/preset_preview.h"
 #include "generative/firmware/sound_swaps.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/browser/sample_browser.h"
@@ -46,6 +47,7 @@ namespace gen = deluge::generative;
 namespace perform = deluge::generative::perform;
 using gen::firmware::currentRecipe;
 using gen::firmware::performAdapter;
+using gen::firmware::presetPreview;
 using gen::firmware::SoundSwaps;
 using gen::firmware::soundSwaps;
 
@@ -181,10 +183,23 @@ ActionResult PerformSoundBrowser::timerCallback() {
 void PerformSoundBrowser::graphicsRoutine() {
 	// Perform's frame: swaps, transitions and retirements are serviced while browsing, and the sidebar is live.
 	performView.graphicsRoutine();
+	if (samples()) {
+		return;
+	}
+	if (!perform::previewsPresets(preview_, playbackHandler.isEitherClockActive())) {
+		presetPreview.stop(); // a start frees the preview: presets preview only while stopped (spec §13.3)
+	}
+	presetPreview.service();
+	if (chooseWhenFree_ && !presetPreview.building()) {
+		// SELECT came while a preview still built: it has unwound, so the runner is free for the choice.
+		chooseWhenFree_ = false;
+		enterKeyPress();
+	}
 }
 
 void PerformSoundBrowser::currentFileChanged(int32_t movementDirection) {
 	// Nothing loads into the part: it plays on with its sound until a file is chosen (spec §13.5).
+	chooseWhenFree_ = false; // a SELECT waiting for a preview to unwind was for the file the cursor has left
 #if ENABLE_SYSEX_TEST
 	FileItem* item = getCurrentFileItem();
 	TEST_EVENT("gen_browser at=%s/%s", currentDir.get(), item != nullptr ? item->filename.get() : "");
@@ -212,10 +227,15 @@ Error PerformSoundBrowser::getCurrentFilePath(String* path) {
 void PerformSoundBrowser::preview() {
 	AudioEngine::stopAnyPreviewing();
 	FileItem* item = getCurrentFileItem();
-	if (!samples() || item == nullptr || item->isFolder) {
+	if (item == nullptr || item->isFolder) {
+		presetPreview.stop();
 		return;
 	}
 	const bool playing = playbackHandler.isEitherClockActive();
+	if (!samples()) {
+		previewPreset(*item, playing);
+		return;
+	}
 	if (!perform::previews(preview_, playing)) {
 		TEST_EVENT("gen_browser_preview off playing=%d", playing ? 1 : 0);
 		return;
@@ -231,13 +251,38 @@ void PerformSoundBrowser::preview() {
 	           AudioEngine::sampleForPreview->hasActiveVoices() ? 1 : 0, playing ? 1 : 0, path.get());
 }
 
+void PerformSoundBrowser::previewPreset(FileItem& item, bool playing) {
+	if (!perform::previewsPresets(preview_, playing)) {
+		presetPreview.stop();
+		TEST_EVENT("gen_browser_preview off playing=%d", playing ? 1 : 0);
+		return;
+	}
+	// Loads into an Output of the part beside its own, and plays one note there (spec §13.3). A path a pick can't
+	// hold previews nothing: it can't be chosen either.
+	gen::SoundChoice choice{.lane = lane_};
+	if (!choice.path.set(currentDir.get(), item.filename.get())) {
+		presetPreview.stop();
+		return;
+	}
+	presetPreview.show(part_, choice);
+}
+
 void PerformSoundBrowser::enterKeyPress() {
 	FileItem* item = getCurrentFileItem();
 	if (item == nullptr) {
 		return;
 	}
+	if (!item->isFolder) {
+		// The preview goes before a choice: the part's own sound swaps as a re-roll does, from the card.
+		presetPreview.stop();
+		if (presetPreview.building()) {
+			chooseWhenFree_ = true; // the runner is busy until the cancelled build unwinds: graphicsRoutine() chooses
+			return;
+		}
+	}
 	if (item->isFolder) {
 		AudioEngine::stopAnyPreviewing();
+		presetPreview.stop();
 		Error error = goIntoFolder(item->filename.get());
 		if (error != Error::NONE) {
 			display->displayError(error);
@@ -278,6 +323,8 @@ void PerformSoundBrowser::exitAction() {
 
 void PerformSoundBrowser::closeBrowser(bool chosen) {
 	AudioEngine::stopAnyPreviewing();
+	presetPreview.stop();
+	chooseWhenFree_ = false;
 	indicator_leds::setLedState(forLane() ? IndicatorLED::KIT : IndicatorLED::SYNTH, false);
 	const bool overList = overList_;
 	part_ = -1;

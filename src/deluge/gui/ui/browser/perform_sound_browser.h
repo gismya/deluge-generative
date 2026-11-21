@@ -19,7 +19,8 @@
 // lane of the lane list (KIT on a Drums or FX part) on the lane's samples, or on presets for an FX lane that takes one.
 // It is the stock browser's file list, folder navigation and QWERTY search over every matching file on the card, but
 // scrolling never loads into the part: it plays on with its sound. BROWSER PREVIEW (spec §13.3) says whether a sample
-// under the cursor previews, at the lane's volume. SELECT on a file hands it to Perform, which preloads it as a
+// under the cursor previews, at the lane's volume, and whether a preset does (stopped only), on an Output built beside
+// the part's (firmware::presetPreview). SELECT on a file hands it to Perform, which preloads it as a
 // re-roll and swaps it in at the next phrase line; BACK at the top folder closes it with nothing changed, back to the
 // lane list if it opened from one. Playback, the gold knobs and the sidebar stay Perform's meanwhile (End aside, as
 // under every overlay), and Perform's frame runs underneath, so swaps, transitions and retirements are serviced.
@@ -29,6 +30,8 @@
 #include "generative/core/types.h"
 #include "generative/perform/sound_browser.h"
 #include "gui/ui/browser/slot_browser.h"
+
+class FileItem;
 
 class PerformSoundBrowser final : public SlotBrowser {
 public:
@@ -62,8 +65,10 @@ protected:
 private:
 	/// Closes the browser, its LED back off and any preview silenced. A choice also closes the lane list under it.
 	void closeBrowser(bool chosen);
-	/// Plays the sample under the cursor, if BROWSER PREVIEW lets it now, else silences the last one.
+	/// Previews the file under the cursor, if BROWSER PREVIEW lets it now, else silences the last one: a sample through
+	/// stock's preview voice, a preset loaded beside the part with one note (spec §13.3).
 	void preview();
+	void previewPreset(FileItem& item, bool playing);
 	[[nodiscard]] bool forLane() const { return lane_ != deluge::generative::Lane::None; }
 	[[nodiscard]] bool samples() const { return kind_ == deluge::generative::perform::BrowseKind::Sample; }
 
@@ -72,6 +77,8 @@ private:
 	deluge::generative::perform::BrowseKind kind_ = deluge::generative::perform::BrowseKind::Preset;
 	/// Opened over the lane list: a choice closes it too.
 	bool overList_ = false;
+	/// SELECT on a file came while a preset preview still built: the choice is made once it has unwound.
+	bool chooseWhenFree_ = false;
 	static inline deluge::generative::perform::BrowserPreview preview_ =
 	    deluge::generative::perform::kDefaultBrowserPreview;
 };

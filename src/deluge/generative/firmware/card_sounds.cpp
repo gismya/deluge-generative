@@ -213,9 +213,21 @@ void applyDelaySetup(Delay& delay, const DelaySetup& setup, const Song& song) {
 }
 
 #if ENABLE_SYSEX_TEST
+namespace {
+bool previewBuild = false;
+} // namespace
+
+const char* buildEventPrefix() {
+	return previewBuild ? "preview_" : "";
+}
+
+void setPreviewBuild(bool preview) {
+	previewBuild = preview;
+}
+
 void reportDelay(const Delay& delay, int32_t feedback, const char* part, const char* lane) {
-	TEST_EVENT("gen_sound_delay %s %s sync=%d type=%d pingpong=%d analog=%d feedback=%ld", part, lane,
-	           static_cast<int>(delay.syncLevel), static_cast<int>(delay.syncType), delay.pingPong ? 1 : 0,
+	TEST_EVENT("%sgen_sound_delay %s %s sync=%d type=%d pingpong=%d analog=%d feedback=%ld", buildEventPrefix(), part,
+	           lane, static_cast<int>(delay.syncLevel), static_cast<int>(delay.syncType), delay.pingPong ? 1 : 0,
 	           delay.analog ? 1 : 0, static_cast<long>(perform::menuUnits(feedback)));
 }
 #endif
