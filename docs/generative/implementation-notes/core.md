@@ -236,4 +236,10 @@ otherwise.
   LaneMute reads the lane's notes as gone, not flagged (`punch_in_spec`).
   Flam's lanes are `flams()` (`punch_ins.h`, shared with the spec). Pump changes in `apply()` push at most one Pump a
   step: a second change in the same drain removes the first (they cancel), as `stepEventsOf()` counts one.
-
+- Trap: a `PartsAndLanes` keep set with the Drums part's bit keeps every Drums lane, the kick too: to keep all but a
+  lane, list the lanes (House's Builds: the pitched parts kept by bit, the lanes `0x7FFF & ~laneBit(Lane::Kick)`;
+  bit 15 is `kSameAsBreakKeeps`' marker). `kEverything.without({.lanes = laneBit(Lane::Kick)})` still keeps the kick.
+- Trap: Respond never thins an anchor (§5.5), so a spec of "no note in an against half" holds only while the target is
+  never busier where the source anchors. House's #368 Bass line makes the second half busier, where the Lead anchors;
+  its specs allow the anchor steps. A gated source (House's Lead at 30) plays little at the default Density: run
+  interplay specs above the gate.

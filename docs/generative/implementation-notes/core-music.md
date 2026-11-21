@@ -33,6 +33,13 @@ otherwise.
   on bar lines and a jump's `skipTo()` crosses none, so `skipTo()` doesn't walk. A genre with no graph returns at
   once, so its stream is unchanged. The guard, the colour row and the walk rules are passed in with their
   Generator-wide defaults: an override (a genre field, a Recipe value) is a new argument there.
+- A looping graph (`ChordGraph::loopChance` ≥ 0, House) takes `Generator::walkLoop()` instead of the walk's place
+  rules: the loop playing and the count drawn are two stored bytes (`chordLoop_`, `chordLoops_`), moved only on a
+  Drop's chord line and keyed on the Groove's occurrence there, so a Break, a Build and the Outro hold the Groove's
+  loop with no recount. Each chord is keyed on the loop's index and the bar in it (`Purpose::ChordLoop`), so a loop
+  gone back to replays chord for chord: the walk's other inputs (the chord before, A-B-A) agree because a loop always
+  starts on home. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
+  rhythm's grid draws no chord there, so the loop stays on the phrase grid.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
