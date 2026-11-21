@@ -10,6 +10,10 @@
 # For figures: --events 'gen_audio|gen_h1 |gen_h16|gen_transition start'.
 # covers: src/deluge/io/midi/output_margin.h src/deluge/io/midi/test_port_render.*
 # covers: src/OSLikeStuff/task_scheduler/task_scheduler.cpp src/deluge/gui/ui_timer_manager.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/generative/perform/transition_lifecycle.h
 start_state
 hold entropy
 include perform_open.txt
