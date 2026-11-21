@@ -140,6 +140,7 @@ bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
 bool holdingFree = false;           ///< See freeHeld()
 bool holdingQueueFull = false;      ///< See queueFullHeld()
+bool holdingLogFull = false;        ///< See logFullHeld()
 bool holdingDelaySetups = false;    ///< See delaySetupsHeld()
 bool holdingCompose = false;        ///< See composeHeld()
 bool holdingComposeAlone = false;   ///< See composeAloneHeld()
@@ -263,6 +264,8 @@ constexpr Hold kHolds[] = {
     {"free", [](bool on) { holdingFree = on; }},
     /// A waiting sound's cancel or a transition confirm finds the steering queue full, or doesn't (see queueFullHeld())
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
+    /// AS IT BEGAN finds no header kept for the playing piece, or reads the log (see logFullHeld())
+    {"log_full", [](bool on) { holdingLogFull = on; }},
     /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
     {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
     /// Holds a Compose build after its first bar, or lets it go (see composeHeld())
@@ -1221,6 +1224,10 @@ bool freeHeld() {
 
 bool queueFullHeld() {
 	return holdingQueueFull;
+}
+
+bool logFullHeld() {
+	return holdingLogFull;
 }
 
 bool delaySetupsHeld() {
