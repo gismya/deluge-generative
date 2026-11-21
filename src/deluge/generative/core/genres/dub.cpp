@@ -95,7 +95,7 @@ constexpr Pattern kBassLine[] = {
     {"X.......8...8...X..8..8.....8...", "................................", 0},
     {"X..8..8.7...8.8.X..8..8...8.8.7.", "........g.....................g.", 1},
     {"X..8..8...8.7.8.X.....8.8.7.8...", "............g.............g.....", 1},
-    {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g.......................", 2},
+    {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g............g...g......", 2},
 };
 
 /// The skank: the backbeats of the half-time feel, beats 2 and 4, anchored so a dip keeps it; its "chk-a" double on
@@ -315,7 +315,7 @@ constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBi
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 1,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 2,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swing = 10},
     .phraseBars = 8,
     .parts = kParts,

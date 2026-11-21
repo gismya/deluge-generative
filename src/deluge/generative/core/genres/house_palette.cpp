@@ -29,21 +29,28 @@ namespace {
 
 // ---- Synth parts ----
 
-/// The offbeat bass: 080, the card's house organ bass, first; then round, short basses.
+/// The offbeat bass: 080, the card's house organ bass, first; then round, short basses. 000 Rich Saw Bass dropped by
+/// ear (listening round 2).
 constexpr PaletteEntry kBass[] = {
-    {"SYNTHS/080 House.XML", 3},         {"SYNTHS/002 Basic Square Bass.XML", 2}, {"SYNTHS/050 FM Basic Bass.XML", 2},
-    {"SYNTHS/000 Rich Saw Bass.XML", 1}, {"SYNTHS/012 Blunt Sync Bass.XML", 1},
+    {"SYNTHS/080 House.XML", 3},
+    {"SYNTHS/002 Basic Square Bass.XML", 2},
+    {"SYNTHS/050 FM Basic Bass.XML", 2},
+    {"SYNTHS/012 Blunt Sync Bass.XML", 1},
 };
 /// The stab: the pack's plain saw and square (no built-in interval, no portamento, sustain 0) first, then 078's FM
-/// organ stab, the electric pianos, the piano and an organ, which carry 7th and 9th voicings.
+/// organ stab, the Rhodes, the piano and an organ, which carry 7th and 9th voicings. 074 Electric Piano dropped by ear
+/// (listening round 2).
 constexpr PaletteEntry kStab[] = {
-    {"SYNTHS/GENERATIVE/GEN House Stab.XML", 3}, {"SYNTHS/078 House.XML", 2}, {"SYNTHS/071 Rhodes.XML", 2},
-    {"SYNTHS/074 Electric Piano.XML", 1},        {"SYNTHS/073 Piano.XML", 1}, {"SYNTHS/026 PW Organ.XML", 1},
+    {"SYNTHS/GENERATIVE/GEN House Stab.XML", 3},
+    {"SYNTHS/078 House.XML", 2},
+    {"SYNTHS/071 Rhodes.XML", 2},
+    {"SYNTHS/073 Piano.XML", 1},
+    {"SYNTHS/026 PW Organ.XML", 1},
 };
-/// Strings under the stabs. 136's saved portamento is cleared at load (spec §10.6).
+/// Strings under the stabs. 136's saved portamento is cleared at load (spec §10.6). 143 Chillout Pad dropped by ear
+/// (listening round 2).
 constexpr PaletteEntry kStrings[] = {
     {"SYNTHS/131 Warm Strings.XML", 3},
-    {"SYNTHS/143 Chillout Pad.XML", 2},
     {"SYNTHS/139 Detuned Saw Pad.XML", 1},
     {"SYNTHS/136 Synthwave Pad.XML", 1},
 };
