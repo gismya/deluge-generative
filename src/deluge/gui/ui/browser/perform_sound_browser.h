@@ -50,6 +50,8 @@ public:
 	ActionResult timerCallback() override;
 	void graphicsRoutine() override;
 	UIType getUIType() override { return UIType::GENERATIVE_SOUND_BROWSER; }
+	/// A sample's path is its folder and file name as the card has it; a preset's is the slot browser's.
+	Error getCurrentFilePath(String* path) override;
 
 protected:
 	void enterKeyPress() override;

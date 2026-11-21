@@ -63,19 +63,21 @@ describe sound_browser("Perform's sound browsers", $ {
 			BrowserStart start = browserStart(kPalette, Lane::None, pick, BrowseKind::Preset);
 			expect(text(start.folder)).to_equal(std::string("SYNTHS/GENERATIVE"));
 			expect(text(start.name)).to_equal(std::string("GEN Acid.XML"));
-			expect(text(start.fallback)).to_equal(std::string("SYNTHS"));
+			expect(text(start.paletteFolder)).to_equal(std::string("SYNTHS"));
+			expect(text(start.topFolder)).to_equal(std::string("SYNTHS"));
 
 			start = browserStart(kPalette, Lane::None, SoundPath{}, BrowseKind::Preset);
 			expect(text(start.folder)).to_equal(std::string("SYNTHS"));
 			expect(text(start.name)).to_equal(std::string("(none)"));
 		});
 
-		it("opens a lane's sample browser on its sample, falling back to the lane's first palette folder", _ {
+		it("opens a lane's sample browser on its sample, then the lane's first palette folder, then SAMPLES", _ {
 			const SoundPath pick = pathOf("MY SAMPLES/Hits/Boom.wav");
 			BrowserStart start = browserStart(kPalette, Lane::Fall, pick, BrowseKind::Sample);
 			expect(text(start.folder)).to_equal(std::string("MY SAMPLES/Hits"));
 			expect(text(start.name)).to_equal(std::string("Boom.wav"));
-			expect(text(start.fallback)).to_equal(std::string("SAMPLES/MY FX/Falls"));
+			expect(text(start.paletteFolder)).to_equal(std::string("SAMPLES/MY FX/Falls"));
+			expect(text(start.topFolder)).to_equal(std::string("SAMPLES"));
 		});
 
 		it("falls back to the lane's default folder when its palette entry lists none, or it has no entry", _ {
@@ -104,7 +106,7 @@ describe sound_browser("Perform's sound browsers", $ {
 		it("falls back to SYNTHS for an FX lane's presets when its first preset sits at the card's root", _ {
 			BrowserStart siren = browserStart(kPalette, Lane::Siren, SoundPath{}, BrowseKind::Preset);
 			expect(text(siren.folder)).to_equal(std::string("SYNTHS"));
-			expect(text(siren.fallback)).to_equal(std::string("SYNTHS"));
+			expect(text(siren.paletteFolder)).to_equal(std::string("SYNTHS"));
 		});
 
 		it("opens in each genre's palette folder for every lane it plays, never an empty one", _ {
@@ -115,7 +117,9 @@ describe sound_browser("Perform's sound browsers", $ {
 						for (BrowseKind kind : {BrowseKind::Sample, BrowseKind::Preset}) {
 							BrowserStart start = browserStart(*genre->palette, lane.lane, SoundPath{}, kind);
 							expect(start.folder.empty()).to_be_false();
-							expect(text(start.folder)).to_equal(text(start.fallback));
+							expect(text(start.folder)).to_equal(text(start.paletteFolder));
+							expect(text(start.topFolder))
+							    .to_equal(std::string(kind == BrowseKind::Sample ? "SAMPLES" : "SYNTHS"));
 						}
 					}
 				}

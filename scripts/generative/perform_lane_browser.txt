@@ -1,0 +1,317 @@
+# Perform's lane list and lane browser (#300 part 1, spec §10.1, §10.5, §10.7, §13.3, §13.5) over the sysex test port:
+# KIT on a focused Drums or FX part opens the lane list (RE-ROLL ALL, then a row per lane); SELECT on a lane opens its
+# browser on the lane's pick, where the sample under the cursor previews per BROWSER PREVIEW (WHEN STOPPED by default);
+# BACK goes back to the list and BACK again closes it. A chosen sample preloads the whole Kit with only that lane
+# changed (the other lanes load what they loaded at entry) and swaps in as a re-roll does; SHIFT + KIT brings the
+# previous Kit back, RE-ROLL ALL re-rolls every lane, and KIT while the chosen sound waits for its line cancels it. An
+# FX lane that takes a preset asks SAMPLE or SYNTH PRESET first, and a chosen preset loads into its row as a synth.
+# BROWSER PREVIEW: OFF and ALWAYS from the Perform menu. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2, DRONE row 3, FX row 4 (y 4). The QWERTY keyboard's digits are row
+# y 5, '1' to '0' at x 3 to 12. gen_lane_list part= rows=reroll,<lane>[+preset],...: the list opened (+preset: the lane
+# asks SAMPLE or SYNTH PRESET). gen_browser open part= lane= kind=sample|preset at=<the selected file>;
+# gen_browser at=<folder>/<file> on each move; gen_browser chose part= path= lane=; gen_browser closed.
+# gen_browser_preview sounding=0|1 playing=0|1 path= (or "off playing="): the file under the cursor previewed, or not.
+# gen_sound <part> <LANE> pick|fallback mode= prio= <path>: a Kit row loaded. The Perform menu's last row is BROWSER
+# PREVIEW (encoder 3 20 reaches it whatever rows come before), gen_browser_preview_setting <0 off|1 when stopped|2
+# always>.
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.* src/deluge/gui/menu_item/generative/perform_lanes.*
+# covers: src/deluge/generative/perform/sound_browser.* src/deluge/gui/ui/browser/sample_browser.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_internal.h
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/core/recipe.h
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/lane_names.h
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/core/palette_file.*
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/gui/l10n/strings.h
+start_state
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event /gen_sound DRUMS KICK \w+ mode=\d+ prio=\d+ (?P<kick>SAMPLES\/.+)$/ since=mark within=10
+keep events /^gen_sound DRUMS (?!KICK )/
+
+# ---- Lock DRUMS (double tap its row on the SONG page), stopped ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+
+# ---- KIT opens the lane list on RE-ROLL ALL, then DRUMS' lanes ----
+button KIT down
+wait 50
+button KIT up
+expect event /gen_lane_list part=0 rows=reroll,kick,snare,/ within=5
+expect event gen_menu LANES
+expect ui=sound_editor
+expect root_ui=generative_perform
+
+# ---- SELECT on KICK: its browser on its pick, which previews (stopped, WHEN STOPPED); a move previews the next ----
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser open part=0 lane=kick kind=sample at=(?P=kick)$/ within=10
+expect ui=generative_sound_browser
+expect event /gen_browser_preview sounding=1 playing=0 path=(?P=kick)$/ within=5
+encoder 3 1
+expect event /gen_browser at=SAMPLES\/.+\.(wav|WAV|aif|aiff)$/ within=5
+expect event /gen_browser_preview sounding=1 playing=0 path=SAMPLES\// within=5
+
+# ---- BACK closes the browser, back to the list; BACK again closes the list: nothing changed ----
+# BACK goes up a folder (SAMPLES/DRUMS, SAMPLES) and closes the browser at the top, as the preset browser does
+mark
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser at=SAMPLES/DRUMS/Kick within=5
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser at=SAMPLES/DRUMS within=5
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+expect ui=sound_editor within=5
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+expect no_event gen_sound_press since=mark within=1
+
+# ---- A chosen sample: the Kit preloads with KICK alone changed, the other lanes as at entry, and swaps in at once
+# while stopped. The list closes with the browser ----
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+encoder 3 1
+expect event /gen_browser at=(?P<chosen>SAMPLES\/.+\.(wav|WAV|aif|aiff))$/ within=5
+mark
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser chose part=0 path=(?P=chosen) lane=kick$/ within=5
+expect ui=generative_perform within=5
+expect event gen_press chosen part=0 previous=0 result=0 within=5
+expect event gen_sound_press part=0 source=chosen
+expect event /gen_sound DRUMS KICK pick mode=\d+ prio=\d+ (?P=chosen)$/ within=20
+expect events kept within=20
+expect event gen_sound_swap part=0 stopped within=30
+
+# ---- SHIFT + KIT brings the previous Kit back: KICK's entry pick ----
+button SHIFT down
+wait 50
+button KIT down
+wait 50
+button KIT up
+wait 50
+button SHIFT up
+expect event gen_press sound part=0 previous=1 result=0 within=5
+expect event gen_sound_press part=0 source=previous
+expect event /gen_sound DRUMS KICK \w+ mode=\d+ prio=\d+ (?P=kick)$/ within=20
+expect event gen_sound_swap part=0 stopped within=30
+
+# ---- RE-ROLL ALL re-rolls the whole part, as NEW SOUND ----
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=generative_perform within=5
+expect event gen_press sound part=0 previous=0 result=0 within=5
+expect event gen_sound_press part=0 source=roll
+expect event gen_sound_swap part=0 stopped within=30
+
+# ---- Playing, under WHEN STOPPED: the browser doesn't preview. A chosen sample waits for its line, and KIT then
+# cancels it instead of opening the list ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+expect event gen_browser_preview off playing=1 within=5
+encoder 3 1
+expect event gen_browser_preview off playing=1 within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser chose part=0 path=SAMPLES\/.+ lane=kick$/ within=5
+expect event gen_sound_preload done part=0 source=chosen within=30
+mark
+button KIT down
+wait 50
+button KIT up
+expect event gen_sound_cancel part=0 waiting within=5
+expect no_event gen_menu LANES since=mark within=1
+expect no_event gen_sound_swap since=mark within=1
+
+# ---- BROWSER PREVIEW ALWAYS (the Perform menu's last row): it previews while playing ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 5
+expect event gen_browser_preview_setting 2
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+expect event /gen_browser_preview sounding=1 playing=1 path=SAMPLES\// within=5
+
+# ---- OFF: nothing previews, stopped or not ----
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+expect event gen_browser_preview_setting 0
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+expect event gen_browser_preview off playing=0 within=5
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+wait 300
+button BACK down
+wait 50
+button BACK up
+expect event gen_browser closed within=5
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+
+# ---- FX: its lanes take a preset, so a lane asks SAMPLE or SYNTH PRESET. SYNTH PRESET's browser (SYNTHS when the
+# pack's folder is gone) and a preset typed in ("002"): the Riser's row loads it as a synth ----
+pad 9 4 down
+wait 50
+pad 9 4 up
+wait 50
+pad 9 4 down
+wait 50
+pad 9 4 up
+expect event gen_focus part=3 locked=3
+button KIT down
+wait 50
+button KIT up
+expect event gen_lane_list part=3 rows=reroll,riser+preset,fall+preset,impact+preset within=5
+expect event gen_menu LANES
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+expect ui=sound_editor
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser open part=3 lane=riser kind=preset at=SYNTHS\// within=10
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 12 5 down
+wait 30
+pad 12 5 up
+wait 100
+pad 4 5 down
+wait 30
+pad 4 5 up
+expect event gen_browser at=SYNTHS/002 Basic Square Bass.XML within=10
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser chose part=3 path=SYNTHS/002 Basic Square Bass.XML lane=riser within=5
+expect event gen_sound_press part=3 source=chosen within=5
+expect event gen_sound_transpose FX RISER within=20
+expect event /gen_sound FX RISER pick mode=\d+ prio=\d+ SYNTHS\/002 Basic Square Bass\.XML$/ within=5
+expect event gen_sound_swap part=3 stopped within=30

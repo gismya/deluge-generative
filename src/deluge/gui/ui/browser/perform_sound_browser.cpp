@@ -110,9 +110,17 @@ bool PerformSoundBrowser::opened() {
 		// Start in the pick's folder, on the pick (spec §13.5).
 		const perform::BrowserStart start =
 		    perform::browserStart(currentRecipe.palette(), lane_, pickOf(part_, lane_), kind_);
+		// The pick's folder, the palette's while that's gone, and the top folder while that's gone too: the stock
+		// browser makes a missing default folder, so only the top one is passed as that.
 		error = currentDir.set(start.folder.c_str());
 		if (error == Error::NONE) {
-			error = arrivedInNewFolder(0, start.name, start.fallback.c_str());
+			error = arrivedInNewFolder(0, start.name, nullptr);
+		}
+		if (error == Error::FOLDER_DOESNT_EXIST) {
+			error = currentDir.set(start.paletteFolder.c_str());
+			if (error == Error::NONE) {
+				error = arrivedInNewFolder(0, nullptr, start.topFolder);
+			}
 		}
 	}
 	if (error != Error::NONE) {
@@ -124,9 +132,10 @@ bool PerformSoundBrowser::opened() {
 #if ENABLE_SYSEX_TEST
 	FileItem* item = getCurrentFileItem();
 	if (forLane()) {
-		TEST_EVENT("gen_browser open part=%ld lane=%s kind=%s pick=%s at=%s/%s", static_cast<long>(part_),
-		           gen::lanePaletteName(lane_), samples() ? "sample" : "preset", pickOf(part_, lane_).c_str(),
-		           currentDir.get(), item != nullptr ? item->filename.get() : "");
+		// No pick= (an event holds 120 characters): at= is the pick when the browser found it.
+		TEST_EVENT("gen_browser open part=%ld lane=%s kind=%s at=%s/%s", static_cast<long>(part_),
+		           gen::lanePaletteName(lane_), samples() ? "sample" : "preset", currentDir.get(),
+		           item != nullptr ? item->filename.get() : "");
 	}
 	else {
 		TEST_EVENT("gen_browser open part=%ld pick=%s at=%s/%s", static_cast<long>(part_), pickOf(part_, lane_).c_str(),
@@ -186,6 +195,19 @@ void PerformSoundBrowser::currentFileChanged(int32_t movementDirection) {
 
 void PerformSoundBrowser::folderContentsReady(int32_t entryDirection) {
 	currentFileChanged(0);
+}
+
+Error PerformSoundBrowser::getCurrentFilePath(String* path) {
+	FileItem* item = getCurrentFileItem();
+	if (!samples() || item == nullptr) {
+		return SlotBrowser::getCurrentFilePath(path); // the entered name with .XML
+	}
+	path->set(&currentDir);
+	Error error = path->concatenate("/");
+	if (error == Error::NONE) {
+		error = path->concatenate(&item->filename);
+	}
+	return error;
 }
 
 void PerformSoundBrowser::preview() {

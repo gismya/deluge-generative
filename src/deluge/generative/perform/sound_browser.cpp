@@ -22,8 +22,9 @@ namespace deluge::generative::perform {
 
 namespace {
 
-/// The folder presets are browsed from when nothing better is known.
+/// The top folders presets and samples are browsed from when nothing better is there.
 constexpr const char* kSynthsFolder = "SYNTHS";
+constexpr const char* kSamplesFolder = "SAMPLES";
 
 /// Sets `out` to `path`'s folder: everything before its last '/', or empty when it has none.
 void folderOf(const char* path, SoundPath& out) {
@@ -45,14 +46,18 @@ BrowserStart browserStart(const Palette& palette, Lane lane, const SoundPath& pi
 	BrowserStart start;
 	const LaneSounds* sounds = lane != Lane::None ? palette.laneSounds(lane) : nullptr;
 	if (kind == BrowseKind::Sample) {
+		start.topFolder = kSamplesFolder;
 		const auto folders = sounds != nullptr ? laneFolders(*sounds) : defaultLaneFolders(lane);
-		start.fallback.set(folders.empty() ? "SAMPLES" : folders[0]);
+		start.paletteFolder.set(folders.empty() ? kSamplesFolder : folders[0]);
 	}
-	else if (sounds != nullptr && !sounds->synths.empty()) {
-		folderOf(sounds->synths[0].path, start.fallback);
-	}
-	if (start.fallback.empty()) {
-		start.fallback.set(kSynthsFolder);
+	else {
+		start.topFolder = kSynthsFolder;
+		if (sounds != nullptr && !sounds->synths.empty()) {
+			folderOf(sounds->synths[0].path, start.paletteFolder);
+		}
+		if (start.paletteFolder.empty()) {
+			start.paletteFolder.set(kSynthsFolder);
+		}
 	}
 
 	// The pick, where it is of the kind listed: an FX lane's pick may be a sample or a preset.
@@ -63,7 +68,7 @@ BrowserStart browserStart(const Palette& palette, Lane lane, const SoundPath& pi
 		start.name = slash + 1;
 	}
 	if (start.folder.empty()) {
-		start.folder = start.fallback;
+		start.folder = start.paletteFolder;
 		start.name = nullptr;
 	}
 	return start;

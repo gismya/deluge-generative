@@ -27,7 +27,9 @@
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
 #include "io/midi/test_port.h"
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <optional>
 #include <string_view>
 
@@ -143,15 +145,14 @@ public:
 	void beginSession(MenuItem* navigatedBackwardFrom) override {
 #if ENABLE_SYSEX_TEST
 		if (navigatedBackwardFrom == nullptr) {
-			char rows[160];
-			int32_t used =
-			    snprintf(rows, sizeof(rows), "gen_lane_list part=%ld rows=reroll", static_cast<long>(listPart));
+			char rows[160] = "reroll";
+			size_t used = strlen(rows);
 			for (const gen::LaneSpec& lane : listLanes()) {
 				const bool preset = gen::laneTakesPreset(currentRecipe.palette(), lane.lane);
-				used += snprintf(rows + used, sizeof(rows) - std::min<size_t>(used, sizeof(rows)), ",%s%s",
+				used += snprintf(rows + used, sizeof(rows) - std::min(used, sizeof(rows)), ",%s%s",
 				                 gen::lanePaletteName(lane.lane), preset ? "+preset" : "");
 			}
-			TEST_EVENT("%s", rows);
+			TEST_EVENT("gen_lane_list part=%ld rows=%s", static_cast<long>(listPart), rows);
 		}
 #endif
 		// Opened, it starts on RE-ROLL ALL: the row it was left on may be another part's lane.

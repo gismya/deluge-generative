@@ -39,15 +39,17 @@ constexpr BrowserPreview kDefaultBrowserPreview = BrowserPreview::WhenStopped;
 /// What a browser lists: card presets, or audio files.
 enum class BrowseKind : uint8_t { Preset, Sample };
 
-/// Where a browser opens (spec §13.5): in the pick's folder on the pick, when the pick is of the kind it lists, else
-/// in `fallback`, which it also goes to when the pick's folder is gone.
+/// Where a browser opens (spec §13.5): in the pick's folder on the pick, when the pick is of the kind it lists, else in
+/// the palette's folder. Each is tried in turn while the one before is gone, ending at the top folder.
 struct BrowserStart {
 	SoundPath folder;
 	/// The file selected in `folder`: a pointer into the pick, or nullptr.
 	const char* name = nullptr;
 	/// SYNTHS for a part's preset, the lane's first preset's folder (else SYNTHS) for an FX lane's, and the lane's
 	/// first palette folder for its sample.
-	SoundPath fallback;
+	SoundPath paletteFolder;
+	/// SYNTHS or SAMPLES, which the stock browser makes if even it is gone.
+	const char* topFolder = nullptr;
 };
 
 /// Where a browser of `kind` for `pick` opens: a synth part's preset browser (`lane` None) or `lane`'s browser,
