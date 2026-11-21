@@ -4,12 +4,12 @@
 # surely changes) the part's first sound preloads under the working animation, then
 # the restart queues, and on its line the first sound swaps back in, the param snapshot is written back, and the
 # Current Recipe's macros and takes are the piece's first ones. The restarted run opens a piece of its own in the log.
-# BACK cancels the preload. Stopped, it restores the last piece's start state, then starts. Runs on a Deluge
-# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current
-# clip a synth or kit clip.
+# With no header kept (log full) it is refused with LOG FULL. BACK cancels the preload. Stopped, it restores the last
+# piece's start state, then starts. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
-# Events: gen_restart_press began parts=0 | began_preload parts= stopped= submitted= | began_queued | began_cancelled:
-# what AS IT BEGAN did (parts: a bit per part whose picks changed). gen_restart_preload_held parts=,
+# Events: gen_restart_press began parts=0 | began_preload parts= stopped= submitted= | began_queued | began_cancelled
+# | began_log_full: what AS IT BEGAN did (parts: a bit per part whose picks changed). gen_restart_preload_held parts=,
 # gen_restart_preload done|cancelled|failed parts= error= missing= ms= working=: its preload (parts: a bit per
 # part whose picks changed or whose re-roll waits for its line). gen_press sound part= previous= result=2: a re-roll
 # refused with BUSY while AS IT BEGAN is ahead. gen_restart_snapshot
@@ -66,6 +66,28 @@ expect ui=generative_perform
 expect event /^gen_restart as_it_began tempo=\d+ energy=(?P<energy>\d+)$/ within=15
 expect event /^gen_log_piece pieces=1 / within=5
 expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
+
+# ---- No kept header (log full): refused with LOG FULL, nothing queued (spec §13.2). hold log_full stands in for a
+# log too full to keep the playing piece's header: filling it takes about 45 minutes (capture_h13.txt) ----
+hold log_full
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_restart_press began_log_full
+expect ui=generative_perform
+expect no_event /^gen_restart(_press began_queued| as_i)/ within=6
+release log_full
 
 # ---- Steer: Energy up a few detents (F8's upper gold knob) ----
 button F8 down
