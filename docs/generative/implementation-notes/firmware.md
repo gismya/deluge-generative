@@ -124,4 +124,6 @@ otherwise.
   restart, transition and knob bind. The runner is busy while a preview builds, so the browser's SELECT cancels it and
   chooses once it has unwound (`chooseWhenFree_`); a choice made at once would be refused BUSY.
   `deleteUnusedAudioFiles()` after a free runs only with the runner free (or from the preview job itself): another job
-  may be loading samples no Output holds yet. A synth preset's preview costs about 15 KB of internal RAM in delugemu.
+  may be loading samples no Output holds yet. What a preview holds, on the Deluge with the pack (`gen_mem preset_preview`
+  against `preset_preview_freed`): a synth part's preset 13.7 KB of internal RAM, an FX lane's (a whole Kit, the
+  lane's row a synth) 39 KB, external RAM about 0 for both.
