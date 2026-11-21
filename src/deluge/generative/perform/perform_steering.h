@@ -202,13 +202,15 @@ public:
 	/// (instanceStarts()). @return false if Perform isn't in, the command names no punch-in, or the queue was full: the
 	/// pad stays as it was.
 	bool setPunch(PunchIn punch, Lane lane, bool on);
-	/// Stock's stutter started or ended (spec §17.2): logged where it lands, for Capture. @return false only if the
-	/// queue was full while a piece plays: the caller tries again. While stopped there is nothing to log.
-	bool logStutter(bool on) {
-		if (!entered_ || leaving_ || playing() == nullptr) {
-			return true;
+	/// Stock's stutter started or ended (spec §17.2): logged where it lands, for Capture, and a stutter still on is
+	/// logged again at each instance's step 0 (instanceStarts()). @return false only if the queue was full while a
+	/// piece plays: the caller tries again. While stopped there is nothing to log.
+	bool setStutter(bool on) {
+		if (entered_ && !leaving_ && playing() != nullptr && !queue_.push({CommandKind::SetStutter, 0, on ? 1 : 0})) {
+			return false;
 		}
-		return queue_.push({CommandKind::SetStutter, 0, on ? 1 : 0});
+		stutterOn_ = on;
+		return true;
 	}
 	/// The punch-ins on, as the pads last set them.
 	[[nodiscard]] PunchIns punchIns() const { return {.lanes = punchLanes_, .effects = punchEffects_}; }
@@ -403,6 +405,8 @@ private:
 	/// Perform's song is in, and LEAVE hasn't started its teardown.
 	bool entered_ = false;
 	bool leaving_ = false;
+	/// Stock's stutter is on (setStutter()), in what was padding: see punchEffects_.
+	bool stutterOn_ = false;
 	/// The SetFill value last pushed in this instance: kFillReleased while FILL is up.
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
@@ -437,6 +441,7 @@ void PerformSteering<Adapter>::enter() {
 	macroSteering_ = MacroSteering{};
 	punchEffects_ = 0; // an entry starts with no punch-in on
 	punchLanes_ = 0;
+	stutterOn_ = false;
 	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
 }
 
@@ -479,6 +484,11 @@ void PerformSteering<Adapter>::instanceStarts(bool fillDown) {
 			mute.lane = static_cast<Lane>(l);
 			queue_.push(mute);
 		}
+	}
+	// A stutter still on is logged again in the new instance; one let go since the last one's final decision isn't,
+	// so the new piece's log has no stutter (spec §17.2).
+	if (stutterOn_) {
+		queue_.push({CommandKind::SetStutter, 0, 1});
 	}
 }
 

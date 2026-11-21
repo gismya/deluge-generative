@@ -124,11 +124,11 @@ enum class PunchIn : uint8_t {
 	LaneMute,   ///< One Drums lane plays nothing (Command::lane).
 	HatRoll,    ///< The Closed hat plays 32nds.
 	SnareRoll,  ///< The Snare, or the Clap where there's none, plays 16ths.
-	Flam,       ///< Every Drums hit but the Kick's flams.
+	Flam,       ///< Snare, Clap and Rim hits flam, or every hit but the Kick's in a kit with none (flams()).
 	DoubleKick, ///< Each Kick hit plays twice, a 32nd apart.
 	Pump,       ///< Every other part ducks under the Kick through its sidechain (the driver's, on Event::pump()).
 };
-constexpr int32_t kNumPunchIns = 6;
+constexpr int32_t kNumPunchIns = static_cast<int32_t>(PunchIn::Pump) + 1; ///< Pump is the last
 
 /// How a transition plays (spec §9.7), chosen in the confirm.
 enum class TransitionStyle : uint8_t {

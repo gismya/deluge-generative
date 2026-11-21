@@ -520,7 +520,7 @@ void PerformView::graphicsRoutine() {
 	// Stock's stutter (the stock Performance view page's column, or a gold knob's push) is logged on and off, as it
 	// isn't a param edit (spec §17.2). A full queue tries again next frame.
 	if (const bool stuttering = isUIModeActive(UI_MODE_STUTTERING); stuttering != stutterLogged_) {
-		if (performAdapter.steering().logStutter(stuttering)) {
+		if (performAdapter.steering().setStutter(stuttering)) {
 			stutterLogged_ = stuttering;
 			TEST_EVENT("gen_stutter on=%d", stuttering ? 1 : 0);
 		}

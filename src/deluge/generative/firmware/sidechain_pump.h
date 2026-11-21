@@ -25,27 +25,34 @@
 #include "generative/firmware/perform_song.h"
 #include <cstdint>
 
+class InstrumentClip;
 class Output;
 
 namespace deluge::generative::firmware {
 
 class SidechainPump {
 public:
-	/// Ducks (`on`) every part of `roster` but the Drums, or lets each go back to what it had. Ducking again ducks only
-	/// a part whose Output is new since (a sound swap, a transition's roster).
-	void set(const Roster& roster, bool on);
-	/// A stop: every part ducked lets go, so the next start's pump (the steering sends it again) ducks from there.
-	void release(const Roster& roster) { set(roster, false); }
+	/// Ducks every part of `roster` but the Drums, each Output once: a part whose Output is new since (a sound swap, a
+	/// transition's roster) ducks too.
+	void duck(const Roster& roster);
+	/// Every part ducked goes back to what it had, on the Output it ducked, so it reaches an outgoing roster too, and a
+	/// sidechain → volume cable the pump made is deleted: a Pump off, a stop, and each instance start (the steering
+	/// sends a pump still on again from there, spec §8.9).
+	void release();
 	/// Perform's song is gone, its Outputs with it.
 	void forget() { *this = {}; }
 	[[nodiscard]] bool on() const { return on_; }
 
 private:
-	/// What a ducked part had before: its Output, so a part swapped since isn't touched, and the value.
+	/// What a ducked part had before: the Output and clip it ducked, so a part swapped since isn't touched, the value,
+	/// and whether the pump made the cable.
 	struct Saved {
 		Output* output = nullptr;
+		InstrumentClip* clip = nullptr;
 		int32_t value = 0;
+		bool made = false;
 	};
+	void report(bool on);
 	Saved saved_[kMaxParts] = {};
 	bool on_ = false;
 };

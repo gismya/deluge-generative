@@ -149,11 +149,16 @@ void OutputSink::play(const Event& event) {
 		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
 		soundSwaps.swap(event);
 		if (sidechainPump.on()) {
-			sidechainPump.set(roster, true); // the part's new Output ducks too (spec §8.9)
+			sidechainPump.duck(roster); // the part's new Output ducks too (spec §8.9)
 		}
 		break;
 	case EventKind::Pump:
-		sidechainPump.set(roster, event.pumps());
+		if (event.pumps()) {
+			sidechainPump.duck(roster);
+		}
+		else {
+			sidechainPump.release();
+		}
 		break;
 	}
 }

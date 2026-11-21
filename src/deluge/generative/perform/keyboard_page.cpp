@@ -38,6 +38,27 @@ int32_t faderLevel(int32_t units) {
 	return std::clamp<int32_t>(macroLevel(units), 0, kTopLevel);
 }
 
+/// A main pad's place: its row from the top and its column, from 0.
+struct PadAt {
+	int32_t row;
+	int32_t x;
+};
+constexpr int32_t kRows = KeyboardPage::kRows;
+/// Drums lane pad `l`'s place, down column 9, then column 10, and back.
+constexpr PadAt laneMuteCell(int32_t l) {
+	return {l % kRows, kLaneMuteColumn + l / kRows};
+}
+constexpr int32_t laneMuteIndex(int32_t x, int32_t row) {
+	return (x - kLaneMuteColumn) * kRows + row;
+}
+/// Punch-in pad `i`'s place (kPunchPads' order), two to a row, and back.
+constexpr PadAt punchCell(int32_t i) {
+	return {i / kPunchColumns, kPunchFirstColumn + i % kPunchColumns};
+}
+constexpr int32_t punchIndex(int32_t x, int32_t row) {
+	return row * kPunchColumns + (x - kPunchFirstColumn);
+}
+
 } // namespace
 
 KeyboardPad keyboardPad(int32_t x, int32_t row) {
@@ -48,12 +69,12 @@ KeyboardPad keyboardPad(int32_t x, int32_t row) {
 	    && row < kFillFirstRow + kFillRows) {
 		return KeyboardPad::Fill;
 	}
-	if (x >= kLaneMuteColumn && x < kLaneMuteColumn + kLaneMuteColumns && row >= 0 && row < KeyboardPage::kRows
-	    && (x - kLaneMuteColumn) * KeyboardPage::kRows + row < kNumDrumLanes) {
+	if (x >= kLaneMuteColumn && x < kLaneMuteColumn + kLaneMuteColumns && row >= 0 && row < kRows
+	    && laneMuteIndex(x, row) < kNumDrumLanes) {
 		return KeyboardPad::LaneMute;
 	}
 	if (x >= kPunchFirstColumn && x < kPunchFirstColumn + kPunchColumns && row >= 0
-	    && row * kPunchColumns + (x - kPunchFirstColumn) < kNumPunchPads) {
+	    && punchIndex(x, row) < kNumPunchPads) {
 		return KeyboardPad::Punch;
 	}
 	return KeyboardPad::None;
@@ -84,10 +105,10 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row) {
 		at.pad = FillHolds::padHolder(fillPad(x, row));
 		break;
 	case KeyboardPad::LaneMute:
-		at.pad = (x - kLaneMuteColumn) * KeyboardPage::kRows + row;
+		at.pad = laneMuteIndex(x, row);
 		break;
 	case KeyboardPad::Punch:
-		at.punch = kPunchPads[row * kPunchColumns + (x - kPunchFirstColumn)];
+		at.punch = kPunchPads[punchIndex(x, row)];
 		break;
 	case KeyboardPad::None:
 		break;
@@ -144,7 +165,8 @@ void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 	// A pad per lane the Drums part has; the rest of the two columns stay dark.
 	for (int32_t l = 0; l < std::min(in.drumLaneCount, kNumDrumLanes); l++) {
 		const int32_t key = PunchHolds::punchKey(PunchIn::LaneMute, in.drumLanes[l]);
-		out.cell[l % KeyboardPage::kRows][kLaneMuteColumn + l / KeyboardPage::kRows] = {
+		const PadAt at = laneMuteCell(l);
+		out.cell[at.row][at.x] = {
 		    .look = Look::LaneMute,
 		    .lit = in.punches != nullptr && in.punches->on(key),
 		    .held = in.punches != nullptr && in.punches->held(key),
@@ -152,7 +174,8 @@ void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 	}
 	for (int32_t i = 0; i < kNumPunchPads; i++) {
 		const int32_t key = PunchHolds::punchKey(kPunchPads[i], Lane::None);
-		out.cell[i / kPunchColumns][kPunchFirstColumn + i % kPunchColumns] = {
+		const PadAt at = punchCell(i);
+		out.cell[at.row][at.x] = {
 		    .look = Look::Punch,
 		    .lit = in.punches != nullptr && in.punches->on(key),
 		    .held = in.punches != nullptr && in.punches->held(key),
@@ -204,7 +227,8 @@ void describePunches(const KeyboardPage& page, char (&out)[kPunchTextChars + 1])
 	Text text(out);
 	text.add("lanes=");
 	for (int32_t l = 0; l < kNumDrumLanes; l++) {
-		const KeyboardCell& cell = page.cell[l % KeyboardPage::kRows][kLaneMuteColumn + l / KeyboardPage::kRows];
+		const PadAt at = laneMuteCell(l);
+		const KeyboardCell& cell = page.cell[at.row][at.x];
 		if (cell.look == Look::LaneMute) {
 			text.add(cell.held ? "M" : cell.lit ? "m" : ".");
 		}
@@ -214,7 +238,8 @@ void describePunches(const KeyboardPage& page, char (&out)[kPunchTextChars + 1])
 		constexpr const char* kOn[] = {"H", "S", "F", "D", "P"}; // kPunchPads' order
 		constexpr const char* kHeld[] = {"h", "s", "f", "d", "p"};
 		static_assert(sizeof(kOn) / sizeof(kOn[0]) == kNumPunchPads && sizeof(kHeld) == sizeof(kOn));
-		const KeyboardCell& cell = page.cell[i / kPunchColumns][kPunchFirstColumn + i % kPunchColumns];
+		const PadAt at = punchCell(i);
+		const KeyboardCell& cell = page.cell[at.row][at.x];
 		text.add(cell.held ? kHeld[i] : cell.lit ? kOn[i] : ".");
 	}
 }

@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Steering into the core (spec §2.6, ADR 0005). UI handlers push commands into a fixed queue; the core drains it at
+// The punch-ins on, as the Generator keeps them (spec §8.9).
 
 #pragma once
 
@@ -61,5 +61,17 @@ struct PunchIns {
 	}
 };
 static_assert(kNumPunchIns <= 8, "PunchIns::effects holds a bit for each");
+
+/// Whether the Flam punch-in flams `lane`'s hits on `drums`, the Drums part (spec §8.9): the backbeat lanes (Snare,
+/// Clap, Rim) where the part has any of them, else every lane but the Kick.
+constexpr bool flams(const PartSpec& drums, Lane lane) {
+	const bool backbeat = lane == Lane::Snare || lane == Lane::Clap || lane == Lane::Rim;
+	if (backbeat) {
+		return true;
+	}
+	const bool hasBackbeat = laneIndexOf(drums, Lane::Snare) >= 0 || laneIndexOf(drums, Lane::Clap) >= 0
+	                         || laneIndexOf(drums, Lane::Rim) >= 0;
+	return !hasBackbeat && lane != Lane::Kick && lane != Lane::None && !isFxLane(lane);
+}
 
 } // namespace deluge::generative

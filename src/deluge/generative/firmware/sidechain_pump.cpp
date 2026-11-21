@@ -35,64 +35,98 @@ namespace {
 /// sidechain level on a Kit (tuning).
 constexpr int32_t kPumpKnob = 20;
 
-/// The param that ducks `part`'s Output: a synth's sidechain → volume cable (made if it has none), a Kit's kit-wide
-/// sidechain level. Built in `memory`; nullptr where there is none (no room for another cable).
-ModelStackWithAutoParam* duckParam(const PartOutput& part, char* memory) {
-	ParamManagerForTimeline* manager = &part.clip->paramManager;
-	ModelStackWithThreeMainThings* stack =
-	    setupModelStackWithSong(memory, currentSong)
-	        ->addTimelineCounter(part.clip)
-	        ->addOtherTwoThingsButNoNoteRow(part.output->toModControllable(), manager);
-	if (part.output->type == OutputType::KIT) {
+ParamDescriptor duckDestination() {
+	ParamDescriptor volume;
+	volume.setToHaveParamOnly(deluge::modulation::params::GLOBAL_VOLUME_POST_REVERB_SEND);
+	return volume;
+}
+
+ModelStackWithThreeMainThings* partStack(Output* output, InstrumentClip* clip, char* memory) {
+	return setupModelStackWithSong(memory, currentSong)
+	    ->addTimelineCounter(clip)
+	    ->addOtherTwoThingsButNoNoteRow(output->toModControllable(), &clip->paramManager);
+}
+
+/// The param that ducks `output`: a synth's sidechain → volume cable, made if it has none and `make` (`made` says
+/// so), a Kit's kit-wide sidechain level. Built in `memory`; nullptr where there is none.
+ModelStackWithAutoParam* duckParam(Output* output, InstrumentClip* clip, char* memory, bool make, bool* made) {
+	ParamManagerForTimeline* manager = &clip->paramManager;
+	ModelStackWithThreeMainThings* stack = partStack(output, clip, memory);
+	if (output->type == OutputType::KIT) {
 		ParamCollectionSummary* summary = manager->getUnpatchedParamSetSummary();
 		const int32_t id = deluge::modulation::params::UNPATCHED_SIDECHAIN_VOLUME;
 		return stack->addParam(summary->paramCollection, summary, id, &manager->getUnpatchedParamSet()->params[id]);
 	}
 	ParamCollectionSummary* summary = manager->getPatchCableSetSummary();
-	ParamDescriptor volume;
-	volume.setToHaveParamOnly(deluge::modulation::params::GLOBAL_VOLUME_POST_REVERB_SEND);
-	ModelStackWithParamCollection* cables = stack->addParamCollection(summary->paramCollection, summary);
-	AutoParam* cable = manager->getPatchCableSet()->getParam(cables, PatchSource::SIDECHAIN, volume, true);
+	PatchCableSet* cables = manager->getPatchCableSet();
+	ModelStackWithParamCollection* withCables = stack->addParamCollection(summary->paramCollection, summary);
+	const bool had = cables->getPatchCableIndex(PatchSource::SIDECHAIN, duckDestination()) != 255;
+	AutoParam* cable = cables->getParam(withCables, PatchSource::SIDECHAIN, duckDestination(), make);
 	if (cable == nullptr) {
 		return nullptr;
 	}
-	return stack->addParam(summary->paramCollection, summary, PatchCableSet::getParamId(volume, PatchSource::SIDECHAIN),
-	                       cable);
+	if (made != nullptr) {
+		*made = !had;
+	}
+	return stack->addParam(summary->paramCollection, summary,
+	                       PatchCableSet::getParamId(duckDestination(), PatchSource::SIDECHAIN), cable);
 }
 
 } // namespace
 
-void SidechainPump::set(const Roster& roster, bool on) {
+void SidechainPump::duck(const Roster& roster) {
 	const Genre* genre = currentRecipe.recipe.genre;
+	const int32_t drums = genre != nullptr ? drumsPart(*genre) : -1;
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		const PartOutput& part = roster.parts[p];
 		Saved& saved = saved_[p];
-		const bool drums = genre != nullptr && p < partCount(*genre) && genre->parts[p].role == Role::Drums;
-		if (part.output == nullptr || part.clip == nullptr || drums) {
+		if (part.output == nullptr || part.clip == nullptr || p == drums || saved.output == part.output) {
+			continue; // none, the Drums, or ducked already
+		}
+		// A part swapped while ducked keeps no record of its old Output, which retires.
+		char memory[MODEL_STACK_MAX_SIZE];
+		bool made = false;
+		ModelStackWithAutoParam* stack = duckParam(part.output, part.clip, memory, true, &made);
+		if (stack == nullptr || stack->autoParam == nullptr) {
+			saved = {};
 			continue;
 		}
-		if (on == (saved.output == part.output)) {
-			continue; // ducked already, or never ducked
+		saved = {part.output, part.clip, stack->autoParam->getCurrentValue(), made};
+		stack->autoParam->setCurrentValueWithNoReversionOrRecording(
+		    stack, stack->paramCollection->knobPosToParamValue(kPumpKnob, stack));
+	}
+	report(true);
+}
+
+void SidechainPump::release() {
+	for (Saved& saved : saved_) {
+		if (saved.output == nullptr) {
+			continue;
 		}
 		char memory[MODEL_STACK_MAX_SIZE];
-		ModelStackWithAutoParam* stack = duckParam(part, memory);
-		if (stack == nullptr || stack->autoParam == nullptr) {
-			continue;
+		ModelStackWithAutoParam* stack = duckParam(saved.output, saved.clip, memory, false, nullptr);
+		if (stack != nullptr && stack->autoParam != nullptr) {
+			if (saved.made) {
+				// The pump's own cable goes, so the song keeps none it never had (Compose, a leave that keeps it).
+				ParamManagerForTimeline* manager = &saved.clip->paramManager;
+				ParamCollectionSummary* summary = manager->getPatchCableSetSummary();
+				char cableMemory[MODEL_STACK_MAX_SIZE];
+				ModelStackWithParamCollection* withCables = partStack(saved.output, saved.clip, cableMemory)
+				                                                ->addParamCollection(summary->paramCollection, summary);
+				PatchCableSet* cables = manager->getPatchCableSet();
+				cables->deletePatchCable(withCables,
+				                         cables->getPatchCableIndex(PatchSource::SIDECHAIN, duckDestination()));
+			}
+			else {
+				stack->autoParam->setCurrentValueWithNoReversionOrRecording(stack, saved.value);
+			}
 		}
-		if (on) {
-			saved = {part.output, stack->autoParam->getCurrentValue()};
-			stack->autoParam->setCurrentValueWithNoReversionOrRecording(
-			    stack, stack->paramCollection->knobPosToParamValue(kPumpKnob, stack));
-		}
-		else {
-			stack->autoParam->setCurrentValueWithNoReversionOrRecording(stack, saved.value);
-			saved = {};
-		}
+		saved = {};
 	}
-	// A part swapped while ducked keeps no record: its old Output is gone.
-	if (!on) {
-		std::fill(std::begin(saved_), std::end(saved_), Saved{});
-	}
+	report(false);
+}
+
+void SidechainPump::report(bool on) {
 	if (on != on_) {
 		on_ = on;
 		TEST_EVENT("gen_pump on=%d", on ? 1 : 0);

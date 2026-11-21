@@ -279,9 +279,17 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		if (!punch_.set(command)) {
 			return false;
 		}
-		// The pump starts or stops on this step's line: the driver ducks the other parts from there (spec §8.9).
+		// The pump starts or stops on this step's line: the driver ducks the other parts from there (spec §8.9). A
+		// Pump event already in this step was the other change: the two cancel, so the step sends none, and the
+		// buffer holds one Pump a step, as stepEventsOf() counts.
 		if (punch_.on(PunchIn::Pump) != punch_.pumped) {
 			punch_.pumped = !punch_.pumped;
+			for (int32_t i = events_.stepStart(); i < events_.size(); i++) {
+				if (events_.at(i).kind == EventKind::Pump) {
+					events_.removeAt(i);
+					return true;
+				}
+			}
 			push(Event::pump(stepTick(nextStep_), punch_.pumped));
 		}
 		return true;

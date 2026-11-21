@@ -51,7 +51,8 @@ void PerformView::enterPerformancePage() {
 		return;
 	}
 	// Nothing stock held on another song carries into Perform's: a held column's release would set Perform's song
-	// FX to the other song's values. Stock's editing modes stay stock's own.
+	// FX to the other song's values. Stock's editing modes stay stock's own. The fields are those stock's private
+	// initFXPress() resets, to the values it gives them.
 	for (FXColumnPress& press : performanceView.fxPress) {
 		press.previousKnobPosition = kNoSelection;
 		press.currentKnobPosition = kNoSelection;

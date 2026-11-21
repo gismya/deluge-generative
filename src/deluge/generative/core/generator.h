@@ -502,7 +502,7 @@ private:
 	/// Roll fill's (§8.7).
 	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
 	/// Whether the punch-ins act on `part`: the Drums part (spec §8.9).
-	[[nodiscard]] bool punchesPart(int32_t part) const { return genre_->parts[part].role == Role::Drums; }
+	[[nodiscard]] bool punchesPart(int32_t part) const { return part == drumsPart(*genre_); }
 	/// The roll a punch-in plays on the Drums part's `lane`, or one with no stage (spec §8.9).
 	[[nodiscard]] RollStep punchRoll(int32_t partIndex, Lane lane) const;
 	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
@@ -684,7 +684,7 @@ private:
 	                                       int32_t patternStep, Lane lane) const;
 	/// The Ornament a Drums hit on `lane` plays while a Flam or Double kick punch-in is on, in place of `drawn` (spec
 	/// §8.9).
-	[[nodiscard]] OrnamentKind punchOrnament(Lane lane, OrnamentKind drawn) const;
+	[[nodiscard]] OrnamentKind punchOrnament(int32_t partIndex, Lane lane, OrnamentKind drawn) const;
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,

@@ -41,10 +41,11 @@ constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform:
 /// A Drums lane's mute pad while its lane plays, and while muted: stock's mute colours (spec §13.5).
 constexpr RGB kLanePlays = RGB(0, 160, 0);
 constexpr RGB kLaneMuted = RGB(255, 0, 0);
-/// Each punch-in pad's colour, in kPunchPads' order: Hat roll, Snare roll, Flam, Double kick, Pump (tuning).
-constexpr RGB kPunchColours[] = {RGB(0, 200, 255), RGB(255, 140, 0), RGB(255, 60, 160), RGB(255, 30, 0),
-                                 RGB(120, 255, 60)};
-static_assert(sizeof(kPunchColours) / sizeof(kPunchColours[0]) == deluge::generative::perform::kNumPunchPads);
+/// Each punch-in pad's colour, indexed by PunchIn: LaneMute (its pads use kLanePlays and kLaneMuted), Hat roll, Snare
+/// roll, Flam, Double kick, Pump (tuning).
+constexpr RGB kPunchColours[] = {RGB(0, 0, 0),      RGB(0, 200, 255), RGB(255, 140, 0),
+                                 RGB(255, 60, 160), RGB(255, 30, 0),  RGB(120, 255, 60)};
+static_assert(sizeof(kPunchColours) / sizeof(kPunchColours[0]) == deluge::generative::kNumPunchIns);
 
 /// What the Recipe keeps for a fader let go: the macro's centre, or `part`'s bias on it (test events).
 [[maybe_unused]] int32_t keptByFader(Macro macro, int32_t part) {
@@ -124,17 +125,16 @@ int32_t PerformView::drumLanes(deluge::generative::Lane (&lanes)[deluge::generat
 	if (genre == nullptr) {
 		return 0;
 	}
-	for (int32_t p = 0; p < partCount(*genre); p++) {
-		const PartSpec& part = genre->parts[p];
-		if (part.role == Role::Drums) {
-			const int32_t count = std::min<int32_t>(laneCount(part), kMaxLanesPerPart);
-			for (int32_t l = 0; l < count; l++) {
-				lanes[l] = part.lanes[l].lane;
-			}
-			return count;
-		}
+	const int32_t drums = drumsPart(*genre);
+	if (drums < 0) {
+		return 0;
 	}
-	return 0;
+	const PartSpec& part = genre->parts[drums];
+	const int32_t count = std::min<int32_t>(laneCount(part), kMaxLanesPerPart);
+	for (int32_t l = 0; l < count; l++) {
+		lanes[l] = part.lanes[l].lane;
+	}
+	return count;
 }
 
 void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
@@ -216,12 +216,8 @@ RGB keyboardColour(const deluge::generative::perform::KeyboardCell& cell, Sectio
 	case Look::LaneMute:
 		return cell.lit ? kLaneMuted : kLanePlays.dim(cell.held ? 0 : 2);
 	case Look::Punch: {
-		using deluge::generative::perform::kPunchPads;
-		int32_t i = 0;
-		while (i < deluge::generative::perform::kNumPunchPads - 1 && kPunchPads[i] != cell.punch) {
-			i++;
-		}
-		return cell.lit ? kPunchColours[i] : kPunchColours[i].dim(4); // bright while on, faint while off
+		const RGB colour = kPunchColours[static_cast<int32_t>(cell.punch)];
+		return cell.lit ? colour : colour.dim(4); // bright while on, faint while off
 	}
 	case Look::Off:
 		break;

@@ -28,15 +28,6 @@ Command punch(PunchIn which, bool on, Lane lane = Lane::None) {
 	return command;
 }
 
-int32_t drumsOf(const Genre& genre) {
-	for (int32_t p = 0; p < partCount(genre); p++) {
-		if (genre.parts[p].role == Role::Drums) {
-			return p;
-		}
-	}
-	return -1;
-}
-
 /// `genre` from its first Groove with `seed`, the punch-in on from kOn to kOff (none when `which` is empty).
 Result played(const Genre& genre, uint32_t seed, std::vector<Command> on, SteeringLog* log = nullptr) {
 	Run run;
@@ -122,7 +113,7 @@ describe punch_in("Punch-ins", $ {
 
 	it("mutes one Drums lane from the step it lands on to the step it lets go on, and nothing else", _ {
 		for (const Genre* genre : allGenres()) {
-			const int32_t drums = drumsOf(*genre);
+			const int32_t drums = drumsPart(*genre);
 			if (drums < 0) {
 				continue;
 			}
@@ -178,7 +169,7 @@ describe punch_in("Punch-ins", $ {
 	it("rolls the Closed hat in 32nds and the Snare (or Clap) in 16ths, from the step it lands on to the release",
 	_ {
 		for (const Genre* genre : allGenres()) {
-			const int32_t drums = drumsOf(*genre);
+			const int32_t drums = drumsPart(*genre);
 			struct Roll {
 				PunchIn which;
 				Lane lane;
@@ -216,13 +207,15 @@ describe punch_in("Punch-ins", $ {
 		}
 	});
 
-	it("flams every Drums hit but the Kick's and doubles every Kick hit a 32nd later while on, and only then", _ {
+	it("flams the backbeat lanes (every lane but the Kick in a kit with none) and doubles every Kick hit a 32nd later "
+	   "while on, and only then", _ {
+		int32_t flammed = 0; // over every genre and seed, so the check bites
 		struct Ornament {
 			PunchIn which;
 			std::vector<Lane> lanes;
 		};
 		for (const Genre* genre : allGenres()) {
-			const int32_t drums = drumsOf(*genre);
+			const int32_t drums = drumsPart(*genre);
 			if (drums < 0) {
 				continue;
 			}
@@ -246,6 +239,12 @@ describe punch_in("Punch-ins", $ {
 					int32_t checked = 0;
 					int32_t plainHits = 0;
 					for (const Lane lane : ornament.lanes) {
+						if (ornament.which == PunchIn::Flam && !flams(genre->parts[drums], lane)) {
+							// A lane the Flam leaves alone plays as it would have.
+							expect(notesIn(punched, drums, lane, 0, INT32_MAX) == notesIn(plain, drums, lane, 0, INT32_MAX))
+							    .to_be_true();
+							continue;
+						}
 						for (const Event& hit : notesIn(plain, drums, lane, 0, INT32_MAX)) {
 							plainHits += checks(hit) ? 1 : 0;
 						}
@@ -280,9 +279,41 @@ describe punch_in("Punch-ins", $ {
 					// Every hit the piece plays there gets it, and no more hits play (a plain hit could have
 					// been a ratchet's first, which the punch-in's Ornament replaces).
 					expect(checked).to_equal(plainHits);
+					flammed += ornament.which == PunchIn::Flam ? checked : 0;
 				}
 			}
 		}
+		expect(flammed).to_be_greater_than(0);
+	});
+
+	it("names the lanes the Flam acts on: Snare, Clap and Rim where the kit has any, else all but the Kick", _ {
+		static constexpr Pattern kHit[] = {{"X...............", "................", 0}};
+		static constexpr LaneSpec kRimKit[] = {{.lane = Lane::Kick, .pool = kHit}, {.lane = Lane::Rim, .pool = kHit},
+		                                       {.lane = Lane::ClosedHat, .pool = kHit}};
+		static constexpr LaneSpec kHatKit[] = {{.lane = Lane::Kick, .pool = kHit},
+		                                       {.lane = Lane::ClosedHat, .pool = kHit},
+		                                       {.lane = Lane::Perc1, .pool = kHit}};
+		const PartSpec rim{.role = Role::Drums, .lanes = kRimKit};
+		const PartSpec hats{.role = Role::Drums, .lanes = kHatKit};
+		for (Lane lane : {Lane::Snare, Lane::Clap, Lane::Rim}) {
+			expect(flams(rim, lane) && flams(hats, lane)).to_be_true();
+		}
+		expect(flams(rim, Lane::ClosedHat) || flams(rim, Lane::Kick)).to_be_false();
+		expect(flams(hats, Lane::ClosedHat) && flams(hats, Lane::Perc1)).to_be_true();
+		expect(flams(hats, Lane::Kick) || flams(hats, Lane::Riser)).to_be_false();
+	});
+
+	it("sends no pump when it goes on and off on the same step, and one when it goes on twice", _ {
+		Run run;
+		run.recipe = acidRecipe();
+		run.skipIntro = true;
+		run.steer = steerAt({{4, punch(PunchIn::Pump, true)}, {4, punch(PunchIn::Pump, false)}});
+		expect(only(play(run, 2).events, EventKind::Pump).size()).to_equal(0U);
+		run.steer = steerAt({{4, punch(PunchIn::Pump, true)}, {4, punch(PunchIn::Pump, false)},
+		                     {4, punch(PunchIn::Pump, true)}});
+		const auto pumps = only(play(run, 2).events, EventKind::Pump);
+		expect(pumps.size()).to_equal(1U);
+		expect(!pumps.empty() && pumps[0].pumps()).to_be_true();
 	});
 
 	it("sends a pump on as it lands and off as it lets go, once each", _ {
@@ -342,7 +373,7 @@ describe punch_in("Punch-ins", $ {
 
 	it("starts several punch-ins on one step and lets each go on its own", _ {
 		const Genre& genre = genres::technoAcid;
-		const int32_t drums = drumsOf(genre);
+		const int32_t drums = drumsPart(genre);
 		const Result plain = played(genre, 2, {});
 		const Result both =
 		    played(genre, 2, {punch(PunchIn::HatRoll, true), punch(PunchIn::LaneMute, true, Lane::Kick)});

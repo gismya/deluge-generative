@@ -99,8 +99,8 @@ void PerformAdapter::stopPiece() {
 		reportLog(true);
 	}
 	sink_.allNotesOff();
-	sidechainPump.release(sink_.roster); // the next start's pump ducks again (spec §8.9)
-	soundControls.restoreHomes();        // every sound back as its preset was, or as the player left it while stopped
+	sidechainPump.release();      // the next start's pump ducks again (spec §8.9)
+	soundControls.restoreHomes(); // every sound back as its preset was, or as the player left it while stopped
 }
 
 #if ENABLE_SYSEX_TEST
@@ -433,6 +433,10 @@ void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
+	// Every part ducked lets go: the new instance starts with no pump, and the steering's re-send below ducks again
+	// from its step 0 only if PUMP is still on. A release made after the last instance's final decision (a restart's
+	// line, a transition's start step) never reached that instance, and its queue is gone (spec §8.9).
+	sidechainPump.release();
 	steering_.instanceStarts(currentSong->isFillModeActive());
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;

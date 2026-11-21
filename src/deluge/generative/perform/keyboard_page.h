@@ -86,9 +86,12 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
 /// go, a hold too. Several can be on at once. A pad is keyed by punchKey().
 class PunchHolds {
 public:
-	/// A LaneMute's key is its lane's (a Drums lane, 0 to kNumDrumLanes - 1), the others' 16 on.
+	/// The first key past the lanes': a punch-in other than LaneMute is this plus its value.
+	static constexpr int32_t kFirstPunchKey = 16;
+	static_assert(kNumDrumLanes <= kFirstPunchKey, "every Drums lane's key comes before the punch-ins'");
+	/// A LaneMute's key is its lane's (a Drums lane, 0 to kNumDrumLanes - 1), the others' kFirstPunchKey on.
 	static constexpr int32_t punchKey(PunchIn punch, Lane lane) {
-		return punch == PunchIn::LaneMute ? static_cast<int32_t>(lane) : 16 + static_cast<int32_t>(punch);
+		return punch == PunchIn::LaneMute ? static_cast<int32_t>(lane) : kFirstPunchKey + static_cast<int32_t>(punch);
 	}
 
 	/// The pad keyed `key` went down at `now`. @return Whether its punch-in turns on now: it was off.
@@ -105,8 +108,8 @@ public:
 	[[nodiscard]] bool held(int32_t key) const { return (held_ >> key & 1) != 0; }
 
 private:
-	static constexpr int32_t kKeys = 16 + kNumPunchIns;
-	static_assert(kNumDrumLanes <= 16 && kKeys <= 32, "every key fits a bit");
+	static constexpr int32_t kKeys = kFirstPunchKey + kNumPunchIns;
+	static_assert(kKeys <= 32, "every key fits a bit");
 	uint32_t on_ = 0;
 	uint32_t held_ = 0;
 	uint32_t wasOn_ = 0; ///< on as it went down: a release turns it off

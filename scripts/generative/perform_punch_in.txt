@@ -148,6 +148,30 @@ expect event gen_page KEYBOARD
 pad 2 5 up
 expect event /^gen_performance_pad x=2 y=5 up value=-?[0-9]+ held=0/
 
+# ---- A restart lets the pump go and ducks again from its step 0 while PUMP is still on (R1 M1): a release made after
+# the last decision before the line never reaches the old instance, and the restart drops it from the queue, so the
+# instance start itself lets go. Then the release ----
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_pump on=1 within=5
+mark
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+expect event gen_restart as_it_is within=15
+expect event gen_pump on=0 since=mark
+expect event gen_pump on=1 within=5
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_pump on=0 within=5
+
 button PLAY down
 wait 50
 button PLAY up
