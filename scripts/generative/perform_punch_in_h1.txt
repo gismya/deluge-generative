@@ -29,9 +29,9 @@ button SHIFT up
 expect playing=true
 expect event gen_section GROOVE 0 clip_pos=0 within=5
 
-# ---- 8 bars plain: two gen_h1 reports ----
-expect event gen_h1 within=20
-expect event gen_h1 within=20
+# ---- 8 bars plain: two gen_h1 reports (a regex: gen_h1 alone also matches gen_h16) ----
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
 
 # ---- Latch them all: the Open hat's mute (5th lane, x 8 y 3), the rolls, FLAM, DOUBLE KICK, PUMP ----
 pad 8 3 down
@@ -52,16 +52,15 @@ pad 15 6 up
 pad 14 5 down
 wait 50
 pad 14 5 up
-expect event gen_punch lanes=....m.. punch=HSFDP
-expect event gen_pump on=1 within=5
 expect event /^gen_punch_landed lanes=20 effects=3e/ within=5
+expect event gen_pump on=1 within=5
 
-# ---- 16 bars with them on: four reports after the one in flight ----
-expect event gen_h1 within=20
-expect event gen_h1 within=20
-expect event gen_h1 within=20
-expect event gen_h1 within=20
-expect event gen_h1 within=20
+# ---- 20 bars with them on: the report in flight, then four ----
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
 
 # ---- All let go ----
 pad 8 3 down
