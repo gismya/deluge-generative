@@ -42,6 +42,12 @@ repos:
         entry: python3 scripts/lint/generative_rules.py perform-l10n
         language: system
         files: ^src/deluge/gui/(views/perform_view|ui/generative_modal|ui/browser/perform_preset_browser|context_menu/generative|menu_item/generative/).*\.(cpp|h)$
+      - id: generative-spec-no-nested-describe
+        name: a nested describe( never runs in CppSpec, use context(
+        alias: generative-rules
+        entry: python3 scripts/lint/generative_rules.py spec-no-nested-describe
+        language: system
+        files: ^tests/spec/.*_spec\.cpp$
 # - repo: local
 
 #   hooks:

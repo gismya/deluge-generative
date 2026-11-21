@@ -320,6 +320,16 @@ class Checks:
         print("\n" + f"{'check':<{width}}  result   time  note")
         for name, result, seconds, note, _ in self.rows:
             print(f"{name:<{width}}  {result:<6} {seconds:5.0f}s  {note}")
+        skips = [
+            int(m.group(1))
+            for r in self.rows
+            if (m := HARDWARE_ONLY_SKIPS.search(r[3]))
+        ]
+        if skips:
+            print(
+                f"hardware-only expects skipped under delugemu: {sum(skips)}, in {len(skips)} scripts (they run on"
+                " the Deluge)"
+            )
         return sum(1 for r in self.rows if r[1] == "FAIL")
 
     def passed_alone(self):
@@ -348,6 +358,12 @@ def last_match(pattern):
         return found[-1] if found else ""
 
     return detail
+
+
+# A test_port_emu.py run's note: its summary line's counts, with the hardware_only expects it skipped, which the
+# table adds up (Checks.table()).
+SCRIPT_RESULT = last_match(r"\d+ checks, \d+ failed(?:, \d+ hardware-only skipped)?")
+HARDWARE_ONLY_SKIPS = re.compile(r"(\d+) hardware-only skipped")
 
 
 # The ARM types row: its count line, or how to get a toolchain on a fresh clone.
@@ -678,9 +694,7 @@ def run_delugemu(checks, todo, built, workers, given):
             if name != os.path.basename(covers.SMOKE):
                 # the error replies are checked once, with the smoke script
                 cmd.append("--no-protocol-checks")
-            jobs.append(
-                (f"delugemu {name}", cmd, last_match(r"\d+ checks, \d+ failed"))
-            )
+            jobs.append((f"delugemu {name}", cmd, SCRIPT_RESULT))
     else:
         checks.skip(
             "leak check, firmware check and probe scripts", "the test-port build failed"

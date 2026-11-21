@@ -22,8 +22,9 @@ finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware 
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
 someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
 naming each covers path that matches no file, each src/ file that sends an event a script expects (or rules out)
-that its covers lines miss (a string literal whose first word is the event's kind), and each event expect that doesn't
-start with its kind (check_all.py runs it every time;
+that its covers lines miss (a string literal whose first word is the event's kind), each event expect that doesn't
+start with its kind, and each that pins a timing figure (TIMING_FIELDS) without hardware_only (check_all.py runs it
+every time;
 so do the unit tests).
 """
 
@@ -43,12 +44,25 @@ COVERS = re.compile(r"^#\s*covers:(.*)$", re.MULTILINE)
 INCLUDE = re.compile(r"^\s*include\s+(\S.*?)\s*(?:#.*)?$", re.MULTILINE)
 START_STATE = re.compile(r"^start_state\b", re.MULTILINE)
 IMPORT = re.compile(r"^\s*(?:import\s+([\w, ]+)|from\s+(\w+)\s+import)", re.MULTILINE)
-# An event a script waits on, rules out or keeps to compare: expect [next] [no_]event TEXT, keep events TEXT; TEXT
-# plain or /regex/, then the line's options.
+# An event a script waits on, rules out or keeps to compare: [hardware_only] expect [next] [no_]event TEXT, keep events
+# TEXT; TEXT plain or /regex/, then the line's options.
+HARDWARE_ONLY = (
+    "hardware_only "  # deluge_probe.HARDWARE_ONLY: delugemu skips the expect
+)
 EXPECT_LINE = re.compile(
-    r"^(?:expect (?:next )?(?:no_)?event|keep events) (.*?)(?: (?:since=mark|within=\S+))*\s*$",
+    r"^(?:(?:hardware_only )?expect (?:next )?(?:no_)?event|keep events) (.*?)(?: (?:since=mark|within=\S+))*\s*$",
     re.MULTILINE,
 )
+# The fields of a test event whose value delugemu's speed decides as much as the firmware's: it renders slower than
+# real time under host load, so it culls voices, sounds fewer, measures the host's clock off its own. An expect that
+# pins one (any value but one of ANY_VALUE) must be "hardware_only expect" (unmarked_timing(), #417).
+TIMING_FIELDS = {
+    "gen_h16": ("culls", "culled", "voices", "render_max_us"),
+    "gen_h1": ("mean_ns", "max_ns"),
+    "gen_ext_tempo": ("bpm",),
+    "gen_midi_feedback": ("ms", "bytes_per_s", "peak_pass"),
+}
+ANY_VALUE = ("", r"\d+", r"\d*", r"\S+", r"\S*", ".*", ".+", r"-?\d+")
 SMOKE = "scripts/generative/test_port_smoke.txt"
 SCRIPT_LITERAL = re.compile(r"[\"']([\w-]+\.txt)[\"']")
 # The firmware's inputs: a change to one of these (covers paths: a file, a folder, a glob) builds the firmware and runs
@@ -403,8 +417,8 @@ def missing(scripts, repo=REPO):
     return out
 
 
-def expect_texts(path):
-    """(file name:line, TEXT) for each event expect in the script at `path` and its includes."""
+def expect_lines(path):
+    """(file name:line, TEXT, hardware_only) for each event expect in the script at `path` and its includes."""
     out = []
     folder = os.path.dirname(path)
     for name in sorted(own_files(path, folder)):
@@ -413,8 +427,39 @@ def expect_texts(path):
         ):
             m = EXPECT_LINE.match(line)
             if m:
-                out.append((f"{os.path.basename(name)}:{number}", m.group(1)))
+                where = f"{os.path.basename(name)}:{number}"
+                out.append((where, m.group(1), line.startswith(HARDWARE_ONLY)))
     return out
+
+
+def expect_texts(path):
+    """(file name:line, TEXT) for each event expect in the script at `path` and its includes."""
+    return [(where, text) for where, text, _ in expect_lines(path)]
+
+
+def timing_field(text):
+    """The first TIMING_FIELDS field an expect's TEXT pins to less than any value, or None."""
+    regex = len(text) > 1 and text.startswith("/") and text.endswith("/")
+    body = text[1:-1].lstrip("^") if regex else text
+    kind = re.match(r"[a-z][a-z0-9_]*", body)
+    if not kind or not body[kind.end() :].startswith(" "):
+        return None
+    for field in TIMING_FIELDS.get(kind.group(0), ()):
+        m = re.search(rf"(?<![\w]){field}=(\S*)", body)
+        if m and m.group(1).rstrip("$") not in ANY_VALUE:
+            return field
+    return None
+
+
+def unmarked_timing(scripts):
+    """(where, TEXT, field) for each event expect that pins a timing field (timing_field()) without hardware_only."""
+    out = []
+    for s in scripts:
+        for where, text, hardware_only in expect_lines(s):
+            field = None if hardware_only else timing_field(text)
+            if field:
+                out.append((where, text, field))
+    return sorted(set(out))
 
 
 def expect_kinds(text, sent):
@@ -600,12 +645,18 @@ def check(scripts, repo=REPO):
         print(
             f"{where}: expect {text!r} starts with no event kind a src/ file sends: give it its kind"
         )
+    timing = unmarked_timing(scripts)
+    for where, text, field in timing:
+        print(
+            f"{where}: expect {text!r} pins {field}=, which delugemu's speed decides: make it hardware_only expect"
+        )
     with_lines = sum(script_covers(s) is not None for s in scripts)
     print(
         f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing, "
-        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind, {len(gaps)} builder gaps"
+        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind, {len(gaps)} builder gaps, "
+        f"{len(timing)} timing expects not hardware_only"
     )
-    return 1 if gone or unseen or loose or gaps else 0
+    return 1 if gone or unseen or loose or gaps or timing else 0
 
 
 def all_scripts(here=HERE):
