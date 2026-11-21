@@ -28,7 +28,7 @@ otherwise.
   lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
   target lists one or reads one at any depth. A source's notes sounding into its against half aren't the rule's
   business (§5.5), so `avoided()` stays Avoid's.
-- **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
+- **Replay (M4, #145):** `ComposeDriver::beginReplay()` doesn't stop on `Generator::ended()`, which reads the pending list; it runs the piece's span.
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
   command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
@@ -85,10 +85,9 @@ otherwise.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.
-- **Capture's clips (M4):** `ClipBuilder::take()` drops Section, KeyScale and Sound events today (spec §15.2, §15.5).
-  Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
-  a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
-  (`endsHere()`), and its muted notes are already dropped there.
+- **Capture's clips (#146):** the portable replay (#145) calls the SongWriter's Capture hooks (`cutClip`, `soundPick`,
+  `newTrack`, `tempo`, `paramEdit`, `stutter`, `nextSong`); the firmware's `ComposeSong` implements none yet. A split
+  song's opening state (picks, snapshot, homes) is the writer's to rebuild from begin(), newTrack() and paramEdit().
 - The Generative menu's lists (#140): a new source row is a `MenuItem` in `SourceMenu`'s list
   (`gui/menu_item/generative/source_rows.h`), in PERFORM FROM (`perform_from.cpp`), COMPOSE FROM and the screen's
   FROM (`compose_screen.cpp`). Perform entry from a new kind of source is an `EntrySource`

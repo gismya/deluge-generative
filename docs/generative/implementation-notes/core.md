@@ -41,7 +41,9 @@ otherwise.
   true where it lands (`steering_log_spec` round-trips every kind). Recipe state it changes reaches the header through
   the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins.
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
-  (ADR 0005), so an effect done anywhere else is lost on replay.
+  (ADR 0005), so an effect done anywhere else is lost on replay. A decision that reads the pending list breaks replay
+  unless the log says when that command waits: only Arc moves do today (`waitingMove()`, `lastGroovePhrase()`), and
+  `logWaitingMoves()` logs their slots (RecordKind::Waiting/NotWaiting). A new reader of another slot needs the same.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
