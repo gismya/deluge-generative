@@ -440,6 +440,11 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition_preload_held within=10
 include perform_hold_back.txt
+# NOTHING, the option before CANCEL (no Capture), one detent at a time (perform_leave.txt says why)
+encoder 3 1
+encoder 3 1
+encoder 3 1
+encoder 3 -1
 button 4 3 down
 wait 50
 button 4 3 up

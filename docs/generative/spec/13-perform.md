@@ -213,6 +213,8 @@ Holding BACK opens the leave menu, a stock context menu, while playback continue
 | No marks | `LEAVE, KEEP:` | LAST, NOTHING, CANCEL |
 | No piece was played | `LEAVE PERFORM?` | LEAVE, CANCEL |
 
+The counts and the last piece are the kept ones ([§17.7](17-capture.md#177-building-on-leave)): an earlier piece unmarked in CAPTURE ▸ isn't counted, nor is a piece with nothing logged. The option that keeps nothing (NOTHING, or LEAVE) is always the one before CANCEL.
+
 - Any choice but CANCEL stops the transport.
 - If pieces are kept, Capture builds and saves them ([§17.7](17-capture.md#177-building-on-leave)). The player lands on the last saved song in arranger view.
 - If nothing is kept, the player lands on a new blank song in session view, the song SHIFT+LOAD → NEW makes. Leaving also empties the sample cache, the previous song's samples included ([§20](20-budgets.md)).

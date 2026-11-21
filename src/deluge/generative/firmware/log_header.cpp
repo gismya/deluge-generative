@@ -168,6 +168,38 @@ int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t 
 
 } // namespace
 
+std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song) {
+	const int32_t collection = edit.length >> 13;
+	const auto source = static_cast<uint8_t>((edit.length >> 8) & 0x1F);
+	const int32_t id = edit.length & 0xFF;
+	SnapshotBlock block{edit.target, edit.lane, static_cast<uint8_t>(collection), 0};
+	const BlockParams params = paramsOf(block, roster, genre, song);
+	ParamManager* manager = params.manager;
+	if (manager == nullptr || collection >= manager->getExpressionParamSetOffset()) {
+		return std::nullopt;
+	}
+	ParamCollection* found = manager->summaries[collection].paramCollection;
+	if (found == nullptr) {
+		return std::nullopt;
+	}
+	if (isCableCollection(*manager, collection)) {
+		auto* set = static_cast<PatchCableSet*>(found);
+		for (int32_t c = 0; c < set->numPatchCables; c++) {
+			PatchCable& cable = set->patchCables[c];
+			if (cable.destinationParamDescriptor.getJustTheParam() == id
+			    && static_cast<uint8_t>(cable.from) == source) {
+				return LoggedParam{manager, &cable.param, collection, c};
+			}
+		}
+		return std::nullopt;
+	}
+	auto* set = static_cast<ParamSet*>(found);
+	if (id >= set->getNumParams()) {
+		return std::nullopt;
+	}
+	return LoggedParam{manager, &set->params[id], collection, id};
+}
+
 int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song) {
 	int32_t written = 0;
 	piece.forEachSnapshot([&](const void* data, int32_t length) {
