@@ -10,7 +10,7 @@
 # Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3, FX row 4 (y 4). The QWERTY keyboard's digits
 # are row y 5, '1' to '0' at x 3 to 12. gen_preset_preview built|cancelled|failed part= error= ms= path=: a preview's
 # build ended; held part=: a build waits under the hold; note part= lane=<lane or ->: its note on; note_off part=; freed
-# part=: the Output freed. A preview's build reports its sounds as preview_gen_sound (gen_sound is the part's own).
+# part=: the Output freed. A preview's build reports no gen_sound events: those are the part's own loads.
 # gen_browser_preview off playing=0|1: nothing previews. The Perform menu's last row is BROWSER PREVIEW (encoder 3 20
 # reaches it), gen_browser_preview_setting <0 off|1 when stopped|2 always>.
 # covers: src/deluge/generative/firmware/preset_preview.* src/deluge/generative/perform/preset_preview.h
@@ -18,6 +18,14 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.h
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.*
+# covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/generative/firmware/sound_controls.cpp
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/core/palette_file.* src/deluge/gui/menu_item/generative/perform_lanes.cpp
+# covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/retirements.* src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/lane_names.h src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -39,8 +47,7 @@ wait 50
 button SYNTH up
 expect event /gen_browser open part=1 pick=(?P<pick>SYNTHS\/.+\.XML) at=(?P=pick)$/ within=10
 expect ui=generative_sound_browser
-expect event /preview_gen_sound ACID - pick mode=\d+ prio=\d+ arp=\d+ (?P=pick) / within=10
-expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=5
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=10
 expect event gen_preset_preview note part=1 lane=-
 expect event gen_mem preset_preview
 

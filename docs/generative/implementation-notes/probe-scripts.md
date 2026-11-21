@@ -126,8 +126,10 @@ otherwise.
   press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
   that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
   presses whose handler refuses instead (`perform_recipe_save.txt`).
-- A preset preview's build reports its sounds as `preview_gen_sound`, `preview_gen_sound_level`, ... (test builds:
-  `buildEventPrefix()`, `card_sounds.h`), so `gen_sound ACID` expects see only the part's own loads. `hold
+- A preset preview's build reports none of a build's events (`gen_sound`, `gen_sound_level`, ...: each sits under
+  `if (!previewBuild())`, `card_sounds.h`), so `gen_sound ACID` expects see only the part's own loads; its own
+  `gen_preset_preview built ... path=` says what it loaded. Keep the event kind literal at the start of a
+  `TEST_EVENT` format: a `%s` prefix there hides the kind from `covers.py --check`, which fails check_all. `hold
   preset_preview` parks every preview build at its start until it is cancelled or released.
 - Trap: a BACK hold whose press closed a browser at its top folder also closes the lane list under it (the
   `BACK_MENU_EXIT` timer fires on the list); from a subfolder only the browser closes. Which one depends on the card
