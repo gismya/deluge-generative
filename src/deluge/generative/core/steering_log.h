@@ -101,8 +101,9 @@ public:
 
 	// ---- Pieces (spec §17.3): the Perform driver ----
 
-	/// A piece starts, from `start`. The newest piece, if it ended and isn't marked, is thrown away first (spec
-	/// §17.3). If even the opening doesn't fit, no piece opens: nothing logs until the next one.
+	/// A piece starts, from `start`. Every piece that ended and isn't marked is thrown away first (spec §17.3, §17.4):
+	/// the last piece, and an earlier one unmarked in the CAPTURE menu, the pieces after it moved down into its room.
+	/// If even the opening doesn't fit, no piece opens: nothing logs until the next one.
 	void beginPiece(const PieceStart& start);
 	/// Header records, after beginPiece() and before the piece's first record. A sound pick, by pickSlot(): an empty
 	/// path is skipped.
@@ -114,8 +115,12 @@ public:
 	uint8_t* snapshotSpace(int32_t length);
 	/// The current piece ends before `step`: its first step not played.
 	void endPiece(int32_t step, PieceEnd why);
-	/// Marks the newest piece to keep, or unmarks it (spec §17.4).
-	void mark(bool on);
+	/// Marks the current piece to keep, or unmarks it (spec §17.4). @return false, changing nothing, with no current
+	/// piece, or for a mark while the log is full().
+	bool mark(bool on);
+	/// Marks piece `i` or unmarks it: the current one as mark() does; an earlier one (the CAPTURE menu) stays in the
+	/// log until the next piece begins, so it can be marked again until then, full or not. @return false if refused.
+	bool markPiece(int32_t i, bool on);
 
 	// ---- Records, in step order within the piece ----
 
@@ -182,6 +187,11 @@ public:
 
 	[[nodiscard]] int32_t pieces() const { return pieces_; }
 	[[nodiscard]] Piece piece(int32_t i) const;
+	/// The current piece, the newest: playing, or the last piece after it ended. -1 before any, or when the newest
+	/// found no room to open (the pieces left are marked ones, which a RECORD press doesn't touch).
+	[[nodiscard]] int32_t current() const { return current_ ? pieces_ - 1 : -1; }
+	/// The pieces marked, the current one among them.
+	[[nodiscard]] int32_t markedPieces() const;
 	/// Whether the newest piece stopped logging because the log was full, or found no room to open: new marks are
 	/// refused (spec §17.2).
 	[[nodiscard]] bool full() const { return cut_; }
@@ -225,6 +235,8 @@ private:
 	/// Writes a header record (its bytes from `data`, if not nullptr), or cuts the piece at step 0. @return where its
 	/// bytes are, or nullptr.
 	uint8_t* writeHeader(uint8_t tag, const void* data, int32_t length);
+	/// Throws away every piece that isn't marked, moving the ones after each down into its room.
+	void dropUnmarked();
 	/// The records' cut: the step `step` didn't fit, and its records go whole.
 	void cut(int32_t step);
 	/// A header that didn't fit: none of it stays, and the piece is cut at its step 0.
@@ -240,6 +252,7 @@ private:
 	/// The current piece's state for writing: open, cut, its records' last step, and where that step's records began.
 	bool open_ = false;
 	bool cut_ = false;
+	bool current_ = false; ///< The newest piece is the current one (current()).
 	bool inRecords_ = false;
 	int32_t lastStep_ = 0;
 	int32_t stepFrom_ = 0;

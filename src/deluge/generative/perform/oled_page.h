@@ -15,9 +15,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Perform's OLED (spec §13.5) as a portable screen: the status line, and below it a SELECT-turn peek (QUEUE or
-// RECIPE), or the page that follows the grid page (SONG: ARC, CLIP: PART, KEYBOARD: MACROS), or the Recipe while
-// stopped. The Perform view draws the screen's text, bars and boxes as pixels and applies the blink phase; this
+// Perform's OLED (spec §13.5) as a portable screen: the status line, and below it a SELECT-turn peek (QUEUE,
+// RECIPE or CAPTURE), or the page that follows the grid page (SONG: ARC, CLIP: PART, KEYBOARD: MACROS), or the Recipe
+// while stopped. The Perform view draws the screen's text, bars and boxes as pixels and applies the blink phase; this
 // decides what they say. The harness has no l10n, so the words are here, as queue_text's are. The test port's
 // gen_arcpage and gen_macropage texts are made from the same screen.
 
@@ -27,6 +27,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/perform/arc_map.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/queue_text.h"
@@ -53,8 +54,11 @@ static_assert(macroToPoints(kMacroFull) < 100);
 constexpr int32_t kMacroLabelChars = 1 + kMacroPointsChars;
 void macroLabel(int32_t macro, int32_t units, char (&out)[kMacroLabelChars + 1]);
 
+/// The characters the status line's Capture dot takes, with the space before it.
+constexpr int32_t kCaptureDotChars = 2;
+
 /// The SELECT-turn peek below the status line (spec §13.5).
-enum class OledPeek : uint8_t { None, Queue, Recipe };
+enum class OledPeek : uint8_t { None, Queue, Recipe, Capture };
 
 /// The last Section event played, as the driver's sink keeps it.
 struct HeardSection {
@@ -108,6 +112,8 @@ struct OledInput {
 	/// QUEUE the state's queue.
 	const PhraseHistory* history = nullptr;
 	const ArcMapState* arcState = nullptr;
+	/// The steering log's marks: the status line's dot and CAPTURE.
+	CaptureStatus capture;
 };
 
 /// What the OLED shows, as text and numbers: the view redraws only when it changes.
@@ -116,6 +122,9 @@ struct OledScreen {
 	char right[12] = {}; ///< the next queued action's tag, or bar.beat
 	bool tag = false;    ///< `right` is a tag: drawn inverted
 	bool ext = false;
+	/// The Capture dot at the line's right end (spec §13.5), which blinks while the log is full.
+	CaptureDot dot = CaptureDot::None;
+	bool dotBlinks = false;
 	int16_t phraseBar = 0; ///< pixels
 	static constexpr int32_t kLines = 3;
 	char lines[kLines][24] = {};

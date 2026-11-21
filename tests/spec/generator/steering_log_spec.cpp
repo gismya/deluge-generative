@@ -429,6 +429,121 @@ describe steering_log("The steering log", $ {
 		});
 	});
 
+	context("marks (§17.4)", _ {
+		it("marks and unmarks the current piece, playing or the last one after a stop", _ {
+			Buffer b(4096);
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.mark(true)).to_be_false(); // no piece yet
+			b.log.beginPiece(startOf(1));
+			expect(b.log.current()).to_equal(0);
+			expect(b.log.mark(true)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_true();
+			expect(b.log.markedPieces()).to_equal(1);
+			expect(b.log.mark(false)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_false();
+			b.log.endPiece(10, PieceEnd::Stopped);
+			expect(b.log.current()).to_equal(0); // the last piece, which the leave menu offers
+			expect(b.log.mark(true)).to_be_true();
+			b.log.beginPiece(startOf(2));
+			expect(b.log.pieces()).to_equal(2);
+			expect(b.log.current()).to_equal(1);
+			expect(b.log.piece(1).marked()).to_be_false();
+			expect(b.log.markedPieces()).to_equal(1);
+		});
+
+		it("refuses a mark once the log is full, but still takes an unmark", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.mark(false)).to_be_true();
+			expect(b.log.piece(0).marked()).to_be_false();
+			expect(b.log.mark(true)).to_be_false();
+			expect(b.log.piece(0).marked()).to_be_false();
+		});
+
+		it("has no current piece when the next one found no room to open, so a press can't touch the marked ones", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(2));
+			expect(b.log.current()).to_equal(-1);
+			expect(b.log.mark(false)).to_be_false();
+			expect(b.log.piece(0).marked()).to_be_true();
+		});
+
+		it("unmarks an earlier piece until the next piece begins, which throws it away and closes the gap", _ {
+			Buffer b(8192);
+			for (uint32_t seed = 1; seed <= 3; seed++) {
+				b.log.beginPiece(startOf(seed));
+				b.log.addPick(pickSlot(1), "SYNTHS/GEN ACID");
+				b.log.append(2, macro(Macro::Energy, static_cast<int32_t>(seed)));
+				b.log.append(5, macro(Macro::Density, static_cast<int32_t>(seed)));
+				b.log.mark(true);
+				b.log.endPiece(8, PieceEnd::Stopped);
+			}
+			expect(b.log.pieces()).to_equal(3);
+			// The first piece, unmarked from the CAPTURE menu: it stays until the next piece begins, and can be
+			// marked again until then, even with the log full.
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.markedPieces()).to_equal(2);
+			expect(b.log.markPiece(0, true)).to_be_true();
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.pieces()).to_equal(3);
+			const int32_t before = b.log.used();
+
+			b.log.beginPiece(startOf(4));
+			expect(b.log.pieces()).to_equal(3);
+			expect(b.log.used()).to_be_less_than(before); // the new piece's opening is smaller than the dropped piece
+			expect(b.log.piece(0).start().seed).to_equal(2u);
+			expect(b.log.piece(1).start().seed).to_equal(3u);
+			expect(b.log.piece(2).start().seed).to_equal(4u);
+			expect(b.log.current()).to_equal(2);
+			char path[kMaxSoundPath];
+			expect(b.log.piece(1).pick(pickSlot(1), path)).to_be_true();
+			expect(std::string{path}).to_equal(std::string{"SYNTHS/GEN ACID"});
+			const std::vector<LogRecord> moved = records(b.log, 1);
+			expect(moved.size()).to_equal(2u);
+			expect(moved[0].command == macro(Macro::Energy, 3)).to_be_true();
+			expect(moved[1].step).to_equal(5);
+			// The new piece logs after the moved ones as usual.
+			expect(b.log.append(1, macro(Macro::Motion, 9))).to_be_true();
+			expect(records(b.log, 2).size()).to_equal(1u);
+		});
+
+		it("takes marks again after an unmarked earlier piece made room at the next piece", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			int32_t step = 0;
+			while (step < 60 && b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(2));
+			while (b.log.append(step, macro(Macro::Energy, 1))) {
+				step++;
+			}
+			expect(b.log.full()).to_be_true();
+			expect(b.log.markPiece(0, false)).to_be_true();
+			expect(b.log.mark(true)).to_be_false(); // the current piece stays cut until it ends
+			b.log.endPiece(step, PieceEnd::Stopped);
+			b.log.beginPiece(startOf(3));
+			expect(b.log.pieces()).to_equal(1);
+			expect(b.log.full()).to_be_false();
+			expect(b.log.mark(true)).to_be_true();
+		});
+	});
+
 	context("Perform's pieces", _ {
 		it("logs a param edit on the next undecided step, one value per param a step", _ {
 			StepwisePiece<HeaderSink> piece{{.seed = 3, .skipIntro = true, .logEntries = 64}};

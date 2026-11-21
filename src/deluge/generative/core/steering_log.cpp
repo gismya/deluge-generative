@@ -90,21 +90,16 @@ GEN_STEP_CODE SteeringLog::PieceInfo& SteeringLog::newest() const {
 }
 
 void SteeringLog::beginPiece(const PieceStart& start) {
-	if (pieces_ > 0) {
-		PieceInfo& last = newest();
-		if (last.ended == PieceEnd::Playing) {
-			endPiece(lastStep_ + 1, PieceEnd::Stopped);
-		}
-		if (!last.marked) {
-			used_ = newest_; // thrown away (spec §17.3)
-			pieces_--;
-		}
+	if (pieces_ > 0 && current_ && newest().ended == PieceEnd::Playing) {
+		endPiece(lastStep_ + 1, PieceEnd::Stopped);
 	}
+	dropUnmarked(); // the last piece, and any unmarked in the CAPTURE menu (spec §17.3, §17.4)
 	open_ = false;
 	const int32_t at = alignUp(used_);
 	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > room()) {
 		newest_ = pieces_ > 0 ? offsetOf(pieces_ - 1) : 0;
 		cut_ = true; // no room even for its opening: nothing logs, and marks are refused
+		current_ = false;
 		return;
 	}
 	newest_ = at;
@@ -121,6 +116,7 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	pieces_++;
 	open_ = true;
 	cut_ = false;
+	current_ = true;
 	inRecords_ = false;
 	lastStep_ = 0;
 	stepBefore_ = 0;
@@ -183,10 +179,52 @@ void SteeringLog::endPiece(int32_t step, PieceEnd why) {
 	open_ = false;
 }
 
-void SteeringLog::mark(bool on) {
-	if (pieces_ > 0) {
-		newest().marked = on;
+bool SteeringLog::mark(bool on) {
+	return markPiece(current(), on);
+}
+
+bool SteeringLog::markPiece(int32_t i, bool on) {
+	if (i < 0 || i >= pieces_ || (i == current() && on && cut_)) {
+		return false; // no such piece, or a full log refuses a new mark (spec §17.2)
 	}
+	reinterpret_cast<PieceInfo*>(buffer_ + offsetOf(i))->marked = on;
+	return true;
+}
+
+int32_t SteeringLog::markedPieces() const {
+	int32_t marked = 0;
+	for (int32_t i = 0; i < pieces_; i++) {
+		marked += piece(i).marked() ? 1 : 0;
+	}
+	return marked;
+}
+
+void SteeringLog::dropUnmarked() {
+	// Pieces only ever end before the next begins, so every piece here has ended: none is being written. Each starts
+	// aligned for its PieceInfo, and a kept one moves down to the next aligned offset, so it stays aligned.
+	int32_t from = 0;
+	int32_t to = 0;
+	int32_t kept = 0;
+	for (int32_t i = 0; i < pieces_; i++) {
+		const int32_t bytes = reinterpret_cast<const PieceInfo*>(buffer_ + from)->bytes;
+		const bool marked = reinterpret_cast<const PieceInfo*>(buffer_ + from)->marked;
+		if (marked) {
+			if (to != from) {
+				std::memmove(buffer_ + to, buffer_ + from, static_cast<size_t>(bytes));
+			}
+			newest_ = to;
+			used_ = to + bytes;
+			to = alignUp(used_);
+			kept++;
+		}
+		from = alignUp(from + bytes);
+	}
+	if (kept == 0) {
+		newest_ = 0;
+		used_ = 0;
+	}
+	pieces_ = kept;
+	current_ = false;
 }
 
 void SteeringLog::cutHeader() {
@@ -341,6 +379,7 @@ void SteeringLog::clear() {
 	newest_ = 0;
 	open_ = false;
 	cut_ = false;
+	current_ = false;
 	inRecords_ = false;
 }
 
