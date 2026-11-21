@@ -32,6 +32,7 @@ struct Genre;
 struct PartSpec;
 struct SoundPath;
 struct SoundPicks;
+struct SoundChoice;
 
 // ---- Palette data (slot 8) ----
 
@@ -226,6 +227,13 @@ RolledKit rolledKit(const Palette& palette, const PartSpec& part, int32_t p, uin
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
+/// A lane re-roll (the Compose screen's lane list, spec §14.4): rolls `lane`'s pick again from `palette` and fresh
+/// entropy, moving away from the one in `sounds` as rollPartSounds() does. The Open hat doesn't lean on the Closed
+/// hat's tag here: the player picked this lane alone. Every other pick stays; a lane the genre doesn't play leaves
+/// them all. Returns false on a card error, with the lane's pick partly rolled: roll into a copy.
+bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
+                   FolderLister& lister);
+
 /// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
 /// keeps the sound it has where its palette offers another, but a Kit's drum machine rolls by its weights and may stay
 /// (spec §10.2). Returns false on a card error, with the picks partly
@@ -244,10 +252,22 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 /// (spec §13.5). False for a Kit part (Drums, FX) and a part the genre doesn't have.
 [[nodiscard]] bool synthPart(const Genre& genre, int32_t part);
 
-/// A sound pick the player chose (spec §10.1, §13.5): `path` becomes synth `part`'s pick, whether or not the
-/// palette lists it. Every other part's and lane's picks stay. False, with nothing changed, unless synthPart() and
-/// `path` isn't empty.
-bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds);
+/// Whether `part` of `genre` plays `lane`: one of a Drums or FX part's lanes, as its lane list shows them (spec
+/// §13.5). False for a synth part, Lane::None and a part the genre doesn't have.
+[[nodiscard]] bool partPlaysLane(const Genre& genre, int32_t part, Lane lane);
+
+/// Whether `lane`'s pick may be a synth preset (spec §10.5): an FX lane whose palette entry lists presets (Siren, and
+/// the Riser, Fall and Impact fallbacks). Its lane browser asks SAMPLE or SYNTH PRESET first (spec §13.5).
+[[nodiscard]] bool laneTakesPreset(const Palette& palette, Lane lane);
+
+/// Whether `choice` names something `part` has: a synth part's preset (no lane) or a lane the part plays, with a
+/// path.
+[[nodiscard]] bool choiceFits(const Genre& genre, int32_t part, const SoundChoice& choice);
+
+/// A sound the player chose (spec §10.1, §13.5): `choice`'s path becomes `part`'s pick, or its lane's, whether or not
+/// the palette lists it. Every other part's and lane's picks stay: choosing one hat leaves the other's. False, with
+/// nothing changed, unless choiceFits().
+bool chooseSound(const Genre& genre, int32_t part, const SoundChoice& choice, SoundPicks& sounds);
 
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
@@ -256,6 +276,25 @@ enum class LoadOutcome : uint8_t {
 	Missing,   ///< Absent or unloadable: fall back.
 	CardError, ///< The card failed: stop, and cancel the load like BACK would (spec §10.7).
 };
+
+/// Says whether card files are there, for a Recipe file's load (spec §16.6).
+class FileChecker {
+public:
+	/// Loaded if `path` is on the card, Missing if it isn't, CardError if the card failed.
+	virtual LoadOutcome exists(const char* path) = 0;
+
+protected:
+	~FileChecker() = default;
+};
+
+/// A loaded Recipe file's missing sounds (spec §16.6): each pick whose file `files` can't find is re-rolled from
+/// `palette` (this card's) and `entropy`, a synth part's as rollPartSounds() rolls it and a lane's as rollLaneSound()
+/// does, so it moves away from the missing path where the palette offers another. A synth part with no pick is rolled
+/// too; a lane with none stays empty (an FX lane falls back to its presets). Lanes the genre doesn't play aren't
+/// checked. Every other pick stays.
+/// @return the picks replaced, or -1 on a card error, with the picks partly replaced: work on a copy.
+int32_t replaceMissingSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                             FolderLister& lister, FileChecker& files);
 
 /// Loads card sounds for the core's fallback chain. The firmware's loader keeps what it loaded.
 class SoundLoader {
@@ -292,7 +331,9 @@ struct SoundLoad {
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader);
 
 /// Loads a lane: its pick, then the other files its tags allow (found a few per folder scan), then for FX lanes its
-/// synth presets (spec §10.2, §10.5). Returns CardError if the lister or the loader reports one.
+/// synth presets (spec §10.2, §10.5). An FX lane's pick that isn't an audio file is a preset (a chosen one, spec
+/// §13.5), loaded with its palette entry's control ranges, or the defaults where the palette doesn't list it. Returns
+/// CardError if the lister or the loader reports one.
 SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, FolderLister& lister, SoundLoader& loader);
 
 } // namespace deluge::generative

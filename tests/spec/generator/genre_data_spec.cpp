@@ -685,6 +685,21 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(2, 0, Role::Drums)).to_be_false();
 	});
 
+	it("keeps every pitched anchor a MIDI note two octaves either way (registersShiftValid(), spec §7.3)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(registersShiftValid(*genre)).to_be_true();
+		}
+		const auto valid = [](uint8_t anchor, Role role) {
+			const PartSpec parts[] = {{.role = role, .reg = {anchor, -5, 12}}};
+			return registersShiftValid(Genre{.name = "registers", .parts = parts});
+		};
+		expect(valid(24, Role::Bass)).to_be_true();
+		expect(valid(103, Role::Lead)).to_be_true();
+		expect(valid(23, Role::Bass)).to_be_false();
+		expect(valid(104, Role::Lead)).to_be_false();
+		expect(valid(10, Role::Drums)).to_be_true(); // no Register: the anchor is never read
+	});
+
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {
 		using deluge::generative::perform::GlideLength;
 		using deluge::generative::perform::glideTicks;
@@ -763,7 +778,7 @@ describe genre_data("Every built-in genre", $ {
 			// Spec §9.3's named exception (#349): Psytrance's 2-phrase decay keeps its Lead (gate 30) in for a Drop's
 			// whole first phrase. In a Groove shorter than the decay the lift stops at the next Section
 			// (psytrance_spec shows it).
-			if (genre == &genres::psytrance) {
+			if (genre == &genres::psytranceClassic) {
 				continue;
 			}
 			// The first phrase line where phrases × the Groove multiple at Motion 50 reaches the shortest base, less

@@ -20,7 +20,10 @@
 #include "definitions.h"
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
+#include "generative/core/golden_case.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/card_text.h"
+#include "generative/perform/pending_recipe.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
@@ -85,8 +88,12 @@ alignas(8) PLACE_SDRAM_BSS CurrentRecipe currentRecipe{};
 #if ENABLE_SYSEX_TEST
 void forgetCurrentRecipe() {
 	// Boot's zero-fill, not a CurrentRecipe{}: that would set the Recipe's non-zero defaults, which boot never does,
-	// and build several KB on the stack.
+	// and build several KB on the stack. The generation goes on counting, so state kept about the forgotten Recipe
+	// can't match a later one.
+	const uint32_t generation = currentRecipe.generation;
 	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
+	currentRecipe.generation = generation;
+	currentRecipe.replaced();
 }
 #endif
 
@@ -119,45 +126,18 @@ Error readPaletteOverride(const Genre& genre, PaletteOverride& override) {
 	std::memcpy(name + length, ".XML", 5);
 	SoundPath filePath;
 	filePath.set("GENERATIVE/PALETTES", name);
-	Error error = StorageManager::initSD();
-	if (error != Error::NONE) {
-		return error;
+	struct Parse final : CardTextReader {
+		Parse(PaletteOverride& target, const Genre& genre) : target(target), genre(genre) {}
+		void read(std::string_view text) override { parsed = target.parse(text, genre); }
+		PaletteOverride& target;
+		const Genre& genre;
+		bool parsed = false;
+	} parse{override, genre};
+	Error error = Error::NONE;
+	const CardText read = readCardText(filePath.c_str(), PaletteOverride::kMaxFileBytes, parse, error);
+	if (error == Error::NONE && read != CardText::Missing) {
+		TEST_EVENT("gen_palette_override %s %s", genre.name, parse.parsed ? "read" : "ignored");
 	}
-	auto opened = FatFS::File::open(filePath.c_str(), FA_READ);
-	if (!opened) {
-		// No file, or one FatFs can't open (a bad name, DENIED): no override. Only the card failing is an error.
-		const FatFS::Error openError = opened.error();
-		return cardFailed(openError) ? fatfsErrorToDelugeError(openError) : Error::NONE;
-	}
-	// One byte more than the largest file read, to tell a file that fills the buffer from one that overflows it.
-	constexpr int32_t kBufferBytes = PaletteOverride::kMaxFileBytes + 1;
-	auto* buffer = static_cast<std::byte*>(GeneralMemoryAllocator::get().allocLowSpeed(kBufferBytes));
-	if (buffer == nullptr) {
-		return Error::INSUFFICIENT_RAM;
-	}
-	length = 0;
-	bool unread = false;
-	while (length < static_cast<size_t>(kBufferBytes)) {
-		auto read = opened->read({buffer + length, static_cast<size_t>(kBufferBytes) - length});
-		if (!read) {
-			// As for the open: only the card failing is an error; a file FatFs can't read through is no override.
-			const FatFS::Error readError = read.error();
-			error = cardFailed(readError) ? fatfsErrorToDelugeError(readError) : Error::NONE;
-			unread = true;
-			break;
-		}
-		if (read->empty()) {
-			break;
-		}
-		length += read->size();
-		AudioEngine::routineWithClusterLoading();
-	}
-	if (error == Error::NONE) {
-		bool fits = length <= static_cast<size_t>(PaletteOverride::kMaxFileBytes);
-		bool parsed = !unread && fits && override.parse({reinterpret_cast<const char*>(buffer), length}, genre);
-		TEST_EVENT("gen_palette_override %s %s", genre.name, parsed ? "read" : "ignored");
-	}
-	delugeDealloc(buffer);
 	return error;
 }
 
@@ -202,6 +182,12 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	Recipe rolled = newRecipe(genre, freshEntropy());
 	uint32_t rolledSeed = freshEntropy();
 	uint32_t soundEntropy = freshEntropy();
+#if ENABLE_SYSEX_TEST
+	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
+		rolled = newRecipe(genre, golden_case::kEntropy);
+		rolledSeed = golden_case::kSeed;
+	}
+#endif
 #endif
 	const Genre& rolledGenre = *rolled.genre;
 	// Staged: the override, the picks and the Recipe replace the current ones only once all of them are in, so a card
@@ -226,6 +212,112 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	seed = rolledSeed;
 	takes = Takes{};
 	exists = true;
+	replaced();
+	return Error::NONE;
+}
+
+namespace {
+
+/// A roll's error: a cancel, or else the card's (SD_CARD when the card itself still answers).
+Error rollError(const CardFolders& folders) {
+	if (folders.cancelled()) {
+		return Error::ABORTED_BY_USER;
+	}
+	const Error error = StorageManager::initSD();
+	return error != Error::NONE ? error : Error::SD_CARD;
+}
+
+} // namespace
+
+Error CurrentRecipe::regenerate(Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	const Genre& genre = *recipe.genre;
+	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
+	rolled.macros = recipe.macros;
+	if (perform::keepsPartBias(perform::HandoverMacros::Live, rolled.genre, recipe.genre)) {
+		rolled.bias = recipe.bias; // always: a Regenerate keeps the roster
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	recipe = rolled;
+	sounds = stagedSounds_;
+	seed = freshEntropy();
+	takes = Takes{};
+	replaced();
+	return Error::NONE;
+}
+
+Error replaceMissingCardSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, int32_t& soundsReplaced,
+                               Chunks* chunks) {
+	CardFolders folders(chunks);
+	CardFiles files(chunks);
+	soundsReplaced = replaceMissingSounds(genre, palette, sounds, freshEntropy(), folders, files);
+	if (soundsReplaced >= 0) {
+		return Error::NONE;
+	}
+	soundsReplaced = 0;
+	if (folders.cancelled() || files.cancelled()) {
+		return Error::ABORTED_BY_USER;
+	}
+	const Error error = StorageManager::initSD();
+	return error != Error::NONE ? error : Error::SD_CARD;
+}
+
+Error CurrentRecipe::load(const RecipeFile& file, const perform::RecipeName& fileName, int32_t& soundsReplaced,
+                          Chunks* chunks) {
+	soundsReplaced = 0;
+	const Genre& genre = *file.recipe.genre;
+	// Staged, as a genre pick: nothing changes until the palette and every pick are in.
+	PaletteOverride& staged = overrides_[1 - activeOverride_];
+	Error error = readPaletteOverride(genre, staged);
+	if (error != Error::NONE) {
+		return error;
+	}
+	stagedSounds_ = file.sounds;
+	error = replaceMissingCardSounds(genre, staged.palette(), stagedSounds_, soundsReplaced, chunks);
+	if (error != Error::NONE) {
+		return error;
+	}
+	activeOverride_ = 1 - activeOverride_;
+	overrideGenre_ = &genre;
+	recipe = file.recipe;
+	sounds = stagedSounds_;
+	seed = file.seed;
+	takes = file.takes;
+	exists = true;
+	replaced();
+	name = fileName; // a loaded name is its own stem: the next save offers `<name>A` (spec §16.3)
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollPart(int32_t part, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollPartSounds(*recipe.genre, palette(), part, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
+	return Error::NONE;
+}
+
+Error CurrentRecipe::rerollLane(Lane lane, Chunks* chunks) {
+	if (!exists || recipe.genre == nullptr) {
+		return Error::NONE;
+	}
+	stagedSounds_ = sounds;
+	CardFolders folders(chunks);
+	if (!rollLaneSound(*recipe.genre, palette(), lane, stagedSounds_, freshEntropy(), folders)) {
+		return rollError(folders);
+	}
+	sounds = stagedSounds_;
 	return Error::NONE;
 }
 

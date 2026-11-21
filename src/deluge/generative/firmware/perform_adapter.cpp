@@ -17,15 +17,23 @@
 
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_midi.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
+#include "gui/l10n/l10n.h"
+#include "gui/ui/generative_popups.h"
+#include "hid/buttons.h"
+#include "hid/display/display.h"
 #include "io/midi/test_port.h"
 #include "model/model_stack.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
+#include "storage/flash_storage.h"
 #include <algorithm>
 
 namespace deluge::generative::firmware {
@@ -37,11 +45,8 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	const bool groove = startInGroove_;
 	startInGroove_ = false;
 	pieceEnded_ = false;
-	generator_->start(currentRecipe.recipe, currentRecipe.seed, currentRecipe.takes, groove);
-	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
-	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
-	steering_.pieceStarts(generator_->recipe().macros);
-	sink_.sectionKnown = false;
+	steering_.startFromCurrentRecipe(*generator_, groove);
+	pieceBegins();
 	// Where the master is: playback started from metronomeOffset, a Continue's song position pointer, or 0. Step 0
 	// lands on its next bar line (spec §12.4).
 	const int32_t master = playbackHandler.metronomeOffset + swungTick;
@@ -56,24 +61,82 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	magnitude_ = magnitude;
 	positionPending_ = false;
 	instanceStarts();
-#if ENABLE_SYSEX_TEST
-	macrosShown_ = generator_->recipe().macros;
-#endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
+}
+
+void PerformAdapter::pieceBegins() {
+	// Every control starts at home: read from the parts' Outputs as they are now (spec §11.6).
+	soundControls.begin(sink_.roster, *currentRecipe.recipe.genre);
+	sink_.sectionKnown = false;
+#if ENABLE_SYSEX_TEST
+	macrosShown_ = generator_->recipe().macros;
+	biasShown_ = generator_->recipe().bias;
+	punchesShown_ = {}; // a start begins with none: the re-sent ones land on step 0
+#endif
+}
+
+void PerformAdapter::restartPiece(Generator& generator) {
+	// The safety net after the flush, as at a stop or the piece's end (spec §12.5).
+	sink_.allNotesOff();
+	// The first run's sounds go back home, a Throw's Space too, before the new piece reads them as home (spec §11.6),
+	// as a stop puts them back. Its waiting sounds go with the core's pending list.
+	soundControls.restoreHomes();
+	soundSwaps.pieceRestarts();
+	// AS IT BEGAN: its sounds swap in and its param snapshot is written back, before the controls read their homes.
+	const PieceStart* began = restartBegan.lands();
+	const uint8_t interval = currentRecipe.recipe.swingInterval;
+	steering_.restartOnLine(generator, began);
+	if (currentRecipe.recipe.swingInterval != interval) {
+		transitions.swingIntervalFollows(); // in task context: the tick mustn't reschedule
+	}
+	pieceBegins();
+	instanceStarts();
+	restarts_++;
+	TEST_EVENT("gen_restart %s tempo=%ld energy=%ld", began != nullptr ? "as_it_began" : "as_it_is",
+	           static_cast<long>(currentRecipe.recipe.tempo),
+	           static_cast<long>(currentRecipe.recipe.macros[Macro::Energy]));
+}
+
+void OutputSink::restartPiece(Generator& generator) {
+	performAdapter.restartPiece(generator);
 }
 
 void PerformAdapter::stopPiece() {
 	if (driver_.running()) {
 		driver_.stop(sink_);
+		reportLog(true);
 	}
 	sink_.allNotesOff();
+	sidechainPump.release();      // the next start's pump ducks again (spec §8.9)
 	soundControls.restoreHomes(); // every sound back as its preset was, or as the player left it while stopped
 }
 
+#if ENABLE_SYSEX_TEST
+void PerformAdapter::reportLog(bool stopped) const {
+	// H13 (spec §20): the newest piece's bytes, its header's, its records, its end and cut, and the whole log's use.
+	if (log_.pieces() == 0) {
+		return;
+	}
+	const SteeringLog::Piece piece = log_.piece(log_.pieces() - 1);
+	const int32_t records = piece.recordCount(); // counted as written: no walk over the piece in the tick
+	const auto pieces = static_cast<long>(log_.pieces());
+	const auto used = static_cast<long>(log_.used());
+	const auto bytes = static_cast<long>(piece.bytes());
+	const auto header = static_cast<long>(piece.headerBytes());
+	const auto end = static_cast<long>(piece.endStep());
+	const auto cut = static_cast<long>(piece.cutAt());
+	TEST_EVENT("gen_log at=%s pieces=%ld used=%ld piece=%ld header=%ld records=%ld end=%ld cut=%ld full=%d",
+	           stopped ? "stop" : "phrase", pieces, used, bytes, header, static_cast<long>(records), end, cut,
+	           log_.full() ? 1 : 0);
+}
+#endif
+
 void PerformAdapter::dropSong() {
 	soundControls.forget();
+	sidechainPump.forget();
 	soundSwaps.forgetSong();
+	restartBegan.forgetSong();
 	transitions.forget();
 	retirements.forget();
 	generator_ = nullptr;
@@ -128,7 +191,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 	sink_.rampTicks = 6 << magnitude; // one unswung 16th in internal ticks (spec §11.7)
 	const uint32_t jumps = driver_.jumps();
 	steering_.sampleFill(currentSong->isFillModeActive());
-	int32_t wait = driver_.advance(delta, magnitude, steering_.queue(), nullptr, sink_);
+	int32_t wait = driver_.advance(delta, magnitude, steering_.queue(), sink_);
 #if ENABLE_SYSEX_TEST
 	if (generator_->heldFill() != fillShown_) {
 		// A held fill landed on the last decided step, or ended there.
@@ -153,8 +216,35 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
 	}
+	if (const PunchIns& punches = generator_->punchIns();
+	    punches.lanes != punchesShown_.lanes || punches.effects != punchesShown_.effects) {
+		// A SetPunch (a KEYBOARD punch-in pad, or the steering's re-send at a start) landed on the last decided step.
+		punchesShown_ = punches;
+		TEST_EVENT("gen_punch_landed lanes=%x effects=%x step=%ld", static_cast<unsigned>(punches.lanes),
+		           static_cast<unsigned>(punches.effects), static_cast<long>(generator_->nextStep() - 1));
+	}
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		// A SetBias (an F8 turn with the part focused, a KEYBOARD fader, RESET PART BIAS) landed on the last decided
+		// step, or a transition's start step brought the new roster's.
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			if (generator_->recipe().bias.of(p, macro) != biasShown_.of(p, macro)) {
+				biasShown_.set(p, macro, generator_->recipe().bias.of(p, macro));
+				TEST_EVENT("gen_bias_landed part=%ld macro=%ld units=%ld step=%ld", static_cast<long>(p),
+				           static_cast<long>(m), static_cast<long>(biasShown_.of(p, macro)),
+				           static_cast<long>(generator_->nextStep() - 1));
+			}
+		}
+		// A SetOctave landed on the last decided step: the Current Recipe still has the shift before it.
+		if (generator_->octave(p) != currentRecipe.recipe.octave[p]) {
+			const int32_t landed = generator_->nextStep() - 1;
+			TEST_EVENT("gen_octave_landed part=%ld shift=%ld step=%ld bar_line=%s", static_cast<long>(p),
+			           static_cast<long>(generator_->octave(p)), static_cast<long>(landed),
+			           landed % kStepsPerBar == 0 ? "yes" : "no");
+		}
+	}
 #endif
-	steering_.recordTakes(*generator_);
+	steering_.recordLanded(*generator_);
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}
@@ -186,6 +276,7 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		const int32_t line = (generator_->nextStep() - 1) / genre->phraseSteps() * genre->phraseSteps();
 		if (line > 0) {
 			TEST_EVENT("gen_phrase bar=%ld", static_cast<long>(line / kStepsPerBar));
+			reportLog(false);
 		}
 		nextPhraseReport_ = line + genre->phraseSteps();
 	}
@@ -222,6 +313,7 @@ void PerformAdapter::playbackEnded() {
 	if (active() && currentSong == song_) {
 		stopPiece();
 		soundSwaps.playbackEnded();
+		restartBegan.playbackEnded();
 		transitions.playbackEnded(); // a stop commits a transition (spec §12.9)
 	}
 	startInGroove_ = false;
@@ -229,14 +321,93 @@ void PerformAdapter::playbackEnded() {
 }
 
 void PerformAdapter::pressPlay(bool groove) {
+	const bool restartShortcut = FlashStorage::accessibilityShortcuts
+	                                 ? Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT)
+	                                 : Buttons::isButtonPressed(deluge::hid::button::X_ENC);
+	if (restartShortcut) {
+		pressRestart();
+		return;
+	}
+	playOrStop(groove);
+}
+
+void PerformAdapter::playOrStop(bool groove) {
 	if (playbackHandler.playbackState) {
 		playbackHandler.playButtonPressed(kInternalButtonPressLatency); // a stop
+		return;
+	}
+	if (restartBegan.preloading()) {
+		// PLAY cancels AS IT BEGAN's start, as a transition's; a press while that cancel unwinds does nothing.
+		if (restartBegan.cancelPreload()) {
+			TEST_EVENT("gen_restart_press began_cancelled");
+		}
 		return;
 	}
 	if (active() && !leaving() && transitions.startWhenLoaded(groove)) {
 		return; // it starts when the incoming roster has loaded
 	}
 	startPlayback(groove);
+}
+
+void PerformAdapter::pressRestart() {
+	using perform::PressOutcome;
+	if (!active() || leaving()) {
+		return;
+	}
+	if (restartBegan.preloading()) {
+		// AS IT BEGAN's sounds preloading is the restart ahead: pressed again (X+PLAY, AS IT BEGAN), it is cancelled,
+		// playing or stopped. A press while its cancel unwinds does nothing more.
+		if (restartBegan.cancelPreload()) {
+			TEST_EVENT("gen_restart_press began_cancelled");
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+		}
+		return;
+	}
+	if (!playbackHandler.playbackState) {
+		// Stopped, AS IT IS is PLAY: the Current Recipe from bar 1 (spec §13.2). A PLAY already waiting for a
+		// transition's preload is cancelled by this one, as PLAY's would be: no RESTART popup then.
+		const bool cancelsWait = transitions.playWaits();
+		TEST_EVENT("gen_restart_press %s", cancelsWait ? "stopped_cancels_wait" : "stopped");
+		playOrStop(false);
+		if (!cancelsWait) {
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART));
+		}
+		return;
+	}
+	const bool cancels = steering_.restartAhead();
+	const PressOutcome outcome = steering_.pressRestart();
+	// landed: from its line's decision a restart can't be cancelled, and a press does nothing (spec §13.2).
+	TEST_EVENT("gen_restart_press %s", perform::refused(outcome)              ? "refused"
+	                                   : outcome == PressOutcome::NothingToDo ? "landed"
+	                                   : cancels                              ? "cancelled"
+	                                                                          : "queued");
+	if (gui::refusedWithPopup(outcome) || outcome != PressOutcome::Accepted) {
+		return;
+	}
+	display->displayPopup(
+	    l10n::get(cancels ? l10n::String::STRING_FOR_RESTART_CANCELLED : l10n::String::STRING_FOR_RESTART));
+}
+
+perform::MarkOutcome PerformAdapter::pressMark() {
+	return pressMark(log_.current());
+}
+
+perform::MarkOutcome PerformAdapter::pressMark(int32_t piece) {
+	using perform::MarkOutcome;
+	if (!active() || leaving()) {
+		return MarkOutcome::NoPiece;
+	}
+	const MarkOutcome outcome = perform::pressMark(log_, piece);
+	static constexpr const char* kNames[] = {"marked", "unmarked", "log_full", "no_piece"};
+	TEST_EVENT("gen_mark %s piece=%ld current=%ld marks=%ld", kNames[static_cast<int32_t>(outcome)],
+	           static_cast<long>(piece), static_cast<long>(log_.current()), static_cast<long>(log_.markedPieces()));
+	if (outcome == MarkOutcome::LogFull) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_LOG_FULL));
+	}
+	else if (outcome == MarkOutcome::NoPiece) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_NOTHING_PLAYED));
+	}
+	return outcome;
 }
 
 void PerformAdapter::startPlayback(bool groove) {
@@ -263,6 +434,11 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		// per param and a full queue only loses the log entry.
 		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
 	}
+	else if (const auto edit = paramEdit(stack, value, sink_.roster, *currentRecipe.recipe.genre, *song_)) {
+		// Any other param edit is logged the same way, for Capture's automation (spec §17.2). A full queue loses the
+		// entry while the edit is still heard: Capture's song then misses it.
+		steering_.queue().push(*edit);
+	}
 }
 
 void PerformAdapter::takeRoster(Roster& incoming) {
@@ -273,7 +449,9 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
 	// modulo 8, as with the sound picks (perform/pending_recipe.h); both objects are aligned to 8, so the
-	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions. The steering's size moves `sink_`:
+	// MacroSteering's Part bias holds keep their part in 16 bits so they grow it by 16 B; with 8 bits, 12 B broke this
+	// (#303).
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 	static_assert((Transitions::incomingOffset() - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8
@@ -283,7 +461,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
 }
 
@@ -294,11 +472,11 @@ void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRec
 	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
 	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the
 	// interval: nothing is rescheduled, which the tick must not do.
-	steering_.takeOverStopped(pending, perform::HandoverMacros::Live);
+	steering_.takeOverStopped(pending);
 }
 
 void PerformAdapter::pendingCommitsOnLeave(const perform::PendingRecipe& pending) {
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 }
 
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
@@ -307,11 +485,16 @@ void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
+	// Every part ducked lets go: the new instance starts with no pump, and the steering's re-send below ducks again
+	// from its step 0 only if PUMP is still on. A release made after the last instance's final decision (a restart's
+	// line, a transition's start step) never reached that instance, and its queue is gone (spec §8.9).
+	sidechainPump.release();
 	steering_.instanceStarts(currentSong->isFillModeActive());
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	controlTiming.reset();
+	decisionTiming.reset(); // H1's windows start with the instance: the first carries no older steps
 #endif
 }
 

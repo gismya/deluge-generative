@@ -21,8 +21,8 @@
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::Generator;
+using deluge::generative::SoundChoice;
 using deluge::generative::SoundControl;
-using deluge::generative::SoundPath;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
@@ -262,13 +262,42 @@ void PerformView::openPresetBrowser(int32_t part) {
 	// A held row lets go once the browser has opened (a failed open leaves Perform on top). A held End pad needs
 	// nothing: the browser is the current UI from the start of its opened(), which reads the card, so a release
 	// delivered meanwhile isn't a tap (endPadActs()); it still lets go of the hold.
-	if (performPresetBrowser.open(part)) {
+	if (performSoundBrowser.open(part, deluge::generative::Lane::None,
+	                             deluge::generative::perform::BrowseKind::Preset)) {
 		letGoOfHeldPart();
 	}
 }
 
-void PerformView::chooseSound(int32_t part, const SoundPath& path) {
-	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, path); }));
+void PerformView::openLaneList(int32_t part) {
+	if (currentUIMode != UI_MODE_NONE) {
+		return;
+	}
+	if (soundSwaps.pending(part)) {
+		soundPress(part, false); // KIT again cancels the part's sound (spec §10.7)
+		return;
+	}
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "lanes", false, press); // refused as a re-roll would be (spec §12.9, §12.10)
+		return;
+	}
+	deluge::gui::menu_item::generative::setLaneListPart(part);
+	openMenu(&deluge::gui::menu_item::generative::laneListMenu, "LANES", false);
+}
+
+void PerformView::openLaneBrowser(int32_t part, deluge::generative::Lane lane,
+                                  deluge::generative::perform::BrowseKind kind) {
+	// Checked again: the runner may have taken a job (freeing a swapped-out sound) since the list opened.
+	const SoundSwaps::Press press = soundSwaps.canStart(part);
+	if (press != SoundSwaps::Press::Preloading) {
+		showSoundPress(part, "browser", false, press);
+		return;
+	}
+	performSoundBrowser.open(part, lane, kind);
+}
+
+void PerformView::chooseSound(int32_t part, const SoundChoice& choice) {
+	showSoundPress(part, "chosen", false, pressShowingWork([&] { return soundSwaps.choose(part, choice); }));
 	refreshClipPage();
 }
 
@@ -300,8 +329,13 @@ bool PerformView::partFrozen(int32_t part) {
 
 ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRoutine*/) {
 	// Y turn: the focused part's take back or forward, from the one queued or else the one playing (spec §13.5).
+	// SHIFT + Y turn: its octave shift down or up instead.
 	const int32_t part = focusedPart();
 	if (part < 0 || offset == 0) {
+		return ActionResult::DEALT_WITH;
+	}
+	if (Buttons::isShiftButtonPressed()) {
+		octaveTurn(part, offset);
 		return ActionResult::DEALT_WITH;
 	}
 	PressOutcome outcome = PressOutcome::NothingToDo;
@@ -314,6 +348,45 @@ ActionResult PerformView::verticalEncoderAction(int32_t offset, bool /*inCardRou
 		refreshClipPage();
 	}
 	return ActionResult::DEALT_WITH;
+}
+
+void PerformView::octaveTurn(int32_t part, int32_t offset) {
+	// Drums and FX have no Register: nothing to do, and no popup (spec §13.5).
+	if (octaveEdgePopup(part, offset)) {
+		return;
+	}
+	PressOutcome outcome = PressOutcome::NothingToDo;
+	const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part), offset, &outcome);
+	if (refusedWithPopup(outcome) || shift == deluge::generative::kNoOctaveWaiting) {
+		return;
+	}
+	const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
+	char text[deluge::generative::perform::kQueueLineChars + 1];
+	deluge::generative::perform::queueLabel(
+	    {deluge::generative::CommandKind::SetOctave, static_cast<uint8_t>(part), shift}, *genre, text);
+	display->displayPopup(text);
+	TEST_EVENT("gen_press octave part=%ld shift=%ld y=%ld", static_cast<long>(part), static_cast<long>(shift),
+	           static_cast<long>(offset));
+	TEST_EVENT("gen_octave_popup %s", text);
+}
+
+bool PerformView::octaveEdgePopup(int32_t part, int32_t direction) {
+	if (!performAdapter.steering().octaveAtEdge(part, direction)) {
+		return false;
+	}
+	// The shift as it goes on is the lowest or highest the part takes: refused, and the popup says so (spec §13.5).
+	const int32_t shift = performAdapter.steering().octaveAhead(part);
+	char text[deluge::generative::perform::kQueueLineChars + 16];
+	deluge::generative::perform::queueLabel(
+	    {deluge::generative::CommandKind::SetOctave, static_cast<uint8_t>(part), shift},
+	    *performAdapter.steering().rosterGenre(), {text, deluge::generative::perform::kQueueLineChars + 1});
+	const l10n::String edge =
+	    direction < 0 ? l10n::String::STRING_FOR_OCTAVE_LOWEST : l10n::String::STRING_FOR_OCTAVE_HIGHEST;
+	strncat(text, " ", sizeof(text) - strlen(text) - 1);
+	strncat(text, l10n::get(edge), sizeof(text) - strlen(text) - 1);
+	display->displayPopup(text);
+	TEST_EVENT("gen_octave_popup %s", text);
+	return true;
 }
 
 void PerformView::refreshFaders() {

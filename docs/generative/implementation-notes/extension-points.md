@@ -3,20 +3,13 @@
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- **LOAD (M3):** runs `TransitionLifecycle` unchanged, as a genre change does: add a call beside
-  `Transitions::change()` that says what to preload, and have `TransitionJob::run()`
-  (`generative/firmware/transitions.cpp`) take the file's Recipe, seed and takes instead of rolling them. The lifecycle
-  never reads the pending Recipe. The handover is the steering's (`PerformSteering::handOver()`, `takeOverStopped()`),
-  and the handover's macro rule lives there: each caller passes `HandoverMacros::Live` today
-  (`PerformAdapter::incomingStarts()`, `incomingCommits()`, `pendingCommitsOnLeave()` and the harness's
-  `TransitionAdapter`); a LOAD passes `Pending`, the file's. `Pending` isn't the whole of a LOAD's macro rule: at the
-  start step the incoming instance's `carryOver()` (`PerformDriver::switchToIncoming()`) copies the live macros into
-  it, which a LOAD has to skip, and the steering's `macroSteering_` has to restart from the file's macros
-  (`MacroSteering::startFrom()`, as `PerformSteering::pieceStarts()` does), or it steers from the live ones. The confirm
-  (`gui/context_menu/generative.cpp`, `TransitionConfirm::setupAndCheckAvailability()`) starts on
-  `perform::confirmStyle(genre)` (`perform/genre_menu.h`), the incoming genre's `ArcSpec::transitionEntry` (Drop or
-  Intro, #125); a LOAD passes the file's genre. Incoming Outputs don't get unique names yet (§9.7):
-  Perform's song is never saved.
+- **LOAD as a transition (#139, built):** `Transitions::load()` beside `change()`; the preload type is
+  `Transitions::Incoming` (a genre, or a file and its name, copied into the job's own `LoadSlot`). The macro rule is
+  `PendingRecipe::macros` (`HandoverMacros::Pending` for a LOAD): `handOver()` reads it and restarts `macroSteering_`
+  from the file's macros, and the lifecycle passes it to `PerformDriver::queueIncoming(keepsMacros)` through the
+  adapter's `incomingMacros()`, so `carryOver()` skips the live macros at the start step. A new kind of transition
+  sets those two fields in its preload. Incoming Outputs don't get unique names yet (§9.7): Perform's song is never
+  saved.
 - **Chord-playing flavours (Sustain, Stab, Arp, Motif):** read `Generator::chord()`, the voiced chord on the last
   decided step in steps from the tonic, and resolve each note with `noteFor`; `chordRoot()` is its degree. A genre
   walks once its Harmony slot points at a `ChordGraph` (`harmonyValid()` in `genre_data_spec.cpp` checks it).
@@ -35,14 +28,19 @@ otherwise.
   lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
   target lists one or reads one at any depth. A source's notes sounding into its against half aren't the rule's
   business (§5.5), so `avoided()` stays Avoid's.
-- **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
+- **Replay (M4, #145):** `ComposeDriver::beginReplay()` doesn't stop on `Generator::ended()`, which reads the pending list; it runs the piece's span.
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
   command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
   A transition's confirm in the 12 ticks between a sound's SetSound landing and its Sound event drops the swap in
-  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token), but the core has logged the SetSound:
-  the log says a sound changed that never played (#261 decision 2, pinned in `sound_swap_spec`). M4 settles what the
-  steering log says there. It also needs the new pick's path for each landed token: tokens wrap at 255.
+  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token); the core has logged the SetSound, and
+  `swapDropped()` logs a SoundDropped record after it (#143): Capture keeps the part's old track. Each landed token
+  has its picks as SoundPath records on its step (tokens wrap at 255).
+  The header's opening (`PieceStart`) holds the incoming instance's carried-over macros and hold, read at its step 0.
+  Jumps (SPP, a clock scale change) still aren't logged: a replay doesn't skip to the next bar line.
+- **The steering log's lifetime (#146):** `PerformAdapter::freeBlocks()` frees the log's buffer with the Generator
+  blocks at the teardown. Capture's builds run after it, so #146 keeps the buffer (and `log_`) past the teardown
+  until the last build. Marks (#144): `SteeringLog::mark()` marks the newest piece, `full()` refuses a new mark.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
   mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
   re-roll's new Output, can share a preset name and folder with one still playing or retiring.
@@ -87,3 +85,22 @@ otherwise.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.
+- **Capture's clips (#146):** the portable replay (#145) calls the SongWriter's Capture hooks (`cutClip`, `soundPick`,
+  `newTrack`, `tempo`, `paramEdit`, `stutter`, `nextSong`); the firmware's `ComposeSong` implements none yet. A split
+  song's opening state (picks, snapshot, homes) is the writer's to rebuild from begin(), newTrack() and paramEdit().
+- The Generative menu's lists (#140): a new source row is a `MenuItem` in `SourceMenu`'s list
+  (`gui/menu_item/generative/source_rows.h`), in PERFORM FROM (`perform_from.cpp`), COMPOSE FROM and the screen's
+  FROM (`compose_screen.cpp`). Perform entry from a new kind of source is an `EntrySource`
+  (`generative/firmware/entry_source.h`) and a branch at the start of `EntryJob::run()`. SAVE and LOAD on the screen
+  are the sound editor's SAVE and LOAD branches (F19, `composeScreenShowing()`).
+- What a file chosen in `LoadRecipeUI` does is `loadChosen()` (`gui/ui/load/load_recipe_ui.cpp`): PERFORM FROM under
+  it (`performFromShowing()`) asks DISCARD SONG?; Perform as root UI makes it a transition; otherwise the Compose
+  load (`loadComposeRecipe()`), which shows the screen. A new place to open the browser from adds a branch there.
+- **Restart AS IT BEGAN (#413 part 2).** A restart is the core's `CommandKind::Restart` (lands on the next bar line,
+  stops the instance as a hard cut does), then `PerformDriver::restartOnLine()`, which ends the first run and calls
+  `NoteSink::restartPiece(generator)`. The firmware's is `PerformAdapter::restartPiece()`, which starts the Generator
+  through `PerformSteering::restartAsItIs()` (the Current Recipe). AS IT BEGAN is a second mode chosen at the press
+  (beside `pressRestart()`): its preload of the swapped sounds runs first, as a sound re-roll's does, and pushes the
+  Restart command once loaded; at the line `restartPiece()` puts the piece header's Recipe, takes and param snapshot
+  back before `Generator::start()`. #143's `openPiece()` (set by `begin()` and `switchToIncoming()`) also needs
+  setting in `restartOnLine()`, so the new piece gets its header.

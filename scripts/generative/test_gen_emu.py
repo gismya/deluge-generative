@@ -698,6 +698,29 @@ class WavCheck(unittest.TestCase):
             verdict.checked, 40
         )  # steps 0-39 start a 16th or more before 1.25 s
 
+    def test_no_step_to_check_and_silent_throughout_fails(self):
+        # An FX-alone capture whose only note, a Riser's, falls past its end.
+        self.assertEqual(
+            failures(bars_pcm([0] * 4), 2.0, set(), STEP_S),
+            ["silent throughout, and the harness has no note to check in it"],
+        )
+
+    def test_no_step_to_check_with_sound_warns(self):
+        verdict = gen_emu.wav_failures(bars_pcm([0, 0.3, 0, 0]), 2.0, set(), STEP_S)
+        self.assertEqual(verdict.failures, [])
+        self.assertEqual(
+            verdict.warnings,
+            [
+                "the harness has no note to check in it: only its length and full-scale runs were checked"
+            ],
+        )
+
+    def test_without_a_render_silence_is_not_checked(self):
+        self.assertEqual(
+            gen_emu.wav_failures(bars_pcm([0] * 4), 2.0, None, 1.0),
+            gen_emu.WavVerdict([], [], 0),
+        )
+
     def test_silence_in_a_bar_the_job_expects_quiet_passes(self):
         # An FX-alone capture: the riser starts from silence on the Build's first beat (#422).
         pcm = bars_pcm([0.3, 0, 0, 0.3])
@@ -710,6 +733,34 @@ class WavCheck(unittest.TestCase):
             gen_emu.wav_failures(pcm, 2.0, steps, STEP_S, quiet_bars={1}).failures,
             [
                 "silent in 1 bar(s) where the harness has notes (bar 0 at PLAY): 2 at 1 s"
+            ],
+        )
+
+    def test_quiet_bars_that_leave_no_step_to_check_say_so(self):
+        # #426: the harness has notes in the capture, but every one is in a quiet bar: nothing was checked.
+        pcm = bars_pcm([0.3, 0, 0, 0.3])
+        verdict = gen_emu.wav_failures(
+            pcm, 2.0, steps_of(1, 2), STEP_S, quiet_bars={1, 2}
+        )
+        self.assertEqual(verdict.failures, [])
+        self.assertEqual(verdict.checked, 0)
+        self.assertEqual(
+            verdict.warnings,
+            [
+                (
+                    "--quiet-bars left no step to check: the harness's 32 steps in it are all in quiet bars; "
+                    "only its length and full-scale runs were checked"
+                )
+            ],
+        )
+        # Silent throughout, every step quiet: still a failure, naming the quiet bars
+        self.assertEqual(
+            failures(bars_pcm([0] * 4), 2.0, steps_of(1, 2), STEP_S, {1, 2}),
+            [
+                (
+                    "silent throughout, and --quiet-bars left no step to check (the harness's 32 steps in it are "
+                    "all in quiet bars)"
+                )
             ],
         )
 
@@ -748,7 +799,7 @@ class WavCheck(unittest.TestCase):
         # Firmware latency could put its sound after the capture's end.
         pcm = bars_pcm([0.3] * 2) + bars_pcm([0], 0.02)
         verdict = gen_emu.wav_failures(pcm, 1.02, {32}, STEP_S)
-        self.assertEqual(verdict, gen_emu.WavVerdict([], [], 0))
+        self.assertEqual((verdict.failures, verdict.checked), ([], 0))
 
     def test_a_long_run_of_full_scale_samples_fails(self):
         good = bars_pcm([0.3] * 4)
@@ -799,13 +850,14 @@ class WavCheck(unittest.TestCase):
 
 
 class Note:
-    def __init__(self, tick, end):
-        self.tick, self.end = tick, end
+    def __init__(self, tick, end, key=60):
+        self.tick, self.end, self.key = tick, end, key
 
 
 class Part:
-    def __init__(self, *notes):
+    def __init__(self, *notes, lane_notes=None):
         self.notes = list(notes)
+        self.lane_notes = lane_notes or {}
 
 
 STEP = gen_emu.TICKS_PER_STEP
@@ -824,6 +876,28 @@ class ActiveSteps(unittest.TestCase):
         # A short-decay sound under a long note is silent before its note-off.
         parts = [Part(Note(STEP // 2, 12 * STEP))]
         self.assertEqual(gen_emu.active_steps(parts, muted=()), {0})
+
+    def test_a_riser_counts_on_the_beat_before_the_drop_not_its_onset(self):
+        # The firmware starts a sample Riser late, so it ends on the Drop (riser_timing.h); the render's note starts
+        # with the Build and ends on the Drop. A Fall on the Riser's onset step still counts there.
+        fx = Part(
+            Note(16 * STEP, 32 * STEP, key=84),
+            Note(16 * STEP, 17 * STEP, key=85),
+            Note(20 * STEP, 21 * STEP, key=85),
+            lane_notes=RISER_FALL,
+        )
+        self.assertEqual(gen_emu.active_steps([fx], muted=()), {16, 20, 28})
+
+    def test_a_riser_shorter_than_a_beat_counts_on_its_onset(self):
+        fx = Part(Note(30 * STEP, 32 * STEP, key=84), lane_notes=RISER_FALL)
+        self.assertEqual(gen_emu.active_steps([fx], muted=()), {30})
+
+    def test_a_riser_whose_drop_is_past_the_render_doesnt_count(self):
+        fx = Part(Note(16 * STEP, None, key=84), lane_notes=RISER_FALL)
+        self.assertEqual(gen_emu.active_steps([fx], muted=()), set())
+
+
+RISER_FALL = {84: "Riser", 85: "Fall"}
 
 
 class Piece:
@@ -1167,6 +1241,28 @@ class CheckCommand(unittest.TestCase):
         self.assertIn(f"ok {good} (2 s, 64 sounding steps checked)", lines)
         self.assertIn(f"BAD {short}: 1.5 s of audio, wanted 2.0 s", lines)
 
+    def test_check_fails_a_silent_capture_of_a_part_whose_only_lane_is_the_riser(self):
+        # The Riser's Drop is past the capture's end: no step to check, so silence throughout fails it.
+        parts = [Part(Note(48 * STEP, 96 * STEP, key=84), lane_notes={84: "Riser"})]
+        with tempfile.TemporaryDirectory() as tmp:
+            silent = self.write(os.path.join(tmp, "silent.wav"), bars_pcm([0] * 4))
+            args = gen_emu.parser().parse_args(["check", silent, "--seconds", "2"])
+            with (
+                mock.patch.object(gen_emu, "find_render", return_value="/r"),
+                mock.patch.object(gen_emu, "require_render"),
+                mock.patch.object(gen_emu, "log_render"),
+                mock.patch.object(
+                    gen_emu, "harness_piece", return_value=(parts, STEP_S)
+                ),
+                mock.patch.object(gen_emu, "log") as log,
+            ):
+                self.assertEqual(gen_emu.check_wavs(args), 1)
+            lines = [c.args[0] for c in log.call_args_list]
+        self.assertIn(
+            f"BAD {silent}: silent throughout, and the harness has no note to check in it",
+            lines,
+        )
+
 
 class RenderAge(unittest.TestCase):
     def test_a_render_older_than_the_generators_source_warns(self):
@@ -1198,6 +1294,26 @@ class RenderAge(unittest.TestCase):
         ):
             gen_emu.log_render(fh.name)
         self.assertEqual(len(log.call_args_list), 1)
+
+
+class GoldenScript(unittest.TestCase):
+    def test_the_script_picks_a_genre_that_has_a_golden(self):
+        with open(gen_emu.GOLDEN_SCRIPT) as fh:
+            genre = gen_emu.golden_genre(fh.read())
+        self.assertTrue(os.path.isfile(gen_emu.golden_song.golden_path(genre)))
+
+    def test_the_last_pick_genre_line_names_it(self):
+        text = "start_state\npick genre techno-acid\nfoo\npick genre techno-dub\n"
+        self.assertEqual(gen_emu.golden_genre(text), "techno-dub")
+        with self.assertRaises(ValueError):
+            gen_emu.golden_genre("start_state\n")
+
+    def test_the_script_saves_the_song_the_check_reads(self):
+        with open(gen_emu.GOLDEN_SCRIPT) as fh:
+            text = fh.read()
+        name = os.path.splitext(os.path.basename(gen_emu.GOLDEN_SONG))[0]
+        self.assertIn(f"\nsave song {name}\n", text)
+        self.assertIn(f"\nload song {gen_emu.GOLDEN_SONG}\n", text)
 
 
 if __name__ == "__main__":

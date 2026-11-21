@@ -25,9 +25,12 @@
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/entry_source.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
@@ -75,6 +78,16 @@ public:
 	void outgoingDrained() override;
 	/// A stop or jump cut its Throws short: its Space goes home (spec §11.4).
 	void outgoingThrowsCut() override;
+	/// Test builds time the piece's opening from here, with its header.
+	void pieceOpening() override;
+	/// A step of closing dropped pieces' room (spec §17.4); test builds time it (gen_log_compact).
+	void compactLog(SteeringLog& log) override;
+	/// The piece's header: the Current Recipe's picks and every param on the song and the roster (spec §17.2).
+	void logPieceHeader(SteeringLog& log) override;
+	/// A re-roll's new picks, from its waiting sound (spec §17.2).
+	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
+	/// A restart reached its line (spec §13.2): the adapter starts the piece again (PerformAdapter::restartPiece()).
+	void restartPiece(Generator& generator) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -152,11 +165,14 @@ using LeaveEnded = void (*)(JobOutcome outcome);
 class PerformAdapter {
 public:
 	/// Builds Perform's song from the Current Recipe as a modal runner job (spec §14.3, §12.10): privately while the
-	/// player's song plays, then swapped in stopped with the Generator blocks allocated. The job first rolls a fresh
-	/// Current Recipe for `genre` (its sound picks read the card). A cancel before the swap, or a card error, leaves
-	/// the player's song untouched, and a card error in the roll leaves the Current Recipe as it was.
-	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy.
-	bool beginEntry(const Genre& genre, EntryEnded ended);
+	/// player's song plays, then swapped in stopped with the Generator blocks allocated. For a genre the job first
+	/// rolls a fresh Current Recipe (its sound picks read the card); for a file it first loads the file into the
+	/// Current Recipe, re-rolling missing sounds (CurrentRecipe::load()). Once rolled or loaded, it stays the Current
+	/// Recipe whatever happens after. A cancel before the swap, or a card error, leaves the player's song untouched,
+	/// and a card error in the roll or the load leaves the Current Recipe as it was.
+	/// @return false, with nothing started and the Current Recipe unchanged, if the runner is busy, or if the source is
+	/// the Current Recipe and none exists.
+	bool beginEntry(const EntrySource& source, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
 	void leave(LeaveEnded ended);
@@ -179,7 +195,24 @@ public:
 	/// F14: the panel's PLAY under Perform, with SHIFT as `groove`. From stop it starts the next piece, in Groove with
 	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
 	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
+	/// X held (CROSS SCREEN with accessibility shortcuts, as stock's restart shortcut) makes it pressRestart().
 	void pressPlay(bool groove);
+	/// X+PLAY, or RESTART ▸ AS IT IS (spec §13.2): playing, the piece starts again at the next bar line from the
+	/// Current Recipe as it is then (pressed again while it waits, it cancels); stopped, it is PLAY. Shows its popup:
+	/// RESTART, RESTART CANCELLED, or why it was refused (CHANGE PENDING while a transition is pending).
+	void pressRestart();
+
+	// ---- Capture marks (spec §17.4) ----
+
+	/// RECORD or MIDI RECORD (F9, F10): the current piece's mark, toggled at once, playing or stopped (the last
+	/// piece). A refusal shows its popup: LOG FULL, or NOTHING PLAYED before any piece.
+	perform::MarkOutcome pressMark();
+	/// A CAPTURE menu row: piece `piece`'s mark, toggled.
+	perform::MarkOutcome pressMark(int32_t piece);
+	[[nodiscard]] perform::CaptureStatus captureStatus() const { return perform::captureStatus(log_); }
+
+	/// Counts the restarts that reached their line: the view returns the Arc map to now when it changes.
+	[[nodiscard]] uint32_t restarts() const { return restarts_; }
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 
@@ -201,6 +234,8 @@ public:
 	/// Generator ticks since step 0's grid line, while playing.
 	[[nodiscard]] int32_t clock() const { return driver_.clock(); }
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
+	/// The pieces played since Perform was entered (spec §17.2, §17.3): empty once it is left.
+	[[nodiscard]] const SteeringLog& steeringLog() const { return log_; }
 	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
 	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
@@ -234,16 +269,31 @@ private:
 	friend class LeaveJob;
 	friend class SoundJob;
 	friend class SoundSwaps;
+	friend class RestartBegan;
+	friend class BeganJob;
 	friend class TransitionJob;
 	friend class OutputSink;
 
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
+	/// pressPlay() without the restart shortcut.
+	void playOrStop(bool groove);
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// What every new piece reads once its Generator has started: the controls' homes, the Section shown.
+	void pieceBegins();
+	/// A restart's line, from the sink (spec §13.2): every voice is released, the first run's sounds go home and its
+	/// waiting swaps are dropped, then `generator` starts again from the Current Recipe (AS IT IS).
+	void restartPiece(Generator& generator);
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();
+#if ENABLE_SYSEX_TEST
+	/// gen_log: the steering log's use, at a phrase line or a stop.
+	void reportLog(bool stopped) const;
+#else
+	void reportLog(bool /*stopped*/) const {}
+#endif
 	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
 	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
 	void instanceStarts();
@@ -280,13 +330,19 @@ private:
 	/// instruction grows the step's code (see implementation-notes/core.md).
 	Steering steering_;
 	perform::PerformDriver driver_;
-	OutputSink sink_;
+	/// Before sink_, where it puts the roster an odd 4 bytes from Transitions' incoming one (the static_assert in
+	/// incomingStarts()): the driver's size moves that.
 	int32_t lastSwungTick_ = 0;
+	OutputSink sink_;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+	/// The steering log, over its 128 KB SDRAM buffer from entry to the teardown (spec §17.2, §20).
+	uint8_t* logBuffer_ = nullptr;
+	SteeringLog log_{nullptr, 0};
+	uint32_t restarts_ = 0;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;
@@ -298,6 +354,10 @@ private:
 	int32_t fillShown_ = -1;
 	/// The macros the last tick saw the Generator play, for the gen_macro_landed test event.
 	Macros macrosShown_;
+	/// The Part biases the last tick saw the Generator play, for the gen_bias_landed test event.
+	PartBiases biasShown_;
+	/// The punch-ins the last tick saw the Generator play, for the gen_punch_landed test event.
+	PunchIns punchesShown_;
 #endif
 };
 

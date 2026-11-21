@@ -19,6 +19,10 @@ struct Piece : StepwisePiece<> {
 	Piece() : StepwisePiece({.seed = 3, .skipIntro = true, .logEntries = 64}) {}
 	/// What the core plays for `macro` now: the SetMacro that last landed, or the Recipe's.
 	[[nodiscard]] int32_t corePlays(Macro macro) const { return driver.playing()->recipe().macros[macro]; }
+	/// What the core plays as `part`'s Part bias on `macro` now.
+	[[nodiscard]] int32_t corePlaysBias(int32_t part, Macro macro) const {
+		return driver.playing()->recipe().bias.of(part, macro);
+	}
 	/// Has the instance that plays decide `steps` more steps.
 	void decideMore(int32_t steps) { decideBefore(driver.playing()->nextStep() + steps); }
 };
@@ -30,9 +34,9 @@ std::string fillPress(bool shift) {
 
 /// The value of the first SetFill logged, or -1.
 int32_t firstFillLogged(const SteeringLog& log) {
-	for (int32_t i = 0; i < log.size(); i++) {
-		if (log.at(i).command.kind == CommandKind::SetFill) {
-			return log.at(i).command.value;
+	for (int32_t i = 0; i < logSize(log); i++) {
+		if (logAt(log, i).command.kind == CommandKind::SetFill) {
+			return logAt(log, i).command.value;
 		}
 	}
 	return -1;
@@ -195,6 +199,161 @@ describe perform_steering("The Perform driver's steering", $ {
 		});
 	});
 
+	context("Part bias (spec §3.3, §13.5)", _ {
+		it("set by a knob turn, is the Recipe's at once and the core's from the next step; refused past the roster", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setBias(1, Macro::Energy, macroPoints(6));
+			expect(piece.currentRecipe.bias.of(1, Macro::Energy)).to_equal(macroPoints(6));
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Energy)).to_equal(macroPoints(6));
+
+			const PartBiases before = piece.currentRecipe.bias;
+			piece.steering.setBias(partCount(*piece.currentRecipe.genre), Macro::Energy, macroPoints(6));
+			piece.steering.setBias(-1, Macro::Energy, macroPoints(6));
+			expect(piece.currentRecipe.bias == before).to_be_true();
+		});
+
+		it("held on a fader, plays while held, across a piece start; a knob turn moves only the Recipe's", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(1, Macro::Density, -kHeld);
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+			expect(piece.currentRecipe.bias.of(1, Macro::Density)).to_equal(0);
+
+			piece.steering.setBias(1, Macro::Density, macroPoints(3)); // a knob turn while the fader holds it
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.of(1, Macro::Density)).to_equal(macroPoints(3));
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+
+			piece.playFromRecipe(true); // still held
+			piece.decideBefore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(-kHeld);
+
+			piece.steering.springBiasBack(1, Macro::Density); // a hold let go: back to the Recipe's
+			piece.decideMore(2);
+			expect(piece.corePlaysBias(1, Macro::Density)).to_equal(macroPoints(3));
+		});
+
+		it("tapped on a fader, is the Recipe's, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(2, Macro::Motion, macroPoints(9));
+			piece.steering.keepBias(2, Macro::Motion, macroPoints(9));
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.of(2, Macro::Motion)).to_equal(macroPoints(9));
+			expect(piece.corePlaysBias(2, Macro::Motion)).to_equal(macroPoints(9));
+			piece.playFromRecipe(true);
+			expect(piece.corePlaysBias(2, Macro::Motion)).to_equal(macroPoints(9));
+		});
+
+		it("held on a part's fader, leaves the Recipe level's centre to the knobs", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.holdBias(1, Macro::Energy, macroPoints(5));
+			piece.steering.setMacro(Macro::Energy, macroPoints(30));
+			piece.decideMore(2);
+			expect(piece.corePlays(Macro::Energy)).to_equal(macroPoints(30));
+		});
+
+		it("RESET PART BIAS sets one part's biases to 0, or every part's", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setBias(1, Macro::Energy, macroPoints(6));
+			piece.steering.setBias(1, Macro::Motion, -macroPoints(6));
+			piece.steering.setBias(2, Macro::Density, macroPoints(4));
+			piece.steering.resetBias(1);
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias.any(1)).to_be_false();
+			expect(piece.corePlaysBias(1, Macro::Energy)).to_equal(0);
+			expect(piece.corePlaysBias(1, Macro::Motion)).to_equal(0);
+			expect(piece.corePlaysBias(2, Macro::Density)).to_equal(macroPoints(4));
+			piece.steering.resetBias(-1);
+			piece.decideMore(2);
+			expect(piece.currentRecipe.bias == PartBiases{}).to_be_true();
+			expect(piece.driver.playing()->recipe().bias == PartBiases{}).to_be_true();
+		});
+
+		it("stopped, is the Recipe's at once, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.driver.stop(piece.sink);
+			piece.steering.setBias(1, Macro::Complexity, -macroPoints(8));
+			piece.playFromRecipe(true);
+			expect(piece.corePlaysBias(1, Macro::Complexity)).to_equal(-macroPoints(8));
+		});
+	});
+
+	context("octave shifts (spec §7.3, §13.4, §13.6)", _ {
+		constexpr uint8_t kBass = 1;
+		it("steps on from a press the core hasn't drained, lands on the bar line, and the Recipe keeps it", _ {
+			Piece piece;
+			piece.runToStepLine(kStepsPerBar + 2);
+			PressOutcome outcome = PressOutcome::NothingToDo;
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(1);
+			expect(outcome == PressOutcome::Accepted).to_be_true();
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(2);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(2);
+			// Two octaves is as far as it goes: the view's HIGHEST popup asks octaveAtEdge().
+			expect(piece.steering.octaveAtEdge(kBass, 1)).to_be_true();
+			expect(piece.steering.octaveAtEdge(kBass, -1)).to_be_false();
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(kNoOctaveWaiting);
+			expect(outcome == PressOutcome::NothingToDo).to_be_true();
+			piece.decideMore(2);
+			expect(piece.steering.octave(kBass)).to_equal(0);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(2);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(2);
+			piece.decideBefore(2 * kStepsPerBar + 1);
+			expect(piece.steering.octave(kBass)).to_equal(2);
+			expect(static_cast<int32_t>(piece.currentRecipe.octave[kBass])).to_equal(2);
+		});
+
+		it("stepped back to the shift that plays, cancels the one waiting", _ {
+			Piece piece;
+			piece.runToStepLine(kStepsPerBar + 2);
+			PressOutcome outcome = PressOutcome::NothingToDo;
+			piece.steering.stepOctave(kBass, -1, &outcome);
+			piece.decideMore(2);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(-1);
+			expect(piece.steering.stepOctave(kBass, 1, &outcome)).to_equal(0);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(0);
+			piece.decideBefore(2 * kStepsPerBar + 1);
+			expect(piece.steering.octave(kBass)).to_equal(0);
+			expect(piece.generator.octaveWaiting(kBass)).to_equal(kNoOctaveWaiting);
+		});
+
+		it("does nothing on Drums or FX", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			const auto fx = static_cast<uint8_t>(partCount(*piece.currentRecipe.genre) - 1);
+			for (uint8_t part : {uint8_t{0}, fx}) {
+				PressOutcome outcome = PressOutcome::Accepted;
+				expect(piece.steering.takesOctave(part)).to_be_false();
+				expect(piece.steering.octavesOf(part).lowest).to_equal(0);
+				expect(piece.steering.octavesOf(part).highest).to_equal(0);
+				expect(piece.steering.octaveAtEdge(part, 1)).to_be_false(); // no popup on Drums or FX
+				expect(piece.steering.stepOctave(part, 1, &outcome)).to_equal(kNoOctaveWaiting);
+				expect(outcome == PressOutcome::NothingToDo).to_be_true();
+				expect(piece.steering.pressOctave(part, 1) == PressOutcome::NothingToDo).to_be_true();
+			}
+			expect(piece.queue.size()).to_equal(0);
+		});
+
+		it("stopped, is the Recipe's at once, and the next start plays it", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.driver.stop(piece.sink);
+			piece.queue.clear();
+			expect(piece.steering.pressOctave(kBass, -1) == PressOutcome::Accepted).to_be_true();
+			expect(static_cast<int32_t>(piece.currentRecipe.octave[kBass])).to_equal(-1);
+			expect(piece.steering.octaveAhead(kBass)).to_equal(-1);
+			piece.playFromRecipe(true);
+			piece.decideBefore(2);
+			expect(piece.generator.octave(kBass)).to_equal(-1);
+		});
+	});
+
 	context("stopped (spec §13.2, §13.5)", _ {
 		it("a take, a key and a tempo edit act at once, and the next start plays them", _ {
 			StepwisePiece<TimedSink> piece({.seed = 3, .skipIntro = true});
@@ -243,6 +402,61 @@ describe perform_steering("The Perform driver's steering", $ {
 		});
 	});
 
+	context("punch-ins (spec §8.9, §13.5)", _ {
+		it("reach the core on the next undecided step, and only while on", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			expect(piece.steering.setPunch(PunchIn::HatRoll, Lane::None, true)).to_be_true();
+			expect(piece.generator.punchIns().on(PunchIn::HatRoll)).to_be_false(); // waiting in the queue
+			piece.decideMore(1);
+			expect(piece.generator.punchIns().on(PunchIn::HatRoll)).to_be_true();
+			expect(piece.steering.setPunch(PunchIn::HatRoll, Lane::None, false)).to_be_true();
+			piece.decideMore(1);
+			expect(piece.generator.punchIns().any()).to_be_false();
+			expect(piece.steering.punchIns().any()).to_be_false();
+		});
+
+		it("still on across a stop, play from the next piece's first step", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			piece.steering.setPunch(PunchIn::LaneMute, Lane::Kick, true);
+			piece.steering.setPunch(PunchIn::Pump, Lane::None, true);
+			piece.decideMore(1);
+			piece.playFromRecipe(true);
+			piece.decideBefore(1);
+			expect(piece.generator.punchIns().muted(Lane::Kick)).to_be_true();
+			expect(piece.generator.punchIns().on(PunchIn::Pump)).to_be_true();
+			// The pump starts on the new piece's step 0.
+			expect(piece.generator.punchIns().pumped).to_be_true();
+		});
+
+		it("turned on while stopped, play from the next start", _ {
+			Piece piece;
+			piece.driver.stop(piece.sink);
+			expect(piece.steering.setPunch(PunchIn::Flam, Lane::None, true)).to_be_true();
+			piece.playFromRecipe(true);
+			piece.decideBefore(1);
+			expect(piece.generator.punchIns().on(PunchIn::Flam)).to_be_true();
+		});
+
+		it("stay as they were when the queue is full, or the command names none", _ {
+			Piece piece;
+			piece.runToStepLine(4);
+			while (piece.push({CommandKind::SetFreeze, 0, kPress})) { // discrete: never coalesced, so it fills
+			}
+			expect(piece.steering.setPunch(PunchIn::SnareRoll, Lane::None, true)).to_be_false();
+			expect(piece.steering.punchIns().any()).to_be_false();
+			expect(piece.steering.setPunch(PunchIn::LaneMute, Lane::Riser, true)).to_be_false();
+		});
+
+		it("are dropped by a new entry", _ {
+			Piece piece;
+			piece.steering.setPunch(PunchIn::DoubleKick, Lane::None, true);
+			piece.steering.enter();
+			expect(piece.steering.punchIns().any()).to_be_false();
+		});
+	});
+
 	context("a transition's handover (spec §12.9)", _ {
 		it("makes the pending Recipe Current, with its seed and takes, and the macros the rule names", _ {
 			Piece piece;
@@ -254,13 +468,14 @@ describe perform_steering("The Perform driver's steering", $ {
 			pending.seed = 11;
 			pending.takes.take[2] = 3;
 			// A genre change or Regenerate keeps the live macros
-			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			piece.steering.handOver(pending);
 			expect(piece.currentRecipe.tempo).to_equal(13400);
 			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(40));
 			expect(piece.currentSeed).to_equal(11U);
 			expect(static_cast<int32_t>(piece.currentTakes.take[2])).to_equal(3);
 			// A LOAD keeps the file's
-			piece.steering.handOver(pending, perform::HandoverMacros::Pending);
+			pending.macros = perform::HandoverMacros::Pending;
+			piece.steering.handOver(pending);
 			expect(piece.currentRecipe.macros.value[0]).to_equal(macroPoints(10));
 		});
 
@@ -272,7 +487,7 @@ describe perform_steering("The Perform driver's steering", $ {
 			perform::PendingRecipe pending;
 			pending.recipe = acidRecipe();
 			pending.takes.take[0] = 1;
-			piece.steering.handOver(pending, perform::HandoverMacros::Live);
+			piece.steering.handOver(pending);
 			expect(piece.steering.takeRow(0).newest).to_equal(1); // the pending Recipe's take, none made yet
 		});
 	});

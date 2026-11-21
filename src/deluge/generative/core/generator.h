@@ -34,9 +34,12 @@
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
+#include "generative/core/part_bias.h"
+#include "generative/core/punch_ins.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/core/types.h"
 #include "generative/core/voicing.h"
 #include <array>
@@ -242,12 +245,36 @@ public:
 	/// the outgoing instance stops.
 	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style);
 	/// At the start step, before the first decision: the new roster plays the live macros, as a genre change and
-	/// Regenerate keep them (spec §12.9), and a held Arc stays held from its first Groove (spec §9.7).
-	void carryOver(const Macros& macros, bool held);
+	/// Regenerate keep them (spec §12.9), and the Part biases `bias` (a Regenerate's live ones, spec §3.3), and a held
+	/// Arc stays held from its first Groove (spec §9.7).
+	void carryOver(const Macros& macros, const PartBiases& bias, bool held);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
+
+	// ---- Replay (spec §2.6, §17.1): Capture's Compose driver plays a piece's steering log ----
+
+	/// Begins a piece as its log's header opened it (spec §17.2, §17.3): its Recipe at step 0 (a transition's carried
+	/// macros and Part biases already in it), seed and takes, entering its first Section (a Drop's Groove with
+	/// `onDrop`), with the Arc held if the hold was carried over.
+	void startPiece(const PieceStart& start);
+	/// As decideNextStep(), from the log's records stamped on nextStep(), in order (spec §2.6): each command applied
+	/// there as it landed, through apply(), with no press to resolve and no quantisation. The pending list holds only
+	/// the Arc moves the log says wait (RecordKind::Waiting), because the Arc's look-ahead reads them; each leaves it
+	/// as its command lands. `next(LogRecord&)` hands the records on one at a time and returns false after the last.
+	template <typename Next>
+	void decideReplayed(Next next) {
+		if (stoppedDeciding()) {
+			return;
+		}
+		beginDecision();
+		LogRecord record;
+		while (next(record)) {
+			replay(record);
+		}
+		decideLanded();
+	}
 
 	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
 	/// without deciding it. A force that lands on the end line then cancels the ending (spec §13.2). Everything else
@@ -267,8 +294,17 @@ public:
 	[[nodiscard]] bool transitionWaiting() const { return pending_.has(CommandKind::Transition); }
 	/// The waiting transition's command, or nullptr.
 	[[nodiscard]] const Command* waitingTransition() const { return pending_.waiting({CommandKind::Transition}); }
-	/// Once the transition has landed, its start step: the Drop, the seam or the cut line. Otherwise -1.
+	/// Once the transition has landed, its start step: the Drop, the seam or the cut line; or a restart's line.
+	/// Otherwise -1.
 	[[nodiscard]] int32_t transitionStart() const { return stopAt_ == kNever ? -1 : stopAt_; }
+
+	// ---- A restart (spec §13.2) ----
+
+	/// Whether a restart waits in the pending list for its bar line: it can still be cancelled.
+	[[nodiscard]] bool restartWaiting() const { return pending_.has(CommandKind::Restart); }
+	/// Whether a restart has landed: the instance stopped deciding on its line (transitionStart()), and every note
+	/// still sounding ends there. The driver starts the piece again on that line.
+	[[nodiscard]] bool restartLanded() const { return restartLanded_; }
 	/// Whether the instance decides nothing more: it has reached its transition's start step. Its buffered events still
 	/// play (note-offs, hits leaning late) until isDrained().
 	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
@@ -300,8 +336,25 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	[[nodiscard]] uint32_t seed() const { return seed_; }
+	[[nodiscard]] const Takes& takes() const { return takes_; }
+	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
+	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser
+	/// from here (perform/riser_timing.h).
+	[[nodiscard]] int32_t riserDropTick() const {
+		return arc_.section() == SectionKind::Build ? stepTick(nextStep_ - 1 + arc_.stepsToDrop()) : -1;
+	}
+	/// A sound control's macro layer at the Recipe's own macros, its centre, with no Section offset (spec §11.3), on
+	/// the set `part`'s events on `lane` move, within ±kControlFull: the base Compose stores for a param it automates
+	/// (spec §15.6). A Drums lane's row takes none.
+	[[nodiscard]] int32_t centreLayer(uint8_t part, Lane lane, SoundControl control) const;
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
+	/// `shared`, a value of `macro` every part shares, as part `part` plays it: moved by its Part bias through
+	/// partBiased() (spec §3.3). `shared` itself at bias 0.
+	[[nodiscard]] int32_t biasedOn(int32_t part, Macro macro, int32_t shared) const {
+		return partBiased(shared, recipe_.bias.of(part, macro));
+	}
 	/// The chord playing on the last decided step, in steps from the tonic (spec §7.4): `voiced_`, which
 	/// voiceChordAt() voices on each bar line, and as a piece starts, from the walk's root at the Extension level the
 	/// Recipe's Complexity gives then, within the genre's floor and ceiling (the Arc never moves Complexity). Its root
@@ -328,12 +381,21 @@ public:
 	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
 	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
+	/// The tier 2 punch-ins on as of the last decided step (spec §8.9).
+	[[nodiscard]] const PunchIns& punchIns() const { return punch_; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
 	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
+	/// A part's octave shift on the last decided step (spec §7.3): 0 for Drums and FX.
+	[[nodiscard]] int32_t octave(int32_t part) const { return recipe_.octave[part]; }
+	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
+	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
+		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : kNoOctaveWaiting;
+	}
 	/// The token of a part's new sound waiting for its phrase line, or -1 (spec §10.7).
 	[[nodiscard]] int32_t soundWaiting(int32_t part) const { return waitingValue(CommandKind::SetSound, part); }
 	/// The token of the last sound that landed on a part in this piece, or -1. Its Sound event plays on the line.
@@ -370,12 +432,11 @@ public:
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
-	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
-	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
+	/// Capture's replay never stops on it: it runs the piece's span (ComposeDriver::beginReplay()).
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
-	/// transition waits.
+	/// transition or a restart waits: a restart lands on the end line at the latest, and the piece starts again there.
 	[[nodiscard]] bool ended() const {
-		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting();
+		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting() && !restartWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
@@ -404,6 +465,10 @@ private:
 		int32_t density = 0;
 		int32_t complexity = 0;
 		int32_t motion = 0;
+		/// The Density every part shares on this step, before its Part bias. A part decides on a copy of the step at
+		/// its own biased macros (partStep()), and planned() biases this for whichever part it asks about, so an
+		/// interplay rule's target plans at its own Density (spec §3.3, §5.5).
+		int32_t sharedDensity = 0;
 		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
 		bool drop = false;
 		bool repickLine = false;
@@ -459,6 +524,10 @@ private:
 	/// One step of a roll on a lane, at `roll`'s stage and from its base velocity: the Build roll's (spec §8.3) or a
 	/// Roll fill's (§8.7).
 	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
+	/// Whether the punch-ins act on `part`: the Drums part (spec §8.9).
+	[[nodiscard]] bool punchesPart(int32_t part) const { return part == drumsPart(*genre_); }
+	/// The roll a punch-in plays on the Drums part's `lane`, or one with no stage (spec §8.9).
+	[[nodiscard]] RollStep punchRoll(int32_t partIndex, Lane lane) const;
 	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
 	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
 		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
@@ -491,8 +560,9 @@ private:
 	/// control whose target changed since it was last sent: ramped over the step, or snapped on the piece's first
 	/// step, a Reset, and where a Throw starts or a part playing again ends it (spec §11.3–§11.7).
 	void updateControls(const Step& step);
-	/// The macro layer's offset for `control` on the last decided step (spec §11.3).
-	[[nodiscard]] int32_t macroLayer(SoundControl control) const;
+	/// The macro layer's offset for `control` on the last decided step (spec §11.3), as part `part` plays it: at its
+	/// biased macros. -1: unbiased, the layer every part with no Part bias shares.
+	[[nodiscard]] int32_t macroLayer(SoundControl control, int32_t part) const;
 	/// Where a Throw's line is, if the step just decided is in the window before it (spec §11.4).
 	struct ThrowLine {
 		bool near = false;
@@ -580,11 +650,30 @@ private:
 	[[nodiscard]] Arc::Move waitingMove() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
+	/// A decision's start, before the steering lands on `nextStep()`.
+	void beginDecision();
+	/// Whether `command` waits in an Arc move's slot: a force or End, or a transition (Arc::Move).
+	static bool isArcMove(const Command& command) {
+		return command.kind == CommandKind::ForceSection || command.kind == CommandKind::End
+		       || command.kind == CommandKind::Transition;
+	}
+	/// Logs each Arc move slot that changed on `nextStep()` since the last decision (RecordKind::Waiting, NotWaiting),
+	/// so replay can wait it as this decision does.
+	void logWaitingMoves(SteeringLog* log);
+	/// Notes what waits in the Arc move slots now, as logged: after the landings, which leave their slots logged.
+	void noteWaitingMoves();
+	/// One replayed record (decideReplayed()).
+	void replay(const LogRecord& record);
+	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide.
+	void decideLanded();
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
 	/// keeps its own note-off (spec §12.9). The new roster plays from here.
 	void endAtStop();
 	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
 	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
+	/// `step` as part `partIndex` decides it: its four macros moved by the part's Part bias (spec §3.3). `step` itself
+	/// when the part has none.
+	[[nodiscard]] Step partStep(int32_t partIndex, const Step& step) const;
 	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
 	/// notes sounding into it.
 	bool decidePart(int32_t partIndex, const Step& step);
@@ -632,6 +721,9 @@ private:
 	/// Whether a note gets an Ornament, and which (spec §8.2).
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
 	                                       int32_t patternStep, Lane lane) const;
+	/// The Ornament a Drums hit on `lane` plays while a Flam or Double kick punch-in is on, in place of `drawn` (spec
+	/// §8.9).
+	[[nodiscard]] OrnamentKind punchOrnament(int32_t partIndex, Lane lane, OrnamentKind drawn) const;
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
@@ -720,8 +812,9 @@ private:
 	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
 	/// planned onset.
 	[[nodiscard]] bool avoided(int32_t partIndex, const Step& step) const;
-	/// A rule's effective strength for the Recipe's Complexity: the free effectiveStrength() (genre.h).
-	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
+	/// A rule's effective strength for its source part `part`'s Complexity, biased: the free effectiveStrength()
+	/// (genre.h).
+	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule, int32_t part) const;
 	/// Energy's velocity layer at `energy`, scaled by the genre's weight (spec §8.4).
 	[[nodiscard]] int32_t energyLayer(int32_t energy) const;
 	/// A note's velocity: its base (the flavour's level) plus Energy's layer, clamped to 1–127.
@@ -776,7 +869,11 @@ private:
 	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
 	[[nodiscard]] int32_t stepsToChordLine() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
-	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
+	[[nodiscard]] uint8_t resolvePitch(int32_t partIndex, int32_t steps) const;
+	/// The part's Register, moved by its octave shift (spec §7.3).
+	[[nodiscard]] Register partRegister(int32_t partIndex) const {
+		return shiftedRegister(genre_->parts[partIndex].registerOrDefault(), recipe_.octave[partIndex]);
+	}
 
 	/// One hit of a note, for noteOn() to start.
 	struct Note {
@@ -803,10 +900,10 @@ private:
 	Takes takes_;
 	/// What the last decided step's Space was made of that a command landing on the stop step could change, so
 	/// fallThrows() keeps a stopped instance's Space where that step left it: the Motion drift's walk moved on by after
-	/// it, and the macro layer's Space. Beside takes_: the first fills its 2 B of padding, the second costs 4 B with
-	/// the padding after it.
+	/// it, and each part's macro layer's Space (its Part bias moves it). Beside takes_: the first fills its 2 B of
+	/// padding.
 	int16_t driftLastMotion_ = 0;
-	int16_t lastSpaceMacro_ = 0;
+	int16_t lastSpaceMacro_[kMaxParts] = {};
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
 	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
 	              "lastSpaceMacro_ holds the macro layer in 16 bits");
@@ -819,11 +916,16 @@ private:
 	Arc arc_;
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
+	/// The Arc move slots as the log last had them (logWaitingMoves()): the force or End, then the transition;
+	/// CancelNewest (never pending) for an empty slot.
+	Command waitingMoves_[2] = {{CommandKind::CancelNewest}, {CommandKind::CancelNewest}};
 	uint32_t refused_ = 0;
 	/// The roster's mutes and solos. Performance state (spec §12.5, §13.1).
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
+	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
+	PunchIns punch_;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
 	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
@@ -869,6 +971,8 @@ private:
 	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
 	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
 	bool hasSiren_ = false;
+	/// A restart landed on stopAt_ (spec §13.2), rather than a transition. Beside the other byte fields.
+	bool restartLanded_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
@@ -893,9 +997,9 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 3 + 4 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo and a sound per "
-              "part at once");
+static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, a restart, and a take, a mute, a solo, a "
+              "sound and an octave shift per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

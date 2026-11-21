@@ -45,7 +45,7 @@ struct TestFlavour {
 		for (int32_t n = 0; n < notes; n++) {
 			const int32_t steps = 2 * n + onset % 2; // root, 3rd, 5th, 7th, then the scale steps between
 			g.express(partIndex, spec.expression, state, patternStep,
-			          {Lane::None, g.resolvePitch(spec, steps), pattern.level[patternStep], length, false}, step);
+			          {Lane::None, g.resolvePitch(partIndex, steps), pattern.level[patternStep], length, false}, step);
 		}
 	}
 };
@@ -121,8 +121,9 @@ describe roster_room("Room in the Generator block", $ {
 		expect(SoundingNotes::kTotal).to_equal(35);
 		// Per part on a bar line: each source's 4 hits, a note-off for each inside the step, a note-off for each note
 		// sounding and a re-strike for each: Drums 11·10, FX 4·10, Pad and Stab 4·8 + 8·2, Bass and Motif 1·8 + 2·2,
-		// plus a Section, a KeyScale and 6 Sound events: 278. Off a bar line, no re-strikes: 243. Control events: 108.
-		expect(kEventBufferSize).to_equal(278 + 243 + 108);
+		// plus a Section, a KeyScale, a Pump and 6 Sound events: 279. Off a bar line, no re-strikes: 244. Control
+		// events: 108.
+		expect(kEventBufferSize).to_equal(279 + 244 + 108);
 		expect(kMaxControlSets).to_equal(20);
 	});
 

@@ -74,10 +74,14 @@ const char* queueTag(const Command& command) {
 		return "TAK";
 	case CommandKind::SetSound:
 		return "SND";
+	case CommandKind::SetOctave:
+		return "OCT";
 	case CommandKind::End:
 		return "END";
 	case CommandKind::Transition:
 		return "CHG";
+	case CommandKind::Restart:
+		return "RST";
 	case CommandKind::ForceSection:
 		return command.target < kNumSectionKinds ? kSectionTags[command.target] : "??";
 	default:
@@ -100,6 +104,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 	case CommandKind::SetSound:
 		text.add(partName(genre, command.target)).add(" SOUND");
 		break;
+	case CommandKind::SetOctave:
+		text.add(partName(genre, command.target)).add(" OCT ").add(command.value > 0 ? "+" : "").add(command.value);
+		break;
 	case CommandKind::SetKey:
 		text.add("KEY ").add(keyName(command.target)).add(" ");
 		text.add(command.value >= 0 ? scaleName(static_cast<Scale>(command.value)) : "?");
@@ -115,6 +122,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 		text.add(command.target == static_cast<uint8_t>(TransitionStyle::BuildIntoDrop) ? "CHANGE DROP"
 		         : command.target == static_cast<uint8_t>(TransitionStyle::Fade)        ? "CHANGE FADE"
 		                                                                                : "CHANGE CUT");
+		break;
+	case CommandKind::Restart:
+		text.add("RESTART");
 		break;
 	default:
 		text.add("?");

@@ -16,6 +16,7 @@
  */
 
 #include "generative/firmware/pump.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
@@ -24,6 +25,7 @@ namespace deluge::generative::firmware {
 
 void Pump::service(ReleaseUi release) {
 	soundSwaps.service();
+	restartBegan.service();
 	transitions.service();
 	retirements.service(release);
 }

@@ -1,0 +1,145 @@
+# Recipe LOAD in Perform (#139, spec §16.2, §16.5, §16.6, §9.7, §12.9) over the sysex test port, on the card
+# fixtures/recipe_load (its card.txt lists the files). LOAD opens the browser on RECIPES/ with the QWERTY, which hides
+# once the player scrolls; a pad press brings it back. A file cut short and one naming Techno's parent table are
+# refused and the browser stays. Stopped, a file loads at once: LOAD MISSING's two missing sounds are re-rolled (2
+# sounds replaced, so it no longer matches its file but for the sounds), LOAD OK matches its file. Playing, LOAD OLDER
+# shows its version notice and asks the transition confirm; the confirm's default plays through, and the new piece
+# has the file's Recipe, seed, takes and macros ("check recipe *").
+# gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|refused why=|stopped result= working=|replaced
+# sounds=|version older|closed; gen_recipe_check name= read= error= match= recipe= seed= takes= sounds=.
+# needs: card fixtures/recipe_load (its own card; test_port_emu.py builds it)
+# covers: src/deluge/gui/ui/load/load_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/recipe_file.* src/deluge/generative/perform/pending_recipe.h
+# covers: src/deluge/generative/perform/perform_steering.h src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/menu_item/generative/compose_screen.*
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: scripts/generative/fixtures/recipe_load/card.txt
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- LOAD: the browser on RECIPES/, the QWERTY on entry; a scroll hides it, a pad press brings it back ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD BROKEN.XML within=10
+expect ui=generative_load_recipe
+encoder 3 1
+expect event gen_recipe_load at=LOAD MISSING.XML qwerty=0 within=5
+encoder 3 -1
+expect event gen_recipe_load at=LOAD BROKEN.XML qwerty=0 within=5
+pad 5 2 down
+wait 50
+pad 5 2 up
+wait 200
+expect ui=generative_load_recipe
+
+# ---- A file cut short is refused, and the browser stays ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /^gen_recipe_load refused why=unreadable error=\d+ file=LOAD BROKEN.XML$/ within=5
+expect ui=generative_load_recipe
+
+# ---- Techno's parent table is an unknown genre: refused, the browser stays ----
+encoder 3 4
+expect event gen_recipe_load at=LOAD TECHNO.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load refused why=unknown_genre file=LOAD TECHNO.XML within=5
+expect ui=generative_load_recipe
+
+# ---- A press inside a card wait is refused with BUSY, and leaves no long press behind ----
+button SELECT_ENC down
+wait 50
+hold card_routine
+button SELECT_ENC up
+expect event gen_recipe_load refused why=busy within=5
+release card_routine
+expect ui_mode=0
+expect ui=generative_load_recipe
+
+# ---- Stopped: LOAD MISSING loads at once, its two missing sounds re-rolled ----
+encoder 3 -3
+expect event gen_recipe_load at=LOAD MISSING.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect event gen_recipe_load stopped result=0 working=1
+expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
+expect event gen_recipe_load replaced sounds=2 within=5
+expect ui=generative_perform
+expect playing=false
+check recipe *
+expect event gen_recipe_check name=LOAD MISSING read=ok error=0 match=0 recipe=1 seed=1 takes=1 sounds=0 within=10
+
+# ---- The browser opens on the file the Recipe came from; LOAD OK loads and matches its file ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD MISSING.XML within=10
+encoder 3 1
+expect event gen_recipe_load at=LOAD OK.XML within=5
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load chose name=LOAD OK genre=techno-acid version=2 within=5
+expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
+expect no_event gen_recipe_load replaced within=2
+check recipe *
+expect event gen_recipe_check name=LOAD OK read=ok error=0 match=1 within=10
+
+# ---- BACK in RECIPES/ leaves with nothing changed ----
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD OK.XML within=10
+button BACK down
+wait 50
+button BACK up
+expect event gen_recipe_load closed
+expect ui=generative_perform
+
+# ---- Playing: LOAD OLDER shows its notice, asks the confirm, and plays through as a transition ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0 within=10
+button LOAD down
+wait 50
+button LOAD up
+expect event gen_recipe_load opened at=LOAD OK.XML within=10
+expect playing=true
+encoder 3 1
+expect event gen_recipe_load at=LOAD OLDER.XML within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
+expect event gen_recipe_load version older file=1 genre=2
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm load style=0 result=0 within=5
+expect ui=generative_perform
+expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
+# The live macros are LOAD OK's (10, 40, 20, 30 points) until the start step; from there the new instance plays the
+# file's (35, 25, 45, 15), not the live ones (spec §12.9), and the Current Recipe has them ("check recipe *").
+expect no_event gen_macro_landed within=1
+expect event gen_transition start style=0 within=90
+expect event gen_macro_landed macro=0 units=2240 within=5
+expect event gen_macro_landed macro=1 units=1600 within=5
+expect event gen_macro_landed macro=2 units=2880 within=5
+expect event gen_macro_landed macro=3 units=960 within=5
+expect playing=true
+check recipe *
+expect event gen_recipe_check name=LOAD OLDER read=other_version error=0 match=1 recipe=1 within=10

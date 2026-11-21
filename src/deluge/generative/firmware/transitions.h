@@ -19,14 +19,16 @@
 // the phase and its rules. A genre change or Regenerate confirmed in the Perform menu runs one. Here is what needs the
 // firmware: the preload job (a live runner job rolls the pending Recipe and loads the incoming roster into fresh
 // Outputs, each linked into Perform's song in one chunk), the rosters' Outputs, the Current Recipe, popups and the test
-// events. A genre change runs the same lifecycle with a pending Recipe rolled from the new genre; a mid-set LOAD (M3)
-// will too, with the file's.
+// events. A genre change runs the same lifecycle with a pending Recipe rolled from the new genre; a mid-set LOAD runs
+// it with the file's (Transitions::load()).
 
 #pragma once
 
 #include "generative/core/recipe.h"
+#include "generative/core/recipe_file.h"
 #include "generative/core/steering.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/perform/recipe_name.h"
 #include "generative/perform/transition_lifecycle.h"
 #include <cstddef>
 #include <cstdint>
@@ -49,6 +51,7 @@ public:
 	using TransitionLifecycle::holdsStart;
 	using TransitionLifecycle::pending;
 	using TransitionLifecycle::phase;
+	using TransitionLifecycle::playWaits;
 	using TransitionLifecycle::preloading;
 	using TransitionLifecycle::starts;
 	using TransitionLifecycle::startWhenLoaded;
@@ -62,8 +65,15 @@ public:
 	/// GENRE ▸ on `genre`, confirmed with `style` (spec §9.7, §13.6): a genre change, or on the genre playing (and
 	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`.
 	Request change(const Genre& genre, TransitionStyle style);
+	/// A Recipe file's LOAD (spec §16.5): confirmed with `style` while playing, or at once while stopped (it commits
+	/// when loaded). The preload takes `file` as the pending Recipe, macros included, with its missing sounds re-rolled
+	/// (spec §16.6), and the Current Recipe takes `name` with it. Both are copied: the caller's may change at once.
+	Request load(const RecipeFile& file, const perform::RecipeName& name, TransitionStyle style);
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
+	/// The Current Recipe's swing interval changed in the tick (a restart AS IT BEGAN): the song's follows at the
+	/// pump's next call, in task context, as after a transition's start step.
+	void swingIntervalFollows() { swingIntervalDue_ = true; }
 	/// Where the incoming roster lies in Transitions: the start step's copy (PerformAdapter::incomingStarts()) needs
 	/// it to differ, modulo 8, from where it goes.
 	[[nodiscard]] static constexpr size_t incomingOffset();
@@ -89,13 +99,20 @@ private:
 	[[nodiscard]] bool transportRunning() const;
 	void startPlayback(bool groove);
 	[[nodiscard]] int32_t cutGlideTicks() const;
-	bool submitPreload(uint32_t request, const Genre& genre);
+	/// What a preload loads: a genre to roll from, or a LOAD's file (`file` and `name` set, `genre` its genre).
+	struct Incoming {
+		const Genre* genre = nullptr;
+		const RecipeFile* file = nullptr;
+		const perform::RecipeName* name = nullptr;
+	};
+	bool submitPreload(uint32_t request, const Incoming& incoming);
 	void cancelPreload();
 	void preloadEnded();
 	[[nodiscard]] int32_t waitingSounds() const;
 	void dropWaitingSounds();
 	void adoptIncoming();
 	Generator& startIncoming(TransitionStyle style);
+	[[nodiscard]] perform::HandoverMacros incomingMacros() const;
 	void releaseIncoming();
 	void showQueueFull();
 	void rosterStarts(TransitionStyle style);

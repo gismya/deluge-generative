@@ -21,6 +21,7 @@
 
 #include "generative/core/pitch.h"
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 
@@ -79,6 +80,28 @@ struct Macros {
 	constexpr bool operator==(const Macros&) const = default;
 };
 
+/// Each part's Part bias (spec §3.3): a signed offset per Macro that the part plays at around the Recipe value, after
+/// the Arc, through partBiased() (core/part_bias.h). In macro units, -kMacroFull..kMacroFull, by roster index. 0
+/// plays the Recipe value.
+struct PartBiases {
+	int16_t value[kMaxParts][kNumMacros] = {};
+
+	[[nodiscard]] constexpr int32_t of(int32_t part, Macro macro) const {
+		return value[part][static_cast<int32_t>(macro)];
+	}
+	constexpr void set(int32_t part, Macro macro, int32_t units) {
+		value[part][static_cast<int32_t>(macro)] =
+		    static_cast<int16_t>(std::clamp<int32_t>(units, -kMacroFull, kMacroFull));
+	}
+	/// Whether `part` has a bias on any macro.
+	[[nodiscard]] constexpr bool any(int32_t part) const {
+		const int16_t* bias = value[part];
+		return (bias[0] | bias[1] | bias[2] | bias[3]) != 0;
+	}
+	constexpr bool operator==(const PartBiases&) const = default;
+};
+static_assert(kNumMacros == 4, "PartBiases::any() reads four macros");
+
 // ---- Sound picks (spec §3.1, §10.1) ----
 
 /// The longest card path a sound pick holds, with its terminator. Longer paths are never picked.
@@ -105,6 +128,13 @@ struct SoundPicks {
 	SoundPath lane[kNumLanes];
 };
 
+/// A sound the player chose (spec §10.1, §13.5): a card preset for a synth part (`lane` None), or a file for one of a
+/// Drums or FX part's lanes, a sample, or a preset for an FX lane that takes one (spec §10.5).
+struct SoundChoice {
+	SoundPath path;
+	Lane lane = Lane::None;
+};
+
 // ---- The Recipe (spec §3.1, §3.2) ----
 
 /// The longest swing interval a Recipe holds: 5 doublings of a 16th (2 bars), the coarsest sync level at the
@@ -124,6 +154,11 @@ struct Recipe {
 	int8_t swing = 0;          ///< Song swing amount, -kMaxSwing..kMaxSwing.
 	uint8_t swingInterval = 0; ///< A note value: 0 the 16th, 1 the 8th, each step doubling. Drivers map it.
 	Macros macros;
+	/// Each pitched part's octave shift, -kMaxOctaveShift..kMaxOctaveShift, by roster index: its Register moves by
+	/// 12 semitones an octave (spec §3.1, §7.3). 0 for Drums and FX, which have no Register.
+	int8_t octave[kMaxParts] = {};
+	/// Each part's Part bias (spec §3.3). Regenerate keeps it, as it keeps the macros; a genre change sets it to 0.
+	PartBiases bias;
 
 	constexpr bool operator==(const Recipe&) const = default;
 };

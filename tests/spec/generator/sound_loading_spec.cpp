@@ -201,6 +201,50 @@ describe sound_loading("Loading sounds with fallback", $ {
 		expect(picked.ranges == ControlRanges{}).to_be_true();
 	});
 
+	it("loads an FX lane's preset pick (a chosen one) as a preset, with its palette entry's ranges or the defaults", _ {
+		FakeCard noFx;
+		FakeLoader listed;
+		SoundLoad wet = loadLaneSound(kRanged, Lane::Riser, "SYNTHS/R2.XML", noFx, listed);
+		expect(wet.source == SoundSource::Pick).to_be_true();
+		expect(wet.synth).to_be_true();
+		expect(wet.ranges == kWet).to_be_true();
+		expect(listed.presets).to_equal(Paths{"SYNTHS/R2.XML"});
+
+		FakeLoader mine;
+		SoundLoad unlisted = loadLaneSound(kRanged, Lane::Riser, "SYNTHS/MINE.XML", noFx, mine);
+		expect(unlisted.source == SoundSource::Pick).to_be_true();
+		expect(unlisted.synth).to_be_true();
+		expect(unlisted.ranges == ControlRanges{}).to_be_true();
+		expect(mine.presets).to_equal(Paths{"SYNTHS/MINE.XML"});
+	});
+
+	it("falls back from a missing preset pick as from a missing sample: the lane's files, then its presets", _ {
+		FakeCard withFx = card();
+		FakeLoader gone;
+		gone.missing = {"SYNTHS/MINE.XML"};
+		SoundLoad sample = loadLaneSound(kPalette, Lane::Riser, "SYNTHS/MINE.XML", withFx, gone);
+		expect(sample.source == SoundSource::Fallback).to_be_true();
+		expect(sample.synth).to_be_false();
+		expect(gone.tried).to_equal(Paths{"SYNTHS/MINE.XML", "SAMPLES/FX/Riser/GEN Riser 1.wav"});
+
+		FakeCard noFx;
+		FakeLoader none;
+		none.missing = {"SYNTHS/MINE.XML"};
+		SoundLoad preset = loadLaneSound(kPalette, Lane::Riser, "SYNTHS/MINE.XML", noFx, none);
+		expect(preset.source == SoundSource::Fallback).to_be_true();
+		expect(preset.synth).to_be_true();
+		expect(none.presets).to_equal(Paths{"SYNTHS/MINE.XML", "SYNTHS/GENERATIVE/FX/GEN Riser 1.XML"});
+	});
+
+	it("loads a Drums lane's pick as a sample whatever its extension: Drums lanes take no preset", _ {
+		FakeCard kicks = card();
+		FakeLoader loader;
+		SoundLoad load = loadLaneSound(kPalette, Lane::Kick, "SYNTHS/MINE.XML", kicks, loader);
+		expect(load.synth).to_be_false();
+		expect(loader.presets.empty()).to_be_true();
+		expect(loader.tried).to_equal(Paths{"SYNTHS/MINE.XML"});
+	});
+
 	it("leaves a lane with no palette entry and no pick silent with a warning", _ {
 		FakeCard empty;
 		FakeLoader loader;

@@ -197,3 +197,13 @@ otherwise.
   notes ended a bar or more before the drop-out's end, so `extend()` finds none and the voicing strikes again there.
   The draw reads `Arc::ahead()` with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section
   start known when it is drawn; one a later press moves is cut on the line instead.
+- Octave shift (§7.3, #397): `Generator::partRegister()` is the one Register a flavour reads, the genre's
+  `registerOrDefault()` moved by `Recipe::octave`. A new flavour that reads `spec.registerOrDefault()` itself ignores
+  the shift, and `octave_spec` fails. A shift that lands moves the part's held voicing (`PartState::voicing`) with it
+  in `apply()`, so voice leading goes on as a translation: without that, `leadVoicing()` places the new voicing near
+  the old one's pitches inside the moved Register, not 12 apart. A part takes only the shifts that keep its reach
+  in MIDI's range (`octaveRange()`, `pitchReach()` in `core/genre.h`): the reach is worked out from the Register
+  alone, so a new flavour that plays outside the span (a note above `spanHigh`, a grace note an octave down) must
+  widen `pitchReach()`, or `octave_spec`'s every-key reach case fails. A shift up alone doesn't show a voicing left
+  behind in a Stab: its voicings sit low in their window, and voice-led from below the moved window takes the same
+  notes. The re-voice spec runs each Sustain and Stab part down an octave too, which does.

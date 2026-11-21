@@ -439,6 +439,23 @@ describe transitions("Transitions", $ {
 		expect(t.driver.playing()->recipe().keyRoot).to_equal(uint8_t{2}); // the pending Recipe's
 	});
 
+	it("starts a LOAD's roster with the file's macros: a turn since the confirm is lost (spec §12.9)", _ {
+		Transition t;
+		t.lifecycle.pendingRecipe.macros = perform::HandoverMacros::Pending;
+		t.lifecycle.pendingRecipe.recipe.macros.set(Macro::Energy, macroPoints(10));
+		t.confirmAt(3, TransitionStyle::Cut);
+		t.runToTick(stepTick(20));
+		t.steering.setMacro(Macro::Energy, macroPoints(40)); // a knob turn
+		t.runBars(2 * phrase / kStepsPerBar);
+		expect(t.sink.starts).to_equal(1);
+		expect(t.driver.playing()->recipe().macros[Macro::Energy]).to_equal(macroPoints(10));
+		expect(t.currentRecipe.macros[Macro::Energy]).to_equal(macroPoints(10));
+		// The steering starts again from the file's macros: turning back to 40 reaches the core.
+		t.steering.setMacro(Macro::Energy, macroPoints(40));
+		t.runBars(1);
+		expect(t.driver.playing()->recipe().macros[Macro::Energy]).to_equal(macroPoints(40));
+	});
+
 	it("keeps a hold through the Build, and holds the new roster's Groove", _ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::BuildIntoDrop);

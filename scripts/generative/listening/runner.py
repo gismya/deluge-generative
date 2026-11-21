@@ -144,11 +144,20 @@ class Run:
         return _plan.seconds(capture.bars, self.tempos[capture.name])
 
     def done(self, capture):
-        """Whether every name the capture serves has a WAV of these arguments, source and card, long enough."""
+        """Whether every name the capture serves has a WAV of these arguments, source and card, long enough. A WAV kept
+        with its check failed (capture()) is current only for the quiet bars it was checked with: other ones may make
+        the check pass."""
         stamp, need = self.stamp(capture), self.seconds(capture)
+        quiet = list(capture.quiet)
+
+        def current(info):
+            return is_current(info, stamp, need) and (
+                not info.get("check") or info.get("quiet", []) == quiet
+            )
+
         return all(
             os.path.exists(os.path.join(self.raw, n + ".wav"))
-            and is_current(read_info(self.raw, n), stamp, need)
+            and current(read_info(self.raw, n))
             for n in capture.serves
         )
 
@@ -300,7 +309,11 @@ class Run:
                     self.tempos[capture.name],
                     seconds,
                     "delugemu",
-                    dict(self.stamp(capture), check=f"failed: {tail}")
+                    dict(
+                        self.stamp(capture),
+                        check=f"failed: {tail}",
+                        quiet=list(capture.quiet),
+                    )
                     if same
                     else self.stamp(capture),
                 )
@@ -342,9 +355,8 @@ class Run:
                     continue
                 variant = captures[0].variant
                 wt = wt or self.worktree(index)
-                if (
-                    applied != variant
-                ):  # a second chunk of the variant applied already: no relink
+                # a second chunk of the variant applied already: no relink
+                if applied != variant:
                     _variants.revert(wt)
                     _variants.apply(wt, self.session, variant)
                     applied = variant

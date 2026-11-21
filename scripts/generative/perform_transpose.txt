@@ -13,10 +13,11 @@
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
 # covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/core/sound_settings.h
 # covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
-# covers: src/deluge/gui/ui/browser/perform_preset_browser.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp scripts/generative/fixtures/perform_transpose/
 # covers: src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 include perform_open.txt
 

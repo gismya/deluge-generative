@@ -218,7 +218,8 @@ void PlaybackHandler::playButtonPressed(int32_t buttonPressLatency) {
 		    (accessibility && Buttons::isButtonPressed(deluge::hid::button::CROSS_SCREEN_EDIT))
 		    || (!accessibility && Buttons::isButtonPressed(deluge::hid::button::X_ENC));
 
-		// Generative mode (F9, spec §13.2): Perform blocks the restart shortcut, under any overlay too.
+		// Generative mode (F9, spec §13.2): Perform blocks stock's restart shortcut, under any overlay too. The panel's
+		// X+PLAY never gets here: it is Perform's restart (PerformAdapter::pressPlay()). A MIDI-learned PLAY does.
 		if (isRestartShortcutPressed && rootUIIsGenerativePerform()) {
 			return;
 		}
@@ -286,9 +287,10 @@ static const uint32_t recordButtonUIModes[] = {UI_MODE_HORIZONTAL_ZOOM, UI_MODE_
                                                UI_MODE_RECORD_COUNT_IN, UI_MODE_AUDITIONING, 0};
 
 void PlaybackHandler::recordButtonPressed() {
-	// Generative mode (F9 and F10, spec §13.5, §13.7): RECORD from the panel or MIDI never records into Perform's
-	// song, under any overlay too. It becomes the Capture mark later.
+	// Generative mode (F9 and F10, spec §13.5, §13.7, §17.4): RECORD from the panel or MIDI never records into
+	// Perform's song, under any overlay too: it marks the current piece for Capture.
 	if (rootUIIsGenerativePerform()) {
+		deluge::generative::firmware::performAdapter.pressMark();
 		return;
 	}
 

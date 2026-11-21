@@ -24,6 +24,8 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette_file.h"
 #include "generative/core/recipe.h"
+#include "generative/core/recipe_file.h"
+#include "generative/perform/recipe_name.h"
 #include "generative/runner/runner.h"
 #include <cstdint>
 
@@ -36,6 +38,22 @@ struct CurrentRecipe {
 	uint32_t seed = 0;
 	Takes takes;
 	bool exists = false;
+	/// Bumped each time the Current Recipe is replaced by a whole new one: a genre pick (rollFromGenre()),
+	/// regenerate(), a Perform genre change or REGENERATE at its start step, `reset recipe`. State kept outside the
+	/// Recipe about it (the Compose screen's previous picks) records the generation it belongs to and is void once it
+	/// differs. A new way of replacing the Recipe (a Recipe file's load) calls replaced().
+	uint32_t generation = 0;
+
+	/// The name of the Recipe file it was loaded from or last saved as (spec §14.2, §16.3), empty if none. A genre pick
+	/// and Regenerate clear it, here or in Perform, through replaced().
+	perform::RecipeName name;
+
+	/// The Current Recipe was replaced by a whole new one: see `generation`. It forgets its file name too; a Recipe
+	/// file's load sets the file's name after calling this.
+	void replaced() {
+		generation++;
+		name.clear();
+	}
 
 	/// Picking a genre rolls a fresh Recipe: rolled facts and sound picks, a new seed, takes at 0 and the genre's
 	/// default macros (spec §14.1). Facts, sound picks and the seed come from fresh hardware-timer entropy
@@ -48,6 +66,23 @@ struct CurrentRecipe {
 	/// With a runner job's `chunks`, each folder scan is a chunk boundary: a cancel returns ABORTED_BY_USER, with the
 	/// Current Recipe as it was.
 	Error rollFromGenre(const Genre& genre, Chunks* chunks = nullptr);
+
+	/// The Compose screen's REGENERATE (spec §14.4, §9.7): facts rolled again from the genre, leaning towards the key
+	/// it has, every sound pick re-rolled away from the one it has, a new seed and takes at 0. The macros stay. On a
+	/// card error, or a cancel through `chunks` (ABORTED_BY_USER), the Current Recipe stays as it was.
+	Error regenerate(Chunks* chunks = nullptr);
+	/// The Compose screen's sound re-rolls (spec §14.4): `part`'s picks (every lane of a Kit part), or one lane's,
+	/// rolled again from the palette away from the ones they have. Errors as regenerate().
+	Error rerollPart(int32_t part, Chunks* chunks = nullptr);
+	Error rerollLane(Lane lane, Chunks* chunks = nullptr);
+
+	/// A Recipe file's load outside Perform (spec §16.5, §16.6): the Compose screen's LOAD and FILE..., and PERFORM
+	/// FROM's FILE... (in the entry job). In Perform a LOAD is a transition, stopped too (Transitions::load()). `file`
+	/// becomes the Current Recipe, its macros included, with its genre's palette override read as a genre pick reads it
+	/// and each missing sound re-rolled from that palette (`soundsReplaced` counts them). It remembers `fileName`.
+	/// Errors as rollFromGenre(); on one, the Current Recipe stays as it was.
+	Error load(const RecipeFile& file, const perform::RecipeName& fileName, int32_t& soundsReplaced,
+	           Chunks* chunks = nullptr);
 
 	/// The palette the Recipe's sounds come from: the genre's built-in one, with the card's override over it if the
 	/// last genre pick read one.
@@ -89,5 +124,12 @@ void forgetCurrentRecipe();
 
 /// Fresh entropy from a hardware timer.
 uint32_t freshEntropy();
+
+/// A loaded Recipe file's sound picks checked against the card (spec §16.6): replaceMissingSounds() with fresh
+/// entropy, `soundsReplaced` the picks it re-rolled. With a runner job's `chunks` each check and folder read is a chunk
+/// boundary: a cancel returns ABORTED_BY_USER. A card error returns the card's error. Either way `sounds` may be
+/// partly replaced: work on a copy.
+Error replaceMissingCardSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, int32_t& soundsReplaced,
+                               Chunks* chunks = nullptr);
 
 } // namespace deluge::generative::firmware

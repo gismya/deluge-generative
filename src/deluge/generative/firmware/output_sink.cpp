@@ -19,7 +19,9 @@
 // transition's points from the tick (spec §12.5, §12.9).
 
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/riser_timing.h"
@@ -146,6 +148,17 @@ void OutputSink::play(const Event& event) {
 	case EventKind::Sound:
 		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
 		soundSwaps.swap(event);
+		if (sidechainPump.on()) {
+			sidechainPump.duck(roster); // the part's new Output ducks too (spec §8.9)
+		}
+		break;
+	case EventKind::Pump:
+		if (event.pumps()) {
+			sidechainPump.duck(roster);
+		}
+		else {
+			sidechainPump.release();
+		}
 		break;
 	}
 }
@@ -239,6 +252,53 @@ void OutputSink::playOutgoing(const Event& event) {
 void OutputSink::outgoingThrowsCut() {
 	soundControls.restoreOutgoingHomes();
 	TEST_EVENT("gen_outgoing_throws_cut");
+}
+
+#if ENABLE_SYSEX_TEST
+namespace {
+/// When the piece being opened began opening: gen_log_piece's us= counts from here.
+uint32_t pieceOpeningTicks = 0;
+} // namespace
+#endif
+
+void OutputSink::pieceOpening() {
+#if ENABLE_SYSEX_TEST
+	pieceOpeningTicks = getSystemTicks();
+#endif
+}
+
+void OutputSink::logPieceHeader(SteeringLog& log) {
+	const Generator* playing = performAdapter.driver().playing();
+	if (playing == nullptr || performAdapter.song_ == nullptr) {
+		return;
+	}
+	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_);
+	// header: the newest piece's opening and header records, in bytes; dropping: the bytes of dropped pieces whose
+	// room compactStep() is still to close (spec §17.4); us: what opening the piece and its header cost in the tick.
+	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d dropping=%ld us=%lu",
+	           static_cast<long>(log.pieces()), static_cast<long>(log.piece(log.pieces() - 1).headerBytes()),
+	           static_cast<long>(log.used()), log.full() ? 1 : 0, static_cast<long>(log.droppedBytes()),
+	           ticksToNs(getSystemTicks() - pieceOpeningTicks) / 1000);
+}
+
+void OutputSink::compactLog(SteeringLog& log) {
+#if ENABLE_SYSEX_TEST
+	const uint32_t started = getSystemTicks();
+#endif
+	[[maybe_unused]] const int32_t moved = log.compactStep(SteeringLog::kCompactStepBytes);
+#if ENABLE_SYSEX_TEST
+	const unsigned long us = ticksToNs(getSystemTicks() - started) / 1000;
+#endif
+	// moved: the bytes this step moved down; left: dropped bytes still to close (0: done, used= has come down); us:
+	// what it cost in the tick, outside the decision (spec §17.4, §20).
+	TEST_EVENT("gen_log_compact moved=%ld left=%ld used=%ld us=%lu", static_cast<long>(moved),
+	           static_cast<long>(log.droppedBytes()), static_cast<long>(log.used()), us);
+}
+
+void OutputSink::logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) {
+	if (const Generator* playing = performAdapter.driver().playing()) {
+		firmware::logSoundPaths(log, step, part, token, SoundSwaps::waitingPicks(), *playing->recipe().genre);
+	}
 }
 
 void OutputSink::outgoingDrained() {

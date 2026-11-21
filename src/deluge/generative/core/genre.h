@@ -957,9 +957,9 @@ extern const Genre technoDetroit;
 /// Ambient (spec §4.5): pads and a drone over a slow Chord graph, a held sub, sparse bells and soft percussion, an Arc
 /// that swells and recedes and never drops.
 extern const Genre ambient;
-/// Psytrance (spec §4.5): a four-on-the-floor kick under a rolling 16th bass that Avoids it, a pedal Drone, a swept
-/// Lead and a 16th Arp, in 16-bar phrases with long Builds into hard Drops.
-extern const Genre psytrance;
+/// Classic psytrance (spec §4.5), the Psytrance parent's only subgenre: a four-on-the-floor kick under a rolling 16th
+/// bass that Avoids it, a pedal Drone, a swept Lead and a 16th Arp, in 16-bar phrases with long Builds into hard Drops.
+extern const Genre psytranceClassic;
 /// Dub (spec §4.5): roots dub, not Dub techno. One-drop drums, an offbeat skank, a bass that carries the tune and a
 /// melodica, with drop-outs thrown into dotted-8th echoes and a Siren on Drops.
 extern const Genre dub;
@@ -1495,6 +1495,64 @@ constexpr bool sirensValid(const Genre& genre) {
 	return true;
 }
 
+/// The lowest and highest notes a pitched part can play unshifted, in any key (spec §7.3). Every flavour plays inside
+/// the Register's span around the part's tonic: a Loop, a Motif and a pedal through noteFor()'s fold, a voicing and its
+/// doubled root at the nearest place inside it, an Arp from the root's lowest place up, folded down. The tonic is the
+/// key root nearest the anchor, the lower on a tie, so it lies from 6 below the anchor to 5 above whatever the key.
+struct PitchReach {
+	int32_t lowest = 0;
+	int32_t highest = 0;
+};
+constexpr PitchReach pitchReach(const PartSpec& part) {
+	const Register reg = part.registerOrDefault();
+	return {reg.anchor - 6 + reg.spanLow, reg.anchor + 5 + reg.spanHigh};
+}
+
+/// The octave shifts a part takes (spec §3.1, §7.3): those of -kMaxOctaveShift..kMaxOctaveShift that keep its whole
+/// reach inside MIDI's 0–127, so no note of it is ever clamped. Only 0 for Drums and FX.
+struct OctaveRange {
+	int32_t lowest = 0;
+	int32_t highest = 0;
+	[[nodiscard]] constexpr bool contains(int32_t shift) const { return shift >= lowest && shift <= highest; }
+	[[nodiscard]] constexpr int32_t clamp(int32_t shift) const {
+		return shift < lowest ? lowest : shift > highest ? highest : shift;
+	}
+};
+constexpr OctaveRange octaveRange(const PartSpec& part) {
+	if (!hasRegister(part.role)) {
+		return {};
+	}
+	const PitchReach reach = pitchReach(part);
+	OctaveRange range{-kMaxOctaveShift, kMaxOctaveShift};
+	while (range.lowest < 0 && reach.lowest + 12 * range.lowest < 0) {
+		range.lowest++;
+	}
+	while (range.highest > 0 && reach.highest + 12 * range.highest > 127) {
+		range.highest--;
+	}
+	return range;
+}
+
+/// Whether every pitched part plays inside MIDI's range unshifted, so its octave range holds 0, and its Register anchor
+/// ± 12 × kMaxOctaveShift stays a MIDI note, so shiftedRegister()'s byte never wraps (spec §7.3).
+constexpr bool registersShiftValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		if (!hasRegister(part.role)) {
+			continue;
+		}
+		const int32_t anchor = part.registerOrDefault().anchor;
+		const PitchReach reach = pitchReach(part);
+		// pitchReach() bounds the notes only for a span of at least 11 semitones: a narrower one lets noteFor()'s
+		// upward fold land past spanHigh.
+		const Register reg = part.registerOrDefault();
+		if (reg.spanHigh - reg.spanLow < 11 || anchor - 12 * kMaxOctaveShift < 0 || anchor + 12 * kMaxOctaveShift > 127
+		    || reach.lowest < 0 || reach.highest > 127) {
+			return false;
+		}
+	}
+	return true;
+}
+
 /// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
 /// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
 /// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
@@ -1579,6 +1637,16 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
+/// The genre's Drums part, the one the punch-ins act on and Pump leaves out (spec §8.9), or -1 with none.
+constexpr int32_t drumsPart(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (genre.parts[p].role == Role::Drums) {
+			return p;
+		}
+	}
+	return -1;
+}
+
 /// What a control set is, which decides the layers that move it (spec §11.3–§11.5).
 enum class ControlSetKind : uint8_t {
 	Part,    ///< A pitched part's own: every layer.
@@ -1587,10 +1655,15 @@ enum class ControlSetKind : uint8_t {
 	FxLane,  ///< An FX lane's row controls: every layer.
 };
 constexpr int32_t kNumControlSetKinds = 4;
+/// Whether the macro layer moves a set of `kind` (spec §11.3): a Drums lane's row takes none, since the macro layer
+/// moves the kit-wide controls.
+constexpr bool takesMacroLayer(ControlSetKind kind) {
+	return kind != ControlSetKind::KitLane;
+}
 /// Whether a set of `kind` can ever move `control`: the layers that act on it, and what each layer moves.
 constexpr bool setMoves(ControlSetKind kind, SoundControl control) {
 	const bool drift = kind != ControlSetKind::KitWide && drifts(control);
-	const bool macro = kind != ControlSetKind::KitLane && macroMoves(control);
+	const bool macro = takesMacroLayer(kind) && macroMoves(control);
 	return drift || macro || gestureMoves(control);
 }
 /// How a part of each role lays out its control sets (spec §11.1): a set of its own first, if it has one, then one per
@@ -1625,6 +1698,11 @@ constexpr int32_t controlSetsOf(const PartSpec& part) {
 constexpr ControlSetKind controlSetKind(Role role, int32_t set) {
 	const ControlSetLayout layout = controlSetLayout(role);
 	return layout.own && set == 0 ? layout.ownKind : layout.laneKind;
+}
+/// The kind of the `role` part's set that its events on `lane` move: its own for Lane::None, else its lane's.
+constexpr ControlSetKind controlSetKindOf(Role role, Lane lane) {
+	const ControlSetLayout layout = controlSetLayout(role);
+	return lane == Lane::None ? layout.ownKind : layout.laneKind;
 }
 constexpr ControlSetKind controlSetKind(const PartSpec& part, int32_t set) {
 	return controlSetKind(part.role, set);

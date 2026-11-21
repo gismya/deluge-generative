@@ -18,7 +18,7 @@
 # alone.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_clip.cpp
-# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/ui/browser/perform_preset_browser.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/ui/browser/perform_sound_browser.cpp
 # covers: src/deluge/generative/perform/press_outcome.h src/deluge/generative/perform/sidebar.*
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
@@ -34,6 +34,7 @@
 # covers: src/deluge/generative/perform/oled_page.* src/deluge/generative/perform/queue_text.*
 # covers: src/deluge/generative/perform/text.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -62,7 +63,7 @@ button SYNTH down
 wait 50
 button SYNTH up
 expect event /gen_browser open part=1 pick=(SYNTHS\/.+\.XML) at=\1$/ within=10
-expect ui=generative_preset_browser
+expect ui=generative_sound_browser
 expect root_ui=generative_perform
 encoder 3 1
 expect event gen_browser at=SYNTHS/ within=5
@@ -113,7 +114,7 @@ pad 17 0 down
 wait 1500
 pad 17 0 up
 expect no_event gen_end armed since=mark within=2
-expect ui=generative_preset_browser
+expect ui=generative_sound_browser
 button BACK down
 wait 50
 button BACK up
@@ -166,7 +167,7 @@ pad 17 0 down
 wait 50
 pad 17 0 up
 expect no_event gen_end tap since=mark within=2
-expect ui=generative_preset_browser
+expect ui=generative_sound_browser
 button BACK down
 wait 50
 button BACK up
@@ -426,7 +427,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_browser refused part=1 result=2 within=5
-expect ui=generative_preset_browser
+expect ui=generative_sound_browser
 release free
 expect event gen_outputs_freed outputs=1 within=10
 button SELECT_ENC down

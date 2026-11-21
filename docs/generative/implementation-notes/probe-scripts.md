@@ -12,6 +12,12 @@ otherwise.
 - A probe expect's `within=` counts from the expect line, the wait for the firmware's queue included (`no_event`
   alone watches its whole window after that wait). An expect after queued `wait`s and turns needs a window that covers
   them too (`perform_transport.txt`'s swing: 4 s of queue, `within=10`).
+- `within=` is host seconds; an event's timestamp is the firmware's. Under host load delugemu runs well below real
+  time (#381: 13.5 firmware s outran a 20 s wait at load 13-16), so a wait for something bars away needs about 3x its
+  musical length. The H16 report comes every 4 bars on the phrase grid: the one on a Section's line goes out just
+  before that Section's event, so an h16 expected after a Section event is the next one, 4 bars later
+  (`perform_genre_change_dub.txt`, `_ambient.txt`: `within=40` at 70 BPM). A `since=mark` there would take the
+  previous Section's report instead.
 - A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
   double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
   act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.
@@ -22,8 +28,8 @@ otherwise.
   few hundred ms (a 100 ms margin over delugemu's numbers would be flaky on hardware).
 - run_script lets go of every hold when a script ends, also on an error (`hold entropy` left on pins every entry until
   a reboot). To compare events between two runs of something whose events depend on the card, `mark`, then `keep
-  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry rolls a fresh
-  Recipe, the Current Recipe or not.
+  events TEXT`, `mark` again and `expect events kept` (`perform_entropy.txt`). Every Perform entry from GENRE rolls a
+  fresh Recipe, the Current Recipe or not; PERFORM FROM's CURRENT RECIPE doesn't.
 - A test-port hold (`hold NAME`, `release NAME`) is a row of `kHolds` in `io/midi/test_port.cpp` plus the hook that
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
   `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
@@ -41,7 +47,10 @@ otherwise.
   include's steps caused before its last match is behind the search when the including script's next `expect event`
   runs, which waits for a later one and fails (#320's and #125's scripts hit it). To check such an event: `mark now`
   before the `include`, then `expect event TEXT since=mark` after it. `mark now`, not `mark`: it also skips older
-  unmatched events. The runner keeps one search on purpose: later expects count from an include's match
+  unmatched events. Each such expect needs its own `since=mark`, not only the first: a `since=mark` match doesn't
+  move the search back to it, so the next plain expect still starts after the include's last match
+  (`gen_generator_heap block=0` then `block=1`, both before `gen_perform_entered`, #388). The runner keeps one
+  search on purpose: later expects count from an include's match
   (`perform_confirm.txt`'s `gen_perform_entered`).
 - To check that nothing swaps on the line a cancelled sound would have landed on: `mark now`, the expects for the
   cancel's events, then `expect event gen_phrase bar= since=mark within=40` and `expect no_event gen_sound_swap
@@ -68,6 +77,10 @@ otherwise.
   lets its transition's preload run straight through (`perform_transition.txt`). Each `expect event` searches after
   the previous expect's match, so two expects can't both match one event: put every field you check in one expect (a
   `/regex/` when they aren't adjacent).
+- `hold sound_committed` parks a sound job past its `chunks.commit()`, where a cancel no longer stops it, until
+  `release sound_committed` (no cancel ends the wait). Any sound job's end turns it off (`SoundJob::finished()`), so a
+  hold set for a job that fails before its commit doesn't park the next one. Release it before leaving Perform: the
+  leave can't cancel a committed job, so its teardown waits on the parked one.
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
@@ -102,3 +115,14 @@ otherwise.
   `card.txt` starts a comment, so no path there may hold one. `fat_image.py` handles FAT32 on the whole image only
   (delugemu's card); its unit tests format their own images and run `fsck_msdos` or `fsck.fat` on each where the
   host has one.
+- `covers.py --check` (`expect_kinds()`) takes an expect's TEXT up to its first space as the kind, and the files that
+  send or build it (BUILDERS) must be on the covers lines. A kind with nothing after it matches as a prefix:
+  `expect no_event gen_h1` names every file that sends or builds `gen_h16 ...` too. Write `gen_h1 steps=` to match
+  only `gen_h1`.
+- A script that needs a song (`# needs: SONGS/...`) can still be tried in delugemu: copy it and its includes to a
+  scratch folder without its `load song` and `song_loaded` lines, and run the copy on the blank song. What depends on
+  the song differs: the blank song has no arrangement, so PLAY in the arranger stops at once (`playing=false`).
+- `hold card_routine` hands injected presses to their handlers with `sdRoutineLock` set (`inCardRoutine` true), as a
+  press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
+  that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
+  presses whose handler refuses instead (`perform_recipe_save.txt`).

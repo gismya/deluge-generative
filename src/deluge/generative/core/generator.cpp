@@ -16,6 +16,7 @@
  */
 
 #include "generative/core/generator.h"
+#include "generative/core/steering_log.h"
 #include <algorithm>
 #include <iterator>
 #ifdef GENERATOR_TEST_SEAMS
@@ -37,20 +38,28 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 
 void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop) {
 	recipe_ = recipe;
+	// A shift the part's octave range doesn't take (a Recipe from elsewhere) plays at the nearest it does (spec §7.3).
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		recipe_.octave[p] = static_cast<int8_t>(
+		    p < partCount(*recipe.genre) ? octaveRange(recipe.genre->parts[p]).clamp(recipe_.octave[p]) : 0);
+	}
 	seed_ = seed;
 	takes_ = takes;
 	genre_ = recipe.genre;
 	nextStep_ = 0;
 	stopAt_ = kNever;
+	restartLanded_ = false;
 	arc_.start(*genre_, first, onDrop);
 	// A stop cancels the pending list: every start is fresh (spec §2.6, §13.2).
 	pending_.clear();
+	waitingMoves_[0] = waitingMoves_[1] = Command{CommandKind::CancelNewest};
 	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
 	silent_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
+	punch_ = {};    // and each punch-in still on (spec §8.9)
 	rested_ = 0;
 	busyHalves_[0] = {};
 	busyHalves_[1] = {};
@@ -87,7 +96,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	driftPoint_ = 0;
 	driftTowards_ = 0;
 	driftLastMotion_ = 0;
-	lastSpaceMacro_ = 0;
+	std::fill(std::begin(lastSpaceMacro_), std::end(lastSpaceMacro_), int16_t{0});
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -106,8 +115,9 @@ void Generator::startIncoming(const Recipe& recipe, uint32_t seed, const Takes& 
 	      style == TransitionStyle::BuildIntoDrop);
 }
 
-void Generator::carryOver(const Macros& macros, bool held) {
+void Generator::carryOver(const Macros& macros, const PartBiases& bias, bool held) {
 	recipe_.macros = macros;
+	recipe_.bias = bias;
 	arc_.carryHold(held);
 }
 
@@ -210,8 +220,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	if (stoppedDeciding()) {
 		return; // a transition's start step: the new roster decides from here
 	}
-	events_.beginStep();
-	cutParts_ = 0; // set again below by a SetSound or SetKey landing on this step
+	beginDecision();
 
 	// Steering lands here, on the next undecided step, and is logged where it lands (ADR 0005). Bar- and
 	// phrase-quantised commands wait for their line in the pending list, and land before the Arc moves, so a forced
@@ -235,7 +244,76 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 			log->append(n, command);
 		}
 	}
+	logWaitingMoves(log);
 	landPending(log);
+	noteWaitingMoves();
+	decideLanded();
+}
+
+namespace {
+
+/// What waits in an Arc move slot: the force or End (`slot` 0), or the transition (1); CancelNewest for nothing.
+GEN_STEP_CODE Command waitingIn(const PendingList& pending, int32_t slot) {
+	const Command* waiting = pending.waiting({slot == 0 ? CommandKind::ForceSection : CommandKind::Transition});
+	return waiting != nullptr ? *waiting : Command{CommandKind::CancelNewest};
+}
+
+} // namespace
+
+GEN_STEP_CODE void Generator::logWaitingMoves(SteeringLog* log) {
+	for (int32_t slot = 0; slot < 2; slot++) {
+		const Command now = waitingIn(pending_, slot);
+		if (now == waitingMoves_[slot]) {
+			continue;
+		}
+		waitingMoves_[slot] = now;
+		if (log != nullptr) {
+			const bool waits = now.kind != CommandKind::CancelNewest;
+			log->appendWaiting(nextStep_,
+			                   waits ? now : Command{slot == 0 ? CommandKind::ForceSection : CommandKind::Transition},
+			                   waits);
+		}
+	}
+}
+
+GEN_STEP_CODE void Generator::noteWaitingMoves() {
+	for (int32_t slot = 0; slot < 2; slot++) {
+		waitingMoves_[slot] = waitingIn(pending_, slot);
+	}
+}
+
+void Generator::replay(const LogRecord& record) {
+	switch (record.kind) {
+	case RecordKind::Command:
+		if (isArcMove(record.command)) {
+			pending_.cancel(record.command); // it leaves its slot as it lands
+		}
+		apply(record.command);
+		break;
+	case RecordKind::Waiting:
+		pending_.add(record.command);
+		break;
+	case RecordKind::NotWaiting:
+		pending_.cancel(record.command);
+		break;
+	case RecordKind::SoundPath:
+	case RecordKind::SoundDropped:
+		break;
+	}
+}
+
+void Generator::startPiece(const PieceStart& start) {
+	begin(start.recipe, start.seed, start.takes, start.first, start.onDrop);
+	arc_.carryHold(start.held);
+}
+
+GEN_STEP_CODE void Generator::beginDecision() {
+	events_.beginStep();
+	cutParts_ = 0; // set again by a SetSound or SetKey landing on this step
+}
+
+GEN_STEP_CODE void Generator::decideLanded() {
+	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
 		endAtStop(); // a cut landed: its line is the start step
 		return;
@@ -256,6 +334,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	}
 	step.energy = effectiveMacro(Macro::Energy);
 	step.density = effectiveMacro(Macro::Density);
+	step.sharedDensity = step.density;
 	step.complexity = recipe_.macros[Macro::Complexity];
 	step.motion = recipe_.macros[Macro::Motion];
 	// The Intro and the first Groove share the first pick; Breaks and Builds keep what was playing.
@@ -282,7 +361,9 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	uint8_t avoidedParts = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
-		avoidedParts |= decidePart(p, step) ? partBit(p) : 0;
+		// Each part at its own Part bias (spec §3.3); the shared step above stays the Arc's, the fills' and the
+		// sound controls' drift.
+		avoidedParts |= decidePart(p, recipe_.bias.any(p) ? partStep(p, step) : step) ? partBit(p) : 0;
 	}
 	if (arc_.stepInBar() == 0) {
 		lateEntries(step, avoidedParts);
@@ -336,6 +417,15 @@ void Generator::skipTo(int32_t step) {
 #endif
 		nextStep_++;
 	}
+}
+
+GEN_STEP_CODE Generator::Step Generator::partStep(int32_t partIndex, const Step& step) const {
+	Step own = step;
+	own.energy = biasedOn(partIndex, Macro::Energy, step.energy);
+	own.density = biasedOn(partIndex, Macro::Density, step.density);
+	own.complexity = biasedOn(partIndex, Macro::Complexity, step.complexity);
+	own.motion = biasedOn(partIndex, Macro::Motion, step.motion);
+	return own;
 }
 
 GEN_STEP_CODE bool Generator::decidePart(int32_t partIndex, const Step& step) {
@@ -409,7 +499,8 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const int32_t onTick = note.onTick;
 	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
 	on.ornament = note.ornament;
-	on.muted = !mutes_.audible(partIndex);
+	// A LaneMute punch-in flags its lane's notes as a part mute does (spec §8.9).
+	on.muted = !mutes_.audible(partIndex) || (punch_.lanes != 0 && punchesPart(partIndex) && punch_.muted(lane));
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);

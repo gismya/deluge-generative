@@ -21,6 +21,7 @@ using deluge::generative::firmware::keepFeedbackRunning;
 using deluge::generative::firmware::PartOutput;
 using deluge::generative::firmware::performAdapter;
 using deluge::generative::firmware::Pump;
+using deluge::generative::firmware::restartBegan;
 using deluge::generative::firmware::SoundSwaps;
 using deluge::generative::firmware::soundSwaps;
 using deluge::generative::firmware::transitions;
@@ -46,6 +47,9 @@ bool PerformView::opened() {
 	thinDrivePart_ = -1;
 	macroHolds_ = {};
 	fillHolds_ = {};
+	punchHolds_.clear(); // and no punch-in on (PerformSteering::enter())
+	std::fill(std::begin(stockHeld_), std::end(stockHeld_), 0);
+	stockLayoutLoaded_ = false;
 #if ENABLE_SYSEX_TEST
 	shownRings_[0] = '\0';
 	shownKeyboard_[0] = '\0';
@@ -118,8 +122,19 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 				if (transitions.preloading() && transitions.cancel()) {
 					TEST_EVENT("gen_back_tap transition");
 				}
-				else if (soundSwaps.cancelPreload()) {
-					TEST_EVENT("gen_back_tap preload");
+				else if (soundSwaps.preloadRunning()) {
+					// As for AS IT BEGAN's below: a tap while the cancel unwinds cancels nothing queued.
+					if (soundSwaps.cancelPreload()) {
+						TEST_EVENT("gen_back_tap preload");
+					}
+				}
+				else if (restartBegan.preloading()) {
+					// AS IT BEGAN's sounds: nothing restarts. A tap while that cancel unwinds does nothing, not cancel
+					// an unrelated queued action.
+					if (restartBegan.cancelPreload()) {
+						display->displayPopup(l10n::get(l10n::String::STRING_FOR_RESTART_CANCELLED));
+						TEST_EVENT("gen_back_tap restart_preload");
+					}
 				}
 				else {
 					refusedWithPopup(performAdapter.steering().cancelNewest());
@@ -162,27 +177,48 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SESSION_VIEW || b == CLIP_VIEW || b == KEYBOARD) {
-		// SONG, CLIP and KEYBOARD switch the grid page; the gold knobs stay where they are (spec §13.5).
+		// SONG, CLIP and KEYBOARD switch the grid page; the gold knobs stay where they are. KEYBOARD on the KEYBOARD
+		// page flips to stock Performance view, and back (spec §13.5).
 		if (on) {
-			page_ = b == CLIP_VIEW ? Page::Clip : b == KEYBOARD ? Page::Keyboard : Page::Song;
-			TEST_EVENT("gen_page %s", page_ == Page::Clip ? "CLIP" : page_ == Page::Keyboard ? "KEYBOARD" : "SONG");
+			if (b == KEYBOARD && page_ == Page::Keyboard) {
+				if (inCardRoutine && !stockLayoutLoaded_) {
+					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE; // the layout's first load reads the card
+				}
+				page_ = Page::Performance;
+				enterPerformancePage();
+			}
+			else {
+				page_ = b == CLIP_VIEW ? Page::Clip : b == KEYBOARD ? Page::Keyboard : Page::Song;
+			}
+			TEST_EVENT("gen_page %s", page_ == Page::Clip          ? "CLIP"
+			                          : page_ == Page::Keyboard    ? "KEYBOARD"
+			                          : page_ == Page::Performance ? "PERFORMANCE"
+			                                                       : "SONG");
 			assertPageLeds();
 			refreshArcMap();
 			refreshFaders();
 			refreshKeyboardPage();
+			refreshPerformancePage();
 			refreshScreen();
 		}
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == SYNTH || b == KIT) {
 		// The focused part's new sound at the phrase line; SHIFT, its previous sound. SYNTH on a synth part opens the
-		// preset browser instead (spec §13.5).
+		// preset browser instead, and KIT on a Drums or FX part the lane list (spec §13.5).
 		if (on && focusedPart() >= 0) {
-			if (b == SYNTH && !Buttons::isShiftButtonPressed() && SoundSwaps::synthPart(focusedPart())) {
+			const bool synth = SoundSwaps::synthPart(focusedPart());
+			const bool shift = Buttons::isShiftButtonPressed();
+			if (!shift && ((b == SYNTH && synth) || (b == KIT && !synth))) {
 				if (inCardRoutine) {
 					return ActionResult::REMIND_ME_OUTSIDE_CARD_ROUTINE;
 				}
-				openPresetBrowser(focusedPart());
+				if (synth) {
+					openPresetBrowser(focusedPart());
+				}
+				else {
+					openLaneList(focusedPart());
+				}
 			}
 			else {
 				soundPress(focusedPart(), Buttons::isShiftButtonPressed());
@@ -215,6 +251,20 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	}
 	if (b == SYNC_SCALING) {
 		holdFill(deluge::generative::perform::FillHolds::kButton, on);
+		return ActionResult::DEALT_WITH;
+	}
+	if (b == SAVE) {
+		// Quick save while playing, else the full save UI; SHIFT+SAVE always the full one (spec §16.4).
+		if (on) {
+			recipeSavePress(Buttons::isShiftButtonPressed(), inCardRoutine);
+		}
+		return ActionResult::DEALT_WITH;
+	}
+	if (b == LOAD) {
+		// The Recipe load browser (spec §16.5). SHIFT+LOAD (stock's new song) does nothing here.
+		if (on && !Buttons::isShiftButtonPressed()) {
+			loadRecipeUI.open(inCardRoutine);
+		}
 		return ActionResult::DEALT_WITH;
 	}
 	if (b == TAP_TEMPO) {
@@ -288,6 +338,7 @@ void PerformView::assertLeds() {
 		scaleBlinkShown_ = keyWaits;
 		TEST_EVENT("gen_scale_led %s", keyWaits ? "blink" : "off");
 	}
+	assertRecordLed();
 	// View::setModLedStates, which a menu runs as it opens and moves, sets F7 and F8 steady: under it the knobs are
 	// still on Thin / Drive or Complexity / Motion (F16), so their LEDs blink again.
 	const auto f7 = indicator_leds::modLed[kThinDriveModButton];
@@ -297,6 +348,43 @@ void PerformView::assertLeds() {
 	const auto f8 = indicator_leds::modLed[kMacroModButton];
 	if (onMacroPage() && secondMacroSet_ && indicator_leds::getLedBlinkerIndex(f8) == 255) {
 		indicator_leds::blinkLed(f8);
+	}
+}
+
+void PerformView::assertRecordLed() {
+	using deluge::generative::perform::RecordLed;
+	// The RECORD LED is Capture's (spec §13.5, §17.4): on = the current piece is marked, blinking = the log is full.
+	// Resampling (SHIFT+RECORD stays RESAMPLE) and MIDI learn's flash own it meanwhile; it comes back after them.
+	const deluge::generative::perform::CaptureStatus capture = performAdapter.captureStatus();
+#if ENABLE_SYSEX_TEST
+	{
+		deluge::generative::perform::CaptureStatus reported = capture;
+		reported.usedPercent = 0; // moves with every record: gen_log reports the log's use
+		if (!(reported == captureShown_)) {
+			captureShown_ = reported;
+			TEST_EVENT("gen_capture piece=%d marked=%d full=%d marks=%ld", capture.piece ? 1 : 0,
+			           capture.marked ? 1 : 0, capture.full ? 1 : 0, static_cast<long>(capture.markedPieces));
+		}
+	}
+#endif
+	if (audioRecorder.recordingSource > AudioInputChannel::NONE || currentUIMode == UI_MODE_MIDI_LEARN) {
+		return;
+	}
+	const RecordLed want = deluge::generative::perform::recordLed(capture);
+	const bool blinking = indicator_leds::getLedBlinkerIndex(IndicatorLED::RECORD) != 255;
+	if (want == RecordLed::Blink) {
+		if (!blinking) {
+			indicator_leds::blinkLed(IndicatorLED::RECORD);
+		}
+	}
+	else if (blinking
+	         || indicator_leds::ledStates[static_cast<int32_t>(IndicatorLED::RECORD)] != (want == RecordLed::On)) {
+		indicator_leds::setLedState(IndicatorLED::RECORD, want == RecordLed::On);
+	}
+	if (static_cast<uint8_t>(want) != recordLedShown_) {
+		recordLedShown_ = static_cast<uint8_t>(want);
+		static constexpr const char* kNames[] = {"off", "on", "blink"};
+		TEST_EVENT("gen_record_led %s", kNames[static_cast<int32_t>(want)]);
 	}
 }
 
@@ -326,6 +414,8 @@ void PerformView::leave() {
 	// LEAVE stops the transport, which drops a waiting key change (spec §13.2): SCALE goes dark with it.
 	indicator_leds::setLedState(IndicatorLED::SCALE_MODE, false);
 	scaleBlinkShown_ = false;
+	// The marks go with the log at the teardown: RECORD goes dark now, as stock leaves it outside Perform.
+	indicator_leds::setLedState(IndicatorLED::RECORD, false);
 	generativeModalUI.open(performAdapter.leaveJob());
 	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
 		generativeModalUI.jobEnded();
@@ -351,7 +441,19 @@ void setLedIfChanged(IndicatorLED led, bool on) {
 void PerformView::assertPageLeds() {
 	setLedIfChanged(IndicatorLED::SESSION_VIEW, page_ == Page::Song);
 	setLedIfChanged(IndicatorLED::CLIP_VIEW, page_ == Page::Clip);
-	setLedIfChanged(IndicatorLED::KEYBOARD, page_ == Page::Keyboard);
+	// KEYBOARD: lit on the KEYBOARD page, blinking on stock Performance view (spec §13.5).
+	const bool keyboardBlinks = indicator_leds::getLedBlinkerIndex(IndicatorLED::KEYBOARD) != 255;
+	if (page_ == Page::Performance) {
+		if (!keyboardBlinks) {
+			indicator_leds::blinkLed(IndicatorLED::KEYBOARD);
+		}
+	}
+	else if (keyboardBlinks) {
+		indicator_leds::setLedState(IndicatorLED::KEYBOARD, page_ == Page::Keyboard); // stops the blink
+	}
+	else {
+		setLedIfChanged(IndicatorLED::KEYBOARD, page_ == Page::Keyboard);
+	}
 	setLedIfChanged(IndicatorLED::AFFECT_ENTIRE, focusedPart() < 0);
 	// CROSS-SCREEN: lit while the focused part is frozen (spec §13.5).
 	setLedIfChanged(IndicatorLED::CROSS_SCREEN_EDIT, partFrozen(focusedPart()));
@@ -387,6 +489,14 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		songPadAction(y, false);
 		refreshArcMap();
 		refreshFaders();
+	}
+	else if (velocity == 0 && performancePadHeld(x, y)) {
+		performancePadAction(x, y, false); // pressed on stock Performance view: its release goes there on any page
+	}
+	else if (page_ == Page::Performance) {
+		if (velocity != 0) {
+			performancePadAction(x, y, true);
+		}
 	}
 	else if (page_ == Page::Keyboard || (velocity == 0 && keyboardPadHeld(x, y))) {
 		// A KEYBOARD pad held when the page changed lets go there, as a part row does.
@@ -448,6 +558,11 @@ void PerformView::graphicsRoutine() {
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
 	}
+	if (performAdapter.restarts() != seenRestarts_) {
+		// A restart landed (spec §13.2): a new piece plays from bar 1, so the Arc map shows its now. Focus stays.
+		seenRestarts_ = performAdapter.restarts();
+		arc_.scrollToNow();
+	}
 	if (performAdapter.playing()) {
 		keepFeedbackRunning(); // the live values' MIDI feedback (spec §13.7)
 	}
@@ -461,6 +576,17 @@ void PerformView::graphicsRoutine() {
 	refreshSidebar();
 	refreshArcMap();
 	refreshKeyboardPage();
+	// Stock's stutter (the stock Performance view page's column, or a gold knob's push) is logged on and off, as it
+	// isn't a param edit (spec §17.2). A full queue tries again next frame.
+	if (const bool stuttering = isUIModeActive(UI_MODE_STUTTERING); stuttering != stutterLogged_) {
+		if (performAdapter.steering().setStutter(stuttering)) {
+			stutterLogged_ = stuttering;
+			TEST_EVENT("gen_stutter on=%d", stuttering ? 1 : 0);
+		}
+	}
+	if (AudioEngine::audioSampleTimer - performanceAt_ >= kFaderRefreshSamples) {
+		refreshPerformancePage(); // a knob or MIDI turn moves a column's value
+	}
 	if (AudioEngine::audioSampleTimer - fadersAt_ >= kFaderRefreshSamples) {
 		refreshFaders();
 	}

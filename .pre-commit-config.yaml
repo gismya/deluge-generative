@@ -23,19 +23,19 @@ repos:
         alias: generative-rules
         entry: python3 scripts/lint/generative_rules.py no-float
         language: system
-        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+        files: ^src/deluge/generative/(core|perform|compose|runner)/.*\.(cpp|h)$
       - id: generative-portable-includes
         name: portable code includes only portable headers
         alias: generative-rules
         entry: python3 scripts/lint/generative_rules.py portable-includes
         language: system
-        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+        files: ^src/deluge/generative/(core|perform|compose|runner)/.*\.(cpp|h)$
       - id: generative-no-stdio
         name: no libc stdio in portable code
         alias: generative-rules
         entry: python3 scripts/lint/generative_rules.py no-stdio
         language: system
-        files: ^src/deluge/generative/(core|perform|runner)/.*\.(cpp|h)$
+        files: ^src/deluge/generative/(core|perform|compose|runner)/.*\.(cpp|h)$
       - id: generative-perform-l10n
         name: Perform's UI shows l10n strings, not literals
         alias: generative-rules

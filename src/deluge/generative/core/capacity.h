@@ -43,10 +43,10 @@ constexpr int32_t stepEventsOf(Role role, bool barLine) {
 	const int32_t hits = onsetNotes(role) * kMaxHitsPerNote;
 	return 2 * hits + maxSounding(role) * (barLine ? 2 : 1);
 }
-/// The events one step of `roster` can buffer, part by part (spec §2.7): each part's, plus a Section and a KeyScale
-/// event, and a Sound event per part.
+/// The events one step of `roster` can buffer, part by part (spec §2.7): each part's, plus a Section, a KeyScale and a
+/// Pump event (§8.9), and a Sound event per part.
 constexpr int32_t stepEventsOf(std::span<const Role> roster, bool barLine) {
-	int32_t events = 2;
+	int32_t events = 3;
 	for (Role role : roster) {
 		events += 1 + stepEventsOf(role, barLine);
 	}
@@ -115,7 +115,7 @@ constexpr bool genreValid(const Genre& genre) {
 	       && rosterFits(genre) && sustainValid(genre) && loopNotesValid(genre) && stabNotesValid(genre)
 	       && arpNotesValid(genre) && motifNotesValid(genre) && harmonyValid(genre) && sweepsValid(genre)
 	       && buildBarsValid(genre) && rollUncut(genre) && cutAndGapUnderBuild(genre) && dropOutsValid(genre)
-	       && sirensValid(genre);
+	       && sirensValid(genre) && registersShiftValid(genre);
 }
 
 } // namespace deluge::generative

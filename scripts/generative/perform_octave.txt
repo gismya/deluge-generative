@@ -1,0 +1,155 @@
+# A part's octave shift (#397, spec §7.3, §13.4, §13.5, §13.6) over the sysex test port: SHIFT + Y turn steps the
+# focused pitched part's shift with a popup, it lands on the next bar line, nothing happens on Drums or with no part
+# focused, a turn past the part's octave range is refused with a LOWEST or HIGHEST popup, and the Perform menu's
+# OCTAVES ▸ lists the pitched parts and steers them. Runs on a Deluge (deluge_probe.py
+# session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit
+# clip.
+#
+# Acid techno's parts: DRUMS row 1 (y 7), ACID row 2 (y 6), DRONE row 3 (y 5), FX row 4. Two taps on a sidebar part
+# pad (x 9) lock its focus. gen_press octave part= shift= y=<turn>|menu: a press stepped the shift. gen_octave_popup
+# <text>: SHIFT + Y's popup, as QUEUE names the action, or the shift with LOWEST or HIGHEST when a turn is refused. gen_octave_landed part= shift= step= bar_line=yes|no: the shift
+# landed in the core. Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first); with no
+# transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES.
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/core/steering.h
+# covers: src/deluge/generative/core/generator_steering.cpp src/deluge/generative/core/recipe.*
+# covers: src/deluge/generative/core/pitch.* src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/gui/l10n/*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/perform/oled_page.* src/deluge/generative/perform/text.*
+
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped, ACID focused: SHIFT + Y turn is the Recipe's at once ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SHIFT down
+wait 50
+encoder 0 -1
+expect event gen_press octave part=1 shift=-1 y=-1
+expect event gen_octave_popup ACID OCT -1
+button SHIFT up
+wait 200
+# A plain Y turn stays the takes
+encoder 0 1
+expect event gen_press take part=1 take=1 y=1
+encoder 0 -1
+expect event gen_press take part=1 take=0 y=-1
+
+# ---- Playing: the piece starts on -1; +1 twice queues 0 then +1, which lands on a bar line ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect no_event gen_octave_landed within=1
+button SHIFT down
+wait 50
+encoder 0 1
+expect event gen_press octave part=1 shift=0 y=1
+encoder 0 1
+expect event gen_press octave part=1 shift=1 y=1
+expect event gen_octave_popup ACID OCT +1
+button SHIFT up
+expect event /^gen_status .*\|>OCT/
+expect event /^gen_octave_landed part=1 shift=1 step=\d+ bar_line=yes/ within=10
+# +2 is the highest ACID takes: the turn past it is refused, with a popup saying so (spec §13.5)
+button SHIFT down
+wait 50
+encoder 0 1
+expect event gen_press octave part=1 shift=2 y=1
+mark
+encoder 0 1
+expect event gen_octave_popup ACID OCT +2 HIGHEST
+expect no_event gen_press since=mark within=1
+# Back down onto the shift that plays (+1) cancels the +2 waiting
+encoder 0 -1
+expect event gen_press octave part=1 shift=1 y=-1
+button SHIFT up
+expect no_event gen_octave_landed within=4
+
+# ---- DRUMS focused: SHIFT + Y does nothing ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=1
+button SHIFT down
+wait 50
+mark
+encoder 0 1
+expect no_event gen_press since=mark within=1
+expect no_event gen_octave_popup since=mark within=1
+button SHIFT up
+wait 200
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+
+# ---- OCTAVES ▸: its first row is ACID (DRUMS has none); a turn down queues 0, which lands ----
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -1
+expect event gen_press octave part=1 shift=0 menu
+expect event /^gen_octave_landed part=1 shift=0 step=\d+ bar_line=yes/ within=10
+button BACK down
+wait 50
+button BACK up
+wait 200
+# The next row is DRONE: up one
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_press octave part=2 shift=1 menu
+expect event /^gen_octave_landed part=2 shift=1 step=\d+ bar_line=yes/ within=10
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- Leave ----
+include perform_leave.txt
+expect ui_mode=0

@@ -25,6 +25,7 @@
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/oled_page.*
 # covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -207,16 +208,16 @@ expect event gen_phrase bar= since=mark within=40
 expect no_event gen_sound_swap since=mark within=1
 expect no_event gen_controls rebind since=mark within=1
 
-# ---- DRUMS: a Kit re-roll. KIT on the focused part (hold its row on the SONG page), every lane re-rolled ----
+# ---- DRUMS: a Kit re-roll. SYNTH on the focused part (hold its row on the SONG page), every lane re-rolled ----
 button SESSION_VIEW down
 wait 50
 button SESSION_VIEW up
 expect event gen_page SONG
 pad 9 7 down
 expect event gen_focus part=0 locked=1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_press part=0 source=roll
 expect event gen_sound DRUMS KICK within=20
@@ -235,9 +236,9 @@ wait 50
 button F4 up
 encoder 5 64 fast
 wait 300
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40
@@ -250,9 +251,9 @@ expect event gen_outputs_freed outputs=1 within=30
 hold preload
 pad 9 7 down
 expect event gen_focus part=0 locked=1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload_held part=0 within=10
 button BACK down

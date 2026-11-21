@@ -188,27 +188,27 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.out->takeWaiting(0)).to_equal(2); // no transition: the take lands as pressed
 		});
 
-		it("needs a place for each take, each sound and the Queued one's cancel, and with them drops all", _ {
+		it("needs a place for each take and the Queued one's cancel, and with them drops all", _ {
 			TransitionPiece t;
 			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
 			t.pushAndDecide({CommandKind::SetTake, 1, 1});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
-			t.fillQueue(3); // the cancel, two takes and a sound: one short
+			t.fillQueue(2); // the cancel and two takes: one short
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::QueueFull).to_be_true();
 			expect(t.lifecycle.phase() == Phase::Queued).to_be_true();
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0); // nothing waits while a transition is pending
 			expect(t.lifecycle.retired.empty()).to_be_true();
-			expect(t.queue.room()).to_equal(3);
+			expect(t.queue.room()).to_equal(2);
 			Command filler;
 			t.queue.pop(&filler); // one place more
 			const uint32_t presses = t.steering.takePresses(1);
 			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Started).to_be_true();
 			expect(t.queue.room()).to_equal(0);
-			expect(t.queue.holds({CommandKind::SetSound, kSoundPart, kNoSound})).to_be_true();
+			expect(t.queue.holds({CommandKind::SetSound, kSoundPart, kNoSound})).to_be_false();
 			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.lifecycle.retired == std::vector<Retired>{{2, false, 0}}).to_be_true();
 			expect(t.steering.takePresses(1)).to_equal(presses + 1);
@@ -274,6 +274,31 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.soundDrops).to_equal(1);
 		});
 
+		it("is refused while a restart waits for its line, and accepted once BACK cancelled it", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			expect(t.steering.pressRestart() == perform::PressOutcome::Accepted).to_be_true();
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Refused).to_be_true(); // still in the queue
+			t.decideOne();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Refused).to_be_true(); // waiting in the core
+			expect(t.lifecycle.has("request style=1 refused restart")).to_be_true();
+			expect(t.lifecycle.preloads.empty()).to_be_true();
+			t.steering.cancelNewest();
+			t.decideOne();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+		});
+
+		it("is refused while AS IT BEGAN's sounds preload, and accepted once the preload ended", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			t.steering.restartPreloads(true);
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Refused).to_be_true();
+			expect(t.lifecycle.has("request style=2 refused restart")).to_be_true();
+			expect(t.lifecycle.preloads.empty()).to_be_true();
+			t.steering.restartPreloads(false); // cancelled
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+		});
+
 		it("is refused with QUEUE FULL when the Queued one's cancel has no room, and that one plays on", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
@@ -314,13 +339,13 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.events.empty()).to_be_true();
 		});
 
-		it("changes nothing when its preload can't start: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload can't start: the Queued one and the takes stay", _ {
 			TransitionPiece t;
 			t.sounds.press(kSoundPart, false);
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
 			const Events before = t.lifecycle.events;
 			t.lifecycle.preloadStarts = false;
@@ -330,7 +355,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.queue.size()).to_equal(0);
 			t.decideOne();
 			expect(t.out->transitionWaiting()).to_be_true();
@@ -358,7 +383,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			    .to_be_true();
 		});
 
-		it("changes nothing when its preload ends inside the submit: the Queued one, the takes and the sounds stay", _ {
+		it("changes nothing when its preload ends inside the submit: the Queued one and the takes stay", _ {
 			// The firmware's runner, when the job's task can't start (a full task table): it ends Failed inside the
 			// submit, which still returns true.
 			TransitionPiece t;
@@ -366,7 +391,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.decideOne();
 			t.pushAndDecide({CommandKind::SetTake, 0, 2});
-			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: it waits for its line
+			t.sounds.endPreload(); // the confirm cancelled it past its last boundary: retired unplayed (#316)
 			t.decideOne();
 			const Events before = t.lifecycle.events;
 			const uint32_t presses = t.steering.takePresses(0);
@@ -380,7 +405,7 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.retired.empty()).to_be_true();
 			expect(t.lifecycle.incomingRoster).to_equal(2);
 			expect(t.lifecycle.soundDrops).to_equal(1); // the first confirm's
-			expect(t.sounds.waitingSounds()).to_equal(1);
+			expect(t.sounds.waitingSounds()).to_equal(0);
 			expect(t.steering.takePresses(0)).to_equal(presses);
 			expect(t.queue.size()).to_equal(0);
 			t.decideOne();
@@ -704,6 +729,50 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);
 			t.stop();
 			expect(currentIs(t, next)).to_be_true();
+		});
+
+		it("takes a LOAD's macros and Part biases from the file, at the start step and at a stop's commit", _ {
+			for (const bool stop : {false, true}) {
+				TransitionPiece t;
+				Start next = distinctPending(t);
+				t.lifecycle.pendingRecipe.macros = perform::HandoverMacros::Pending;
+				next.recipe.macros = t.lifecycle.pendingRecipe.recipe.macros;
+				t.currentRecipe.bias.set(1, Macro::Energy, macroPoints(7)); // the live one, which the file's replaces
+				t.lifecycle.pendingRecipe.recipe.bias.set(2, Macro::Motion, -macroPoints(4));
+				next.recipe.bias = t.lifecycle.pendingRecipe.recipe.bias;
+				t.confirmAt(3, stop ? TransitionStyle::BuildIntoDrop : TransitionStyle::Cut);
+				if (stop) {
+					t.stop();
+				}
+				else {
+					t.hook.runUntil([&] { return t.sink.starts == 1; });
+				}
+				expect(currentIs(t, next)).to_be_true();
+			}
+		});
+
+		it("keeps the live Part biases at a Regenerate and sets them to 0 at a genre change (spec §3.3)", _ {
+			for (const Genre* incoming : {&genres::technoAcid, &genres::technoDub}) {
+				for (const bool stop : {false, true}) {
+					TransitionPiece t(&genres::technoAcid, incoming);
+					Command bias{CommandKind::SetBias, 1, macroPoints(7)};
+					bias.length = static_cast<uint16_t>(Macro::Energy);
+					t.currentRecipe.bias.set(1, Macro::Energy, macroPoints(7)); // as the press sets it
+					t.push(bias);
+					t.confirmAt(3, stop ? TransitionStyle::BuildIntoDrop : TransitionStyle::Cut);
+					if (stop) {
+						t.stop();
+					}
+					else {
+						t.hook.runUntil([&] { return t.sink.starts == 1; });
+					}
+					const int32_t kept = incoming == &genres::technoAcid ? macroPoints(7) : 0;
+					expect(t.currentRecipe.bias.of(1, Macro::Energy)).to_equal(kept);
+					if (!stop) {
+						expect(t.driver.playing()->recipe().bias.of(1, Macro::Energy)).to_equal(kept);
+					}
+				}
+			}
 		});
 
 		it("writes the new Recipe's tempo, swing, swing interval and key to the song once each at a stop's commit", _ {

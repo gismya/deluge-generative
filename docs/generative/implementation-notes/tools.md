@@ -19,8 +19,14 @@ otherwise.
   builds that target in `build/tests/` under a lock right after the firmware, and renders there. A render left from
   before a table edit fails good captures (and can pass a real dropout). `./dbt test` and `check_all.py` build the
   same tree without that lock: don't run them beside a checked capture.
-- `gen_emu.py capture`'s default card (delugemu's `deluge_sd.img`) has no pack, and the capture passes its check
-  either way: a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
+- The capture's check counts a Riser lane's note on the beat before its note-off (the Drop), not on its onset
+  (`active_steps`): the firmware starts a sample Riser late so it ends on the Drop (`generative/perform/riser_timing.h`),
+  from the length of the sample it picks off the card, which the render can't know. Synth Risers count there too: the
+  render doesn't say which kind a lane plays. A capture with no harness step to check fails if silent throughout.
+  The default `--card`, the factory image, has none of the pack's Riser samples: a Riser there is silent and its
+  capture fails the check. Capture on a pack card (listening-session `rendering.md`, **Pack card**).
+- `gen_emu.py capture`'s default card (delugemu's `deluge_sd.img`) has no pack, and a pitched part's capture passes
+  its check either way (a Riser's doesn't, above): a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
   of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
   `card.txt` of `copy pack -> /`.
 - A capture build (`-DGENERATIVE_CAPTURE=ON`) holds no Recipe: it plays the `CaptureRecipe` in
@@ -39,6 +45,20 @@ otherwise.
   in a new build dir of the same checkout (`./dbt sizediff`, a fresh `check_all`): it rewrites the l10n
   `g_english.cpp` and `g_seven_segment.cpp` in the source tree, so every other build dir recompiles those and
   relinks once.
+
+## The firmware check (`gen_emu.py golden`, #141)
+
+- `golden_compose.txt` runs under `gen_emu.py golden`, not as a probe script: check_all only picks scripts named
+  `perform_*.txt` or `compose_*.txt`, so check_all doesn't list it as a probe script it can't run (its `# needs:`
+  line); `gen_emu.py golden` runs it. It has no covers lines;
+  check_all runs it whenever it runs delugemu. `# needs: gen_emu.py` keeps it off hardware sessions.
+- The golden ends at its last line, not at 16 bars: Perform's stop ends what still sounds at the driver's clock (6132
+  or 6134), so a Drone note is shorter in the golden than in the song. Both sides cut there and drop notes within
+  `kMaxLean` of it. Muted notes are in the golden and never in a Compose song.
+- The song is read with the Recipe file: Kits are named after their part, synths after their preset, so a synth clip
+  maps to its part through the Recipe file's `sound` path. Instruments come in roster order.
+- To prove it fails, change the stream in `src/` (a velocity in the genre table), rebuild build-testport/ only and run
+  `gen_emu.py golden`: the goldens are the harness's, so they stay as committed.
 
 ## Theory review
 
@@ -89,5 +109,15 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   failure retries.
 - A runner holding two chunks of one variant (`base#1`, `base#2`) skips the revert and apply between them: it would
   relink for nothing (ninja goes by mtime).
+- A job's genre is its own `--genre`: the job parser's genre default is None and `jobs.parse_args` fills in the
+  command's `--genre` after parsing (#426). Never put the command's genre on the job's argument list: it only won
+  by coming first (last wins), so a job's `--genre` beat it by accident. A variant's genre lives in
+  `diffs/genres.json` (`variants.genre_of`), a page card's in its `genre` field or its midi entry's args.
+- A WAV kept with its check failed (`info["check"]`) is current only for the quiet bars it was checked with
+  (`info["quiet"]`, `Run.done`); a clean WAV stays current whatever its job's `--quiet-bars` (#426).
+- `variants.build_renders` reuses `bin/<name>` when `bin/<name>.json` equals `render_stamp` now: the stamp is the
+  commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
+- The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
+  function and the page free of anything a Proxy stub can't stand in for at load.
 - The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
   `pack/` alone prints `-` for every drum lane.

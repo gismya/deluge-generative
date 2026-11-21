@@ -1,9 +1,9 @@
-# Implementation notes: Portable code (`generative/core/`, `perform/`, `runner/`): build, steering, capacity, genre data
+# Implementation notes: Portable code (`generative/core/`, `perform/`, `compose/`, `runner/`): build, steering, capacity, genre data
 
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- The harness builds these three trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
+- The harness builds these four trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
 - The Generator (`core/generator.h`) is one class whose code is split by area: `generator.cpp` (start, the step's
@@ -27,10 +27,25 @@ otherwise.
   at offset 20, which is baked into `Generator::decideNextStep()`'s code: it addresses the queue from a constant
   (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
   bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
+  `PerformDriver`'s size also moves `PerformAdapter::sink_`, and with it the roster copy's mod-8 `static_assert` in
+  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
+- The steering log (`core/steering_log.*`, spec §17.2) holds pieces in one buffer: a `PieceInfo`, header records
+  (picks, snapshot blocks), then packed records (`encodeCommand()`). The core only calls `append()`; the Perform driver
+  opens a piece at its step 0's decision (`openPiece()`, outside H1's timer), ends it in `finish()` and at a
+  transition's start step (`switchToIncoming()`), logs re-roll paths by comparing `soundLanded()` around each decision
+  (`logLandedSounds()`: a new token always differs from the last), and `logSoundDropped()`. What only the firmware
+  knows comes through `NoteSink::logPieceHeader()` and `logSoundPaths()` (`firmware/log_header.*`). A new steering
+  command is logged with no log change: append its `CommandKind`, move `kLastCommandKind`, and have `apply()` return
+  true where it lands (`steering_log_spec` round-trips every kind). Recipe state it changes reaches the header through
+  the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins. A restart's line ends the piece and sets `pieceDue_`,
+  so the restarted run opens its own piece at its step 0 (spec §17.3); the sink's `restartPiece()` runs between the two,
+  where the ended piece's header is still the newest (AS IT BEGAN reads it there).
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
-  (ADR 0005), so an effect done anywhere else is lost on replay.
+  (ADR 0005), so an effect done anywhere else is lost on replay. A decision that reads the pending list breaks replay
+  unless the log says when that command waits: only Arc moves do today (`waitingMove()`, `lastGroovePhrase()`), and
+  `logWaitingMoves()` logs their slots (RecordKind::Waiting/NotWaiting). A new reader of another slot needs the same.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
@@ -125,6 +140,11 @@ otherwise.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- The Psytrance parent (`kPsytranceParent`, #319) is the other way round from Techno's: it holds the whole genre, and
+  Classic (`kPsytranceClassic`) is `subgenreOf` it with only its identity set, so its event stream is the old
+  `psytrance`'s. A subgenre's OLED name is the confirm title and the palette override's file name, capped at 14
+  characters (`genre_data_spec`): `CLASSIC PSYTRANCE` doesn't fit, so it is `CLASSIC PSY`. Picking it in a probe
+  script takes two picks (`row=PSYTRANCE`, SELECT, `row=CLASSIC`), as a Techno subgenre does.
 - The Techno parent (`kTechnoParent`) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
   fills, the Arc, Break keeps of Kick, Rim and Closed hat (a subgenre that names none breaks down to those, not
   a full Groove) and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
@@ -199,3 +219,21 @@ otherwise.
   the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
 - A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
   restoring the table, or `theory_review.py` and later probes read the mutant.
+- Part bias (§3.3, #303): `Recipe::bias` (`PartBiases`), the curve `partBiased()` / its inverse `biasFor()` in
+  `core/part_bias.h` (swap the curve there only: `biasFor()` searches whatever monotonic curve it is), and
+  `Generator::biasedOn(part, macro, shared)`. A part decides on its own copy of the step (`partStep()`, only when
+  `recipe_.bias.any(p)`); the shared step stays what the Arc, fills, accents and drift read. `Step::sharedDensity` is
+  the unbiased Density: `planned()` takes the shared one and biases it for whichever part it asks about, so every
+  caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
+  per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
+  macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.
+- Punch-ins (§8.9, #301): `PunchIns` (`core/punch_ins.h`) in `Generator::punch_`, set by `SetPunch` in `apply()`.
+  Their effects act at output, after the plan: a LaneMute in `noteOn()`'s muted flag, the rolls in `decideKit()` after
+  the Replace pairs (`punchRoll()`), Flam and Double kick in `express()` after `ornamentFor()` (`punchOrnament()`),
+  so no draw moves and the piece after a release is the one with none. Pump is the core's one event the driver acts
+  on for a punch-in (`EventKind::Pump`, appended after NoteOn so the other kinds keep their values, which the goldens'
+  fingerprints hash); `stepEventsOf()` counts one a step. The harness driver drops a muted note-on, so a spec of a
+  LaneMute reads the lane's notes as gone, not flagged (`punch_in_spec`).
+  Flam's lanes are `flams()` (`punch_ins.h`, shared with the spec). Pump changes in `apply()` push at most one Pump a
+  step: a second change in the same drain removes the first (they cancel), as `stepEventsOf()` counts one.
+

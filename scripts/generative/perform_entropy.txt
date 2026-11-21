@@ -8,6 +8,7 @@
 # covers: src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/generative/firmware/perform_song.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 hold entropy
 include perform_open.txt

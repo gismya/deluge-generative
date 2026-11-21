@@ -19,6 +19,7 @@
 // the ARC page draws from the waiting commands (spec §13.5).
 
 #include "generative/core/generator.h"
+#include "generative/core/steering_log.h"
 #include <algorithm>
 
 namespace deluge::generative {
@@ -43,6 +44,12 @@ bool validSound(const Command& command, const Genre& genre) {
 /// Whether a SetTake names a part of the roster and a take.
 constexpr bool validTake(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && command.value >= 0 && command.value < kMaxTakes;
+}
+
+/// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
+constexpr bool validOctave(const Command& command, const Genre& genre) {
+	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
+	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
 
 /// Whether a Section kind can be forced: Groove, Break or Build (spec §9.6, §13.5). The Outro comes with End.
@@ -102,6 +109,12 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		}
 		recipe_.macros.set(static_cast<Macro>(command.target), command.value);
 		return true;
+	case CommandKind::SetBias:
+		if (command.target >= partCount(*genre_) || command.biasMacro() >= kNumMacros) {
+			return false;
+		}
+		recipe_.bias.set(command.target, static_cast<Macro>(command.biasMacro()), command.value);
+		return true;
 	case CommandKind::SetKey: {
 		if (!validKeyChange(command)) {
 			return false;
@@ -132,6 +145,21 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		PartState& part = parts_[command.target];
 		part.newTake = takes_.take[command.target] != command.value;
 		takes_.take[command.target] = static_cast<uint8_t>(command.value);
+		return true;
+	}
+	case CommandKind::SetOctave: {
+		// The part's Register moves (spec §7.3). The voicing it leads from moves with it, so a Sustain or Stab part
+		// voice-leads on as if it had always played there: its whole voicing re-strikes on this line, and every note
+		// from here is the unshifted one moved by the same octaves.
+		if (!validOctave(command, *genre_)) {
+			return false;
+		}
+		const int32_t semitones = 12 * (command.value - recipe_.octave[command.target]);
+		HeldVoicing& voicing = parts_[command.target].voicing;
+		for (int32_t i = 0; i < voicing.size; i++) {
+			voicing.pitch[i] = static_cast<uint8_t>(voicing.pitch[i] + semitones);
+		}
+		recipe_.octave[command.target] = static_cast<int8_t>(command.value);
 		return true;
 	}
 	case CommandKind::ForceSection: {
@@ -176,6 +204,10 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		return true;
 	case CommandKind::SetHome:
 		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
+	case CommandKind::SetParam:                     // the driver set the param: logged, nothing to apply
+		return command.target < partCount(*genre_) || command.target == kSongParams;
+	case CommandKind::TransitionTempo: // the driver's own glide: the Recipe's tempo stays the playing one's
+		return true;
 
 	case CommandKind::SetFreeze: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
@@ -232,6 +264,35 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		stopAt_ = nextStep_ + transitionSteps(command);
 		return true;
 	}
+	case CommandKind::Restart:
+		// The piece decides nothing more: every note still sounding ends on this line, and the driver starts it again
+		// here (spec §13.2). Never logged: it ends the piece.
+		if (stopAt_ != kNever) {
+			return false;
+		}
+		stopAt_ = nextStep_;
+		restartLanded_ = true;
+		return false;
+	case CommandKind::SetStutter:
+		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
+	case CommandKind::SetPunch:
+		if (!punch_.set(command)) {
+			return false;
+		}
+		// The pump starts or stops on this step's line: the driver ducks the other parts from there (spec §8.9). A
+		// Pump event already in this step was the other change: the two cancel, so the step sends none, and the
+		// buffer holds one Pump a step, as stepEventsOf() counts.
+		if (punch_.on(PunchIn::Pump) != punch_.pumped) {
+			punch_.pumped = !punch_.pumped;
+			for (int32_t i = events_.stepStart(); i < events_.size(); i++) {
+				if (events_.at(i).kind == EventKind::Pump) {
+					events_.removeAt(i);
+					return true;
+				}
+			}
+			push(Event::pump(stepTick(nextStep_), punch_.pumped));
+		}
+		return true;
 	case CommandKind::SetFill: {
 		const std::span<const FillEntry> fills = genre_->fills;
 		if (command.value == kFillReleased) {
@@ -304,6 +365,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 		}
 		break;
 	}
+	case CommandKind::SetOctave: {
+		if (!validOctave(command, *genre_)) {
+			return true;
+		}
+		// Choosing the shift that plays cancels the one waiting, as a take does (spec §13.5).
+		if (recipe_.octave[command.target] == command.value) {
+			pending_.cancel(command);
+			return true;
+		}
+		break;
+	}
 	case CommandKind::SetSound:
 		if (command.target < partCount(*genre_) && command.value == kNoSound) {
 			pending_.cancel(command); // the driver frees the sound it preloaded
@@ -354,6 +426,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 			return true;
 		}
 		break;
+	case CommandKind::Restart:
+		// 0 cancels the one waiting; a press while one waits keeps it. Nothing once a transition or restart landed.
+		if (command.value == 0 || stopAt_ != kNever) {
+			pending_.cancel(command);
+			return true;
+		}
+		if (pending_.waiting(command) != nullptr) {
+			return true;
+		}
+		command.value = 1;
+		break;
 	case CommandKind::Transition:
 		if (command.value == kCancelTransition) {
 			pending_.cancel(command); // only while it waits: once landed it plays on (spec §9.7)
@@ -392,7 +475,9 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 		return arc_.stepsToStart(static_cast<SectionKind>(command.target), command.value);
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
-		return arc_.stepsToBarLine(); // spec §13.4
+	case CommandKind::SetOctave:
+	case CommandKind::Restart:
+		return arc_.stepsToBarLine(); // spec §13.4, §7.3, §13.2
 	case CommandKind::Transition:
 		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
@@ -410,8 +495,16 @@ void Generator::landPending(SteeringLog* log) {
 		if (stepsToLine(command) != 0) {
 			return false;
 		}
-		if (apply(command) && log != nullptr) {
-			log->append(n, command);
+		if (apply(command)) {
+			if (log != nullptr) {
+				log->append(n, command);
+			}
+		}
+		else if (isArcMove(command) && log != nullptr) {
+			// Refused at its line, it still leaves its slot: replay must not keep waiting it (unreachable today).
+			log->appendWaiting(
+			    n, {command.kind == CommandKind::Transition ? CommandKind::Transition : CommandKind::ForceSection},
+			    false);
 		}
 		return true;
 	});
@@ -547,7 +640,7 @@ void Generator::planArc(ArcPlan& out) const {
 		if (arc.stepInBar() == 0) {
 			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates[p].crossBar(genre.parts[p], density);
+				gates[p].crossBar(genre.parts[p], biasedOn(p, Macro::Density, density)); // as updateGates()
 			}
 		}
 		const Keeps keeps = genre.arc.keepsIn(arc.section());

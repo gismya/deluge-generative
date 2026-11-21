@@ -21,8 +21,10 @@
 #include "generative/core/palette.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/card_sounds.h"
+#include "generative/firmware/compose_edits.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
@@ -47,8 +49,8 @@ namespace {
 PLACE_SDRAM_BSS SoundPicks stagedPicks;
 PLACE_SDRAM_BSS SoundPicks incomingPicks;
 PLACE_SDRAM_BSS SoundPicks previousPicks;
-/// The path the preset browser chose, for the preload it submits (spec §13.5).
-PLACE_SDRAM_BSS SoundPath chosenPath;
+/// The sound a Perform browser chose, for the preload it submits (spec §13.5).
+PLACE_SDRAM_BSS SoundChoice chosenSound;
 
 /// Copies `part`'s picks, its preset and its lanes' samples, from `from` to `to`.
 void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, SoundPicks& to) {
@@ -66,7 +68,7 @@ class SoundJob final : public Job {
 public:
 	SoundJob() : Job(Kind::Live) {}
 
-	/// Before each submit. A Chosen source's path is in `chosenPath`.
+	/// Before each submit. A Chosen source's choice is in `chosenSound`.
 	void prepare(int32_t part, SoundSwaps::Source source, uint8_t token) {
 		part_ = part;
 		source_ = source;
@@ -96,8 +98,9 @@ public:
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
 		}
 		else if (source_ == SoundSwaps::Source::Chosen) {
-			// The browser's preset, whether or not the palette lists it.
-			if (!choosePartSound(*genre, part_, chosenPath, stagedPicks)) {
+			// The browser's preset or lane file, whether or not the palette lists it. The Kit's other lanes keep
+			// theirs.
+			if (!chooseSound(*genre, part_, chosenSound, stagedPicks)) {
 				return JobOutcome::Failed;
 			}
 		}
@@ -124,10 +127,21 @@ public:
 			return JobOutcome::Failed; // a card error: the old sound plays on (spec §10.7)
 		}
 		chunks.commit(); // linked into the song: it swaps in at its line, or is freed if that's cancelled
+#if ENABLE_SYSEX_TEST
+		if (TestPort::soundCommittedHeld()) {
+			// Test hook: wait here, yielding, so a script's confirm finds a preload it can't cancel (#316).
+			TEST_EVENT("gen_sound_preload_committed part=%ld", static_cast<long>(part_));
+			TestPort::waitWhileSoundCommittedHeld(chunks);
+		}
+#endif
 		return JobOutcome::Done;
 	}
 
 	void finished(JobOutcome outcome) override {
+#if ENABLE_SYSEX_TEST
+		// A job that ended before its commit (failed, cancelled) leaves the hold for the next, unrelated, sound job.
+		TestPort::releaseSoundCommitted();
+#endif
 		soundPreloadEnded();
 		TEST_EVENT("gen_sound_preload %s part=%ld source=%s error=%d token=%u ms=%lu working=%d",
 		           outcome == JobOutcome::Done        ? "done"
@@ -143,11 +157,11 @@ public:
 		if (outcome != JobOutcome::Done) {
 			return;
 		}
-		if (missing_ > 0) {
+		// SOUND MISSING only for an Output that is kept: one retired unplayed (a transition pending) never sounds.
+		if (soundSwaps.preloadDone(part_, token_, built_, stagedPicks) && missing_ > 0) {
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(missing_));
 		}
-		soundSwaps.preloadDone(part_, token_, built_, stagedPicks);
 	}
 
 	[[nodiscard]] int32_t part() const { return part_; }
@@ -185,15 +199,30 @@ void SoundSwaps::forgetSong() {
 	}
 }
 
-void SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
-	if (!takesPreloads()) {
-		return; // the Output goes with Perform's song
-	}
-	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so this
-	// slot is free.
+void SoundSwaps::swapDropped(int32_t part) {
+	performAdapter.driver().logSoundDropped(static_cast<uint8_t>(part));
+}
+
+const SoundPicks& SoundSwaps::waitingPicks() {
+	return incomingPicks;
+}
+
+bool SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
+	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so the
+	// part's incoming slot is free.
+	return preloaded(part, token, [&] {
+		incoming_[part] = output;
+		copyPartPicks(*genre(), part, picks, incomingPicks);
+	});
+}
+
+void SoundSwaps::adoptRestarted(int32_t part, const PartOutput& output, const SoundPicks& picks) {
+	// The restart's line dropped every sound waiting for its line (pieceRestarts()), and while stopped a preload swaps
+	// in as it ends: the part's incoming slot is free.
 	incoming_[part] = output;
 	copyPartPicks(*genre(), part, picks, incomingPicks);
-	preloaded(part, token);
+	swapIn(part);
+	swappedByRestart(part);
 }
 
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
@@ -233,16 +262,16 @@ bool SoundSwaps::queueHeldFull() const {
 }
 
 bool SoundSwaps::runnerBusy() const {
-	return runner.busy();
+	return runner.busy() || restartBegan.holdsSounds();
 }
 
 bool SoundSwaps::preloadRunning() const {
 	return runner.active() == &soundJob;
 }
 
-bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen) {
+bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundChoice* chosen) {
 	if (chosen != nullptr) {
-		chosenPath = *chosen;
+		chosenSound = *chosen;
 	}
 	soundJob.prepare(part, source, token);
 	return runner.submit(soundJob);
@@ -266,6 +295,8 @@ void SoundSwaps::swapIn(int32_t part) {
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);
+	// The Compose screen's previous pick for the part was the one before a re-roll there, two picks back now.
+	forgetPreviousPick(current, part);
 	swaps_++;
 }
 

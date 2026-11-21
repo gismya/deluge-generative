@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<generativeRecipe
+	genre="techno-acid"
+	genreVersion="2"
+	tempo="12345"
+	swing="0"
+	swingInterval="0"
+	key="2"
+	scale="minor"
+	seed="3735928559">
+	<macros
+		energy="640"
+		density="2560"
+		complexity="1280"
+		motion="1920" />
+	<part
+		name="ACID"
+		take="2"
+		octave="0"
+		sound="SYNTHS/005 Sweet Mono Bass.XML" />
+	<part
+		name="DRONE"
+		take="0"
+		octave="0"
+		sound="SYNTHS/148 Warm 5th Pad.XML" />

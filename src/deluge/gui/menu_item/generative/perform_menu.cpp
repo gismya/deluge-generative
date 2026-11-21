@@ -21,17 +21,23 @@
 #include "generative/core/pitch.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/queue_text.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/genre_rows.h"
+#include "gui/menu_item/generative/row_value.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
+#include "gui/ui/browser/perform_sound_browser.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
+#include "gui/ui/ui.h"
+#include "gui/views/perform_view.h"
 #include "hid/display/oled.h"
 #include "io/midi/test_port.h"
 #include <cstdint>
@@ -43,24 +49,15 @@ namespace deluge::gui::menu_item::generative {
 using deluge::generative::Key;
 using deluge::generative::kNumScales;
 using deluge::generative::Scale;
+using deluge::generative::SteeringLog;
 using deluge::generative::firmware::currentRecipe;
 using deluge::generative::firmware::performAdapter;
+using deluge::generative::firmware::restartBegan;
 using deluge::generative::firmware::transitions;
 namespace perform = deluge::generative::perform;
 using perform::PressOutcome;
 
 namespace {
-
-/// A row's value, right-aligned after its name in a submenu, as the Compose screen's rows show theirs (spec §14.4).
-constexpr int32_t kValueGap = 4; ///< pixels between the row's name and its value
-constexpr int32_t kValueRightMargin = 3;
-int32_t valueRenderLength(const char* value) {
-	return kValueGap + static_cast<int32_t>(strlen(value)) * kTextSpacingX + kValueRightMargin;
-}
-void drawRowValue(const char* value, int32_t yPixel) {
-	deluge::hid::display::OLED::main.drawStringAlignRight(value, yPixel, kTextSpacingX, kTextSpacingY,
-	                                                      OLED_MAIN_WIDTH_PIXELS - kValueRightMargin);
-}
 
 /// What a menu's held value was read under. A stop drops what was queued, a start begins from the Recipe, and a press
 /// of the same kind from anywhere (a Y turn under the menu, a BACK tap) moves what waits, so the value is read again
@@ -209,6 +206,42 @@ private:
 	}
 };
 
+// ---- BROWSER PREVIEW ----
+
+/// Indexed by perform::BrowserPreview.
+constexpr l10n::String kPreviewNames[] = {
+    l10n::String::STRING_FOR_OFF,
+    l10n::String::STRING_FOR_WHEN_STOPPED,
+    l10n::String::STRING_FOR_ALWAYS,
+};
+static_assert(std::size(kPreviewNames) == static_cast<size_t>(perform::BrowserPreview::Always) + 1);
+
+/// BROWSER PREVIEW: whether the preset and lane browsers play the file under the cursor (spec §13.3), kept until
+/// power-off.
+class BrowserPreviewItem final : public Selection {
+public:
+	using Selection::Selection;
+	deluge::vector<std::string_view> getOptions(OptType /*optType*/) override {
+		deluge::vector<std::string_view> options;
+		for (l10n::String name : kPreviewNames) {
+			options.push_back(l10n::getView(name));
+		}
+		return options;
+	}
+	void readCurrentValue() override { setValue(PerformSoundBrowser::previewSetting()); }
+	void writeCurrentValue() override {
+		PerformSoundBrowser::setPreviewSetting(getValue<perform::BrowserPreview>());
+		TEST_EVENT("gen_browser_preview_setting %d", static_cast<int>(PerformSoundBrowser::previewSetting()));
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shown()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shown(), yPixel); }
+
+private:
+	static const char* shown() {
+		return l10n::get(kPreviewNames[static_cast<int32_t>(PerformSoundBrowser::previewSetting())]);
+	}
+};
+
 // ---- SEED + TAKES ----
 
 /// SEED + TAKES, titled with the seed code (spec §6.5): `SEED 1A2B3C4`. Opened, its rows read their takes again.
@@ -285,6 +318,53 @@ private:
 	char text_[4] = {};
 };
 
+// ---- OCTAVES ----
+
+/// A pitched part's octave shift, -2 to +2 (spec §7.3, §13.6): a turn steps from the shift it shows, as a SHIFT + Y
+/// turn does. It shows the shift as it goes on (PerformSteering::octaveAhead()), read afresh at each draw: a press in
+/// the steering queue, the shift waiting for its bar line, or the one playing. Drums and FX have no row.
+class OctaveItem final : public Integer {
+public:
+	explicit OctaveItem(int32_t part) : Integer(l10n::String::STRING_FOR_OCTAVES), part_(part) {}
+	[[nodiscard]] std::string_view getName() const override {
+		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
+		return genre != nullptr && part_ < deluge::generative::partCount(*genre) ? genre->parts[part_].name : "";
+	}
+	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return performAdapter.steering().takesOctave(part_);
+	}
+	// Only the shifts the part takes: those that keep every note of it a MIDI note (spec §7.3).
+	[[nodiscard]] int32_t getMinValue() const override { return performAdapter.steering().octavesOf(part_).lowest; }
+	[[nodiscard]] int32_t getMaxValue() const override { return performAdapter.steering().octavesOf(part_).highest; }
+	void readCurrentValue() override { setValue(performAdapter.steering().octaveAhead(part_)); }
+	void selectEncoderAction(int32_t offset) override {
+		if (PerformView::octaveEdgePopup(part_, offset)) {
+			return;
+		}
+		PressOutcome outcome = PressOutcome::NothingToDo;
+		const int32_t shift = performAdapter.steering().stepOctave(static_cast<uint8_t>(part_), offset, &outcome);
+		refusedWithPopup(outcome);
+		if (shift == deluge::generative::kNoOctaveWaiting) { // none that way, or nothing to do
+			return;
+		}
+		TEST_EVENT("gen_press octave part=%ld shift=%ld menu", static_cast<long>(part_), static_cast<long>(shift));
+		setValue(shift);
+		Number::selectEncoderAction(offset);
+	}
+	int32_t getSubmenuItemTypeRenderLength() override { return valueRenderLength(shownText()); }
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValue(shownText(), yPixel); }
+
+private:
+	const char* shownText() {
+		const int32_t shift = performAdapter.steering().octaveAhead(part_);
+		snprintf(text_, sizeof(text_), shift > 0 ? "+%ld" : "%ld", static_cast<long>(shift));
+		return text_;
+	}
+	int32_t part_;
+	char text_[4] = {};
+};
+
 // ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
 
 /// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE. To
@@ -321,6 +401,99 @@ public:
 	MenuItem* selectButtonPress() override { return confirmTransition(currentRecipe.recipe.genre); }
 };
 
+/// RESTART ▸ AS IT IS (spec §13.2, §13.6): as X+PLAY, the piece starts again at the next bar line from the Current
+/// Recipe as it is, or at once while stopped. The menu closes, so the popup and the queue show on the Perform page.
+class RestartAsItIsItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		soundEditor.exitCompletely();
+		performAdapter.pressRestart();
+		return NO_NAVIGATION;
+	}
+};
+
+/// RESTART ▸ AS IT BEGAN (spec §13.2, §13.6): the piece starts again as it began, from its header in the steering
+/// log, once the sounds changed since have preloaded: at the next bar line, or at once while stopped. The menu closes.
+class RestartAsItBeganItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		soundEditor.exitCompletely();
+		restartBegan.press();
+		return NO_NAVIGATION;
+	}
+};
+
+/// RESET PART BIAS: the focused part's Part biases back to 0, or every part's with nothing focused (spec §3.3,
+/// §13.6). It closes the menu, as REGENERATE's confirm does, so the faders and rings show the result at once.
+class ResetPartBiasItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		const int32_t part = performView.focusedPart();
+		performAdapter.steering().resetBias(part);
+		TEST_EVENT("gen_menu_reset_bias part=%ld", static_cast<long>(part));
+		soundEditor.exitCompletely();
+		return NO_NAVIGATION;
+	}
+};
+
+// ---- CAPTURE ----
+
+/// The CAPTURE menu's rows (spec §13.6, §17.4): the pieces in the log, newest first, each numbered in set order with
+/// its genre and MARKED or -. A press toggles the piece's mark: the current one's as RECORD does, an earlier one's
+/// until the next piece begins, which throws an unmarked one away. Only the newest kCaptureRows are listed.
+constexpr int32_t kCaptureRows = 16;
+
+class CaptureRowItem final : public MenuItem {
+public:
+	explicit CaptureRowItem(int32_t row) : MenuItem(l10n::String::STRING_FOR_CAPTURE), row_(row) {}
+	[[nodiscard]] std::string_view getName() const override {
+		read();
+		return shown_.label;
+	}
+	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return piece() >= 0;
+	}
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override {
+		performAdapter.pressMark(piece());
+		renderUIsForOled();
+		return NO_NAVIGATION;
+	}
+	int32_t getSubmenuItemTypeRenderLength() override {
+		read();
+		return valueRenderLength(shown_.value);
+	}
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
+		read();
+		drawRowValue(shown_.value, yPixel);
+	}
+
+private:
+	/// The piece this row shows, or -1: row 0 is the newest.
+	[[nodiscard]] int32_t piece() const { return performAdapter.steeringLog().pieces() - 1 - row_; }
+	void read() const { perform::captureRow(performAdapter.steeringLog(), piece(), shown_); }
+	int32_t row_;
+	mutable perform::CaptureRow shown_;
+};
+
+/// CAPTURE's only row before any piece: NOTHING PLAYED, which does nothing.
+class NothingPlayedItem final : public MenuItem {
+public:
+	using MenuItem::MenuItem;
+	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
+		return performAdapter.steeringLog().pieces() == 0;
+	}
+	bool shouldEnterSubmenu() override { return false; }
+	MenuItem* selectButtonPress() override { return NO_NAVIGATION; }
+};
+
 /// A genre of GENRE ▸ (genre_rows.h). The genre playing is labelled `= REGEN`, and picking it regenerates; picking
 /// another is a genre change (spec §9.7, §13.6). Slots with no genre (a parent's row, or past the last) hide
 /// themselves.
@@ -349,11 +522,29 @@ private:
 
 PLACE_SDRAM_BSS CancelChangeItem cancelChangeItem{l10n::String::STRING_FOR_CANCEL_CHANGE};
 PLACE_SDRAM_BSS RegenerateItem regenerateItem{l10n::String::STRING_FOR_REGENERATE};
+PLACE_SDRAM_BSS RestartAsItIsItem restartAsItIsItem{l10n::String::STRING_FOR_AS_IT_IS};
+PLACE_SDRAM_BSS RestartAsItBeganItem restartAsItBeganItem{l10n::String::STRING_FOR_AS_IT_BEGAN};
+PLACE_SDRAM_BSS Submenu restartMenu{l10n::String::STRING_FOR_RESTART, {&restartAsItIsItem, &restartAsItBeganItem}};
+PLACE_SDRAM_BSS ResetPartBiasItem resetPartBiasItem{l10n::String::STRING_FOR_RESET_PART_BIAS};
+static_assert(kCaptureRows == 16, "one CaptureRowItem per row below");
+PLACE_SDRAM_BSS CaptureRowItem captureRows[kCaptureRows] = {
+    CaptureRowItem{0},  CaptureRowItem{1},  CaptureRowItem{2},  CaptureRowItem{3},
+    CaptureRowItem{4},  CaptureRowItem{5},  CaptureRowItem{6},  CaptureRowItem{7},
+    CaptureRowItem{8},  CaptureRowItem{9},  CaptureRowItem{10}, CaptureRowItem{11},
+    CaptureRowItem{12}, CaptureRowItem{13}, CaptureRowItem{14}, CaptureRowItem{15}};
+PLACE_SDRAM_BSS NothingPlayedItem nothingPlayedItem{l10n::String::STRING_FOR_NOTHING_PLAYED};
+PLACE_SDRAM_BSS Submenu captureMenu{
+    l10n::String::STRING_FOR_CAPTURE,
+    {&nothingPlayedItem, &captureRows[0], &captureRows[1], &captureRows[2], &captureRows[3], &captureRows[4],
+     &captureRows[5], &captureRows[6], &captureRows[7], &captureRows[8], &captureRows[9], &captureRows[10],
+     &captureRows[11], &captureRows[12], &captureRows[13], &captureRows[14], &captureRows[15]},
+};
 PLACE_SDRAM_BSS GenreMenuItems<TransitionGenreItem> transitionGenres{l10n::String::STRING_FOR_GENRE};
 
 PLACE_SDRAM_BSS KeyItem keyItem{l10n::String::STRING_FOR_KEY};
 PLACE_SDRAM_BSS ScaleItem scaleItem{l10n::String::STRING_FOR_SCALE};
 PLACE_SDRAM_BSS GlideItem glideItem{l10n::String::STRING_FOR_GLIDE};
+PLACE_SDRAM_BSS BrowserPreviewItem browserPreviewItem{l10n::String::STRING_FOR_BROWSER_PREVIEW};
 
 static_assert(deluge::generative::kMaxParts == 6, "one TakeItem per part slot below");
 PLACE_SDRAM_BSS TakeItem takeItems[deluge::generative::kMaxParts] = {TakeItem{0}, TakeItem{1}, TakeItem{2},
@@ -361,6 +552,14 @@ PLACE_SDRAM_BSS TakeItem takeItems[deluge::generative::kMaxParts] = {TakeItem{0}
 PLACE_SDRAM_BSS SeedTakesSubmenu seedTakesMenu{
     l10n::String::STRING_FOR_SEED_AND_TAKES,
     {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5]},
+};
+
+static_assert(deluge::generative::kMaxParts == 6, "one OctaveItem per part slot below");
+PLACE_SDRAM_BSS OctaveItem octaveItems[deluge::generative::kMaxParts] = {OctaveItem{0}, OctaveItem{1}, OctaveItem{2},
+                                                                         OctaveItem{3}, OctaveItem{4}, OctaveItem{5}};
+PLACE_SDRAM_BSS Submenu octavesMenu{
+    l10n::String::STRING_FOR_OCTAVES,
+    {&octaveItems[0], &octaveItems[1], &octaveItems[2], &octaveItems[3], &octaveItems[4], &octaveItems[5]},
 };
 
 void SeedTakesSubmenu::beginSession(MenuItem* navigatedBackwardFrom) {
@@ -381,7 +580,8 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
-    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu},
+    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
+     &octavesMenu, &resetPartBiasItem, &restartMenu, &captureMenu, &browserPreviewItem},
 };
 
 void refreshPerformMenu() {
@@ -390,8 +590,13 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.steering().takePresses(part);
 	}
+	presses += performAdapter.steering().octavePresses();
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
+	// CAPTURE's rows move with the marks (RECORD under the menu), the pieces and each piece opened.
+	const SteeringLog& log = performAdapter.steeringLog();
+	presses += static_cast<uint32_t>(log.markedPieces()) << 8 | static_cast<uint32_t>(log.pieces()) << 16;
+	presses += log.opened() << 20; // a new piece can drop one and add one, keeping both counts
 	static Basis shownBasis;
 	if (shownBasis == basisNow(presses)) {
 		return;
@@ -399,9 +604,13 @@ void refreshPerformMenu() {
 	shownBasis = basisNow(presses);
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
-	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu;
+	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu || item == &octavesMenu
+	            || item == &captureMenu;
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
+	}
+	for (OctaveItem& octave : octaveItems) {
+		ours = ours || item == &octave;
 	}
 	for (GenreGroup& group : transitionGenres.groups()) {
 		ours = ours || item == &group; // its `= REGEN` row moves when a genre change starts

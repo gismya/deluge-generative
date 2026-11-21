@@ -53,6 +53,8 @@
 //   The incoming roster:
 //     void adoptIncoming();           the preload's roster is the incoming one
 //     Generator& startIncoming(TransitionStyle);  starts the idle instance with the pending Recipe, in task context
+//     HandoverMacros incomingMacros() const;  the pending Recipe's `macros`: Pending (a LOAD) keeps the incoming
+//                                     instance's own at the start step
 //     void releaseIncoming();         the incoming roster never played: its Outputs are retired, to be freed (the
 //                                     free job frees them later). Runs in the tick at a stop when the piece ended by
 //                                     itself after the core dropped the command, after driver().cancelIncoming(),
@@ -88,6 +90,7 @@
 
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/perform/pending_recipe.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/press_outcome.h"
 #include "generative/perform/text.h"
@@ -136,6 +139,7 @@ enum class TransitionTrace : uint8_t {
 	RequestRefused,
 	RequestQueueFull,
 	RequestBusy,
+	RequestRestart, ///< refused: a restart waits for its line (spec §13.2)
 	CancelPreload,
 	CancelQueued,
 	CancelQueuedRefused,
@@ -181,6 +185,7 @@ struct TransitionTraceText {
 	case TransitionTrace::RequestRefused:
 	case TransitionTrace::RequestQueueFull:
 	case TransitionTrace::RequestBusy:
+	case TransitionTrace::RequestRestart:
 		out.add("request style=");
 		out.add(static_cast<int32_t>(style));
 		if (trace == TransitionTrace::RequestStarted) {
@@ -191,6 +196,9 @@ struct TransitionTraceText {
 		}
 		else if (trace == TransitionTrace::RequestBusy) {
 			out.add(" refused busy");
+		}
+		else if (trace == TransitionTrace::RequestRestart) {
+			out.add(" refused restart");
 		}
 		else {
 			out.add(" refused phase=");
@@ -281,6 +289,8 @@ public:
 	[[nodiscard]] bool preloading() const { return phase_ == Phase::Preloading; }
 	/// Whether a piece mustn't start yet: a transition that commits when loaded still preloads. MIDI Start waits too.
 	[[nodiscard]] bool holdsStart() const { return phase_ == Phase::Preloading && commitOnLoad_; }
+	/// Whether a PLAY waits for that preload (startWhenLoaded()): PLAY again cancels it.
+	[[nodiscard]] bool playWaits() const { return holdsStart() && startWhenLoaded_; }
 	/// Counts the new rosters started: the view drops focus to song level when it changes.
 	[[nodiscard]] uint32_t starts() const { return starts_; }
 	/// Whether `request` is the newest: a preload for an older one changes nothing when it ends.
@@ -403,6 +413,12 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 		adapter().traced(Trace::RequestRefused, style);
 		return Request::Refused;
 	}
+	// One change at a time: a restart waiting for its line refuses it, as a pending transition refuses a restart
+	// (spec §13.2). CHANGE PENDING either way.
+	if (steering().restartAhead()) {
+		adapter().traced(Trace::RequestRestart, style);
+		return Request::Refused;
+	}
 	// Each roster a transition builds retires once: the outgoing one when the new one plays, or the incoming one if it
 	// never does. So this request owes a roster, and replacing a Queued one retires that one's at once. The free job
 	// frees them only while the runner is idle, so requests that replace each other while it stays busy pile them
@@ -510,7 +526,8 @@ bool TransitionLifecycle<Adapter>::loaded(uint32_t request) {
 		setPhase(Phase::Idle);
 		return true;
 	}
-	adapter().driver().queueIncoming(incoming, adapter().cutGlideTicks());
+	adapter().driver().queueIncoming(incoming, adapter().cutGlideTicks(),
+	                                 adapter().incomingMacros() == HandoverMacros::Pending);
 	setPhase(Phase::Queued);
 	return true;
 }

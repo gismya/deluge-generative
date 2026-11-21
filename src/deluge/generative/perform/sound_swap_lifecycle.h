@@ -41,6 +41,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/perform/press_outcome.h"
+#include "generative/perform/sound_retirements.h"
 #include "generative/perform/text.h"
 #include <concepts>
 #include <cstdint>
@@ -103,8 +104,10 @@ enum class SoundTrace : uint8_t {
 	CancelWaiting,           ///< pressed again while waiting
 	CancelDropped,           ///< the core dropped it (a BACK tap, a full pending list)
 	CancelStopped,           ///< the transport stopped
+	CancelRestarted,         ///< a restart reached its line (spec §13.2)
 	CancelPreloadTransition, ///< a transition's confirm cancelled the preload running
 	CancelTransition,        ///< a transition's confirm dropped it
+	CancelTransitionDone,    ///< its preload ended Done after a transition's confirm, past its last boundary (#316)
 	SwapStopped,             ///< stopped: it swapped in as its preload ended
 	Swap,                    ///< its Sound event swapped it in
 };
@@ -152,11 +155,17 @@ struct SoundTraceText {
 	case SoundTrace::CancelStopped:
 		cancel(" stopped");
 		break;
+	case SoundTrace::CancelRestarted:
+		cancel(" restarted");
+		break;
 	case SoundTrace::CancelPreloadTransition:
 		out.add("gen_sound_cancel preload transition");
 		break;
 	case SoundTrace::CancelTransition:
 		cancel(" transition");
+		break;
+	case SoundTrace::CancelTransitionDone:
+		cancel(" transition_done");
 		break;
 	case SoundTrace::SwapStopped:
 		out.add("gen_sound_swap part=").add(traced.part).add(" stopped token=").add(traced.token);
@@ -169,16 +178,11 @@ struct SoundTraceText {
 	return buffer;
 }
 
-/// The sound re-rolls' share of the Outputs waiting to be freed (spec §12.9): each part's swapped-out Output, a phrase
-/// at most, plus each part's waiting one that a transition's confirm drops while the runner is busy with its preload.
-/// The firmware's Retirements gives them this share; a press is refused with BUSY when it hasn't room.
-constexpr int32_t kSoundRetirements = 2 * kMaxParts;
-
 /// What the lifecycle calls on its adapter: the firmware's (generative/firmware/sound_swaps.h) and the harness's
 /// (tests/spec/generator/sound_swap_piece.h). Public members, so the concept can see them.
 template <typename Adapter>
 concept SoundSwapAdapter = requires(Adapter& adapter, const Adapter& reader, int32_t part, SoundSource source,
-                                    uint8_t token, const SoundPath* chosen, const SoundTraced& traced) {
+                                    uint8_t token, const SoundChoice* chosen, const SoundTraced& traced) {
 	// Perform's side.
 	/// The Current Recipe's genre: nullptr while Perform has none.
 	{ reader.genre() } -> std::same_as<const Genre*>;
@@ -197,9 +201,9 @@ concept SoundSwapAdapter = requires(Adapter& adapter, const Adapter& reader, int
 	{ reader.runnerBusy() } -> std::same_as<bool>;
 	/// The sound preload runs (its working animation is up).
 	{ reader.preloadRunning() } -> std::same_as<bool>;
-	/// Starts `part`'s preload from `source`, with `token`. A Chosen source's path is `chosen`, kept for the job.
-	/// It ends Done with preloaded(part, token), or ends Cancelled or Failed with no call here. @return false if the
-	/// runner didn't take it.
+	/// Starts `part`'s preload from `source`, with `token`. A Chosen source's choice is `chosen`, kept for the job.
+	/// It ends Done with preloaded(part, token, park), whose `park` hands over the Output it built, or ends Cancelled
+	/// or Failed with no call here. @return false if the runner didn't take it.
 	{ adapter.submitPreload(part, source, token, chosen) } -> std::same_as<bool>;
 	/// The preload running is cancelled. It may still end Done, past its last boundary.
 	{ adapter.cancelJob() } -> std::same_as<void>;
@@ -215,6 +219,10 @@ concept SoundSwapAdapter = requires(Adapter& adapter, const Adapter& reader, int
 	{ adapter.rebind(part) } -> std::same_as<void>;
 	/// `part`'s incoming Output never plays: it is retired to be freed at once.
 	{ adapter.dropIncoming(part) } -> std::same_as<void>;
+	/// In the tick: `part`'s sound landed, but a confirm dropped it before its Sound event, so the part plays on with
+	/// its old one. The core has logged the SetSound: the steering log says it never played
+	/// (PerformDriver::logSoundDropped(), spec §17.2).
+	{ adapter.swapDropped(part) } -> std::same_as<void>;
 	/// The steering queue had no room for a preloaded sound's SetSound: the QUEUE FULL popup.
 	{ adapter.showQueueFull() } -> std::same_as<void>;
 	/// A test event (compiled out of release firmware).
@@ -262,54 +270,72 @@ public:
 		}
 		return submit(part, previous ? SoundSource::Previous : SoundSource::Roll, nullptr);
 	}
-	/// A synth part's sound chosen in the preset browser (spec §13.5): `path` becomes its pick and preloads as a
-	/// re-roll's does, refused as canChoose() says. Task context.
-	SoundPress choose(int32_t part, const SoundPath& path) {
-		const SoundPress check = canChoose(part, path);
+	/// A sound chosen in a Perform browser (spec §10.1, §13.5): a synth part's preset, or one lane's file on a Drums or
+	/// FX part. It becomes the pick and the part's whole Output preloads as a re-roll's does, refused as canChoose()
+	/// says. Task context.
+	SoundPress choose(int32_t part, const SoundChoice& choice) {
+		const SoundPress check = canChoose(part, choice);
 		if (check != SoundPress::Preloading) {
 			return check;
 		}
-		return submit(part, SoundSource::Chosen, &path);
+		return submit(part, SoundSource::Chosen, &choice);
 	}
-	/// Whether choose(part, path) would start preloading now: Preloading if it would, else what it would be refused
-	/// with: Pending or Busy, or Ignored for an empty path, a part that isn't a synth part, or one whose sound is
-	/// pending() (the browser opens only when it isn't). The browser closes on a choice only when it would.
-	[[nodiscard]] SoundPress canChoose(int32_t part, const SoundPath& path) const {
-		return path.empty() ? SoundPress::Ignored : canStart(part);
+	/// Whether choose(part, choice) would start preloading now: Preloading if it would, else what it would be refused
+	/// with: Pending or Busy, or Ignored for a choice that doesn't fit the part (choiceFits(): an empty path, a preset
+	/// for a Kit part, a lane it doesn't play) or a part whose sound is pending() (the browser opens only when it
+	/// isn't). The browser closes on a choice only when it would.
+	[[nodiscard]] SoundPress canChoose(int32_t part, const SoundChoice& choice) const {
+		const SoundPress start = canStart(part);
+		if (start == SoundPress::Preloading && !choiceFits(*adapter().genre(), part, choice)) {
+			return SoundPress::Ignored;
+		}
+		return start;
 	}
-	/// canChoose() before there is a path: the preset browser opens only when it is Preloading. The caller first lets
-	/// a press cancel the part's pending() sound.
+	/// canChoose() before there is a choice: the preset browser and the lane list open only when it is Preloading.
+	/// The caller first lets a press cancel the part's pending() sound.
 	[[nodiscard]] SoundPress canStart(int32_t part) const {
 		const SoundPress gated = gate(part);
 		if (gated != SoundPress::Preloading) {
 			return gated;
 		}
-		return synthPart(*adapter().genre(), part) && !pending(part) ? room() : SoundPress::Ignored;
+		return !pending(part) ? room() : SoundPress::Ignored;
 	}
 
 	/// Whether a preload that ends now is taken: Perform is entered with a genre and isn't being left. Being left, its
 	/// Output goes with Perform's song.
 	[[nodiscard]] bool takesPreloads() const { return adapter().ready() && adapter().genre() != nullptr; }
-	/// A preload ended well, in the job's task: queues the swap for the line, or swaps at once while stopped. The
-	/// adapter holds the Output it built as `part`'s incoming one. Perform being left, the Output goes with its song.
-	void preloaded(int32_t part, uint8_t token) {
+	/// A preload ended well, in the job's task. If takesPreloads(), `park()` first hands the adapter the Output the
+	/// preload built as `part`'s incoming one, since the swap and the drop name only the part. While a transition is
+	/// pending the Output is retired unplayed: the confirm's cancel came after the preload's last boundary, and sound
+	/// actions wait for the new roster (spec §12.9). Else it swaps in at once while stopped, or is queued for the line.
+	/// Perform being left, `park()` isn't called: the Output goes with Perform's song. @return whether the Output is
+	/// kept: swapped in, or waiting for its line.
+	template <std::invocable Park>
+	bool preloaded(int32_t part, uint8_t token, Park park) {
 		if (!takesPreloads()) {
-			return;
+			return false;
+		}
+		park();
+		if (adapter().changePending()) {
+			adapter().dropIncoming(part);
+			trace({.trace = SoundTrace::CancelTransitionDone, .part = part});
+			return false;
 		}
 		const Generator* piece = adapter().playingGenerator();
 		if (piece == nullptr) {
 			// Stopped: no line to wait for, so it swaps in at once, and the next start plays it.
 			trace({.trace = SoundTrace::SwapStopped, .part = part, .token = token});
 			adopt(part);
-			return;
+			return true;
 		}
 		// The swap waits for the next phrase line in the core (spec §13.4).
 		if (!adapter().queue().push(setSound(part, token))) {
 			adapter().dropIncoming(part);
 			adapter().showQueueFull();
-			return;
+			return false;
 		}
 		waiting_[part] = {.token = token, .pushedAt = piece->nextStep()};
+		return true;
 	}
 	/// In the tick: the core's Sound event. The part's waiting Output swaps in if the event carries its token.
 	void swap(const Event& event) {
@@ -319,7 +345,8 @@ public:
 		}
 		Waiting& in = waiting_[event.part];
 		if (in.token == kNoSound || in.token != event.soundToken()) {
-			return; // cancelled since it landed: the part plays on with its old sound
+			adapter().swapDropped(event.part); // cancelled since it landed: the part plays on with its old sound
+			return;
 		}
 		trace({.trace = SoundTrace::Swap,
 		       .part = event.part,
@@ -355,6 +382,15 @@ public:
 	void playbackEnded() {
 		forEachWaitingSound([this](int32_t part) {
 			trace({.trace = SoundTrace::CancelStopped, .part = part});
+			drop(part);
+		});
+	}
+	/// A restart reached its line (spec §13.2): as at a stop, the core's pending list is gone, and any Sound event
+	/// still buffered, so every waiting sound is dropped. A sound still preloading goes on, as after a stop: once
+	/// loaded it waits for the new piece's next phrase line. In the tick: drop() frees nothing there.
+	void pieceRestarts() {
+		forEachWaitingSound([this](int32_t part) {
+			trace({.trace = SoundTrace::CancelRestarted, .part = part});
 			drop(part);
 		});
 	}
@@ -397,6 +433,9 @@ public:
 		return count;
 	}
 	[[nodiscard]] bool hasPrevious(int32_t part) const { return hasPrevious_[part]; }
+	/// `part`'s Output was swapped in by a restart AS IT BEGAN (spec §13.2), not a re-roll: it has a previous sound
+	/// from here, as after a swap.
+	void swappedByRestart(int32_t part) { hasPrevious_[part] = true; }
 
 private:
 	/// A part's sound waiting for its line.
@@ -450,7 +489,7 @@ private:
 	/// How many re-rolls may still end in a retiring Output: one preloading and every part's waiting one.
 	[[nodiscard]] int32_t retirementsOwed() const { return (adapter().preloadRunning() ? 1 : 0) + waitingSounds(); }
 	/// Submits `part`'s preload from `source` if the runner has room (room()), else Busy.
-	SoundPress submit(int32_t part, SoundSource source, const SoundPath* chosen) {
+	SoundPress submit(int32_t part, SoundSource source, const SoundChoice* chosen) {
 		if (room() != SoundPress::Preloading) {
 			return SoundPress::Busy;
 		}

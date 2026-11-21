@@ -169,8 +169,8 @@ std::string sppResume(int32_t magnitude, int32_t intoWait) {
 // clang-format off
 describe transport("The transport", $ {
 	it("plays the Outro from the phrase line after End, and stops where it ends", _ {
-		static LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run run = techno();
 		run.log = &log;
 		run.steer = at(kGroove0 + 40, end());
@@ -194,9 +194,9 @@ describe transport("The transport", $ {
 		expect(count(result.events, EventKind::NoteOff)).to_equal(count(result.events, EventKind::NoteOn));
 		expect(result.generator->ended()).to_be_true();
 
-		expect(log.size()).to_equal(1);
-		expect(log.at(0).step).to_equal(kGroove0 + kPhraseSteps);
-		expect(log.at(0).command == end()).to_be_true();
+		expect(logSize(log)).to_equal(1);
+		expect(logAt(log, 0).step).to_equal(kGroove0 + kPhraseSteps);
+		expect(logAt(log, 0).command == end()).to_be_true();
 	});
 
 	it("cancels End with a tap while it waits, and keeps it when armed again", _ {
@@ -262,8 +262,8 @@ describe transport("The transport", $ {
 			g.arc.outroPhrases = 2;
 			return g;
 		}();
-		static LogEntry entries[8];
-		SteeringLog log(entries, 8);
+		TestLog entries(8);
+		SteeringLog& log = entries.log;
 		Run again = techno();
 		again.recipe.genre = &longOutro;
 		again.log = &log;
@@ -271,7 +271,7 @@ describe transport("The transport", $ {
 		Result result = play(again, 96);
 		expect(result.ended).to_be_true();
 		expect(result.endedAt).to_equal(stepTick(kOutro + 2 * kPhraseSteps));
-		expect(log.size()).to_equal(1);
+		expect(logSize(log)).to_equal(1);
 	});
 
 	it("takes a force pressed during the Outro's last step, until its end line's decision is due", _ {

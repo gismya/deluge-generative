@@ -24,6 +24,7 @@
 #include "generative/core/event.h"
 #include "generative/core/generator.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/phrase_history.h"
 #include <cstdint>
@@ -73,6 +74,26 @@ public:
 	/// waits: a BACK tap cancelled it as the newest action (spec §13.5). Called once. The incoming instance still
 	/// waits, until the caller's cancelIncoming().
 	virtual void transitionDropped() {}
+
+	// ---- The steering log (spec §17.2) ----
+
+	/// A piece is about to open: beginPiece() comes next. Test builds time the opening from here.
+	virtual void pieceOpening() {}
+	/// Once a step while dropped pieces' room is still to close, outside the decision (spec §17.4): a firmware sink
+	/// times it.
+	virtual void compactLog(SteeringLog& log) { log.compactStep(SteeringLog::kCompactStepBytes); }
+	/// A piece opens in `log` (beginPiece() has written its opening): the header's sound picks and param snapshot
+	/// (SteeringLog::addPick(), addSnapshot()), as the Outputs are now.
+	virtual void logPieceHeader(SteeringLog& /*log*/) {}
+	/// `part`'s new sound, `token`, landed on `step`: its picks, one SteeringLog::appendSoundPath() per slot.
+	virtual void logSoundPaths(SteeringLog& /*log*/, int32_t /*step*/, uint8_t /*part*/, uint8_t /*token*/) {}
+	// ---- A restart (spec §13.2) ----
+
+	/// A restart reached its bar line: every note of the piece has ended there. Starts `generator` again for the new
+	/// piece, from bar 1 with its Intro, as start() does: the firmware from the Current Recipe as it is now (AS IT IS).
+	/// The driver then decides its step 0 on the line, at the new piece's tempo and swing. Only Perform's adapters
+	/// queue a restart; a sink that doesn't start the Generator leaves the piece silent from the line.
+	virtual void restartPiece(Generator& /*generator*/) {}
 };
 
 /// Times the step decisions inside advance(), for H1 (spec §20). Called only when a decision is due.
@@ -102,7 +123,13 @@ public:
 	/// bar is a jump (spec §12.3), resuming at the master's next bar line as jumpTo() does.
 	/// @return Song ticks until the driver next needs a call, at least 1. Never early: an event plays at the first
 	/// call whose clock has reached it (spec §12.3).
-	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	int32_t advance(int32_t songTicks, int32_t magnitude, SteeringQueue& queue, NoteSink& sink);
+	/// Where pieces are logged (spec §17.2, §17.3), or nullptr for none. Each piece opens at its step 0's decision: a
+	/// start's, or a transition's start step, where the outgoing piece ends. A stop or the Outro's end ends it.
+	void setLog(SteeringLog* log) { log_ = log; }
+	/// The newest SetSound logged on `part` never played: a confirm dropped its swap after it landed (spec §12.9).
+	/// Logged on the last step decided, which is at or after the one it landed on.
+	void logSoundDropped(uint8_t part);
 
 	/// A mid-play song position pointer: the master is now at `songTick` (song ticks at `magnitude`). Every note
 	/// ends at once and nothing plays until the master's next bar line, where the Generator carries on from its own
@@ -137,8 +164,10 @@ public:
 	/// The incoming instance, started with Generator::startIncoming(), waits for the playing one's transition command
 	/// (queued by the caller) to land and play its Build or Outro, or to reach the cut line. From the start step it
 	/// decides, with the live macros, and the playing one only drains. Tempo glides to the incoming Recipe's across the
-	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step.
-	void queueIncoming(Generator& incoming, int32_t cutGlideTicks);
+	/// Build or Outro, or over `cutGlideTicks` ending on a cut line; swing switches on the start step. With
+	/// `keepsMacros` (a LOAD, spec §12.9) the incoming instance plays its own Recipe's macros from the start step, not
+	/// the live ones.
+	void queueIncoming(Generator& incoming, int32_t cutGlideTicks, bool keepsMacros = false);
 	/// The transition was cancelled before its command landed. A cut's glide that had started goes back to the
 	/// playing Recipe's tempo over the same length.
 	void cancelIncoming(NoteSink& sink);
@@ -179,11 +208,16 @@ private:
 	/// The bar-line step at or after `step`.
 	[[nodiscard]] static int32_t barLineAtOrAfter(int32_t step);
 	/// The piece is over (stop, or the Outro's end): glides land on their targets, and the driver goes idle.
-	void finish(NoteSink& sink);
+	void finish(NoteSink& sink, PieceEnd why);
 	/// Tells the sink, once, that the core dropped the incoming instance's command: it neither waits nor landed.
 	void reportDropIfGone(NoteSink& sink);
 	/// Decides every step whose decision tick the clock has reached, playing what falls due before each.
-	void decideDue(SteeringQueue& queue, SteeringLog* log, NoteSink& sink);
+	void decideDue(SteeringQueue& queue, NoteSink& sink);
+	/// The playing instance's piece opens in the log, before its step 0's decision.
+	void openPiece(NoteSink& sink);
+	/// Logs the picks of each sound that landed in the decision just made: `before` is each part's soundLanded()
+	/// before it.
+	void logLandedSounds(const int32_t (&before)[kMaxParts], NoteSink& sink);
 	/// Plays every buffered event due at or before `upTo`, in order.
 	void playDue(NoteSink& sink, int32_t upTo);
 	/// Plays the outgoing instance's events due by now, and lets it go once it is drained.
@@ -192,8 +226,16 @@ private:
 	void flushOutgoing(Generator::FlushFor why, NoteSink& sink);
 	/// The incoming instance's first decision is due: it takes over at the start step.
 	void switchToIncoming(NoteSink& sink);
+	/// The restart's line (spec §13.2): the piece's last notes end there, the sink starts the Generator again, and the
+	/// clock counts from the line as the new piece's step 0.
+	void restartOnLine(NoteSink& sink);
+	/// What begin() and a restart's line reset: no transition, no Riser held, the phrase history and the end.
+	void freshPiece();
 	/// Starts the transition's tempo glide once the clock reaches it.
 	void glideIntoTransition(NoteSink& sink);
+	/// Logs a tempo glide the driver started itself, to `tempo`, ending at the playing instance's tick `endTick`, on
+	/// the last decided step (spec §17.2).
+	void logTransitionTempo(int32_t tempo, int32_t endTick);
 	/// Song ticks at `magnitude` until the next decision or event, at least 1.
 	[[nodiscard]] int32_t nextWait(int32_t magnitude) const;
 
@@ -214,6 +256,7 @@ private:
 
 	Generator* generator_ = nullptr;
 	DecisionTimer* timer_ = nullptr;
+	SteeringLog* log_ = nullptr;
 	Generator* incoming_ = nullptr;
 	Generator* outgoing_ = nullptr;
 	/// The start step's tick in the outgoing instance's time: its events play at their tick less this.
@@ -239,6 +282,12 @@ private:
 	TransitionTempo transitionTempo_;
 	bool ended_ = false;
 	bool dropReported_ = false; ///< The sink was told the core dropped the incoming instance's command.
+	/// The incoming instance keeps its own macros at the start step: a LOAD's file's (spec §12.9). Beside the flags
+	/// above, in their padding: the driver's size and later offsets stay as they were (PerformAdapter's
+	/// static_asserts).
+	bool incomingKeepsMacros_ = false;
+	/// The playing instance's piece opens at its next decision: step 0's.
+	bool pieceDue_ = false;
 	uint32_t jumps_ = 0;
 	/// The end line whose steering was drained without deciding it, or -1.
 	int32_t drainedEndLine_ = -1;

@@ -13,6 +13,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
 
@@ -45,7 +46,19 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 /// Keeps every event the driver plays, in play order.
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
+	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
+	/// Where each restart's new piece begins in `events` (spec §13.2): its first event's index.
+	std::vector<size_t> restartedAt;
+	/// Starts a restart's piece, as the adapter does: a StepwisePiece sets it to its Current Recipe's.
+	std::function<void(Generator&)> restarts;
 	void play(const Event& event) override { events.push_back(event); }
+	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
+	void restartPiece(Generator& generator) override {
+		restartedAt.push_back(events.size());
+		if (restarts) {
+			restarts(generator);
+		}
+	}
 };
 
 /// The Glide setting that lasts `ticks` Generator ticks for a genre whose phrase is `phraseSteps` long (spec §13.3).
@@ -60,6 +73,48 @@ inline perform::GlideLength glideLasting(int32_t ticks, int32_t phraseSteps) {
 }
 
 class Hook;
+
+/// A logged command and its step, for a spec that reads the log as one list.
+struct LogEntry {
+	int32_t step = 0;
+	Command command;
+};
+
+/// Every command in the log's pieces, oldest first, as one list.
+inline std::vector<LogEntry> loggedCommands(const SteeringLog& log) {
+	std::vector<LogEntry> out;
+	for (int32_t p = 0; p < log.pieces(); p++) {
+		log.piece(p).forEachRecord([&](const LogRecord& record) {
+			if (record.kind == RecordKind::Command) {
+				out.push_back({record.step, record.command});
+			}
+		});
+	}
+	return out;
+}
+inline int32_t logSize(const SteeringLog& log) {
+	return static_cast<int32_t>(loggedCommands(log).size());
+}
+inline LogEntry logAt(const SteeringLog& log, int32_t i) {
+	const std::vector<LogEntry> all = loggedCommands(log);
+	return i >= 0 && i < static_cast<int32_t>(all.size()) ? all[static_cast<size_t>(i)] : LogEntry{};
+}
+
+/// A steering log for a spec (spec §17.2): room for `entries` commands besides a piece's opening, with a piece open,
+/// so a spec that calls the Generator itself logs too. A Perform driver given it opens its own pieces over that one.
+struct TestLog {
+	explicit TestLog(int32_t entries)
+	    : bytes(static_cast<size_t>(entries * kMaxCommandBytes + kOpeningRoom)),
+	      log(bytes.data(), static_cast<int32_t>(bytes.size())) {
+		log.beginPiece({});
+	}
+	TestLog(const TestLog&) = delete;
+	TestLog& operator=(const TestLog&) = delete;
+	/// A piece's opening, and a header with the picks a spec's sink adds.
+	static constexpr int32_t kOpeningRoom = 1024;
+	std::vector<uint8_t> bytes;
+	SteeringLog log;
+};
 
 /// The Perform driver's steering with the harness as its adapter (perform/perform_steering.h): the driver, sink and
 /// Current Recipe are a piece's, a transition is pending when `pending` says so, a glide wakes the Hook as the
@@ -124,7 +179,9 @@ class Hook {
 public:
 	Hook(perform::PerformDriver& driver, SteeringQueue& queue, perform::NoteSink& sink,
 	     int32_t magnitude = kGeneratorTickMagnitude, SteeringLog* log = nullptr)
-	    : driver_(driver), queue_(queue), sink_(sink), log_(log), magnitude(magnitude) {}
+	    : driver_(driver), queue_(queue), sink_(sink), magnitude(magnitude) {
+		driver.setLog(log);
+	}
 
 	/// The song tick it is now, between calls: song ticks since the first call.
 	[[nodiscard]] int64_t now() const { return now_; }
@@ -204,16 +261,15 @@ private:
 		if (steering_ != nullptr && playing != nullptr) {
 			steering_->sampleFill(*fillDown_);
 		}
-		due_ = now_ + driver_.advance(delta, magnitude, queue_, log_, sink_);
+		due_ = now_ + driver_.advance(delta, magnitude, queue_, sink_);
 		if (steering_ != nullptr && playing != nullptr) {
-			steering_->recordTakes(driver_.playing() != nullptr ? *driver_.playing() : *playing);
+			steering_->recordLanded(driver_.playing() != nullptr ? *driver_.playing() : *playing);
 		}
 	}
 
 	perform::PerformDriver& driver_;
 	SteeringQueue& queue_;
 	perform::NoteSink& sink_;
-	SteeringLog* log_;
 	HarnessSteering* steering_ = nullptr;
 	const bool* fillDown_ = nullptr;
 	int64_t now_ = 0;
@@ -262,6 +318,8 @@ struct Run {
 	/// SHIFT+PLAY: start in Groove, with no Intro (spec §13.2). Specs that want the Recipe's macros to play as set
 	/// from the first bar use it, since an Intro's Density rises from the Intro floor (spec §9.4).
 	bool skipIntro = false;
+	/// The Riser lane's sample length, in microseconds; 0 for a synth Riser (spec §9.5).
+	int32_t riserMicros = 0;
 };
 
 struct Result {
@@ -282,10 +340,13 @@ inline Result play(const Run& run, int32_t bars) {
 	Generator& generator = *result.generator;
 	SteeringQueue queue;
 	RecordingSink sink;
+	sink.riserMicros = run.riserMicros;
 	perform::PerformDriver driver;
 
 	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);
+	driver.setLog(run.log);
 	driver.begin(generator);
+	driver.setTempo(run.recipe.tempo, sink); // as Perform's entry does: a sample Riser is timed from it
 
 	const int64_t songTicksPerStep = int64_t{6} << run.magnitude;
 	const int64_t end = bars * kStepsPerBar * songTicksPerStep;
@@ -295,7 +356,7 @@ inline Result play(const Run& run, int32_t bars) {
 		if (run.steer) {
 			run.steer(generator.nextStep(), queue);
 		}
-		int32_t wait = driver.advance(delta, run.magnitude, queue, run.log, sink);
+		int32_t wait = driver.advance(delta, run.magnitude, queue, sink);
 		if (run.watch) {
 			run.watch(generator);
 		}
@@ -374,7 +435,7 @@ struct Start {
 	int32_t magnitude = kGeneratorTickMagnitude;
 	/// Where the master is at the start, in song ticks: past 0 for a Continue (spec §12.4).
 	int32_t songTick = 0;
-	/// Room in the piece's SteeringLog. With 0 the piece runs with no log.
+	/// Room in the piece's SteeringLog, in commands besides the piece's opening. With 0 the piece runs with no log.
 	int32_t logEntries = 0;
 };
 
@@ -417,9 +478,9 @@ struct StepwisePiece {
 	SteeringQueue& queue;
 	/// The song's fill mode: FILL held, by its button or a pad.
 	bool fillDown = false;
-	std::vector<LogEntry> logEntries;
-	/// What the core logged as steering landed. Empty, and not passed to the driver, unless Start::logEntries is set.
-	SteeringLog log;
+	TestLog logEntries;
+	/// What the core logged as steering landed. Not passed to the driver unless Start::logEntries is set.
+	SteeringLog& log;
 	/// The calls to the driver. Reach for it for a call the driver didn't ask for (call(), callAt()), a wake(), or
 	/// to wait for a kind of call (runUntil()).
 	Hook hook;
@@ -427,7 +488,7 @@ struct StepwisePiece {
 	explicit StepwisePiece(const Start& start = {})
 	    : currentRecipe(start.recipe), currentSeed(start.seed), currentTakes(start.takes),
 	      steering(driver, sink, currentRecipe, currentSeed, currentTakes), queue(steering.queue()),
-	      logEntries(static_cast<size_t>(start.logEntries)), log(logEntries.data(), start.logEntries),
+	      logEntries(start.logEntries), log(logEntries.log),
 	      hook(driver, queue, sink, start.magnitude, start.logEntries > 0 ? &log : nullptr), start_(start) {
 		steering.hook = &hook;
 		hook.steerWith(steering, fillDown);
@@ -440,20 +501,22 @@ struct StepwisePiece {
 			static_assert(
 			    !requires { &Sink::attach; }, "the sink's attach() must take (const PerformDriver&, const Hook&)");
 		}
+		if constexpr (requires { sink.restarts = [](Generator&) {}; }) {
+			sink.restarts = [this](Generator& instance) { restartOnLine(instance); };
+		}
 		begin(start);
 	}
 	StepwisePiece(const StepwisePiece&) = delete;
 	StepwisePiece& operator=(const StepwisePiece&) = delete;
 
 	/// Stops the piece and starts another from `start` on the same Generator, as PLAY after a stop does: the steering
-	/// queue and the log are cleared. The sink keeps what it holds. The magnitude and the log's size stay as
-	/// constructed.
+	/// queue is cleared, and the log opens the next piece as the firmware's does. The sink keeps what it holds. The
+	/// magnitude and the log's size stay as constructed.
 	void restart(const Start& start) {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
 		queue.clear();
-		log.clear();
 		hook.reset();
 		start_ = start;
 		begin(start);
@@ -470,7 +533,6 @@ struct StepwisePiece {
 		if (driver.running()) {
 			driver.stop(sink);
 		}
-		log.clear();
 		hook.reset();
 		Start start = start_;
 		start.recipe = currentRecipe;
@@ -478,6 +540,20 @@ struct StepwisePiece {
 		start.takes = currentTakes;
 		start.skipIntro = groove;
 		begin(start, true, instance != nullptr ? *instance : generator);
+	}
+
+	/// A restart's line (spec §13.2), as the adapter's: the Generator starts again from the Current Recipe, and the
+	/// steering with it, then a FILL or a KEYBOARD fader still held is sent again. A sink calls it from restartPiece().
+	void restartAsItIs(Generator& instance) {
+		steering.restartAsItIs(instance);
+		instanceStarts();
+	}
+	/// A restart's line as the adapter's, AS IT IS or AS IT BEGAN as pressed: AS IT BEGAN from the header of the
+	/// piece that played, when the driver logged one (Start::logEntries). A sink calls it from restartPiece().
+	void restartOnLine(Generator& instance) {
+		const bool logged = start_.logEntries > 0 && log.newestWithHeader() >= 0;
+		steering.restartOnLine(instance, logged ? &log.piece(log.newestWithHeader()).start() : nullptr);
+		instanceStarts();
 	}
 
 	/// A press now: the command goes onto the steering queue, for the next decision. @return false if it was full.

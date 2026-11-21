@@ -1,6 +1,7 @@
 # Psytrance's genre changes (#127, spec §9.7, §21.3) over the sysex test port, in one boot: Acid techno into Psytrance
-# and back out in all three styles, then Ambient into Psytrance and back out in all three. PSYTRANCE is a GENRE row of
-# its own (no parent), so picking it opens the confirm at once, on BUILD INTO A DROP (its transition entry). The first
+# and back out in all three styles, then Ambient into Psytrance and back out in all three. PSYTRANCE is a parent's GENRE
+# row (#319): SELECT opens its submenu, and picking CLASSIC there opens the confirm on BUILD INTO A DROP (Classic
+# psytrance's transition entry). The first
 # change lands Acid's Build on Psytrance's Drop, which sounds (gen_h16 voices=); a forced Break in Psytrance keeps the
 # Drone, Arp and hats sounding; the last change out of it plays Psytrance's own Build (16 or 32 bars, its kick and bass
 # cut for the last 2, a beat's Gap) into Acid's Drop, sounding too. Runs on a Deluge (deluge_probe.py session) or in
@@ -33,14 +34,20 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE -> BUILD INTO A DROP, the highlighted style: Acid techno's Build into Psytrance's Drop, sounding ----
+# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP, the highlighted style: Acid techno's Build into Psytrance's Drop, sounding ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -48,7 +55,7 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=0 result=0
+expect event gen_confirm psytrance-classic style=0 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_section BUILD within=60
 expect event gen_transition start style=0 within=90
@@ -95,14 +102,20 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE -> FADE THROUGH: one detent from BUILD INTO A DROP; Acid's Outro, Psytrance's Intro ----
+# ---- PSYTRANCE ▸ CLASSIC -> FADE THROUGH: one detent from BUILD INTO A DROP; Acid's Outro, Psytrance's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -111,7 +124,7 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=1 result=0
+expect event gen_confirm psytrance-classic style=1 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_section OUTRO within=60
 expect event gen_transition start style=1 within=150
@@ -149,14 +162,20 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -165,7 +184,7 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=2 result=0
+expect event gen_confirm psytrance-classic style=2 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_transition start style=2 within=90
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
@@ -229,14 +248,20 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE -> BUILD INTO A DROP, the highlight: Ambient's 16-bar Build into Psytrance's Drop, sounding ----
+# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP, the highlight: Ambient's 16-bar Build into Psytrance's Drop, sounding ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -244,7 +269,7 @@ expect ui=context_menu
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=0 result=0
+expect event gen_confirm psytrance-classic style=0 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_section BUILD within=60
 expect event gen_transition start style=0 within=90
@@ -276,14 +301,20 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE -> FADE THROUGH: one detent from BUILD INTO A DROP; Ambient's 2-phrase Outro ----
+# ---- PSYTRANCE ▸ CLASSIC -> FADE THROUGH: one detent from BUILD INTO A DROP; Ambient's 2-phrase Outro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -292,7 +323,7 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=1 result=0
+expect event gen_confirm psytrance-classic style=1 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_section OUTRO within=60
 expect event gen_transition start style=1 within=150
@@ -323,14 +354,20 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-pick genre psytrance
-expect event gen_genre_pick psytrance row=PSYTRANCE
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=PSYTRANCE
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre psytrance-classic
+expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -339,7 +376,7 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_confirm psytrance style=2 result=0
+expect event gen_confirm psytrance-classic style=2 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_transition start style=2 within=90
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40

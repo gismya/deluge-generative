@@ -22,8 +22,8 @@ inline std::string lower(std::string text) {
 	return text;
 }
 
-/// Lists folders from memory. Folder names match case-insensitively, as FatFs does.
-struct FakeCard final : FolderLister {
+/// Lists folders from memory, and says which files are there. Folder names match case-insensitively, as FatFs does.
+struct FakeCard final : FolderLister, FileChecker {
 	std::map<std::string, std::vector<std::string>> folders; ///< Keyed by lower-case path.
 	bool cardError = false;
 	int32_t listings = 0;
@@ -72,6 +72,13 @@ struct FakeCard final : FolderLister {
 		                   [&](const std::string& file) { return lower(file) == name; });
 	}
 
+	LoadOutcome exists(const char* path) override {
+		if (cardError) {
+			return LoadOutcome::CardError;
+		}
+		return has(path) ? LoadOutcome::Loaded : LoadOutcome::Missing;
+	}
+
 	bool list(const char* folder, FileVisitor& visitor) override {
 		listings++;
 		if (cardError) {
@@ -104,6 +111,7 @@ struct FakeLoader final : SoundLoader {
 	std::set<std::string> missing;    ///< Paths that report Missing. Everything else loads.
 	std::set<std::string> cardErrors; ///< Paths that report CardError.
 	std::vector<std::string> tried;
+	std::vector<std::string> presets; ///< The paths tried as presets, in order.
 
 	LoadOutcome load(const char* path) {
 		tried.emplace_back(path);
@@ -112,7 +120,10 @@ struct FakeLoader final : SoundLoader {
 		}
 		return missing.contains(path) ? LoadOutcome::Missing : LoadOutcome::Loaded;
 	}
-	LoadOutcome loadPreset(const char* path) override { return load(path); }
+	LoadOutcome loadPreset(const char* path) override {
+		presets.emplace_back(path);
+		return load(path);
+	}
 	LoadOutcome loadSample(const char* path) override { return load(path); }
 };
 
