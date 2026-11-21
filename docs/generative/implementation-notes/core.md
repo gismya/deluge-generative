@@ -230,4 +230,6 @@ otherwise.
   on for a punch-in (`EventKind::Pump`, appended after NoteOn so the other kinds keep their values, which the goldens'
   fingerprints hash); `stepEventsOf()` counts one a step. The harness driver drops a muted note-on, so a spec of a
   LaneMute reads the lane's notes as gone, not flagged (`punch_in_spec`).
+  Flam's lanes are `flams()` (`punch_ins.h`, shared with the spec). Pump changes in `apply()` push at most one Pump a
+  step: a second change in the same drain removes the first (they cancel), as `stepEventsOf()` counts one.
 

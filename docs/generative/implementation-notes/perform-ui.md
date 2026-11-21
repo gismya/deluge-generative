@@ -183,4 +183,11 @@ otherwise.
   Stutter isn't a param edit: `graphicsRoutine()` samples `UI_MODE_STUTTERING` each frame and pushes `SetStutter`
   (logged only) on a change, so a gold knob's stutter is logged too.
 - `generative/firmware/pump.h` is the swaps' service pump, not the Pump punch-in: that is `sidechain_pump.*`.
+- Trap (#437 R1): a driver-side effect the core switches on (Pump's ducking) must be let go at every instance start,
+  not only at a stop. A release made after the last instance's final decision (12 ticks before a restart's line or a
+  transition's start step) never reaches that instance, and a restart's `pieceStarts()` empties the queue: the off is
+  lost. `PerformAdapter::instanceStarts()` calls `sidechainPump.release()` before the steering re-sends what is on, and
+  the pump remembers each ducked part's own Output and clip, so it lets go of a transition's outgoing roster too
+  (`sink_.roster` is already the incoming one there). A logged-only state (stutter's `SetStutter`) has the same
+  window: the steering keeps it (`stutterOn_`) and re-sends it at step 0.
 
