@@ -121,7 +121,9 @@ load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE B.XML
 expect event /^song_loaded / within=60
 expect root_ui=arranger within=10
 
-# ---- The same seed captured again (hold entropy): LIVE and LIVE B are on the card, so its song is LIVE C ----
+# ---- The same seed captured again: LIVE and LIVE B are on the card, so its song is LIVE C ----
+# hold entropy pins only the next entry's roll: set it again for this one.
+hold entropy
 include perform_open.txt
 include perform_confirm.txt
 button PLAY down
