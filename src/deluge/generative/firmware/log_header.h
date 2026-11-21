@@ -26,7 +26,9 @@
 #include <cstdint>
 #include <optional>
 
+class AutoParam;
 class ModelStackWithAutoParam;
+class ParamManager;
 class Song;
 
 namespace deluge::generative::firmware {
@@ -61,6 +63,17 @@ void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& ros
 /// doesn't hold (a cable added since) keep theirs. Writes without notifying, so call it with no voice sounding: on a
 /// restart's line after its flush, or stopped. @return the params written.
 int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song);
+
+/// The param a SetParam names (spec §17.2): on the song, or on part `edit.target`'s Output (its clip's params) or
+/// `edit.lane`'s Kit row, keyed by `edit.length` as paramEdit() keys it. A patch cable is found by its source and its
+/// destination's param.
+struct LoggedParam {
+	ParamManager* manager = nullptr;
+	AutoParam* param = nullptr;
+	int32_t collection = 0; ///< Its collection's index among the manager's summaries
+	int32_t slot = 0;       ///< Its bit in the collection's summary: the param id, or the cable's index
+};
+std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song);
 
 /// `part`'s new picks (`picks`, its preset or each of its lanes' samples), landed on `step` with `token`.
 void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token, const SoundPicks& picks,

@@ -391,7 +391,82 @@ class CheckGrepsOnce(unittest.TestCase):
         self.assertEqual(grep.call_count, 1)
 
 
+class TimingExpects(Repo):
+    """An expect that pins a figure delugemu's speed decides must be hardware_only (#417)."""
+
+    def test_a_pinned_timing_field_is_named(self):
+        for text, field in (
+            (r"/^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/", "voices"),
+            ("gen_h16 culls=0 culled=-", "culls"),
+            ("/^gen_ext_tempo bpm=(119|120|121)$/", "bpm"),
+            (r"/^gen_midi_feedback .* bytes_per_s=\d{4,} /", "bytes_per_s"),
+            ("/^gen_h1 steps=8 mean_ns=1[0-9]{5} /", "mean_ns"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(covers.timing_field(text), field)
+
+    def test_a_field_any_value_matches_pins_nothing(self):
+        for text in (
+            "gen_h16 culls=",
+            r"/^gen_h16 culls=\d+ culled=\S+ voices=\d+ render_max_us=\d+/",
+            "gen_h1 steps=",
+            "/^gen_h1 /",
+            r"/^gen_midi_feedback ccs=[1-9]\d* /",
+            "gen_ext_tempo",
+            "gen_phrase voices=3",  # not a timing kind
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(covers.timing_field(text))
+
+    def test_unmarked_lists_each_such_expect_without_the_prefix(self):
+        self.write(
+            G + "perform_b.txt",
+            "# covers: src/deluge/b_*.cpp\nstart_state\n"
+            "expect event /^gen_h16 culls=\\d+ culled=\\S+ voices=[1-9]/ within=20\n"
+            "hardware_only expect event /^gen_h16 culls=\\d+ culled=\\S+ voices=[1-9]/ within=20\n"
+            "hardware_only expect no_event /^gen_midi_feedback .* bytes_per_s=\\d{4,} / since=mark within=1\n"
+            "expect event gen_h16 culls= within=20\n",
+        )
+        self.assertEqual(
+            covers.unmarked_timing([self.path("perform_b.txt")]),
+            [
+                (
+                    "perform_b.txt:3",
+                    r"/^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/",
+                    "voices",
+                )
+            ],
+        )
+
+    def test_check_fails_on_one(self):
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        self.write("src/deluge/b_one.cpp", 'TEST_EVENT("gen_ext_tempo bpm=%ld", t);\n')
+        self.write(
+            G + "perform_b.txt",
+            "# covers: src/deluge/b_*.cpp\nstart_state\nexpect event gen_ext_tempo bpm=120 within=10\n",
+        )
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = covers.check([self.path("perform_b.txt")], self.repo)
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "perform_b.txt:3: expect 'gen_ext_tempo bpm=120' pins bpm=, which delugemu's speed decides: make it"
+            " hardware_only expect",
+            out.getvalue(),
+        )
+        self.assertIn("1 timing expects not hardware_only", out.getvalue())
+
+
 class ExpectLine(unittest.TestCase):
+    def test_a_hardware_only_expect_is_an_expect(self):
+        self.assertEqual(
+            covers.EXPECT_LINE.match(
+                "hardware_only expect event gen_x a=1 within=1"
+            ).group(1),
+            "gen_x a=1",
+        )
+
     def test_the_options_come_off_in_either_order(self):
         for line in (
             "expect no_event gen_x a=1 since=mark within=1",
@@ -479,6 +554,9 @@ class TheRepo(unittest.TestCase):
 
     def test_every_expect_starts_with_its_kind(self):
         self.assertEqual(covers.kindless(covers.all_scripts()), [])
+
+    def test_every_timing_expect_is_hardware_only(self):
+        self.assertEqual(covers.unmarked_timing(covers.all_scripts()), [])
 
     def test_the_includes_have_no_covers_line(self):
         # An include runs as part of the scripts that include it; a covers line there would read as a script's.

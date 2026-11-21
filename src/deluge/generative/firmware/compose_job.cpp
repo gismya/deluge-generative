@@ -315,14 +315,7 @@ private:
 		return JobOutcome::Done;
 	}
 
-	bool reserveFree() {
-#if ENABLE_SYSEX_TEST
-		if (TestPort::composeReserveHeld()) {
-			return false;
-		}
-#endif
-		return freeSdram(kSdramReserveBytes) >= kSdramReserveBytes;
-	}
+	static bool reserveFree() { return sdramReserveFree(); }
 
 #if ENABLE_SYSEX_TEST
 	/// Test hook: while the test port holds Compose ("hold compose"), the build waits here after its first bar, so a
@@ -403,6 +396,15 @@ private:
 ComposeJob job;
 
 } // namespace
+
+bool sdramReserveFree() {
+#if ENABLE_SYSEX_TEST
+	if (TestPort::composeReserveHeld()) {
+		return false;
+	}
+#endif
+	return freeSdram(kSdramReserveBytes) >= kSdramReserveBytes;
+}
 
 int32_t composeTooLong(const Recipe& recipe, int32_t lengthSeconds) {
 	constexpr int64_t kRoom = kEmptyDelugeFreeBytes - kSdramReserveBytes;

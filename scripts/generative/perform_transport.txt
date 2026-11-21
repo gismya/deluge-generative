@@ -127,9 +127,10 @@ wait 300
 encoder 2 1
 expect event /^gen_tempo_popup .* EXT$/
 # The tempo it reads off the host's clock is measured against delugemu's audio clock, which jitters under host load
-# (118-123 over a minute). Each bar's reading is logged only when it changes, so the script waits for one within
-# 1 BPM: the readings scatter around the master's tempo.
-expect event /^gen_ext_tempo bpm=(119|120|121)$/ within=10
+# (118-123 over a minute, further at load 15+). Each bar's reading is logged only when it changes, so on the Deluge the
+# script waits for one within 1 BPM: the readings scatter around the master's tempo. delugemu checks only that a
+# reading comes (hardware_only, #417).
+hardware_only expect event /^gen_ext_tempo bpm=(119|120|121)$/ within=10
 # A mid-play song position pointer, 1 beat in: note-offs, then silence to the next master bar line, 12 steps on
 midi f2 04 00
 expect event gen_jump spp master=96 to_line=288

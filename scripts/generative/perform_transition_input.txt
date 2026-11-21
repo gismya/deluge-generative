@@ -96,8 +96,8 @@ expect event gen_transition start style=0 within=60
 # gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop. culled= names the last
 # culled voice's part (- with none; outgoing, other for a Sound outside both rosters, freed once its part's Output
 # is freed)
-expect event gen_h16 culls=0 culled=- within=20
-expect event gen_h16 culls=0 culled=- within=20
+hardware_only expect event gen_h16 culls=0 culled=- within=20
+hardware_only expect event gen_h16 culls=0 culled=- within=20
 
 # ---- LEAVE while a preload runs cancels it; the incoming Outputs go with Perform's song ----
 hold preload
@@ -112,6 +112,11 @@ wait 50
 button SELECT_ENC up
 expect event gen_transition_preload_held within=10
 include perform_hold_back.txt
+# NOTHING, the option before CANCEL (no Capture), one detent at a time (perform_leave.txt says why)
+encoder 3 1
+encoder 3 1
+encoder 3 1
+encoder 3 -1
 button 4 3 down
 wait 50
 button 4 3 up

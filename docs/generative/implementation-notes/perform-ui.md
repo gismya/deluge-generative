@@ -132,7 +132,9 @@ otherwise.
   without the pack. The lane browser tries the palette folder with no default first, then the top folder.
 - The lane browser previews through stock's preview voice (`AudioEngine::previewSample()`), at the lane's volume from
   `previewVolumeFor()` (F20, shared with stock's sample browser), reading the row's NoteRow param manager and the
-  Kit clip's. `AudioEngine::stopAnyPreviewing()` on every move, folder change and close.
+  Kit clip's. `AudioEngine::stopAnyPreviewing()` on every move, folder change and close. Presets preview through
+  `firmware::presetPreview` (#443, see [firmware](firmware.md)): the browser's `graphicsRoutine()` services it and stops
+  it on a start, and `PerformView::focusRegained()` stops it too, for a close that didn't go through `closeBrowser()`.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.

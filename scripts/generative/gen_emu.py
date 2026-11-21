@@ -11,7 +11,7 @@ smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retryin
          SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
          plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
          of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
-         changing for a second), and checks that PLAY stops and that holding BACK, then LEAVE, leaves. Functional
+         changing for a second), and checks that PLAY stops and that holding BACK, then NOTHING, leaves. Functional
          only: no audio hashes. Then runs the leak check below (skip it with --no-leak) and reports both: one
          failing doesn't hide the other.
 
@@ -1192,8 +1192,12 @@ def smoke(args):
         check_perform_plays(emu, seconds, check)
         emu.tap("PLAY")
         check("PLAY stops", not emu.led("PLAY"))
-        emu.tap("BACK", hold_ms=700)  # held: LEAVE PERFORM? (spec §13.8)
-        emu.tap("SELECT_ENC")  # LEAVE
+        emu.tap("BACK", hold_ms=700)  # held: the leave menu (spec §13.8)
+        # One unmarked piece played: LEAVE, KEEP: LAST, NOTHING, CANCEL. One detent on to NOTHING (no Capture). Not
+        # past the end and back: in delugemu a turn back after the menu's end was lost.
+        emu.s.encoder(3, 1)
+        emu.wait(200)
+        emu.tap("SELECT_ENC")  # NOTHING: no Capture
         emu.card_quiet()
         check("BACK held, then LEAVE, leaves Perform", not emu.led("BACK"))
         emu.s.screenshot(os.path.join(args.out, "smoke-end.png"))
@@ -1272,7 +1276,7 @@ def golden(args):
                 [GOLDEN_SCRIPT],
                 out=lambda line: None if ": PASS " in line else log(line),
             )
-        _, script_failed, script_total, error = results[0]
+        _, script_failed, script_total, error, _ = results[0]
         check(
             f"golden_compose.txt: {script_total} expects, {script_failed} failed"
             + (f" ({error})" if error else ""),

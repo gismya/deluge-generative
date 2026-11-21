@@ -22,7 +22,7 @@ from test_fat_image import make_fat32
 
 class FakeEmu:
     def __init__(self, link):
-        self.port = deluge_probe.TestPort(link)
+        self.port = deluge_probe.TestPort(link, on_hardware=False)  # as EmuRun's
 
     def alive(self):
         return True
@@ -96,6 +96,60 @@ class Stopped(unittest.TestCase):
         self.assertIn("x.txt: ERROR line 2: unknown command 'no'", out)
         self.assertIn("x.txt: the last 1 events before it stopped, of any kind:", out)
         self.assertIn("x.txt: last 1.0001: gen_left delete_us=300", out)
+
+
+class HardwareOnly(unittest.TestCase):
+    SCRIPT = (
+        "start_state\n"
+        "hardware_only expect no_event gen_h16 culls=0 within=0.1\n"
+        "hardware_only expect bpm=120\n"
+    )
+
+    def test_each_scripts_skips_are_counted_in_its_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write(self.SCRIPT)
+            out = []
+            results = test_port_emu.run_scripts(
+                FakeEmu(FakeDeluge()), [script, script], out=out.append
+            )
+        self.assertEqual(results[1][1:], (0, 1, None, 2))
+        self.assertIn("x.txt: 1 expects, 0 failed, 2 hardware-only skipped", out)
+
+    def test_the_summary_line_counts_them_for_check_all(self):
+        class Booted:
+            def __init__(self, *args, **kw):
+                pass
+
+            def __enter__(self):
+                return FakeEmu(FakeDeluge())
+
+            def __exit__(self, *exc):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            script = os.path.join(tmp, "x.txt")
+            with open(script, "w") as fh:
+                fh.write(self.SCRIPT)
+            elf = os.path.join(tmp, "deluge.elf")
+            open(elf, "w").close()
+            argv = ["test_port_emu.py", "--out", tmp, "--elf", elf, "--script", script]
+            argv.append("--no-protocol-checks")
+            printed = io.StringIO()
+            with (
+                mock.patch.object(test_port_emu, "EmuRun", Booted),
+                mock.patch.object(sys, "argv", argv),
+                contextlib.redirect_stdout(printed),
+            ):
+                self.assertEqual(test_port_emu.main(), 0)
+        self.assertIn(
+            f"1 checks, 0 failed, 2 hardware-only skipped; logs in {tmp}",
+            printed.getvalue(),
+        )
+        self.assertIn(
+            "  x.txt: 1 expects, 0 failed, 2 hardware-only skipped", printed.getvalue()
+        )
 
 
 class ScriptsCard(unittest.TestCase):

@@ -15,6 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "generative/firmware/preset_preview.h"
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::firmware::keepFeedbackRunning;
@@ -83,6 +84,9 @@ void PerformView::focusRegained() {
 	releaseEndPad();
 	backDown_ = false;
 	xDown_ = false;
+	// No browser is open over Perform now, so nothing previews (spec §13.3): the browser stops its preview as it
+	// closes, and this catches a close that didn't go through it.
+	deluge::generative::firmware::presetPreview.stop();
 	releaseLostHolds();
 	// The song's current Clip is set only while the sound editor is open on a part (openSoundEditor()).
 	if (currentSong->getCurrentClip() != nullptr) {
@@ -406,7 +410,7 @@ ActionResult PerformView::exitUI() {
 	return ActionResult::DEALT_WITH;
 }
 
-void PerformView::leave() {
+void PerformView::leave(deluge::generative::perform::LeaveOption keep) {
 	// Focus is lost on exit (spec §13.1), stopped or not: the knobs leave the part's clip before its song goes.
 	dropFocus();
 	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
@@ -418,16 +422,18 @@ void PerformView::leave() {
 	// The marks go with the log at the teardown: RECORD goes dark now, as stock leaves it outside Perform.
 	indicator_leds::setLedState(IndicatorLED::RECORD, false);
 	generativeModalUI.open(performAdapter.leaveJob());
-	performAdapter.leave([](deluge::generative::JobOutcome outcome) {
-		generativeModalUI.jobEnded();
-		if (outcome != deluge::generative::JobOutcome::Done) {
-			// The teardown's task couldn't start: Perform carries on.
-			indicator_leds::setLedState(IndicatorLED::BACK, true);
-			display->displayError(Error::UNSPECIFIED);
-			return;
-		}
-		TEST_EVENT("gen_perform_left");
-	});
+	performAdapter.leave(
+	    [](deluge::generative::JobOutcome outcome) {
+		    generativeModalUI.jobEnded();
+		    if (outcome != deluge::generative::JobOutcome::Done) {
+			    // The teardown's task couldn't start: Perform carries on.
+			    indicator_leds::setLedState(IndicatorLED::BACK, true);
+			    display->displayError(Error::UNSPECIFIED);
+			    return;
+		    }
+		    TEST_EVENT("gen_perform_left");
+	    },
+	    keep);
 }
 
 namespace {

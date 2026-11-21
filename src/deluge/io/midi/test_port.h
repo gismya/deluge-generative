@@ -81,10 +81,11 @@ void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 bool entryHeld();
 void releaseEntry();
 /// Test hooks for the Compose build (spec §14.5, §15.9), each from a "hold <name>" line until "release <name>":
-/// "compose" makes the build wait after its first bar, so a script can press BACK on a private song with notes in it;
+/// "compose" makes the build (a Compose build, or Capture's on leave) wait after its first bar, so a script can press
+/// BACK on a private song with notes in it;
 /// "compose_alone" makes the size estimate fit only alone, so the build frees the player's song first;
-/// "compose_reserve" makes the build find the SDRAM reserve reached after its first bar; "compose_roll" makes it wait
-/// after a genre roll, so a script can press BACK there.
+/// "compose_reserve" makes the build (Compose's or Capture's) find the SDRAM reserve reached after its first bar;
+/// "compose_roll" makes it wait after a genre roll, so a script can press BACK there.
 bool composeHeld();
 bool composeAloneHeld();
 bool composeRollHeld();
@@ -103,6 +104,10 @@ bool rampsStressed();
 /// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
 /// can't fault its card, and on the Deluge pulling it would end the session.
 bool cardErrorHeld();
+/// Test hook for the preset preview (spec §13.3): true from a "hold preset_preview" line until "release
+/// preset_preview". Each preview build waits at its start, yielding, until it is cancelled or the hold is released, so
+/// a script's SELECT lands while one builds.
+bool presetPreviewHeld();
 /// Test hook for sound re-rolls, transitions and the Compose screen's card edits: true from a "hold preload" line until
 /// "release preload" or releasePreload(). The job waits at its start, yielding, so a script can press BACK while it
 /// runs instead of racing it.

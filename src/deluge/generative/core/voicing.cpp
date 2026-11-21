@@ -100,7 +100,7 @@ GEN_STEP_CODE Voicing leadVoicing(const Chord& chord, const Key& key, const Regi
 }
 
 GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Register& reg,
-                                  std::span<const uint8_t> previous) {
+                                  std::span<const uint8_t> previous, bool holdShared) {
 	const int32_t tonic = tonicNote(reg, key.root);
 	const int32_t low = tonic + reg.spanLow;
 	const int32_t high = tonic + reg.spanHigh;
@@ -141,6 +141,7 @@ GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Regi
 	// (a note left over moves nothing, so it must not stand in for a voice that is free).
 	const int32_t paired = std::min(notes, voices);
 	int32_t least = INT32_MAX;
+	int32_t mostHeld = -1;
 	for (const auto& slot : kPairings) {
 		int32_t taking = 0;
 		for (int32_t i = 0; i < notes; i++) {
@@ -151,11 +152,15 @@ GEN_STEP_CODE Voicing openVoicing(const Chord& chord, const Key& key, const Regi
 		}
 		// A note left over moves no voice: it goes to its first-voicing spot.
 		int32_t moved = 0;
+		int32_t held = 0;
 		for (int32_t i = 0; i < notes; i++) {
 			moved += slot[i] < voices ? moves[i][slot[i]] : 0;
+			held += slot[i] < voices && moves[i][slot[i]] == 0 ? 1 : 0;
 		}
-		if (moved < least) {
+		// On a tie, holding a voice in place beats moving a shared note an octave: it stays and doesn't strike.
+		if (moved < least || (holdShared && moved == least && held > mostHeld)) {
 			least = moved;
+			mostHeld = held;
 			for (int32_t i = 0; i < notes; i++) {
 				out.pitch[i] = clampMidi(slot[i] < voices ? to[i][slot[i]] : spot[i]);
 			}

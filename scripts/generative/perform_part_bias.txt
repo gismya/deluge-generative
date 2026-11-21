@@ -45,12 +45,13 @@ button KEYBOARD up
 expect event gen_page KEYBOARD
 expect event gen_keyboard E=5/5 D=5/5 C=5/5 M=5/5 phrase=- fill=0 part=1
 
-# ---- A tap on Energy's 36 row: ACID's bias +11 (704 units), the Recipe's at once; the centre stays 25 ----
+# ---- A tap on Energy's 36 row: ACID's bias 939 units (the blend reaches +11 with about 4/3 of it), the Recipe's at
+# once; the centre stays 25 ----
 pad 1 5 down
 wait 50
 pad 1 5 up
 expect event gen_macro_pad macro=0 hold units=2304 part=1
-expect event gen_macro_pad macro=0 keep units=704 part=1
+expect event gen_macro_pad macro=0 keep units=939 part=1
 expect event gen_keyboard E=6/5 D=5/5 C=5/5 M=5/5 phrase=- fill=0 part=1
 expect no_event gen_macropage within=1
 
@@ -63,7 +64,7 @@ expect event gen_keyboard E=5/5 D=5/5
 pad 1 5 down
 wait 50
 pad 1 5 up
-expect event gen_macro_pad macro=0 keep units=704 part=1
+expect event gen_macro_pad macro=0 keep units=939 part=1
 
 # ---- SHIFT+PLAY: the piece plays ACID's bias from its start ----
 button SHIFT down
@@ -84,13 +85,12 @@ wait 50
 button F8 up
 expect event gen_rings macros ok upper=92 lower=64
 encoder 4 1
-# The rings are drawn each frame and the bias lands from the tick, in either order: the ring is checked here, the
-# landing on the way back.
-expect event gen_bias_knob part=1 macro=0 bias=729
-expect event gen_rings macros ok upper=93 lower=64
+# The bias lands from the tick, checked on the way back.
+# (One detent moves the bias 25 units, which the blend turns into 19: the ring stays on 92.)
+expect event gen_bias_knob part=1 macro=0 bias=964
 encoder 4 -1
-expect event gen_bias_knob part=1 macro=0 bias=704
-expect event gen_bias_landed part=1 macro=0 units=704 step= within=15
+expect event gen_bias_knob part=1 macro=0 bias=939
+expect event gen_bias_landed part=1 macro=0 units=939 step= within=15
 
 # ---- A tap on Density's 36 row: ACID plays more, at its own Density, through an H1 window (the step's cost with a
 # part biased: --events 'gen_h1 |gen_h16') ----
@@ -98,7 +98,7 @@ pad 3 5 down
 wait 50
 pad 3 5 up
 # The bias lands from the press, so its gen_bias_landed can come before the release's event.
-expect event gen_macro_pad macro=1 keep units=704 part=1
+expect event gen_macro_pad macro=1 keep units=939 part=1
 # On the Deluge, report its gen_h1 mean_ns and gen_h16 culls= (0 there); delugemu under load culls, so no expect.
 expect event gen_h1 steps= within=20
 
@@ -109,8 +109,8 @@ expect event gen_bias_landed part=1 macro=1 units=3200 step= within=15
 expect event /^gen_keyboard .*D=8h/5/
 wait 1500
 pad 2 7 up
-expect event gen_macro_pad macro=1 spring units=704 part=1
-expect event gen_bias_landed part=1 macro=1 units=704 step= within=15
+expect event gen_macro_pad macro=1 spring units=939 part=1
+expect event gen_bias_landed part=1 macro=1 units=939 step= within=15
 
 # ---- Unlocked, the faders are the Recipe level's again: a tap moves the centre, and no bias ----
 button AFFECT_ENTIRE down
