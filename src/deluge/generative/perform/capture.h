@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "generative/perform/clip_page.h"
+#include "generative/perform/genre_menu.h"
 #include "generative/perform/queue_text.h"
 #include <cstdint>
 
@@ -77,5 +79,46 @@ struct CaptureRow {
 	char value[8] = {};
 };
 void captureRow(const SteeringLog& log, int32_t piece, CaptureRow& out);
+
+// ---- Leaving (spec §13.8, §17.7) ----
+
+/// A leave menu option, as it shows.
+enum class LeaveOption : uint8_t {
+	MarkedAndLast, ///< MARKED + LAST: every marked piece and the last one
+	MarkedOnly,    ///< MARKED ONLY: the last piece, unmarked, goes
+	Marked,        ///< MARKED: the last piece is itself marked
+	Last,          ///< LAST: no marks
+	Nothing,
+	Leave,  ///< LEAVE: no piece was played
+	Cancel, ///< back to Perform, which never stopped
+};
+
+/// The leave menu (spec §13.8): its title and options, from the log as it is when BACK is held.
+struct LeaveMenu {
+	static constexpr int32_t kMaxOptions = 4;
+	static constexpr int32_t kTitleChars = 16;
+	char title[kTitleChars + 1] = {};
+	LeaveOption options[kMaxOptions] = {};
+	int32_t count = 0;
+};
+void leaveMenu(const SteeringLog& log, LeaveMenu& out);
+
+/// Whether `option` keeps piece `piece` (spec §17.7): the marked pieces and, unless MARKED ONLY, the last piece. A
+/// piece with nothing logged (its header cut, or stopped before its first step) builds nothing and is never kept.
+/// An earlier piece unmarked in CAPTURE ▸ is still in the log until the next piece begins: never kept.
+[[nodiscard]] bool keeps(const SteeringLog& log, LeaveOption option, int32_t piece);
+/// The pieces `option` keeps, in set order: the first after `after` (-1 for the first), or -1 past the last.
+[[nodiscard]] int32_t nextKept(const SteeringLog& log, LeaveOption option, int32_t after);
+
+/// A Capture song's name (spec §17.7): Compose's (`GEN <GENRE> <seed code>`) plus ` LIVE`, and for the second song
+/// of a split piece on (`song` from 1) its number: `… LIVE 2`.
+constexpr int32_t kCaptureNameChars = 4 + kMaxGenreOledName + 1 + kSeedCodeChars + 5 + 4;
+void captureSongName(const Genre& genre, uint32_t seed, int32_t song, char (&out)[kCaptureNameChars + 1]);
+
+/// The Capture screen's title (spec §17.7): `BUILDING 2 OF 3`, `SAVING 2 OF 3`; and after a failure `1 OF 3 SAVED`.
+/// It counts songs: a split piece adds one as it splits.
+constexpr int32_t kCaptureTitleChars = 21;
+enum class CaptureStage : uint8_t { Building, Saving, Saved };
+void captureTitle(CaptureStage stage, int32_t song, int32_t songs, char (&out)[kCaptureTitleChars + 1]);
 
 } // namespace deluge::generative::perform
