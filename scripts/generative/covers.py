@@ -145,6 +145,7 @@ BUILDERS = {
         "src/deluge/generative/firmware/sound_swaps.cpp",
         "src/deluge/generative/firmware/transitions.cpp",
     ),
+    "gen_mark": ("src/deluge/generative/perform/capture.*",),  # the MarkOutcome's name
     "gen_menu": (),
     "gen_menu_cancel_change": (),
     "gen_octave_landed": (),
@@ -172,6 +173,9 @@ BUILDERS = {
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
     "gen_restart": (),  # as_it_is or as_it_began
     "gen_restart_preload": (),  # how AS IT BEGAN's preload ended
+    "gen_record_led": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the RecordLed's name
     "gen_restart_press": (),  # what the press did
     "gen_retire_referenced": (),
     "gen_rings": (),

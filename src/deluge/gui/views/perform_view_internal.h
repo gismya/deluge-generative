@@ -41,6 +41,7 @@
 #include "gui/menu_item/colour.h"
 #include "gui/menu_item/generative/perform_lanes.h"
 #include "gui/menu_item/generative/perform_menu.h"
+#include "gui/ui/audio_recorder.h"
 #include "gui/ui/browser/perform_sound_browser.h"
 #include "gui/ui/generative_modal.h"
 #include "gui/ui/generative_popups.h"

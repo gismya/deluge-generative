@@ -119,8 +119,7 @@ void PerformAdapter::reportLog(bool stopped) const {
 		return;
 	}
 	const SteeringLog::Piece piece = log_.piece(log_.pieces() - 1);
-	int32_t records = 0;
-	piece.forEachRecord([&](const LogRecord&) { records++; });
+	const int32_t records = piece.recordCount(); // counted as written: no walk over the piece in the tick
 	const auto pieces = static_cast<long>(log_.pieces());
 	const auto used = static_cast<long>(log_.used());
 	const auto bytes = static_cast<long>(piece.bytes());
@@ -384,6 +383,28 @@ void PerformAdapter::pressRestart() {
 	}
 	display->displayPopup(
 	    l10n::get(cancels ? l10n::String::STRING_FOR_RESTART_CANCELLED : l10n::String::STRING_FOR_RESTART));
+}
+
+perform::MarkOutcome PerformAdapter::pressMark() {
+	return pressMark(log_.current());
+}
+
+perform::MarkOutcome PerformAdapter::pressMark(int32_t piece) {
+	using perform::MarkOutcome;
+	if (!active() || leaving()) {
+		return MarkOutcome::NoPiece;
+	}
+	const MarkOutcome outcome = perform::pressMark(log_, piece);
+	static constexpr const char* kNames[] = {"marked", "unmarked", "log_full", "no_piece"};
+	TEST_EVENT("gen_mark %s piece=%ld current=%ld marks=%ld", kNames[static_cast<int32_t>(outcome)],
+	           static_cast<long>(piece), static_cast<long>(log_.current()), static_cast<long>(log_.markedPieces()));
+	if (outcome == MarkOutcome::LogFull) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_LOG_FULL));
+	}
+	else if (outcome == MarkOutcome::NoPiece) {
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_NOTHING_PLAYED));
+	}
+	return outcome;
 }
 
 void PerformAdapter::startPlayback(bool groove) {

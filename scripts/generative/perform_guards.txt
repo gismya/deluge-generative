@@ -8,6 +8,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/perform_adapter.cpp
 # covers: src/deluge/generative/firmware/restart_began.cpp
+# covers: src/deluge/playback/playback_handler.cpp src/deluge/generative/perform/capture.*
 start_state
 include perform_open.txt
 
@@ -47,10 +48,17 @@ expect resampling=false
 expect recording=off
 expect event gen_section INTRO 0 within=20
 
-# RECORD is a no-op until Capture (M4): recording stays off, so no automation lands in Perform's clips (F9)
+# RECORD marks the piece for Capture (spec §17.4): recording stays off, so no automation lands in Perform's clips (F9).
+# Pressed again, it unmarks it.
 button RECORD down
 wait 50
 button RECORD up
+expect event gen_mark marked piece=0 current=0 marks=1 within=5
+expect recording=off
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark unmarked piece=0 current=0 marks=0 within=5
 expect recording=off
 expect resampling=false
 expect playing=true

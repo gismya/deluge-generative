@@ -8,6 +8,8 @@
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/context_menu/generative.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/playback/playback_handler.cpp src/deluge/generative/perform/capture.*
+# covers: src/deluge/generative/firmware/perform_adapter.cpp
 start_state
 expect playing=false
 expect ui=instrument_clip
@@ -41,9 +43,14 @@ midi 8e 3d 00
 expect playing=true
 expect event gen_section INTRO 0 within=20
 
-# MIDI RECORD is a no-op until Capture (M4)
+# MIDI RECORD marks the piece for Capture, as the panel's RECORD does (spec §13.7, §17.4), and again unmarks it
 midi 9e 3e 64
 midi 8e 3e 00
+expect event gen_mark marked piece=0 current=0 marks=1 within=5
+expect recording=off
+midi 9e 3e 64
+midi 8e 3e 00
+expect event gen_mark unmarked piece=0 current=0 marks=0 within=5
 expect recording=off
 expect playing=true
 

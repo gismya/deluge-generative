@@ -86,26 +86,24 @@ GEN_STEP_CODE int32_t encodeCommand(const Command& command, uint32_t delta, uint
 // ---- Pieces ----
 
 GEN_STEP_CODE SteeringLog::PieceInfo& SteeringLog::newest() const {
-	return *reinterpret_cast<PieceInfo*>(buffer_ + newest_);
+	return infoAt(newest_);
 }
 
 void SteeringLog::beginPiece(const PieceStart& start) {
-	if (pieces_ > 0) {
-		PieceInfo& last = newest();
-		if (last.ended == PieceEnd::Playing) {
-			endPiece(lastStep_ + 1, PieceEnd::Stopped);
-		}
-		if (!last.marked) {
-			used_ = newest_; // thrown away (spec §17.3)
-			pieces_--;
-		}
+	if (pieces_ > 0 && current_ && newest().ended == PieceEnd::Playing) {
+		endPiece(lastStep_ + 1, PieceEnd::Stopped);
 	}
+	dropUnmarked(); // the last piece, and any unmarked in the CAPTURE menu (spec §17.3, §17.4)
+	opened_++;
 	open_ = false;
 	newestWithHeader_ = -1;
+	current_ = false;
 	const int32_t at = alignUp(used_);
 	if (at + static_cast<int32_t>(sizeof(PieceInfo)) > room()) {
-		newest_ = pieces_ > 0 ? offsetOf(pieces_ - 1) : 0;
-		cut_ = true; // no room even for its opening: nothing logs, and marks are refused
+		// No room even for its opening: nothing logs, and marks are refused. A dropped piece's room, still to close,
+		// doesn't open it later: its step 0 and the steps since would be missing, so replay couldn't build it.
+		newest_ = all_ > 0 ? lastAt() : 0;
+		cut_ = true;
 		return;
 	}
 	newest_ = at;
@@ -121,8 +119,12 @@ void SteeringLog::beginPiece(const PieceStart& start) {
 	used_ = at + static_cast<int32_t>(sizeof(PieceInfo));
 	pieces_++;
 	newestWithHeader_ = pieces_ - 1;
+	all_++;
 	open_ = true;
 	cut_ = false;
+	current_ = true;
+	markedAtCut_ = false;
+	recordsFrom_ = 0;
 	inRecords_ = false;
 	lastStep_ = 0;
 	stepBefore_ = 0;
@@ -141,7 +143,7 @@ uint8_t* SteeringLog::writeHeader(uint8_t tag, const void* data, int32_t length)
 		cutHeader();
 		return nullptr;
 	}
-	uint8_t* at = buffer_ + used_;
+	uint8_t* at = buffer_ + used_; // past any move's cursor: where it stands
 	at[0] = tag;
 	at[1] = static_cast<uint8_t>(length);
 	at[2] = static_cast<uint8_t>(length >> 8);
@@ -185,16 +187,153 @@ void SteeringLog::endPiece(int32_t step, PieceEnd why) {
 	open_ = false;
 }
 
-void SteeringLog::mark(bool on) {
-	if (pieces_ > 0) {
-		newest().marked = on;
+bool SteeringLog::mark(bool on) {
+	return markPiece(current(), on);
+}
+
+bool SteeringLog::markPiece(int32_t i, bool on) {
+	if (i < 0 || i >= pieces_) {
+		return false;
 	}
+	if (i == current() && on && cut_ && !markedAtCut_) {
+		return false; // a full log refuses a new mark (spec §17.2); one the cut found stays the player's to put back
+	}
+	infoAt(offsetOf(i)).marked = on;
+	return true;
+}
+
+int32_t SteeringLog::markedPieces() const {
+	int32_t marked = 0;
+	for (int32_t at = 0, p = 0; p < all_; p++, at = nextAt(at)) {
+		marked += !droppedAt(at) && infoAt(at).marked ? 1 : 0;
+	}
+	return marked;
+}
+
+int32_t SteeringLog::droppedBytes() const {
+	int32_t bytes = 0;
+	for (int32_t at = 0, p = 0; p < all_; p++) {
+		const int32_t next = nextAt(at);
+		bytes += droppedAt(at) ? next - at : 0;
+		at = next;
+	}
+	return bytes;
+}
+
+int32_t SteeringLog::lastAt() const {
+	int32_t at = 0;
+	for (int32_t p = 0; p < all_ - 1; p++) {
+		at = nextAt(at);
+	}
+	return at;
+}
+
+void SteeringLog::truncate(int32_t at) {
+	used_ = at;
+	if (gapAt_ >= 0 && at <= gapAt_) {
+		gapAt_ = -1; // the piece being closed went too: nothing past it is kept
+	}
+	src_ = std::min(src_, used_);
+}
+
+void SteeringLog::dropUnmarked() {
+	// Pieces only ever end before the next begins, so every piece here has ended: none is being written. Those at the
+	// end go at once (nothing after them moves); one before a kept piece is only flagged, and compactStep() closes its
+	// room over the steps that follow, so the step that opens a piece never moves the log (spec §17.4, §20).
+	while (all_ > 0) {
+		const int32_t at = lastAt();
+		if (!droppedAt(at) && infoAt(at).marked) {
+			break;
+		}
+		if (droppedAt(at)) {
+			dropped_ -= at == gapAt_ ? 0 : 1;
+		}
+		else {
+			pieces_--;
+		}
+		all_--;
+		truncate(at);
+	}
+	for (int32_t at = 0, p = 0; p < all_; p++, at = nextAt(at)) {
+		if (!droppedAt(at) && !infoAt(at).marked) {
+			infoAt(at).dropped = true;
+			pieces_--;
+			dropped_++;
+		}
+	}
+	newest_ = all_ > 0 ? lastAt() : 0;
+}
+
+int32_t SteeringLog::openingBytes() {
+	return static_cast<int32_t>(sizeof(PieceInfo));
+}
+
+int32_t SteeringLog::compactStep(int32_t maxBytes) {
+	int32_t moved = 0;
+	while (moved < maxBytes && (gapAt_ >= 0 || startGap())) {
+		int32_t n = std::min(maxBytes - moved, used_ - src_);
+		// Never stop inside a piece's opening: it is read whole, from one place (infoAt()). The first piece whose
+		// opening isn't all moved yet starts at or past the cursor; the chunk then takes in every opening that starts
+		// before its end, however many small pieces it reaches (#439 R2).
+		int32_t at = gapAt_ + gapBytes_;
+		while (at < used_ && at + static_cast<int32_t>(sizeof(PieceInfo)) <= src_) {
+			at = nextAt(at);
+		}
+		while (at < used_ && at < src_ + n) {
+			n = std::max(n, at + static_cast<int32_t>(sizeof(PieceInfo)) - src_);
+			at = nextAt(at); // at or past the cursor: not moved yet, read where it stands
+		}
+		n = std::min(n, used_ - src_);
+		if (n > 0) {
+			// Down by the gap: the source is at or past the cursor, so where it stands, and the target below it.
+			std::memmove(buffer_ + src_ - gapBytes_, buffer_ + src_, static_cast<size_t>(n));
+			src_ += n;
+			moved += n;
+		}
+		if (src_ == used_) {
+			finishGap();
+		}
+	}
+	return moved;
+}
+
+bool SteeringLog::startGap() {
+	if (dropped_ == 0) {
+		return false;
+	}
+	for (int32_t at = 0, p = 0; p < all_; p++, at = nextAt(at)) {
+		if (infoAt(at).dropped) {
+			gapBytes_ = nextAt(at) - at; // aligned, so the pieces after it stay aligned
+			gapAt_ = at;
+			src_ = at + gapBytes_;
+			dropped_--;
+			return true;
+		}
+	}
+	dropped_ = 0;
+	return false;
+}
+
+void SteeringLog::finishGap() {
+	// Everything past the gap now sits gapBytes_ lower: the offsets that point past it follow.
+	const int32_t gap = gapBytes_;
+	const int32_t from = gapAt_;
+	gapAt_ = -1;
+	used_ -= gap;
+	if (newest_ > from) {
+		newest_ -= gap;
+	}
+	if (stepFrom_ > from) {
+		stepFrom_ -= gap;
+	}
+	all_--;
 }
 
 void SteeringLog::cutHeader() {
 	// A piece with half a snapshot can't be built: none of the header stays (spec §17.2).
 	PieceInfo& info = newest();
-	used_ = newest_ + static_cast<int32_t>(sizeof(PieceInfo));
+	markedAtCut_ = info.marked;
+	truncate(newest_ + static_cast<int32_t>(sizeof(PieceInfo)));
 	info.headerBytes = sizeof(PieceInfo);
 	info.bytes = used_ - newest_;
 	info.cutAt = 0;
@@ -206,7 +345,9 @@ GEN_STEP_CODE void SteeringLog::cut(int32_t step) {
 	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2). The
 	// header stays: stepFrom_ is past it before the first record.
 	PieceInfo& info = newest();
-	used_ = stepFrom_;
+	markedAtCut_ = info.marked;
+	truncate(stepFrom_);
+	info.records = recordsFrom_;
 	lastStep_ = stepBefore_;
 	// A swap dropped on that step whose SetSound landed before it stays said, on the step before.
 	for (int32_t p = 0; p < kMaxParts; p++) {
@@ -227,6 +368,7 @@ GEN_STEP_CODE void SteeringLog::writeDropped(uint32_t delta, uint8_t part) {
 	*at++ = part;
 	used_ = static_cast<int32_t>(at - buffer_);
 	newest().bytes = used_ - newest_;
+	newest().records++;
 }
 
 GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t length) {
@@ -236,6 +378,7 @@ GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t
 	if (!inRecords_ || step != lastStep_) {
 		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
+		recordsFrom_ = newest().records;
 		dropsOnStep_ = 0;
 	}
 	if (used_ + length > room()) {
@@ -245,6 +388,7 @@ GEN_STEP_CODE bool SteeringLog::write(int32_t step, const uint8_t* data, int32_t
 	std::memcpy(buffer_ + used_, data, static_cast<size_t>(length));
 	used_ += length;
 	newest().bytes = used_ - newest_;
+	newest().records++;
 	inRecords_ = true;
 	lastStep_ = step;
 	return true;
@@ -324,12 +468,14 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 		if (!cut_) {
 			info.cutAt = lastStep_ + 1;
 			cut_ = true;
+			markedAtCut_ = info.marked;
 		}
 		return false;
 	}
 	if (stamp != lastStep_) {
 		stepBefore_ = lastStep_;
 		stepFrom_ = used_;
+		recordsFrom_ = info.records;
 		dropsOnStep_ = 0;
 	}
 	writeDropped(static_cast<uint32_t>(stamp - lastStep_), part);
@@ -345,14 +491,19 @@ bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 
 int32_t SteeringLog::offsetOf(int32_t i) const {
 	int32_t at = 0;
-	for (int32_t p = 0; p < i; p++) {
-		at = alignUp(at + reinterpret_cast<const PieceInfo*>(buffer_ + at)->bytes);
+	for (int32_t p = 0, n = 0; n < all_; n++, at = nextAt(at)) {
+		if (!droppedAt(at)) {
+			if (p == i) {
+				return at;
+			}
+			p++;
+		}
 	}
-	return at;
+	return at; // past the last piece: callers ask for one of pieces()
 }
 
 SteeringLog::Piece SteeringLog::piece(int32_t i) const {
-	return Piece(buffer_ + offsetOf(i));
+	return Piece(buffer_ + physical(offsetOf(i)));
 }
 
 void SteeringLog::clear() {
@@ -360,8 +511,14 @@ void SteeringLog::clear() {
 	pieces_ = 0;
 	newest_ = 0;
 	newestWithHeader_ = -1;
+	all_ = 0;
+	dropped_ = 0;
+	gapAt_ = -1;
+	src_ = 0;
 	open_ = false;
 	cut_ = false;
+	current_ = false;
+	markedAtCut_ = false;
 	inRecords_ = false;
 }
 
@@ -379,6 +536,9 @@ int32_t SteeringLog::Piece::cutAt() const {
 }
 bool SteeringLog::Piece::marked() const {
 	return reinterpret_cast<const PieceInfo*>(base_)->marked;
+}
+int32_t SteeringLog::Piece::recordCount() const {
+	return reinterpret_cast<const PieceInfo*>(base_)->records;
 }
 int32_t SteeringLog::Piece::bytes() const {
 	return reinterpret_cast<const PieceInfo*>(base_)->bytes;

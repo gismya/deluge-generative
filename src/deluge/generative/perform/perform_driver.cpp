@@ -218,6 +218,9 @@ void PerformDriver::decideDue(SteeringQueue& queue, NoteSink& sink) {
 		if (pieceDue_) {
 			openPiece(sink); // outside the decision's time: the snapshot reads every param (H1, spec §20)
 		}
+		else if (log_ != nullptr && log_->compacting()) {
+			sink.compactLog(*log_); // a dropped piece's room, a bounded part a step, never on the step a piece opens
+		}
 		int32_t soundsBefore[kMaxParts];
 		for (int32_t p = 0; p < kMaxParts; p++) {
 			soundsBefore[p] = generator_->soundLanded(p);
@@ -262,6 +265,7 @@ void PerformDriver::openPiece(NoteSink& sink) {
 	start.first = generator_->arc().first();
 	start.onDrop = generator_->arc().opensOnDrop();
 	start.held = generator_->arc().held();
+	sink.pieceOpening();
 	log_->beginPiece(start);
 	if (log_->logging()) {
 		sink.logPieceHeader(*log_);
