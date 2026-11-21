@@ -18,6 +18,10 @@
 # covers: src/deluge/generative/perform/grid_page.* src/deluge/generative/core/punch_ins.h
 # covers: src/deluge/generative/firmware/sidechain_pump.* src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/perform/sidebar.*
 start_state
 include perform_open.txt
 include perform_confirm.txt

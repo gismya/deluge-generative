@@ -70,7 +70,12 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
 		           static_cast<long>(units), static_cast<long>(part));
 		if (part >= 0) {
-			const int32_t bias = performAdapter.steering().heldBias(at.macro);
+			// The bias the press sets, clamped as the Recipe's: worked out here, not read back from the hold, which a
+			// full queue leaves stale.
+			deluge::generative::PartBiases pressed;
+			pressed.set(part, at.macro,
+			            deluge::generative::perform::faderBias(currentRecipe.recipe.macros[at.macro], units));
+			const int32_t bias = pressed.of(part, at.macro);
 			showBiasPopup(at.macro, deluge::generative::partBiased(currentRecipe.recipe.macros[at.macro], bias), bias);
 		}
 		else {
