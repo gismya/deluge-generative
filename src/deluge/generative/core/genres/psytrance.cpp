@@ -94,7 +94,7 @@ constexpr Pattern kLeadRiffs[] = {
     {"X..8..8...8..8..", "................", 0, 2},
     {"X.8.8.8.X.8.8.8.", "................", 0},
     {"X..8..8.X..8.88.X..8..8.X.8.8.8.", "................................", 0},
-    {"X.88.88.X.88.8.8", "...g............", 1},
+    {"X.88.88.X.88.8.8", "...g......g.....", 1},
     {"X..8.88..8.88.8.", "......g.....g...", 1},
     {"X888.888X888.8.8", ".g.g...g.g.g....", 2},
     {"X8.8X8.8X8.8X889X8.8X8.8X8.89898", ".g...g...g...g...g...g...g.....g", 2},
@@ -347,7 +347,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 2; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 3; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),

@@ -63,7 +63,7 @@ describe dub("Dub", $ {
 		expect(std::string(dubGenre.oledName)).to_equal(std::string("ROOTS DUB"));
 		expect(std::string(dubGenre.oledName).find("TECHNO")).to_equal(std::string::npos);
 		expect(dubGenre.parent == nullptr).to_be_true();
-		expect(dubGenre.version).to_equal(2);
+		expect(dubGenre.version).to_equal(3);
 		expect(findGenre("dub") == &dubGenre).to_be_true();
 		expect(partCount(dubGenre)).to_equal(5);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -78,6 +78,18 @@ describe dub("Dub", $ {
 		}
 		expect(rosterFits(dubGenre)).to_be_true();
 		expect(genreValid(dubGenre)).to_be_true();
+	});
+
+	it("ghosts steps 21 and 25 of its tier-2 Bass line, as notes/132.md meant (listening round 2, QM1)", _ {
+		int32_t lines = 0;
+		for (const Pattern& pattern : dubGenre.parts[kBassPart].pool) {
+			if (pattern.tier == 2) {
+				lines++;
+				expect(pattern.level[21] == VelocityLevel::Ghost).to_be_true();
+				expect(pattern.level[25] == VelocityLevel::Ghost).to_be_true();
+			}
+		}
+		expect(lines).to_equal(1);
 	});
 
 	it("plays 70–80 BPM in Minor alone, swing +10, in 8-bar phrases, every macro at 25", _ {
