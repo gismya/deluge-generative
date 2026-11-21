@@ -53,6 +53,7 @@ bool PerformView::opened() {
 #if ENABLE_SYSEX_TEST
 	shownRings_[0] = '\0';
 	shownKeyboard_[0] = '\0';
+	shownPunches_[0] = '\0';
 	shownFaders_[0] = '\0';
 	shownClip_[0] = '\0';
 	shownSections[0] = '\0';
