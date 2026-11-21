@@ -58,8 +58,15 @@ public:
 	/// §2.8): a phrase line passed on the decided side, a new roster plays (`rosters` counts them: its phrases count
 	/// from 0 again), or something queued, held, muted or soloed changed. Stopped (`piece` nullptr), the plan and the
 	/// queue are empty.
-	/// @return Whether it planned a piece's Arc (Generator::planArc(), the costly part).
-	bool refreshPlan(const Generator* piece, uint32_t rosters);
+	/// The costly part, the plan, goes `maxSteps` steps a call (ArcPlanner, #454): plan() keeps the last one done until
+	/// the new one is. A change while one is under way lets it finish and show, then plans again from the piece as it
+	/// is then, so a gold knob turned faster than a plan takes still moves the map. The queue is worked out at once. A
+	/// new roster or a stop empties the plan at once and starts again, as the old one's phrases count from another
+	/// start.
+	/// @return Whether it finished planning a piece's Arc in this call.
+	bool refreshPlan(const Generator* piece, uint32_t rosters, int32_t maxSteps = INT32_MAX);
+	/// Whether a plan is under way: refreshPlan() has more of it to do.
+	[[nodiscard]] bool planning() const { return planner_.planning(); }
 	/// Forgets what the plan was worked out from, so the next refreshPlan() works it out whatever plays.
 	void forgetPlan() { key_ = PlanKey{.decidedPhrase = -2}; } // never a key refreshPlan() makes
 	[[nodiscard]] const ArcPlan& plan() const { return plan_; }
@@ -122,6 +129,8 @@ private:
 		}
 	};
 	PlanKey key_;
+	ArcPlanner planner_;
+	bool replan_ = false; ///< The key changed while planner_ was under way: plan again once it is done.
 	QueuedAction queued_[PendingList::kCapacity];
 	int32_t queuedCount_ = 0;
 };

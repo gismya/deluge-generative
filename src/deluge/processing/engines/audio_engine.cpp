@@ -1263,14 +1263,6 @@ void routine() {
 			routine_();
 			numRoutines += 1;
 		}
-#if ENABLE_SYSEX_TEST
-		{
-			const auto dma = (uint32_t)getTxBufferCurrentPlace();
-			TestPort::audioRoutineLeft(
-			    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
-			    txFrame(dma));
-		}
-#endif
 	}
 	else {
 		if (!sdRoutineLock) {
@@ -1328,6 +1320,15 @@ void routine() {
 			}
 		}
 	}
+#if ENABLE_SYSEX_TEST
+	{
+		// After an offline stem export's render too, as it writes the ring: the next entry's margin counts from here.
+		const auto dma = (uint32_t)getTxBufferCurrentPlace();
+		TestPort::audioRoutineLeft(
+		    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
+		    txFrame(dma));
+	}
+#endif
 	audioRoutineLocked = false;
 	routineBeenCalled = true;
 }

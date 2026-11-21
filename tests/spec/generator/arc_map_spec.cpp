@@ -81,6 +81,16 @@ constexpr int32_t column(int32_t phrasesFromNow) {
 	return ArcMap::kNowColumn + phrasesFromNow;
 }
 
+/// Frames of 256 steps until the plan under way is done. @return Whether one was (at most 100 frames).
+bool planToEnd(Piece& piece, uint32_t rosters) {
+	for (int32_t frame = 0; frame < 100; frame++) {
+		if (piece.state.refreshPlan(piece.driver.playing(), rosters, 256)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 } // namespace
 
 // clang-format off
@@ -258,6 +268,66 @@ describe arc_map("Arc map", $ {
 		expect(piece.state.refreshPlan(nullptr, 1)).to_be_false();
 		expect(piece.state.plan().count).to_equal(0);
 		expect(static_cast<int32_t>(piece.state.queued().size())).to_equal(0);
+	});
+
+	it("spreads the plan over frames, showing the last one until the new one is done (#454)", _ {
+		Piece piece;
+		piece.decideBefore(kPhraseSteps + 5);
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true();
+		const ArcPlan before = piece.state.plan();
+		piece.pushAndDecide({CommandKind::SetMute, 1, kPress});
+		// The queue at once; the plan when its last slice is done.
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0, 256)).to_be_false();
+		expect(static_cast<int32_t>(piece.state.queued().size())).to_equal(1);
+		expect(piece.state.planning()).to_be_true();
+		expect(piece.state.plan() == before).to_be_true();
+		int32_t frames = 2; // the one above, and the one that finishes
+		while (!piece.state.refreshPlan(piece.driver.playing(), 0, 256)) {
+			expect(piece.state.plan() == before).to_be_true();
+			frames++;
+		}
+		const int32_t steps = (1 + ArcPlan::kMaxPhrases) * kPhraseSteps - piece.driver.playing()->nextStep();
+		expect(frames).to_equal((steps + 255) / 256);
+		ArcPlan atOnce;
+		piece.driver.playing()->planArc(atOnce);
+		expect(piece.state.plan() == atOnce).to_be_true();
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0, 256)).to_be_false(); // nothing changed
+	});
+
+	it("finishes a plan under way when the steering changes, then plans again from the newest", _ {
+		Piece piece;
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.state.refreshPlan(piece.driver.playing(), 0);
+		const auto turn = [&](int32_t points) {
+			piece.pushAndDecide({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(points)});
+		};
+		turn(20);
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0, 256)).to_be_false();
+		ArcPlan at20;
+		piece.driver.playing()->planArc(at20);
+		turn(30); // a gold knob turned faster than a plan takes
+		turn(40);
+		expect(planToEnd(piece, 0)).to_be_true();
+		expect(piece.state.plan() == at20).to_be_true(); // shown, though a turn behind
+		expect(piece.state.planning()).to_be_true();     // and the newest is under way
+		expect(planToEnd(piece, 0)).to_be_true();
+		ArcPlan at40;
+		piece.driver.playing()->planArc(at40);
+		expect(piece.state.plan() == at40).to_be_true();
+		expect(piece.state.planning()).to_be_false();
+	});
+
+	it("empties the plan at once for a new roster or a stop, while the new one is under way", _ {
+		Piece piece;
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.state.refreshPlan(piece.driver.playing(), 0);
+		expect(piece.state.refreshPlan(piece.driver.playing(), 1, 256)).to_be_false(); // a new roster
+		expect(piece.state.plan().count).to_equal(0);
+		expect(planToEnd(piece, 1)).to_be_true();
+		expect(piece.state.plan().count).to_equal(ArcPlan::kMaxPhrases);
+		piece.state.refreshPlan(nullptr, 1, 256);
+		expect(piece.state.plan().count).to_equal(0);
+		expect(piece.state.planning()).to_be_false();
 	});
 
 	it("keeps column 1 lit when scrolled fully back, while the next phrase is already being decided", _ {

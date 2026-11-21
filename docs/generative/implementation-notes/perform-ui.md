@@ -38,6 +38,15 @@ otherwise.
   (the step before and this one, sampled once per step, so a hit flashes for two 16ths). Every frame the view calls
   its `refreshPlan()`, `sampleFlash()` and `clampScroll()` and reports what they return. It composes the map only when something reads it:
   on the SONG page, and in test builds on every page for `gen_arcmap` and `gen_arcrow`.
+- Trap (#454): nothing that runs in `graphicsRoutine()` may take more than about 1 ms. The scheduler can't preempt a
+  task, and the audio TX ring holds 2.9 ms, of which 2.1-2.4 ms is left when the frame starts. The whole Arc plan
+  (`Generator::planArc()`, 2.4-6 ms) ran there after every macro turn: one underrun a turn in Psytrance and Detroit.
+  The SONG page now plans `PerformView::kArcPlanStepsPerFrame` steps a frame (`ArcPlanner`, in `generator.h`), and
+  `ArcMapState` shows the last plan until the new one is done. A change while one is under way lets it finish and
+  then plans again, so turning faster than a plan takes still moves the map. A new roster or a stop empties the plan
+  at once. `ArcPlanner::begin()` copies everything the loop reads (macros, biases, the landing steps), so the piece
+  can step on or be freed between slices. Read a new per-frame cost with `perform_audio_margin.txt` (`gen_audio`,
+  `gen_audio_ui_timer`).
 - The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
   peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
   fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it

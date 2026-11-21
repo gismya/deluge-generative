@@ -39,6 +39,11 @@
 
 #include <algorithm>
 
+#if ENABLE_SYSEX_TEST
+static_assert(util::to_underlying(TimerName::NUM_TIMERS) <= TestPort::RenderTiming::kUiTimers,
+              "TestPort::uiTimerRan() keeps a slot per UI timer");
+#endif
+
 extern "C" {
 #include "RZA1/oled/oled_low_level.h"
 }

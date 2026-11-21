@@ -545,117 +545,138 @@ GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 }
 
 void Generator::planArc(ArcPlan& out) const {
-	out = ArcPlan{};
+	ArcPlanner planner;
+	planner.begin(*this);
+	planner.advance(INT32_MAX);
+	out = planner.plan();
+}
+
+void ArcPlanner::begin(const Generator& piece) {
+	genre_ = piece.genre_;
+	seed_ = piece.seed_;
+	centre_ = piece.recipe_.macros;
+	bias_ = piece.recipe_.bias;
 	const Genre& genre = *genre_;
-	const int32_t phraseSteps = genre.phraseSteps();
-	const Macros& centre = recipe_.macros;
 	const int32_t parts = partCount(genre);
 
 	// What lands on its line: each waiting command and the step it lands on, by the one line rule.
-	struct Landing {
-		Command command;
-		int32_t step;
-	};
-	Landing landings[PendingList::kCapacity];
-	const int32_t waiting = pending_.size();
-	for (int32_t i = 0; i < waiting; i++) {
-		landings[i] = {pending_.at(i), landsAt(pending_.at(i))};
+	waiting_ = piece.pending_.size();
+	for (int32_t i = 0; i < waiting_; i++) {
+		landings_[i] = {piece.pending_.at(i), piece.landsAt(piece.pending_.at(i))};
 	}
+	const Command* force = piece.waitingForce();
+	forceLands_ = force != nullptr ? piece.landsAt(*force) : -1;
 
 	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
-	Arc arc = arc_;
-	MuteSolo mutes = mutes_;
-	Gates gates[kMaxParts] = {};
+	arc_ = piece.arc_;
+	mutes_ = piece.mutes_;
 	for (int32_t p = 0; p < parts; p++) {
-		gates[p] = parts_[p].gates;
+		gates_[p] = piece.parts_[p].gates;
 	}
+	std::fill_n(energySum_, ArcPlan::kMaxPhrases, 0);
+	std::fill_n(steps_, ArcPlan::kMaxPhrases, 0);
+
+	plan_ = ArcPlan{};
+	step_ = piece.nextStep_;
+	plan_.first = (step_ > 0 ? step_ - 1 : 0) / genre.phraseSteps();
+	plan_.count = ArcPlan::kMaxPhrases;
+	if (step_ > 0) {
+		// The last decided step, as it played: the first of the plan's first phrase.
+		uint8_t sounds = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			sounds |= !piece.partSilenced(p) && mutes_.audible(p) ? partBit(p) : 0;
+		}
+		addStep(0, piece.arc_, sounds, piece.effectiveMacro(Macro::Energy));
+	}
+	ended_ = piece.ended();
+	newRoster_ = piece.stopAt_;
+	if (const Command* transition = piece.waitingTransition(); transition != nullptr) {
+		newRoster_ = piece.landsAt(*transition) + piece.transitionSteps(*transition);
+	}
+	planning_ = true;
+}
+
+void ArcPlanner::addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
+	ArcPhrase& entry = plan_.phrase[phrase];
+	entry.kind = at.section();
+	entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
+	entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
+	entry.sounds |= sounds;
+	entry.muted = mutes_.muted;
+	energySum_[phrase] += energy - centre_[Macro::Energy];
+	steps_[phrase]++;
+}
+
+bool ArcPlanner::advance(int32_t maxSteps) {
+	if (!planning_) {
+		return true;
+	}
+	const Genre& genre = *genre_;
+	const int32_t phraseSteps = genre.phraseSteps();
+	const int32_t parts = partCount(genre);
 	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase or a whole Build
 	// (cutAndGapUnderBuild()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
 	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
 	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
 	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
-		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
+		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane); });
 	};
-
-	int32_t energySum[ArcPlan::kMaxPhrases] = {};
-	int32_t steps[ArcPlan::kMaxPhrases] = {};
-	const auto addStep = [&](int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
-		ArcPhrase& entry = out.phrase[phrase];
-		entry.kind = at.section();
-		entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
-		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
-		entry.sounds |= sounds;
-		entry.muted = mutes.muted;
-		energySum[phrase] += energy - centre[Macro::Energy];
-		steps[phrase]++;
-	};
-
-	int32_t step = nextStep_;
-	out.first = (step > 0 ? step - 1 : 0) / phraseSteps;
-	out.count = ArcPlan::kMaxPhrases;
-	if (step > 0) {
-		// The last decided step, as it played: the first of the plan's first phrase.
-		uint8_t sounds = 0;
-		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && mutes.audible(p) ? partBit(p) : 0;
-		}
-		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
-	}
-	bool ended = this->ended();
-	// Where a transition's new roster starts: the landed one's start step, or where the waiting one's would be.
-	int32_t newRoster = stopAt_;
-	if (const Command* transition = waitingTransition(); transition != nullptr) {
-		newRoster = landsAt(*transition) + transitionSteps(*transition);
-	}
-	for (; step / phraseSteps - out.first < ArcPlan::kMaxPhrases; step++) {
-		const int32_t phrase = step / phraseSteps - out.first;
-		if (step >= newRoster) {
-			out.phrase[phrase].next = steps[phrase] == 0;
+	for (; maxSteps > 0 && step_ / phraseSteps - plan_.first < ArcPlan::kMaxPhrases; step_++, maxSteps--) {
+		const int32_t step = step_;
+		const int32_t phrase = step / phraseSteps - plan_.first;
+		if (step >= newRoster_) {
+			plan_.phrase[phrase].next = steps_[phrase] == 0;
 			continue;
 		}
-		if (ended) {
-			out.phrase[phrase].ended = steps[phrase] == 0;
+		if (ended_) {
+			plan_.phrase[phrase].ended = steps_[phrase] == 0;
 			continue;
 		}
 		// Steering lands before the Arc moves, as in decideNextStep().
-		for (int32_t i = 0; i < waiting; i++) {
-			const Command& command = landings[i].command;
-			if (landings[i].step != step) {
+		for (int32_t i = 0; i < waiting_; i++) {
+			const Command& command = landings_[i].command;
+			if (landings_[i].step != step) {
 				continue;
 			}
 			if (Arc::Move move; sectionMoveOf(command, move)) {
 				if (!move.stops) {
-					arc.force(move.section, move.buildSteps);
+					arc_.force(move.section, move.buildSteps);
 				}
 				continue;
 			}
 			if (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo) {
-				mutes.land(command);
+				mutes_.land(command);
 			}
 			// A key change or a take moves nothing the plan shows.
 		}
-		arc.enterStep(genre, seed_, step, centre);
-		const int32_t energy = effectiveOn(genre, arc, centre, Macro::Energy);
-		if (arc.stepInBar() == 0) {
-			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
+		arc_.enterStep(genre, seed_, step, centre_);
+		const int32_t energy = effectiveOn(genre, arc_, centre_, Macro::Energy);
+		if (arc_.stepInBar() == 0) {
+			const int32_t density = effectiveOn(genre, arc_, centre_, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates[p].crossBar(genre.parts[p], biasedOn(p, Macro::Density, density)); // as updateGates()
+				gates_[p].crossBar(genre.parts[p], partBiased(density, bias_.of(p, Macro::Density))); // updateGates()
 			}
 		}
-		const Keeps keeps = genre.arc.keepsIn(arc.section());
-		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
+		const Keeps keeps = genre.arc.keepsIn(arc_.section());
+		const RollStage roll = rollStageOn(genre.arc, arc_, centre_[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? partBit(p) : 0;
+			sounds |= lets(p, keeps, roll) && mutes_.audible(p) ? partBit(p) : 0;
 		}
-		addStep(phrase, arc, sounds, energy);
-		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
-		ended = outroEndsAfter(arc, step);
+		addStep(phrase, arc_, sounds, energy);
+		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as
+		// Generator::outroEndsAfter().
+		ended_ = arc_.outroEndsHere() && forceLands_ != step + 1;
+	}
+	if (step_ / phraseSteps - plan_.first < ArcPlan::kMaxPhrases) {
+		return false;
 	}
 	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
-		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
+		plan_.phrase[i].energy = static_cast<int16_t>(steps_[i] > 0 ? energySum_[i] / steps_[i] : 0);
 	}
+	planning_ = false;
+	return true;
 }
 
 Key Generator::keyAhead() const {

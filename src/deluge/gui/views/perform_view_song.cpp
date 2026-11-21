@@ -226,11 +226,25 @@ void PerformView::refreshSidebar([[maybe_unused]] bool report) {
 void PerformView::refreshPlan() {
 #if ENABLE_SYSEX_TEST
 	const uint32_t start = getSystemTicks();
+	const bool wasPlanning = arc_.planning();
 #endif
-	if (arc_.refreshPlan(performAdapter.playingGenerator(), transitions.starts())) {
-		TEST_EVENT("gen_arcplan first=%ld us=%lu", static_cast<long>(arc_.plan().first),
-		           static_cast<unsigned long>((getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000)));
+	// A slice a frame (#454): the whole plan at once (2-6 ms) kept the audio routine waiting past the output buffer.
+	const bool planned =
+	    arc_.refreshPlan(performAdapter.playingGenerator(), transitions.starts(), kArcPlanStepsPerFrame);
+#if ENABLE_SYSEX_TEST
+	// gen_arcplan us=: the slowest slice, slices=: the frames it took.
+	const uint32_t us = (getSystemTicks() - start) / (DELUGE_CLOCKS_PER / 1000000);
+	if (wasPlanning || arc_.planning() || planned) {
+		planSlices_++;
+		planSliceMaxUs_ = std::max(planSliceMaxUs_, us);
 	}
+	if (planned) {
+		TEST_EVENT("gen_arcplan first=%ld us=%lu slices=%ld", static_cast<long>(arc_.plan().first),
+		           static_cast<unsigned long>(planSliceMaxUs_), static_cast<long>(planSlices_));
+		planSlices_ = 0;
+		planSliceMaxUs_ = 0;
+	}
+#endif
 }
 
 deluge::generative::perform::ArcMapInput PerformView::arcMapInput() const {
