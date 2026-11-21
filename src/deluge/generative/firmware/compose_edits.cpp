@@ -230,7 +230,7 @@ bool beginRecipeLoad(const RecipeFile& file, const perform::RecipeName& name, Re
 }
 
 bool beginPartRoll(int32_t part, RecipeRollEnded ended) {
-	if (currentRecipe.exists && (part < 0 || part >= partCount(*currentRecipe.recipe.genre))) {
+	if (!currentRecipe.exists || part < 0 || part >= partCount(*currentRecipe.recipe.genre)) {
 		return false;
 	}
 	return beginRoll(RecipeRoll::Part, nullptr, part, Lane::Kick, ended);
@@ -260,6 +260,16 @@ bool previousLanePick(Lane lane) {
 	}
 	std::swap(currentRecipe.sounds.lane[index], previous.picks.lane[index]);
 	return true;
+}
+
+void forgetPreviousPick(const Genre& genre, int32_t part) {
+	if (part < 0 || part >= partCount(genre)) {
+		return;
+	}
+	previous.parts &= ~bit(part);
+	for (const LaneSpec& spec : genre.parts[part].lanes) {
+		previous.lanes &= ~bit(static_cast<int32_t>(spec.lane));
+	}
 }
 
 void newSeed() {

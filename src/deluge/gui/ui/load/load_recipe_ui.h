@@ -15,13 +15,14 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The Recipe load browser (spec §16.5): LOAD in Perform or on the Compose screen opens a stock-style load browser on
-// RECIPES/. The QWERTY shows on entry and hides once the player scrolls, so the pads underneath show again; a pad
-// press brings it back. SELECT (or LOAD) on a file reads it: an unreadable file or an unknown genre is refused and the
-// browser stays; otherwise it closes and the file loads. In Perform while playing that is a transition, confirmed with
-// its style (spec §9.7); stopped it rebuilds at once; on the Compose screen it replaces the Current Recipe. BACK in
-// RECIPES/ leaves with nothing changed. Over Perform, Perform plays on: its frame runs and the sidebar stays its own,
-// as under the preset browser.
+// The Recipe load browser (spec §16.5): LOAD in Perform or on the Compose screen, and FILE... in the Generative menu's
+// source lists (§14.1), open a stock-style load browser on RECIPES/. The QWERTY shows on entry and hides once the
+// player scrolls, so the pads underneath show again; a pad press brings it back. SELECT (or LOAD) on a file reads it:
+// an unreadable file or an unknown genre is refused and the browser stays; otherwise it closes and the file loads. In
+// Perform while playing that is a transition, confirmed with its style (spec §9.7); stopped it rebuilds at once; on the
+// Compose screen or COMPOSE FROM it replaces the Current Recipe and the screen shows it; in PERFORM FROM it asks
+// DISCARD SONG?, whose OK enters Perform on it. BACK in RECIPES/ leaves with nothing changed. Over Perform, Perform
+// plays on: its frame runs and the sidebar stays its own, as under the preset browser.
 
 #pragma once
 

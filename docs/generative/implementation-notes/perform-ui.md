@@ -55,14 +55,21 @@ otherwise.
   records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
   part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
   afresh; `refreshPerformMenu()` redraws the open item then.
-- GENRE ▸ is built twice, in PERFORM FROM (`perform_from.cpp`) and the Perform menu (`perform_menu.cpp`), from the
-  same rows and items (`gui/menu_item/generative/genre_rows.h`: `GenreMenuItems<Item>`, each menu with its own genre
-  item; laid out by the portable `perform/genre_menu.h`). Stock
+- The Generative menu (§14.1): GENERATIVE is a context menu (`gui/context_menu/generative.*`); PERFORM FROM, COMPOSE
+  FROM and the Compose screen's FROM are `SourceMenu`s (`gui/menu_item/generative/source_rows.h`) of CURRENT RECIPE
+  (hidden until a Recipe exists), GENRE ▸ and FILE.... PERFORM FROM's rows all end in `DiscardSong::setPerform()` with
+  an `EntrySource`; FILE... gets there through the load browser's `loadChosen()` (`performFromShowing()`). A list
+  remembers its row (stock), so probe scripts reach GENRE from the bottom: `encoder 3 5`, `encoder 3 -1`
+  (`perform_pick_acid.txt`), which holds with or without CURRENT RECIPE. `gen_from_menu perform|compose|screen
+  current=0|1` comes each time a list shows afresh (a UI over it closing too).
+- GENRE ▸ is built three times, in PERFORM FROM (`perform_from.cpp`), the Compose lists (`compose_screen.cpp`) and the
+  Perform menu (`perform_menu.cpp`), from the same rows and items (`gui/menu_item/generative/genre_rows.h`:
+  `GenreMenuItems<Item>`, each menu with its own genre item; laid out by the portable `perform/genre_menu.h`). Stock
   `Submenu`s have fixed item lists and a row can't be a leaf one time and a submenu the next (`selectButtonPress()` is
   final in `Submenu`), so each row slot holds both a genre item and a `GenreGroup`, and `isRelevant()` shows the one
-  that fits. All groups share one list of genre items, which read the open parent (set in
-  `GenreGroup::beginSession()`). Both menus open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a
-  probe script that picks a genre counts rows from there, not from the top.
+  that fits. All groups share one list of genre items, which read the open parent (set in `GenreGroup::beginSession()`).
+  All three open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a probe script that picks a genre
+  counts rows from there, not from the top.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
   editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
   the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.

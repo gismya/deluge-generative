@@ -27,6 +27,7 @@
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/compose_screen.h"
+#include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/ui.h"
 #include "gui/ui_timer_manager.h"
@@ -70,10 +71,17 @@ std::string_view withoutExtension(const char* name) {
 	return text;
 }
 
-/// The chosen file loads (spec §16.5): a transition in Perform, confirmed with its style while playing and at once
-/// while stopped; on the Compose screen it replaces the Current Recipe.
+/// The chosen file loads (spec §16.5): in PERFORM FROM, DISCARD SONG? asks first and OK enters Perform on it; in
+/// Perform a transition, confirmed with its style while playing and at once while stopped; otherwise (the Compose
+/// screen, its FROM, COMPOSE FROM) it replaces the Current Recipe and the Compose screen shows it. The version notice
+/// (spec §16.2) shows as it loads: here, or at DISCARD SONG?'s OK, so backing out of that shows none.
 void loadChosen() {
-	gen::firmware::showVersionNotice(chosen.file); // spec §16.2
+	if (deluge::gui::menu_item::generative::performFromShowing()) {
+		// PERFORM FROM's FILE... (spec §14.1, §14.3).
+		deluge::gui::menu_item::generative::performFromFile(chosen.file, chosen.name);
+		return;
+	}
+	gen::firmware::showVersionNotice(chosen.file);
 	if (!rootUIIsGenerativePerform()) {
 		deluge::gui::menu_item::generative::loadComposeRecipe(chosen.file, chosen.name);
 		return;

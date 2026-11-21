@@ -4,7 +4,8 @@
 # to the previous pick, REGENERATE? keeping the macros, LENGTH), a Recipe replaced in Perform forgetting the previous
 # picks (gen_compose_pick <row> none: NO PREVIOUS SOUND), and BUILD asks DISCARD SONG? and builds at LENGTH; a
 # build cancelled on COMPOSING leaves the screen open.
-# Until the Generative menu's COMPOSE (#140) opens it, the test port's "compose screen" line does.
+# The test port's "compose screen" line opens it with no Recipe (the Generative menu's COMPOSE FROM always has one by
+# then); the stale-picks step goes through PERFORM FROM and COMPOSE FROM's CURRENT RECIPE (gen_from_menu).
 #
 # gen_compose_recipe <why> genre= tempo= swing= key= scale= macros= and gen_compose_seed <why> seed= takes= length=:
 # the Current Recipe after an edit (why: the row, or opened/rolled/seed). gen_compose_pick <row> path=: a SOUNDS row's pick after it changed.
@@ -19,7 +20,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/lane_names.h
 # covers: src/deluge/generative/perform/clip_page.* src/deluge/generative/firmware/transitions.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/gui/views/perform_view.cpp
-# covers: src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/gui/menu_item/generative/source_rows.*
 start_state
 expect playing=false
 
@@ -280,7 +281,7 @@ button BACK up
 wait 300
 
 # ---- A Recipe replaced outside the screen forgets the previous picks: KICK re-rolled here, then Perform (entered
-# from a genre pick) and its REGENERATE, and back: SHIFT+push on KICK has none ----
+# from CURRENT RECIPE, which keeps them) and its REGENERATE, and back: SHIFT+push on KICK has none ----
 encoder 3 -20
 encoder 3 11
 button SELECT_ENC down
@@ -312,7 +313,33 @@ wait 50
 button BACK up
 wait 300
 expect ui=instrument_clip
-include perform_open.txt
+# PERFORM FROM → CURRENT RECIPE: Perform plays this Recipe, so only its REGENERATE replaces it
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+wait 1000
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu perform current=1 within=5
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
 include perform_confirm.txt
 button PLAY down
 wait 50
@@ -332,7 +359,25 @@ expect event gen_confirm regenerate style=2 result=0
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=idle within=40
 include perform_leave.txt
-compose screen
+wait 1000
+# COMPOSE FROM → CURRENT RECIPE: the Recipe REGENERATE left
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_from_menu compose current=1 within=5
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
 expect event gen_compose_screen opened
 encoder 3 -20
 encoder 3 11
