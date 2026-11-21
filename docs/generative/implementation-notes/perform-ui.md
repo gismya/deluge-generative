@@ -161,3 +161,13 @@ otherwise.
   `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
   rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
   (`perform_restart.txt`), since the menu remembers its row.
+- Capture marks (#144, spec §17.4): RECORD and MIDI RECORD both reach `PlaybackHandler::recordButtonPressed()`
+  (the panel's on a short press's release), which under Perform calls `PerformAdapter::pressMark()`; SHIFT+RECORD
+  resamples before that and uses the press up. What a press does, the dot, the RECORD LED, the CAPTURE peek's lines
+  and the CAPTURE menu's rows are the portable `generative/perform/capture.h`, read from the `SteeringLog`
+  (`current()`, `markPiece()`, `markedPieces()`); `captureStatus()` feeds `OledInput::capture`. The LED is asserted
+  every frame in `assertRecordLed()`, except while resampling or in MIDI learn, which own it. An earlier piece
+  unmarked in CAPTURE ▸ stays in the log until the next `beginPiece()`, which moves the marked ones down
+  (`dropUnmarked()`): don't drop pieces from task context, the step writes the newest one by offset.
+- The SELECT-turn peeks go round RECIPE, QUEUE, CAPTURE (`selectEncoderAction()`); the first turn is still QUEUE to
+  the right and RECIPE to the left, which `perform_sidebar.txt` relies on.
