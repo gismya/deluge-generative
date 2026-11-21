@@ -108,8 +108,10 @@ BUILDERS = {
     "gen_arcmap": ("src/deluge/generative/perform/arc_map.*",),
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_audio_late": (),  # a scheduler task's name
     "gen_browser": (),
     "gen_browser_preview": (),  # the previewed path
+    "gen_preset_preview": (),  # built|cancelled|failed, the lane's name or -: literals beside it
     "gen_log": (),  # at=stop or at=phrase, literals beside it
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_performance_pad": (),  # down or up
@@ -187,6 +189,13 @@ BUILDERS = {
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
     "gen_restart": (),  # as_it_is or as_it_began
     "gen_restart_preload": (),  # how AS IT BEGAN's preload ended
+    "gen_capture_end": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the song it landed on: captureSongName()
+    "gen_capture_song": (
+        "src/deluge/generative/perform/capture.*",
+        "src/deluge/generative/firmware/song_file.*",
+    ),  # captureSongName(), or its clash variation
     "gen_record_led": (
         "src/deluge/generative/perform/capture.*",
     ),  # the RecordLed's name

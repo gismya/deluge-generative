@@ -138,24 +138,40 @@ bool RegenerateRecipe::acceptCurrentOption() {
 	return true;
 }
 
-// ---- LEAVE PERFORM? ----
+// ---- The leave menu ----
+
+bool LeavePerform::setupAndCheckAvailability() {
+	using generative::perform::LeaveOption;
+	using enum l10n::String;
+	generative::perform::leaveMenu(generative::firmware::performAdapter.steeringLog(), menu_);
+	for (int32_t i = 0; i < menu_.count; i++) {
+		static constexpr l10n::String kNames[] = {
+		    STRING_FOR_MARKED_AND_LAST, STRING_FOR_MARKED_ONLY, STRING_FOR_MARKED, STRING_FOR_LAST,
+		    STRING_FOR_NOTHING,         STRING_FOR_LEAVE,       STRING_FOR_CANCEL};
+		static_assert(std::size(kNames) == static_cast<size_t>(LeaveOption::Cancel) + 1);
+		options_[i] = l10n::get(kNames[static_cast<int32_t>(menu_.options[i])]);
+	}
+	currentOption = 0; // it starts on the first option (spec §13.8)
+	scrollPos = 0;
+	return true;
+}
 
 char const* LeavePerform::getTitle() {
-	return l10n::get(l10n::String::STRING_FOR_LEAVE_PERFORM_QMARK);
+	return menu_.title;
 }
 
 std::span<char const*> LeavePerform::getOptions() {
-	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_LEAVE),
-	                                l10n::get(l10n::String::STRING_FOR_CANCEL)};
-	return {options, 2};
+	return {options_, static_cast<size_t>(menu_.count)};
 }
 
 bool LeavePerform::acceptCurrentOption() {
-	if (currentOption != 0) {
-		return false; // CANCEL: back to Perform, which never stopped
+	using generative::perform::LeaveOption;
+	const LeaveOption option = menu_.options[currentOption];
+	if (option == LeaveOption::Cancel) {
+		return false; // back to Perform, which never stopped
 	}
 	close();
-	performView.leave();
+	performView.leave(option);
 	return true;
 }
 

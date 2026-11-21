@@ -136,6 +136,7 @@ bool holdingCardError = false;      ///< See cardErrorHeld()
 bool holdingPreload = false;        ///< See preloadHeld()
 bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
 bool holdingCommitted = false;      ///< See soundCommittedHeld()
+bool holdingPresetPreview = false;  ///< See presetPreviewHeld()
 bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
 bool holdingFree = false;           ///< See freeHeld()
@@ -255,6 +256,8 @@ constexpr Hold kHolds[] = {
     {"card_routine", [](bool on) { holdingCardRoutine = on; }},
     /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
     {"sound_committed", [](bool on) { holdingCommitted = on; }},
+    /// Holds a preset preview's build at its start until it is cancelled, or lets it go (see presetPreviewHeld())
+    {"preset_preview", [](bool on) { holdingPresetPreview = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
     /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
@@ -265,13 +268,13 @@ constexpr Hold kHolds[] = {
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
     /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
     {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
-    /// Holds a Compose build after its first bar, or lets it go (see composeHeld())
+    /// Holds a Compose or Capture build after its first bar, or lets it go (see composeHeld())
     {"compose", [](bool on) { holdingCompose = on; }},
     /// A Compose build's estimate fits only alone, or as it is (see composeAloneHeld())
     {"compose_alone", [](bool on) { holdingComposeAlone = on; }},
     /// Holds a Compose build after its genre roll, or lets it go (see composeRollHeld())
     {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
-    /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
+    /// A Compose or Capture build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
     {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
     /// A genre roll makes the golden case and a Compose build starts in the Groove, or both as they are (see
     /// goldenHeld())
@@ -1193,6 +1196,10 @@ bool goldenHeld() {
 
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool presetPreviewHeld() {
+	return holdingPresetPreview;
 }
 
 bool cardRoutineHeld() {

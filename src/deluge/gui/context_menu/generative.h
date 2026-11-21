@@ -19,7 +19,8 @@
 //   GENERATIVE, opened by SHIFT+SONG in session view over the session view: PERFORM, COMPOSE;
 //   DISCARD SONG?, asked every time before Generative mode replaces the song: OK;
 //   REGENERATE? (the Compose screen's), from its REGENERATE: OK;
-//   LEAVE PERFORM?, opened by holding BACK in Perform: LEAVE, CANCEL (M4 adds Capture's keep options);
+//   the leave menu, opened by holding BACK in Perform: Capture's keep options (KEEP: 2 MARKED, LEAVE, KEEP:) or
+//   LEAVE PERFORM? when no piece was played;
 //   REGENERATE?, from the Perform menu's REGENERATE or GENRE, and a LOAD while playing: BUILD INTO A DROP, FADE
 //   THROUGH, HARD CUT AT PHRASE.
 
@@ -27,6 +28,7 @@
 
 #include "generative/core/recipe_file.h"
 #include "generative/firmware/entry_source.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/genre_menu.h"
 #include "generative/perform/recipe_name.h"
 #include "gui/context_menu/context_menu.h"
@@ -85,13 +87,19 @@ public:
 	bool acceptCurrentOption() override;
 };
 
+/// The leave menu (spec §13.8): its title and options from the steering log as BACK is held.
 class LeavePerform final : public GenerativeContextMenu {
 public:
 	LeavePerform() = default;
 	bool canSeeViewUnderneath() override { return true; }
+	bool setupAndCheckAvailability() override;
 	char const* getTitle() override;
 	std::span<char const*> getOptions() override;
 	bool acceptCurrentOption() override;
+
+private:
+	generative::perform::LeaveMenu menu_;
+	char const* options_[generative::perform::LeaveMenu::kMaxOptions] = {};
 };
 
 /// The transition confirm (spec §9.7, §13.6): how a genre change, Regenerate or LOAD plays. It starts on the incoming

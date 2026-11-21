@@ -534,6 +534,11 @@ int32_t SteeringLog::Piece::endStep() const {
 int32_t SteeringLog::Piece::cutAt() const {
 	return reinterpret_cast<const PieceInfo*>(base_)->cutAt;
 }
+int32_t SteeringLog::Piece::spanEnd() const {
+	const int32_t cut = cutAt();
+	const int32_t end = endStep();
+	return cut >= 0 && (end < 0 || cut < end) ? cut : end;
+}
 bool SteeringLog::Piece::marked() const {
 	return reinterpret_cast<const PieceInfo*>(base_)->marked;
 }
