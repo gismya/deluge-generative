@@ -230,6 +230,47 @@ describe arc_plan("Arc plan", $ {
 			}
 		}
 	});
+
+	it("plans in slices to the plan it works out at once (ArcPlanner, #454)", _ {
+		const Command presses[] = {
+		    {CommandKind::SetMute, 1, kPress},
+		    {CommandKind::SetSolo, 1, kPress},
+		    {CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0},
+		    {CommandKind::End, 0, 1},
+		    {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(45)},
+		};
+		for (const Genre* genre : kTechnos) {
+			for (const Command& press : presses) {
+				Piece piece(true, 2, macroPoints(25), genre);
+				piece.decideBefore(kPhraseSteps + 40);
+				piece.pushAndDecide(press);
+				ArcPlanner planner;
+				planner.begin(piece.generator);
+				int32_t slices = 1;
+				while (!planner.advance(100)) {
+					slices++;
+				}
+				const std::string name = std::string(genre->name) + " command " + std::to_string(int(press.kind));
+				expect(name + (planner.plan() == piece.plan() ? "" : " differs")).to_equal(name);
+				expect(slices > 10).to_be_true();
+				expect(planner.planning()).to_be_false();
+				expect(planner.advance(100)).to_be_true(); // nothing under way
+			}
+		}
+	});
+
+	it("plans a piece as it was at begin(), while the piece steps on", _ {
+		Piece piece(true);
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.pushAndDecide({CommandKind::SetMute, 1, kPress});
+		const ArcPlan atOnce = piece.plan();
+		ArcPlanner planner;
+		planner.begin(piece.generator);
+		expect(planner.advance(300)).to_be_false();
+		piece.decideBefore(kPhraseSteps + 60); // the mute lands, and the Arc moves on
+		for (int32_t i = 0; i < 100 && !planner.advance(300); i++) {}
+		expect(planner.plan() == atOnce).to_be_true();
+	});
 });
 
 CPPSPEC_SPEC(arc_plan)

@@ -270,9 +270,12 @@ private:
 	void assertPageLeds();
 	/// The SONG page's input as it stands.
 	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
-	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8). Test builds report a new plan
-	/// as gen_arcplan.
+	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8), kArcPlanStepsPerFrame steps a
+	/// frame. Test builds report each plan done as gen_arcplan.
 	void refreshPlan();
+	/// The Arc plan's steps a frame (#454): about 0.7 ms on the Deluge, so Psytrance's 16 phrases of 16 bars take 8
+	/// frames (120 ms), Techno's 4.
+	static constexpr int32_t kArcPlanStepsPerFrame = 512;
 	/// Every frame: has arc_ follow the clock, and when something reads the Arc map (the SONG page; in test builds
 	/// the gen_arcmap and gen_arcrow texts, on every page) composes it and asks to redraw only the pad rows whose
 	/// colours changed (spec §13.5).
@@ -369,6 +372,8 @@ private:
 	/// §13.5), and that phrase.
 	uint32_t mainRedraws_ = 0;
 	int32_t redrawsPhrase_ = -1;
+	int32_t planSlices_ = 0;      ///< The frames the plan under way has taken so far (gen_arcplan slices=)
+	uint32_t planSliceMaxUs_ = 0; ///< and its slowest one (gen_arcplan us=)
 
 	/// The sidebar as last asked to render, per row and column, so only changed rows redraw.
 	RGB sidebar_[kDisplayHeight][kSideBarWidth] = {};

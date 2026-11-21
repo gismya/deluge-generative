@@ -144,7 +144,7 @@ ArcMapRange scrollRangeOf(const Frame& frame) {
 
 } // namespace
 
-bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
+bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters, int32_t maxSteps) {
 	PlanKey key;
 	key.rosters = rosters;
 	if (piece != nullptr) {
@@ -163,17 +163,34 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 		key.macros = piece->recipe().macros;
 		key.bias = piece->recipe().bias;
 	}
-	if (key == key_) {
+	if (!(key == key_)) {
+		const bool restart = piece == nullptr || key.rosters != key_.rosters || key.playing != key_.playing;
+		key_ = key;
+		if (restart) {
+			plan_ = ArcPlan{}; // the old plan's phrases count from another start
+			planner_ = ArcPlanner{};
+			replan_ = false;
+		}
+		if (piece == nullptr) {
+			queuedCount_ = 0;
+			return false;
+		}
+		queuedCount_ = queuedByTime(*piece, queued_);
+		if (planner_.planning()) {
+			replan_ = true;
+		}
+		else {
+			planner_.begin(*piece);
+		}
+	}
+	if (!planner_.planning() || !planner_.advance(maxSteps)) {
 		return false;
 	}
-	key_ = key;
-	if (piece == nullptr) {
-		plan_ = ArcPlan{};
-		queuedCount_ = 0;
-		return false;
+	plan_ = planner_.plan();
+	if (replan_) {
+		replan_ = false;
+		planner_.begin(*piece);
 	}
-	piece->planArc(plan_);
-	queuedCount_ = queuedByTime(*piece, queued_);
 	return true;
 }
 

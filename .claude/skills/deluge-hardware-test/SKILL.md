@@ -131,4 +131,5 @@ entry, negative after an underrun), and `drift=`, the DMA's move off the timer i
 few samples. `gen_audio_late` names the task that kept the routine away, and `gen_audio_ui_timer` the UI timers whose
 handler ran over 2 ms (TimerName's value). Don't count spans between render starts, or a render's length (`gen_h16`'s
 `render_max_us`): neither one shows the margin. `perform_audio_margin.txt` is the steering load where the margin is
-smallest. Spec §20 has its figures (#449).
+smallest: `underruns=` must stay 0 in every window, as it has since #454 (the Arc plan in slices). Spec §20 has its
+figures, before and after (#449, #454). Any work in Perform's `graphicsRoutine()` must stay under about 1 ms a frame.
