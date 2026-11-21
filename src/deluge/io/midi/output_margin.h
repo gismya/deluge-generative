@@ -48,10 +48,23 @@ public:
 		return static_cast<int32_t>(queuedTicks_ - (now - leftAt_));
 	}
 
-	/// The routine returns at `now`, with `queuedSamples` (txSamplesQueued()) still to play.
-	constexpr void left(uint32_t now, uint32_t queuedSamples) {
+	/// How far the DMA, now at frame `dmaFrame` of a ring of `ringFrames`, has moved beyond what the system timer says
+	/// since the routine returned, in frames (negative: behind). Near 0 when the timer and the codec's clock agree, so
+	/// a margin entered() gives is real time the routine was away. Only once primed().
+	[[nodiscard]] constexpr int32_t dmaDrift(uint32_t now, uint32_t dmaFrame, uint32_t ringFrames) const {
+		const uint32_t expected =
+		    static_cast<uint32_t>(((uint64_t{now - leftAt_} << 8) + ticksPerSampleQ8_ / 2) / ticksPerSampleQ8_);
+		const uint32_t diff = (dmaFrame - leftDmaFrame_ - expected) & (ringFrames - 1);
+		return diff < ringFrames / 2 ? static_cast<int32_t>(diff)
+		                             : static_cast<int32_t>(diff) - static_cast<int32_t>(ringFrames);
+	}
+
+	/// The routine returns at `now`, with `queuedSamples` (txSamplesQueued()) still to play and the DMA at frame
+	/// `dmaFrame`.
+	constexpr void left(uint32_t now, uint32_t queuedSamples, uint32_t dmaFrame = 0) {
 		leftAt_ = now;
 		queuedTicks_ = (queuedSamples * ticksPerSampleQ8_) >> 8;
+		leftDmaFrame_ = dmaFrame;
 		primed_ = true;
 	}
 
@@ -59,6 +72,7 @@ private:
 	uint32_t ticksPerSampleQ8_;
 	uint32_t leftAt_ = 0;
 	uint32_t queuedTicks_ = 0;
+	uint32_t leftDmaFrame_ = 0;
 	bool primed_ = false;
 };
 

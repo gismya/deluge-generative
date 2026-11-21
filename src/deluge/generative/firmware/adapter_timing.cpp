@@ -56,10 +56,11 @@ void ControlTiming::report(const char* ramps) {
 	               : performAdapter.output().partName(render.lastCulled, performAdapter.steering().rosterGenre()),
 	           static_cast<long>(AudioEngine::getNumVoices()), ticksToNs(render.maxCounts) / 1000);
 	// The audio output's margin (spec §20, #449): the routine's entries, those after the TX ring ran dry, the least
-	// audio left at one, and entries with under 0.5, 1 and 2 ms left and more.
+	// audio left at one, entries with under 0.5, 1 and 2 ms left and more, and the DMA's largest move off the timer (in
+	// samples; near 0 says the margins are real time).
 	const long marginMinUs =
 	    render.routineCalls == 0 ? 0L : render.marginMinCounts / static_cast<int32_t>(kCountsPerUs);
-	TEST_EVENT("gen_audio calls=%lu underruns=%lu margin_min_us=%ld margins=%lu/%lu/%lu/%lu",
+	TEST_EVENT("gen_audio calls=%lu underruns=%lu margin_min_us=%ld margins=%lu/%lu/%lu/%lu drift=%ld",
 	           static_cast<unsigned long>(render.routineCalls), static_cast<unsigned long>(render.underruns),
 	           marginMinUs, static_cast<unsigned long>(render.margins[0]),
 	           static_cast<unsigned long>(render.margins[1]), static_cast<unsigned long>(render.margins[2]),

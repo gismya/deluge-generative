@@ -55,3 +55,23 @@ TEST(OutputMargin, MarginSurvivesTheTimerWrapping) {
 	margin.left(UINT32_MAX - 1'000, 128);
 	CHECK_EQUAL(96'740 - 34'331, margin.entered(33'330));
 }
+
+TEST(OutputMargin, DmaMovedAsTheTimerSays) {
+	OutputMargin margin{kTicksPerSampleQ8};
+	margin.left(1'000, 128, 10);
+	// 1 ms is 44.1 samples: the DMA at frame 54 agrees.
+	CHECK_EQUAL(0, margin.dmaDrift(1'000 + 33'330, 54, kRing));
+}
+
+TEST(OutputMargin, DmaDriftCountsRoundTheRing) {
+	OutputMargin margin{kTicksPerSampleQ8};
+	margin.left(1'000, 128, 100);
+	// 3.5 ms is 154 samples: past a whole ring, frame (100 + 154) % 128 = 126. The DMA read 120: 6 behind.
+	CHECK_EQUAL(-6, margin.dmaDrift(1'000 + 116'655, 120, kRing));
+}
+
+TEST(OutputMargin, DmaAheadOfTheTimerIsPositive) {
+	OutputMargin margin{kTicksPerSampleQ8};
+	margin.left(1'000, 128, 120);
+	CHECK_EQUAL(3, margin.dmaDrift(1'000 + 33'330, (120 + 44 + 3) % kRing, kRing));
+}

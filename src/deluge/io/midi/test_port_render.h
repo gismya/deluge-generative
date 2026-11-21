@@ -42,17 +42,28 @@ struct RenderTiming {
 	uint32_t underruns = 0;              ///< Entries after the ring ran dry: the codec replayed old samples.
 	int32_t marginMinCounts = INT32_MAX; ///< The least audio left at an entry; negative once it ran dry.
 	uint32_t margins[4] = {};            ///< Entries with under 0.5, 1 and 2 ms left, and the rest (not underruns).
-	uint32_t renderGapMaxCounts = 0;     ///< The longest span from one render's start to the next's.
-	uint32_t renderGaps[6] = {};         ///< Spans between render starts under 1, 2, 2.9, 5, 10 ms, and the rest.
+	int32_t dmaDriftMax = 0;             ///< The DMA's largest move off the timer at an entry, in samples (dmaDrift()).
+	/// The task that finished last before each underrun's entry: the one that kept the routine away.
+	struct LateTask {
+		const char* name = nullptr;
+		uint32_t underruns = 0;
+		uint32_t runMaxCounts = 0; ///< Its longest run before an underrun.
+	};
+	LateTask lateTasks[4] = {};
+	uint32_t renderGapMaxCounts = 0; ///< The longest span from one render's start to the next's.
+	uint32_t renderGaps[6] = {};     ///< Spans between render starts under 1, 2, 2.9, 5, 10 ms, and the rest.
 };
 extern RenderTiming renderTiming;
 
 /// The audio engine's render of `numSamples`, which started at `start` (getSystemTicks()), has ended.
 void recordRender(uint32_t start, size_t numSamples);
 /// The audio routine starts, at entry to AudioEngine::routine() (spec §20, the audio output's margin).
-void audioRoutineEntered();
-/// The audio routine returns, with `queuedSamples` (txSamplesQueued()) in the TX ring.
-void audioRoutineLeft(uint32_t queuedSamples);
+/// `dmaFrame`: the frame of the TX ring the DMA reads.
+void audioRoutineEntered(uint32_t dmaFrame);
+/// The audio routine returns, with `queuedSamples` (txSamplesQueued()) in the TX ring and the DMA at `dmaFrame`.
+void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame);
+/// The scheduler's task `name` ran for `counts` (getSystemTicks()), for the underruns' culprit.
+void taskRan(const char* name, uint32_t counts);
 /// The audio engine culled one of `sound`'s voices for CPU.
 void voiceCulled(const Sound& sound);
 

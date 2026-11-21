@@ -3,11 +3,13 @@
 # steering), BUILD INTO A DROP into Psytrance, 2.5 min of busy steering, HARD CUT AT PHRASE into Detroit techno (6 parts),
 # 1 min of busy steering, stop. Every 4 bars gen_audio gives the audio routine's entries, those after the TX ring ran
 # dry (underruns), the least audio left at an entry and the entries with under 0.5, 1 and 2 ms left; gen_render_gaps
-# gives the spike's spans between render starts, for comparison. `hold entropy` plays the same Recipe every run.
+# gives the spike's spans between render starts, for comparison; gen_audio_late names the task that ran last before
+# the underruns. `hold entropy` plays the same Recipe every run.
 # Start as after boot: transport stopped, the current clip a synth or kit clip.
 # needs: a Deluge for its timings, and about 5.5 minutes, so check_all.py skips it
 # For figures: --events 'gen_audio|gen_render_gaps|gen_h1 |gen_h16|gen_transition start'.
 # covers: src/deluge/io/midi/output_margin.h src/deluge/io/midi/test_port_render.*
+# covers: src/OSLikeStuff/task_scheduler/task_scheduler.cpp
 start_state
 hold entropy
 include perform_open.txt

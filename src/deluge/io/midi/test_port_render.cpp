@@ -20,9 +20,11 @@
 #if ENABLE_SYSEX_TEST
 
 #include "OSLikeStuff/scheduler_api.h"
+#include "definitions.h"
 #include "io/midi/midi_queue.h"
 #include "io/midi/output_margin.h"
 #include <algorithm>
+#include <cstdlib>
 
 namespace TestPort {
 
@@ -32,6 +34,19 @@ namespace {
 deluge::io::midi::OutputMargin outputMargin{kSystemTicksPerSampleQ8};
 uint32_t lastRenderStart = 0;
 constexpr uint32_t kCountsPerUs = DELUGE_CLOCKS_PER / 1'000'000;
+const char* lastTaskName = nullptr;
+uint32_t lastTaskCounts = 0;
+
+void blameLastTask() {
+	for (RenderTiming::LateTask& late : renderTiming.lateTasks) {
+		if (late.name == nullptr || late.name == lastTaskName) {
+			late.name = lastTaskName != nullptr ? lastTaskName : "?";
+			late.underruns++;
+			late.runMaxCounts = std::max(late.runMaxCounts, lastTaskCounts);
+			return;
+		}
+	}
+}
 } // namespace
 
 void recordRender(uint32_t start, size_t numSamples) {
@@ -52,23 +67,34 @@ void recordRender(uint32_t start, size_t numSamples) {
 	lastRenderStart = start;
 }
 
-void audioRoutineEntered() {
+void audioRoutineEntered(uint32_t dmaFrame) {
 	if (!outputMargin.primed()) {
 		return;
 	}
-	const int32_t margin = outputMargin.entered(getSystemTicks());
+	const uint32_t now = getSystemTicks();
+	const int32_t margin = outputMargin.entered(now);
+	const int32_t drift = outputMargin.dmaDrift(now, dmaFrame, SSI_TX_BUFFER_NUM_SAMPLES);
+	if (std::abs(drift) > std::abs(renderTiming.dmaDriftMax)) {
+		renderTiming.dmaDriftMax = drift;
+	}
 	renderTiming.routineCalls++;
 	renderTiming.marginMinCounts = std::min(renderTiming.marginMinCounts, margin);
 	if (margin < 0) {
 		renderTiming.underruns++;
+		blameLastTask();
 		return;
 	}
 	const uint32_t us = static_cast<uint32_t>(margin) / kCountsPerUs;
 	renderTiming.margins[us < 500 ? 0 : us < 1000 ? 1 : us < 2000 ? 2 : 3]++;
 }
 
-void audioRoutineLeft(uint32_t queuedSamples) {
-	outputMargin.left(getSystemTicks(), queuedSamples);
+void audioRoutineLeft(uint32_t queuedSamples, uint32_t dmaFrame) {
+	outputMargin.left(getSystemTicks(), queuedSamples, dmaFrame);
+}
+
+void taskRan(const char* name, uint32_t counts) {
+	lastTaskName = name;
+	lastTaskCounts = counts;
 }
 
 void voiceCulled(const Sound& sound) {

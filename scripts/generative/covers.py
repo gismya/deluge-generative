@@ -94,6 +94,7 @@ BUILDERS = {
     "gen_arcmap": ("src/deluge/generative/perform/arc_map.*",),
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_audio_late": (),  # a scheduler task's name
     "gen_browser": (),
     "gen_browser_preview": (),  # the previewed path
     "gen_log": (),  # at=stop or at=phrase, literals beside it

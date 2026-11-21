@@ -1224,6 +1224,14 @@ void routine_task() {
 	routine();
 	calledFromScheduler = false;
 }
+#if ENABLE_SYSEX_TEST
+// Generative mode (spec §20): the audio output's margin, in frames of the TX ring
+constexpr uint32_t kTxFrameBytes = 4 * NUM_MONO_OUTPUT_CHANNELS;
+uint32_t txFrame(uint32_t address) {
+	return (address - (uint32_t)getTxBufferStart()) / kTxFrameBytes;
+}
+#endif
+
 void routine() {
 
 	logAction("AudioDriver::routine");
@@ -1239,7 +1247,7 @@ void routine() {
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
 #if ENABLE_SYSEX_TEST
-		TestPort::audioRoutineEntered(); // Generative mode (spec §20): the audio output's margin
+		TestPort::audioRoutineEntered(txFrame((uint32_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
 #endif
 		while (doSomeOutputting() && numRoutines < 2) {
 
@@ -1253,9 +1261,12 @@ void routine() {
 			numRoutines += 1;
 		}
 #if ENABLE_SYSEX_TEST
-		TestPort::audioRoutineLeft(deluge::io::midi::txSamplesQueued((uint32_t)getTxBufferCurrentPlace(),
-		                                                             i2sTXBufferPos, 4 * NUM_MONO_OUTPUT_CHANNELS,
-		                                                             SSI_TX_BUFFER_NUM_SAMPLES));
+		{
+			const auto dma = (uint32_t)getTxBufferCurrentPlace();
+			TestPort::audioRoutineLeft(
+			    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
+			    txFrame(dma));
+		}
 #endif
 	}
 	else {
