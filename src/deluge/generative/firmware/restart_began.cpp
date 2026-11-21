@@ -208,7 +208,12 @@ void RestartBegan::press() {
 		return;
 	}
 	const SteeringLog& log = adapter.steeringLog();
-	const int32_t at = log.newestWithHeader();
+	int32_t at = log.newestWithHeader();
+#if ENABLE_SYSEX_TEST
+	if (playing && TestPort::logFullHeld()) {
+		at = -1; // test hook: as if the log couldn't keep the playing piece's header
+	}
+#endif
 	if (!playing) {
 		// The last piece played, if it is the Current Recipe's: a stopped transition, a Regenerate or a genre change
 		// make another piece, which hasn't begun yet.
@@ -221,8 +226,9 @@ void RestartBegan::press() {
 		}
 	}
 	else if (at < 0) {
-		TEST_EVENT("gen_restart_press began_no_header");
-		adapter.pressRestart(); // the log couldn't keep the header: AS IT IS
+		// The log couldn't keep the playing piece's header (spec §13.2): refused, with RECORD's popup. Nothing queues.
+		TEST_EVENT("gen_restart_press began_log_full");
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_LOG_FULL));
 		return;
 	}
 	piece_ = at;

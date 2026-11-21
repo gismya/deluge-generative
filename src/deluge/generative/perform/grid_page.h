@@ -16,7 +16,7 @@
  */
 
 // Perform's grid pages (spec §13.5): SONG, CLIP, KEYBOARD and stock Performance view (KEYBOARD's second press), and
-// which main pads SHIFT turns into the sound editor's shortcuts (spec §13.7).
+// which main pads SHIFT turns into the sound editor's shortcuts, and on what (spec §13.7).
 
 #pragma once
 
@@ -30,5 +30,10 @@ enum class GridPage : uint8_t { Song, Clip, Keyboard, Performance };
 /// param on `page`. Every main pad does, but those whose SHIFT means something already: the KEYBOARD page's FILL pads
 /// (a fresh pick), and the CLIP page's NEW SOUND (the previous sound) and SOUND EDITOR (its root menu either way).
 bool shiftOpensSoundEditor(GridPage page, int32_t x, int32_t row);
+
+/// The part SHIFT + main pad opens the sound editor on, `focused` being the focused part (-1: none); -1 is the song
+/// FX. Stock Performance view's pads are song FX acting on the whole mix whatever is focused (spec §13.5), so its
+/// SHIFT opens the song's param there; every other page opens the focused part's.
+int32_t shiftEditorPart(GridPage page, int32_t focused);
 
 } // namespace deluge::generative::perform
