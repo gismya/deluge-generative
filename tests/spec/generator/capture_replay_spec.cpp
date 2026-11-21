@@ -549,6 +549,31 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			expect(w.tracks == std::vector<RecordingWriter::Track>{{kAcid, 4, stepTick(phrase)}}).to_be_true();
 		});
 
+		it("ends a part's lanes where its clip is cut or its new track starts: no node for the part comes late", _ {
+			std::vector<uint8_t> bytes(sizeof(PieceStart) + 4096);
+			SteeringLog log(bytes.data(), static_cast<int32_t>(bytes.size()));
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.recipe.macros.set(Macro::Motion, kMacroFull); // lanes that move all the time
+			start.seed = 3;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			log.append(phrase, {CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+			log.append(2 * phrase + 3, {CommandKind::SetSound, kAcid, 4});
+			log.appendSoundPath(2 * phrase + 3, kAcid, 4, pickSlot(kAcid), "SYNTHS/ACID 4.XML");
+			log.endPiece(4 * phrase, PieceEnd::Stopped);
+			auto replayed = replay(log.piece(0));
+			const RecordingWriter& w = replayed->writer;
+			expect(w.cuts.empty()).to_be_false();
+			expect(w.tracks.size()).to_equal(1U);
+			expect(w.lateNodes).to_equal(0);
+			const bool after = std::any_of(w.nodes.begin(), w.nodes.end(), [&](const auto& node) {
+				return node.first.part == kAcid && node.second.tick >= stepTick(2 * phrase + 3);
+			});
+			expect(after).to_be_true();
+		});
+
 		it("splits a song too big to load back at a Section line, and the next starts with that Section (§17.5)", _ {
 			for (const Genre* genre : {&genres::technoAcid, &genres::ambient}) {
 				Run run;

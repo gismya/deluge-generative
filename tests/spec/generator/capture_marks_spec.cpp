@@ -61,7 +61,8 @@ std::string row(const SteeringLog& log, int32_t piece) {
 
 /// The leave menu as text: its title, then each option.
 std::string menu(const SteeringLog& log) {
-	static const char* const kNames[] = {"MARKED + LAST", "MARKED ONLY", "MARKED", "LAST", "NOTHING", "LEAVE", "CANCEL"};
+	static const char* const kNames[] = {"MARKED + LAST", "MARKED ONLY", "MARKED", "LAST",
+	                                     "NOTHING",       "LEAVE",       "CANCEL"};
 	LeaveMenu out;
 	leaveMenu(log, out);
 	std::string text = out.title;

@@ -238,6 +238,8 @@ void ComposeDriver::shape(const Event& event) {
 		const Genre& genre = *generator_->recipe().genre;
 		for (int32_t p = 0; p < partCount(genre); p++) {
 			if (genre.parts[p].synth()) {
+				clips_.cutPart(static_cast<uint8_t>(p), event.tick,
+				               [this](const Automated& automated) { return centreOf(automated); });
 				writer_->cutClip(static_cast<uint8_t>(p), event.tick);
 				songExtra_ += kSongCosts.synthClip;
 			}
@@ -251,6 +253,7 @@ void ComposeDriver::shape(const Event& event) {
 			break;
 		}
 		// Every track has one sound for its whole life (spec §17.6).
+		clips_.cutPart(event.part, event.tick, [this](const Automated& automated) { return centreOf(automated); });
 		writer_->newTrack(event.part, event.pitch, event.tick);
 		const PartSpec& part = generator_->recipe().genre->parts[event.part];
 		songExtra_ += part.synth() ? kSongCosts.synthClip : int64_t{laneCount(part)} * kSongCosts.kitRow;
