@@ -74,7 +74,7 @@ GEN_STEP_CODE int32_t encodeCommand(const Command& command, uint32_t delta, uint
 
 // ---- Pieces ----
 
-SteeringLog::PieceInfo& SteeringLog::newest() const {
+GEN_STEP_CODE SteeringLog::PieceInfo& SteeringLog::newest() const {
 	return *reinterpret_cast<PieceInfo*>(buffer_ + newest_);
 }
 
@@ -188,7 +188,7 @@ void SteeringLog::cutHeader() {
 	cut_ = true;
 }
 
-void SteeringLog::cut(int32_t step) {
+GEN_STEP_CODE void SteeringLog::cut(int32_t step) {
 	// The piece's span ends before `step`: that step's records go, so every logged step is whole (spec §17.2). The
 	// header stays: stepFrom_ is past it before the first record.
 	PieceInfo& info = newest();
@@ -206,7 +206,7 @@ void SteeringLog::cut(int32_t step) {
 	cut_ = true;
 }
 
-void SteeringLog::writeDropped(uint32_t delta, uint8_t part) {
+GEN_STEP_CODE void SteeringLog::writeDropped(uint32_t delta, uint8_t part) {
 	uint8_t* at = buffer_ + used_;
 	*at++ = kSoundDroppedTag;
 	at = putVarint(at, delta);
