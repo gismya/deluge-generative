@@ -264,6 +264,7 @@ uint32_t pieceOpeningTicks = 0;
 void OutputSink::pieceOpening() {
 #if ENABLE_SYSEX_TEST
 	pieceOpeningTicks = getSystemTicks();
+	card_log_spike::pieceOpening(); // SPIKE (measurement only)
 #endif
 }
 

@@ -769,6 +769,9 @@ bool calledFromScheduler = false;
 		return;
 	}
 
+#if ENABLE_SYSEX_TEST
+	TestPort::recordDrained(numSamples); // Spike: card-backed steering log (measurement only)
+#endif
 	// From here on, MIDI is due when the playhead reaches the start of this window, until a MIDI tick in the window
 	// moves that along
 	windowStartTicks = getSystemTicks();

@@ -24,6 +24,7 @@
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/card_log_spike.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
@@ -284,6 +285,15 @@ constexpr Hold kHolds[] = {
 		     currentSong->changeFillMode(on);
 	     }
      }},
+    /// SPIKE (measurement only): stream a synthetic steering log to /GENTEST/ in chunks of this size, or stop and
+    /// delete its files (see card_log_spike.h)
+    {"cardlog_512", [](bool on) { deluge::generative::firmware::card_log_spike::setChunk(on ? 512 : 0); }},
+    {"cardlog_4k", [](bool on) { deluge::generative::firmware::card_log_spike::setChunk(on ? 4096 : 0); }},
+    {"cardlog_16k", [](bool on) { deluge::generative::firmware::card_log_spike::setChunk(on ? 16384 : 0); }},
+    /// SPIKE: an f_sync after every chunk, or only at the piece's end
+    {"cardlog_sync", [](bool on) { deluge::generative::firmware::card_log_spike::setSyncEach(on); }},
+    /// SPIKE: 64 B per step instead of 5, to sample many writes
+    {"cardlog_busy", [](bool on) { deluge::generative::firmware::card_log_spike::setBusy(on); }},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
     /// Perform's fresh entropy (each Recipe, seed and sound roll) comes from a fixed sequence that starts again here,
