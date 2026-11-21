@@ -173,6 +173,13 @@ BUILDERS = {
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
     "gen_restart": (),  # as_it_is or as_it_began
     "gen_restart_preload": (),  # how AS IT BEGAN's preload ended
+    "gen_capture_end": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the song it landed on: captureSongName()
+    "gen_capture_song": (
+        "src/deluge/generative/perform/capture.*",
+        "src/deluge/generative/firmware/song_file.*",
+    ),  # captureSongName(), or its clash variation
     "gen_record_led": (
         "src/deluge/generative/perform/capture.*",
     ),  # the RecordLed's name

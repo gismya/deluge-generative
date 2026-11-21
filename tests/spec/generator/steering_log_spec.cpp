@@ -175,6 +175,25 @@ describe steering_log("The steering log", $ {
 	});
 
 	context("pieces", _ {
+		it("spans a piece to its end, or to where the log cut it if that came first; -1 while it plays uncut", _ {
+			Buffer b(1024);
+			b.log.beginPiece(startOf(1));
+			b.log.append(0, macro(Macro::Energy, 1));
+			expect(b.log.piece(0).spanEnd()).to_equal(-1);
+			b.log.endPiece(40, PieceEnd::Stopped);
+			expect(b.log.piece(0).spanEnd()).to_equal(40);
+
+			Buffer full(1024);
+			full.log.beginPiece(startOf(1));
+			int32_t step = 0;
+			while (full.log.append(step, macro(Macro::Energy, step % 100))) {
+				step++;
+			}
+			expect(full.log.piece(0).spanEnd()).to_equal(step); // cut, still playing
+			full.log.endPiece(step + 5, PieceEnd::Stopped);
+			expect(full.log.piece(0).spanEnd()).to_equal(step); // the cut came first
+		});
+
 		it("opens each piece with its Recipe, seed, takes, picks and snapshot", _ {
 			Buffer b(4096);
 			PieceStart start = startOf(42);

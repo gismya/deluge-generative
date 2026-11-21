@@ -1,4 +1,4 @@
-# Shared by the Perform scripts (include perform_hold_back.txt): holds BACK until LEAVE PERFORM? is up, then lets go.
+# Shared by the Perform scripts (include perform_hold_back.txt): holds BACK until the leave menu is up, then lets go.
 # The menu opens after the stock hold time (400 ms, LONG_PRESS_DURATION; delugemu reports 399-403). held_ms= is how
 # long the press had been held then, on the firmware's audio clock: at least 350, and under a second, so a card access
 # that delays the menu passes and a hold that regressed to seconds or to a tap fails. within=10 only waits out a slow host.

@@ -16,6 +16,7 @@
  */
 
 #include "gui/ui/generative_modal.h"
+#include "generative/firmware/capture_job.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/runner.h"
 #include "gui/l10n/l10n.h"
@@ -40,9 +41,16 @@ void GenerativeModalUI::open(const deluge::generative::Job& job) {
 	display->displayLoadingAnimationText(deluge::l10n::get(deluge::l10n::String::STRING_FOR_LOADING));
 }
 
+void GenerativeModalUI::openCapture(const deluge::generative::Job& job) {
+	openComposing(job);
+	capturing_ = true;
+	renderUIsForOled();
+}
+
 void GenerativeModalUI::openComposing(const deluge::generative::Job& job) {
 	job_ = &job;
 	composing_ = true;
+	capturing_ = false;
 	oledShowsUIUnderneath = false; // the screen is COMPOSING's own
 	openUI(this);
 	renderUIsForOled();
@@ -53,9 +61,20 @@ void GenerativeModalUI::renderOLED(deluge::hid::display::oled_canvas::Canvas& ca
 		return;
 	}
 	using deluge::l10n::String;
-	canvas.drawScreenTitle(deluge::l10n::get(String::STRING_FOR_COMPOSING));
-	// Bars rendered against those expected at the target plus one Outro phrase: it may jump at the end (spec §14.5).
-	const auto progress = deluge::generative::firmware::composeProgress();
+	deluge::generative::firmware::ComposeProgress progress;
+	if (capturing_) {
+		// The song's title, and the bars replayed of its piece's span (spec §17.7).
+		deluge::generative::firmware::CaptureScreen screen;
+		deluge::generative::firmware::captureScreen(screen);
+		canvas.drawScreenTitle(screen.title);
+		progress = {screen.bars, screen.expected};
+	}
+	else {
+		canvas.drawScreenTitle(deluge::l10n::get(String::STRING_FOR_COMPOSING));
+		// Bars rendered against those expected at the target plus one Outro phrase: it may jump at the end (spec
+		// §14.5).
+		progress = deluge::generative::firmware::composeProgress();
+	}
 	constexpr int32_t kLeft = 4;
 	constexpr int32_t kRight = OLED_MAIN_WIDTH_PIXELS - 5;
 	constexpr int32_t kTop = OLED_MAIN_TOPMOST_PIXEL + 17;
@@ -68,8 +87,9 @@ void GenerativeModalUI::renderOLED(deluge::hid::display::oled_canvas::Canvas& ca
 			canvas.invertArea(kLeft + 2, filled, kTop + 2, kBottom - 2);
 		}
 	}
-	canvas.drawStringCentred(deluge::l10n::get(String::STRING_FOR_BACK_CANCELS), kBottom + 5, kTextSpacingX,
-	                         kTextSpacingY);
+	canvas.drawStringCentred(
+	    deluge::l10n::get(capturing_ ? String::STRING_FOR_BACK_STOPS : String::STRING_FOR_BACK_CANCELS), kBottom + 5,
+	    kTextSpacingX, kTextSpacingY);
 }
 
 void GenerativeModalUI::jobEnded() {
@@ -80,6 +100,7 @@ void GenerativeModalUI::jobEnded() {
 	// BACK dismissed it already, or the job replaced the UI stack (a finished Compose build's song).
 	job_ = nullptr;
 	composing_ = false;
+	capturing_ = false;
 }
 
 void GenerativeModalUI::dismiss() {
@@ -88,6 +109,7 @@ void GenerativeModalUI::dismiss() {
 		display->removeLoadingAnimation();
 	}
 	composing_ = false;
+	capturing_ = false;
 	closeUI(this);
 }
 
