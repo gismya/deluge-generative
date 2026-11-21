@@ -7,6 +7,7 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <vector>
 
 using namespace harness;
@@ -266,9 +267,72 @@ describe section_rules("Section rules", $ {
 		auto falls = ons(result, kFxPart, Lane::Fall, 0, end);
 		expect(falls.size()).to_equal(size_t{1});
 		expect(falls[0].tick).to_equal(stepTick(kBreak));
+		int32_t fallOff = -1;
+		for (const Event& e : only(result.events, EventKind::NoteOff)) {
+			if (e.lane == Lane::Fall && fallOff < 0) {
+				fallOff = e.tick;
+			}
+		}
+		expect(fallOff).to_equal(stepTick(kBuild8)); // it spans the Break (#423)
 		auto impacts = ons(result, kFxPart, Lane::Impact, 0, end);
 		expect(impacts.size()).to_equal(size_t{1});
 		expect(impacts[0].tick).to_equal(stepTick(kDrop8));
+	});
+
+	it("hold the Fall from a Break's first step to the Break's end in every genre with a Fall lane (#423)", _ {
+		// A Fall sample of 2 s or more loads in CUT mode (spec §10.4), so a short note would cut it.
+		int32_t genresChecked = 0;
+		for (const Genre* genre : allGenres()) {
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				if (genre->parts[p].role == Role::FX && laneIndexOf(genre->parts[p], Lane::Fall) >= 0) {
+					fxPart = p;
+				}
+			}
+			if (fxPart < 0) {
+				continue;
+			}
+			Run run;
+			run.recipe = newRecipe(*genre, 0);
+			run.recipe.macros.set(Macro::Density, macroPoints(100)); // every Fall gate open
+			Result result = play(run, 256);
+			const int32_t breakTick = sectionStart(result, SectionKind::Break);
+			int32_t breakEnd = -1;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				if (breakTick >= 0 && e.tick > breakTick) {
+					breakEnd = e.tick;
+					break;
+				}
+			}
+			if (breakTick < 0 || breakEnd < 0) {
+				std::printf("%s: no whole Break in 256 bars\n", genre->name);
+			}
+			expect(breakEnd > breakTick && breakTick >= 0).to_be_true();
+			// Paired by lane: a Siren can start on the same tick at the same pitch.
+			std::vector<Held> falls;
+			for (const Event& e : result.events) {
+				if (e.part != fxPart || e.lane != Lane::Fall) {
+					continue;
+				}
+				if (e.kind == EventKind::NoteOn && e.tick >= breakTick && e.tick < breakEnd) {
+					falls.push_back({e.tick, INT32_MAX, e.pitch});
+				}
+				else if (e.kind == EventKind::NoteOff && !falls.empty() && falls.back().off == INT32_MAX) {
+					falls.back().off = e.tick;
+				}
+			}
+			if (falls.size() != 1 || falls[0].on != breakTick || falls[0].off != breakEnd) {
+				std::printf("%s: Break %d-%d, %zu Falls, first %d-%d\n", genre->name, breakTick, breakEnd, falls.size(),
+				            falls.empty() ? -1 : falls[0].on, falls.empty() ? -1 : falls[0].off);
+			}
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].on).to_equal(breakTick);
+				expect(falls[0].off).to_equal(breakEnd);
+			}
+			genresChecked++;
+		}
+		expect(genresChecked >= 5).to_be_true(); // Techno's subgenres, House, Psytrance, Dub and Ambient
 	});
 
 	it("gate FX lanes by Density like any lane", _ {

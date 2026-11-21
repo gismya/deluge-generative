@@ -23,6 +23,7 @@
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/perform/one_shot.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -55,9 +56,6 @@
 namespace deluge::generative::firmware {
 
 namespace {
-
-/// Samples shorter than this play once, as the sample browser sets them (spec §10.4).
-constexpr uint32_t kOneShotMaxLengthMs = 2000;
 
 /// A private song's Kits are built while another song is current, so their constructors took sync defaults from
 /// that song. Set them as they would be for `song` (spec §10.4).
@@ -237,7 +235,7 @@ public:
 		}
 		auto* sample = static_cast<Sample*>(holder->audioFile);
 		sampleDrum_->sources[0].repeatMode =
-		    sample->getLengthInMSec() < kOneShotMaxLengthMs ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
+		    perform::playsOut(sample->getLengthInMSec()) ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
 		return LoadOutcome::Loaded;
 	}
 
