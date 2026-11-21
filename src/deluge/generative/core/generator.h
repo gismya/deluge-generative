@@ -39,6 +39,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/core/types.h"
 #include "generative/core/voicing.h"
 #include <array>
@@ -251,6 +252,29 @@ public:
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
+
+	// ---- Replay (spec §2.6, §17.1): Capture's Compose driver plays a piece's steering log ----
+
+	/// Begins a piece as its log's header opened it (spec §17.2, §17.3): its Recipe at step 0 (a transition's carried
+	/// macros and Part biases already in it), seed and takes, entering its first Section (a Drop's Groove with
+	/// `onDrop`), with the Arc held if the hold was carried over.
+	void startPiece(const PieceStart& start);
+	/// As decideNextStep(), from the log's records stamped on nextStep(), in order (spec §2.6): each command applied
+	/// there as it landed, through apply(), with no press to resolve and no quantisation. The pending list holds only
+	/// the Arc moves the log says wait (RecordKind::Waiting), because the Arc's look-ahead reads them; each leaves it
+	/// as its command lands. `next(LogRecord&)` hands the records on one at a time and returns false after the last.
+	template <typename Next>
+	void decideReplayed(Next next) {
+		if (stoppedDeciding()) {
+			return;
+		}
+		beginDecision();
+		LogRecord record;
+		while (next(record)) {
+			replay(record);
+		}
+		decideLanded();
+	}
 
 	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
 	/// without deciding it. A force that lands on the end line then cancels the ending (spec §13.2). Everything else
@@ -627,6 +651,22 @@ private:
 	[[nodiscard]] Arc::Move waitingMove() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
+	/// A decision's start, before the steering lands on `nextStep()`.
+	void beginDecision();
+	/// Whether `command` waits in an Arc move's slot: a force or End, or a transition (Arc::Move).
+	static bool isArcMove(const Command& command) {
+		return command.kind == CommandKind::ForceSection || command.kind == CommandKind::End
+		       || command.kind == CommandKind::Transition;
+	}
+	/// Logs each Arc move slot that changed on `nextStep()` since the last decision (RecordKind::Waiting, NotWaiting),
+	/// so replay can wait it as this decision does.
+	void logWaitingMoves(SteeringLog* log);
+	/// Notes what waits in the Arc move slots now, as logged: after the landings, which leave their slots logged.
+	void noteWaitingMoves();
+	/// One replayed record (decideReplayed()).
+	void replay(const LogRecord& record);
+	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide.
+	void decideLanded();
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
 	/// keeps its own note-off (spec §12.9). The new roster plays from here.
 	void endAtStop();
@@ -877,6 +917,9 @@ private:
 	Arc arc_;
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
+	/// The Arc move slots as the log last had them (logWaitingMoves()): the force or End, then the transition;
+	/// CancelNewest (never pending) for an empty slot.
+	Command waitingMoves_[2] = {{CommandKind::CancelNewest}, {CommandKind::CancelNewest}};
 	uint32_t refused_ = 0;
 	/// The roster's mutes and solos. Performance state (spec §12.5, §13.1).
 	MuteSolo mutes_;

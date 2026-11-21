@@ -32,12 +32,51 @@ void ComposeDriver::begin(Generator& generator, const Recipe& recipe, uint32_t s
 	shortBuildGrooves_ = 0;
 	done_ = false;
 	// From Start, with the Intro, as an untouched Perform plays it (spec §15.1).
+	replaying_ = false;
 	generator.start(recipe, seed, takes, skipIntro);
 	writer.begin(recipe);
 	clips_.begin(writer);
 }
 
+void ComposeDriver::beginReplay(Generator& generator, const SteeringLog::Piece& piece, SongWriter& writer) {
+	const PieceStart& start = piece.start();
+	begin(generator, start.recipe, start.seed, start.takes, 0, writer);
+	replaying_ = true;
+	generator.startPiece(start);
+	reader_ = piece.reader();
+	// The span: up to where the piece ended, or where the log was cut (spec §17.2). A piece still playing (none is
+	// once Perform has stopped) runs to its last record.
+	spanEnd_ = piece.endStep();
+	if (piece.cutAt() >= 0 && (spanEnd_ < 0 || piece.cutAt() < spanEnd_)) {
+		spanEnd_ = piece.cutAt();
+	}
+	if (spanEnd_ < 0) {
+		LogRecord record;
+		for (SteeringLog::Piece::Reader all = piece.reader(); all.next(record);) {
+			spanEnd_ = record.step + 1;
+		}
+	}
+	endsAtTransition_ = piece.ended() == PieceEnd::Transition && spanEnd_ == piece.endStep();
+	dropped_ = 0;
+}
+
 bool ComposeDriver::run(int32_t steps) {
+	if (replaying_) {
+		for (int32_t i = 0; i < steps && !spanEnds(); i++) {
+			writeDue(decisionTick(generator_->nextStep()) - 1);
+			decideReplayed();
+		}
+		if (!done_ && spanEnds()) {
+			if (endsAtTransition_ && !generator_->stoppedDeciding()) {
+				// A hard cut's Transition sits on the start step itself: it lands there and ends every note, deciding
+				// nothing (spec §17.2).
+				writeDue(decisionTick(generator_->nextStep()) - 1);
+				decideReplayed();
+			}
+			finish();
+		}
+		return done_;
+	}
 	for (int32_t i = 0; i < steps && !done_; i++) {
 		if (generator_->ended()) {
 			break;
@@ -55,6 +94,38 @@ bool ComposeDriver::run(int32_t steps) {
 		finish();
 	}
 	return done_;
+}
+
+bool ComposeDriver::spanEnds() const {
+	return generator_->nextStep() >= spanEnd_;
+}
+
+void ComposeDriver::decideReplayed() {
+	const int32_t step = generator_->nextStep();
+	generator_->decideReplayed([&](LogRecord& out) {
+		if (!reader_.peek(out) || out.step > step) {
+			return false;
+		}
+		reader_.next(out);
+		replayed(out);
+		return true;
+	});
+}
+
+void ComposeDriver::replayed(const LogRecord& record) {
+	switch (record.kind) {
+	case RecordKind::Command:
+	case RecordKind::Waiting:
+	case RecordKind::NotWaiting:
+		break;
+	case RecordKind::SoundPath:
+		writer_->soundPick(static_cast<uint8_t>(record.command.target), static_cast<uint8_t>(record.command.value),
+		                   record.slot, record.path, record.pathLength);
+		break;
+	case RecordKind::SoundDropped:
+		dropped_ |= partBit(record.command.target);
+		break;
+	}
 }
 
 bool ComposeDriver::endsHere() {

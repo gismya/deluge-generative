@@ -26,6 +26,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include <cstdint>
 
 namespace deluge::generative::compose {
@@ -48,6 +49,10 @@ public:
 	/// SHIFT+PLAY does: only the firmware check (spec §21.3) asks for it, to build a golden's case.
 	void begin(Generator& generator, const Recipe& recipe, uint32_t seed, const Takes& takes, int32_t targetSteps,
 	           SongWriter& writer, bool skipIntro = false);
+	/// Capture (spec §17.1): replays `piece` of a steering log from its header, each logged entry applied at its step
+	/// as it landed live (spec §2.6), up to the end of the piece's span: where it ended, or where the log was cut
+	/// (spec §17.2). No LENGTH rule: the log says where End landed. The log must not change until done.
+	void beginReplay(Generator& generator, const SteeringLog::Piece& piece, SongWriter& writer);
 	/// Decides up to `steps` more steps, writing what they play. A runner job calls it a chunk at a time and yields
 	/// between (spec §15.7). Once the Outro's last line is reached, the core is flushed and the writer finished.
 	/// @return whether the song is done.
@@ -73,6 +78,15 @@ private:
 	/// The sample Riser's note-on starts late, so its file ends on the Drop, at the Recipe's tempo (spec §9.5).
 	void timeRiser(Event& noteOn);
 	void finish();
+	/// Replay: the logged entries stamped on the next step, applied in its decision, with what the driver does
+	/// with them.
+	void decideReplayed();
+	/// Replay: a logged entry that isn't a command, or a driver-side command, on `step`.
+	void replayed(const LogRecord& record);
+	/// Replay: what the song does at an event the Compose shape ignores (spec §17.6).
+	void shape(const Event& event);
+	/// The first step past the replayed span: no step from it on is decided.
+	[[nodiscard]] bool spanEnds() const;
 
 	Generator* generator_ = nullptr;
 	SongWriter* writer_ = nullptr;
@@ -84,6 +98,17 @@ private:
 	int32_t endTick_ = 0;
 	int32_t shortBuildGrooves_ = 0;
 	bool done_ = false;
+
+	// Replay (Capture).
+	bool replaying_ = false;
+	SteeringLog::Piece::Reader reader_;
+	/// The first step past the piece's span (spec §17.2): where it ended, or where the log was cut.
+	int32_t spanEnd_ = 0;
+	/// The piece ended at a transition's start step: a hard cut's entry sits on that step itself (spec §17.2).
+	bool endsAtTransition_ = false;
+	/// Parts whose newest SetSound a confirm dropped (SoundDropped): its Sound event starts no track.
+	uint8_t dropped_ = 0;
+	static_assert(kMaxParts <= 8, "dropped_ holds a bit a part");
 };
 
 } // namespace deluge::generative::compose

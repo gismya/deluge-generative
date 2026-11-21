@@ -1,6 +1,7 @@
 // The portable Compose driver (spec §2.5, §6.8, §15.1–§15.6): LENGTH and where End goes, the clip notes and the
 // automation nodes it writes, and an untouched Perform driver run matching a Compose run for every genre (§21.2).
 
+#include "compose_helpers.h"
 #include "generative/compose/compose_driver.h"
 #include "generative/compose/song_size.h"
 #include "generative/perform/riser_timing.h"
@@ -21,51 +22,6 @@ using namespace harness;
 using namespace deluge::generative::compose;
 
 namespace {
-
-/// Keeps what Compose writes, in call order.
-struct RecordingWriter final : SongWriter {
-	const Recipe* recipe = nullptr;
-	std::vector<Note> notes;
-	std::vector<std::pair<Automated, Node>> nodes;
-	std::vector<std::pair<Automated, int8_t>> bases;
-	int32_t endTick = -1;
-	uint32_t soundingParts = 0;
-	int32_t calls = 0;
-	int32_t endCall = -1;
-	int32_t riserMicros = 0;
-	void begin(const Recipe& r) override {
-		recipe = &r;
-		calls++;
-	}
-	void note(const Note& n) override {
-		notes.push_back(n);
-		calls++;
-	}
-	void node(const Automated& a, const Node& n) override {
-		nodes.push_back({a, n});
-		calls++;
-	}
-	void base(const Automated& a, int8_t value) override {
-		bases.push_back({a, value});
-		calls++;
-	}
-	void end(int32_t tick, uint32_t sounding) override {
-		endTick = tick;
-		soundingParts = sounding;
-		endCall = calls++;
-	}
-	int32_t sampleMicros(const Event& /*noteOn*/) override { return riserMicros; }
-
-	[[nodiscard]] std::vector<Node> nodesOf(const Automated& a) const {
-		std::vector<Node> out;
-		for (const auto& [id, node] : nodes) {
-			if (id == a) {
-				out.push_back(node);
-			}
-		}
-		return out;
-	}
-};
 
 /// A Compose run, one step a call as a runner job would make them in chunks, with the Section each step played in.
 struct Composed {
@@ -112,90 +68,6 @@ std::vector<SectionKind> untouchedSections(const Recipe& recipe, uint32_t seed, 
 		while (generator->popDue(INT32_MAX, &e)) {}
 	}
 	return out;
-}
-
-/// Perform's played stream paired into notes, as Compose pairs Compose's: the note-on's tick, to its note-off.
-std::vector<Note> pairNotes(const std::vector<Event>& events) {
-	std::vector<Note> out;
-	std::vector<Event> open;
-	for (const Event& e : events) {
-		if (e.kind == EventKind::NoteOn && !e.muted) {
-			open.push_back(e);
-		}
-		else if (e.kind == EventKind::NoteOff) {
-			auto found = std::find_if(open.begin(), open.end(), [&](const Event& o) { return o.sameKey(e); });
-			if (found != open.end()) {
-				out.push_back(
-				    {found->tick, e.tick - found->tick, found->part, found->lane, found->pitch, found->velocity});
-				open.erase(found);
-			}
-		}
-	}
-	return out;
-}
-
-/// Notes that start before `cutTick` less the most a note leans early, so only the decisions before the cut's own
-/// made them, ended no later than `cutTick`, sorted: what both runs agree on.
-std::vector<Note> notesBefore(std::vector<Note> notes, int32_t cutTick) {
-	std::vector<Note> out;
-	for (Note n : notes) {
-		if (n.tick < cutTick - kMaxLean) {
-			n.length = std::min(n.tick + n.length, cutTick) - n.tick;
-			out.push_back(n);
-		}
-	}
-	std::sort(out.begin(), out.end(), [](const Note& a, const Note& b) {
-		return std::tie(a.tick, a.part, a.lane, a.pitch, a.length, a.velocity)
-		       < std::tie(b.tick, b.part, b.lane, b.pitch, b.length, b.velocity);
-	});
-	return out;
-}
-
-using LaneKey = std::tuple<uint8_t, Lane, SoundControl, bool>;
-LaneKey keyOf(const Automated& a) {
-	return {a.part, a.lane, a.control, a.throwDelay};
-}
-
-/// The value each automation lane has on each step line before `cut`, as Perform plays its Control events: a snap
-/// jumps on its line, a ramp reaches its value on the next. Every lane starts at home, 0.
-std::map<LaneKey, std::vector<int32_t>> performCurves(const std::vector<Event>& events, int32_t cut) {
-	std::map<LaneKey, std::vector<int32_t>> out;
-	auto apply = [&](const Automated& a, int32_t value, const Event& e) {
-		auto [entry, added] = out.try_emplace(keyOf(a), std::vector<int32_t>(cut + 1, 0));
-		std::vector<int32_t>& curve = entry->second;
-		const int32_t step = e.tick / kTicksPerStep;
-		for (int32_t s = e.snap ? step : step + 1; s <= cut; s++) {
-			curve[s] = value;
-		}
-	};
-	for (const Event& e : events) {
-		if (e.kind != EventKind::Control || e.tick >= stepTick(cut)) {
-			continue;
-		}
-		apply({e.part, e.lane, e.control, false}, e.offset, e);
-		if (e.control == SoundControl::Space) {
-			apply({e.part, e.lane, e.control, true}, e.throwDelay(), e);
-		}
-	}
-	return out;
-}
-
-/// What a lane's nodes play at `tick`, as the firmware's automation does: a straight line into an interpolated node,
-/// a jump onto any other; `base` with no node. `from` is a node index at or before `tick`'s, kept from call to call as
-/// ticks rise.
-int32_t nodeValue(const std::vector<Node>& nodes, int32_t base, int32_t tick, size_t& from) {
-	if (nodes.empty()) {
-		return base;
-	}
-	while (from + 1 < nodes.size() && nodes[from + 1].tick <= tick) {
-		from++;
-	}
-	const Node& a = nodes[from];
-	if (from + 1 == nodes.size() || tick <= a.tick) {
-		return a.value;
-	}
-	const Node& b = nodes[from + 1];
-	return b.interpolated ? a.value + (b.value - a.value) * (tick - a.tick) / (b.tick - a.tick) : a.value;
 }
 
 /// Compose's notes and automation against an untouched Perform run of the same Recipe and seed, up to the Outro's

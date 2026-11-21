@@ -27,6 +27,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
+#include "generative/core/steering.h"
 #include "generative/core/types.h"
 #include <cstdint>
 
@@ -67,6 +68,14 @@ struct Node {
 	constexpr bool operator==(const Node&) const = default;
 };
 
+/// A node on the song's tempo automation (spec §17.6), in hundredths of a BPM, as Node is for a control.
+struct TempoNode {
+	int32_t tick = 0;
+	int32_t tempo = 0;
+	bool interpolated = false;
+	constexpr bool operator==(const TempoNode&) const = default;
+};
+
 /// Where Compose writes (spec §2.5): the firmware's adapter builds a private Song (spec §15.7), the harness records.
 /// The calls come in this order: begin(), then notes and nodes as the song plays out (a part's notes in the order they
 /// end, each lane's nodes in tick order), then a base() per automation lane the stream touched, then end().
@@ -92,6 +101,33 @@ public:
 	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length, 0 for a synth. Asked only for a
 	/// Riser in a Build, which then starts so its file ends on the Drop (spec §9.5, §10.5), as Perform's does.
 	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+
+	// ---- Capture's replay (spec §17.5, §17.6). A Compose song gets none of these. ----
+	// Ticks are from the piece's step 0. Each comes when the replay reaches it, among the notes and nodes; a note or
+	// node goes to the clip and the song its tick falls in.
+
+	/// `part`'s clip ends at `tick`, where a key or scale change lands, and its next clip runs on from there on the
+	/// same track (spec §17.6). Pitched parts only: Drums and FX clips are never cut.
+	virtual void cutClip(uint8_t /*part*/, int32_t /*tick*/) {}
+	/// One of the picks of `part`'s sound `token`, from its re-roll (spec §17.2): its slot (pickSlot()) and path,
+	/// `length` chars, not terminated, valid only during the call. Comes on the step its SetSound landed on, before
+	/// newTrack().
+	virtual void soundPick(uint8_t /*part*/, uint8_t /*token*/, int32_t /*slot*/, const char* /*path*/,
+	                       int32_t /*length*/) {}
+	/// From `tick` on, `part` plays sound `token`, from the picks soundPick() gave it: a new track, and the part's clip
+	/// on its old track ends there (spec §17.6). A swap a transition's confirm dropped never comes here: the part keeps
+	/// its old track.
+	virtual void newTrack(uint8_t /*part*/, uint8_t /*token*/, int32_t /*tick*/) {}
+	/// A node on the song's tempo automation (spec §17.6), in tick order. The song's own tempo is begin()'s Recipe's.
+	virtual void tempo(const TempoNode& /*node*/) {}
+	/// A player's param edit from `tick` on (spec §17.2, §17.6): a SetParam, automation on the song or on the part's
+	/// clip, or a SetHome, a sound control's new home.
+	virtual void paramEdit(const Command& /*edit*/, int32_t /*tick*/) {}
+	/// Stock's stutter starts (`on`) or ends at `tick` (SetStutter, spec §17.2).
+	virtual void stutter(bool /*on*/, int32_t /*tick*/) {}
+	/// A split (spec §17.5): end() has ended one song at `tick`, and the next starts there, with that Section and the
+	/// replayed state at that step. Its notes, nodes, bases and end() follow.
+	virtual void nextSong(int32_t /*tick*/) {}
 };
 
 /// Turns the event stream into notes and nodes for a SongWriter, as the events would play: feed it every event in
