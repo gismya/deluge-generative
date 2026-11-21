@@ -93,7 +93,8 @@ private:
 	int32_t hitTo_ = -1;
 	ArcPlan plan_;
 	/// What the plan was worked out from: whether a piece plays, the rosters started, the phrase of its last decided
-	/// step, its steering state (the pending list, the hold, mutes and solos) and the Recipe macros it centres on.
+	/// step, its steering state (the pending list, the hold, mutes and solos), the Recipe macros it centres on and the
+	/// Part biases its gates read (spec §3.3).
 	struct PlanKey {
 		bool playing = false;
 		bool held = false;
@@ -104,11 +105,12 @@ private:
 		int32_t pendingCount = 0;
 		Command pending[PendingList::kCapacity] = {}; ///< The first pendingCount; the rest are never read
 		Macros macros;
+		PartBiases bias;
 		/// Every frame: compares the pending commands only up to pendingCount, not the whole list.
 		bool operator==(const PlanKey& other) const {
 			if (playing != other.playing || held != other.held || muted != other.muted || soloed != other.soloed
 			    || rosters != other.rosters || decidedPhrase != other.decidedPhrase
-			    || pendingCount != other.pendingCount || !(macros == other.macros)) {
+			    || pendingCount != other.pendingCount || !(macros == other.macros) || !(bias == other.bias)) {
 				return false;
 			}
 			for (int32_t i = 0; i < pendingCount; i++) {

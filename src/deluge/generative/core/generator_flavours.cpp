@@ -295,7 +295,7 @@ GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	const Pattern& pattern = spec.pool[state.entry];
 	int32_t patternStep = step.index % pattern.length;
 	LinePitch pitch;
-	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)
+	if (!planned(partIndex, -1, step.index, step.sharedDensity) || keptOut(step, partIndex, Lane::None)
 	    || !linePitch(partIndex, pattern, patternStep, pitch)) {
 		return;
 	}
@@ -399,7 +399,7 @@ GEN_STEP_CODE Generator::PlayingStep Generator::playingStep(int32_t partIndex, c
 	}
 	const PickChange change =
 	    updatePick(state, spec.pool, spec.band, static_cast<uint8_t>(partIndex), Lane::None, step);
-	if (!planned(partIndex, -1, step.index, step.density) || keptOut(step, partIndex, Lane::None)) {
+	if (!planned(partIndex, -1, step.index, step.sharedDensity) || keptOut(step, partIndex, Lane::None)) {
 		return {-1, change};
 	}
 	return {step.index % spec.pool[state.entry].length, change};

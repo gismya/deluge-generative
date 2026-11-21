@@ -302,6 +302,8 @@ private:
 	int32_t fillShown_ = -1;
 	/// The macros the last tick saw the Generator play, for the gen_macro_landed test event.
 	Macros macrosShown_;
+	/// The Part biases the last tick saw the Generator play, for the gen_bias_landed test event.
+	PartBiases biasShown_;
 #endif
 };
 

@@ -241,6 +241,55 @@ public:
 	/// A fader hold let go: the core goes back to the Current Recipe's centre.
 	void springMacroBack(Macro macro);
 
+	// ---- Part bias (spec §3.3, §13.5) ----
+
+	/// Steers `part`'s Part bias on `macro` (F8 with the part focused): the Current Recipe's at once, and the core's
+	/// from the next undecided step, as a macro is. While a KEYBOARD fader holds that bias, only the Recipe's moves.
+	/// Nothing for a part past the roster.
+	void setBias(int32_t part, Macro macro, int32_t units);
+	/// A KEYBOARD fader held with `part` focused: the core plays the bias `units` while it is held, across a piece or
+	/// instance start, and the Current Recipe keeps its own.
+	void holdBias(int32_t part, Macro macro, int32_t units);
+	/// A fader tap let go: `units` is `part`'s bias in the Current Recipe, and the core's.
+	void keepBias(int32_t part, Macro macro, int32_t units);
+	/// A fader hold let go: the core goes back to the Current Recipe's bias.
+	void springBiasBack(int32_t part, Macro macro);
+	/// A KEYBOARD fader row pressed with `part` focused, or -1 for the Recipe level (spec §13.5): holds the macro at
+	/// the row's `units`, or the part's bias that puts it there (faderBias()). keepFader() and springFaderBack() are
+	/// its tap and hold let go, for the part the press held.
+	void holdFader(int32_t part, Macro macro, int32_t units) {
+		if (part < 0) {
+			holdMacro(macro, units);
+			return;
+		}
+		holdBias(part, macro, faderBias(adapter().recipe().macros[macro], units));
+	}
+	void keepFader(int32_t part, Macro macro, int32_t units) {
+		if (part < 0) {
+			keepMacroCentre(macro, units);
+			return;
+		}
+		keepBias(part, macro, faderBias(adapter().recipe().macros[macro], units));
+	}
+	void springFaderBack(int32_t part, Macro macro) {
+		if (part < 0) {
+			springMacroBack(macro);
+			return;
+		}
+		springBiasBack(part, macro);
+	}
+	/// RESET PART BIAS: `part`'s bias on every macro to 0, or every part's for -1.
+	void resetBias(int32_t part);
+	/// Where `part` plays `macro` at the Recipe's centre: the centre moved by its bias (partBiased()). The KEYBOARD
+	/// fader's fill and F8's ring with the part focused.
+	[[nodiscard]] int32_t biasedCentre(int32_t part, Macro macro) const {
+		return partBiased(adapter().recipe().macros[macro], adapter().recipe().bias.of(part, macro));
+	}
+	/// The Part bias a KEYBOARD fader holds on `macro` (its popup), whichever part it holds.
+	[[nodiscard]] int32_t heldBias(Macro macro) const { return macroSteering_.heldBias(macro); }
+	/// Whether `part` is in the roster, so it takes a Part bias.
+	[[nodiscard]] bool takesBias(int32_t part) const { return part >= 0 && part < rosterParts(); }
+
 	// ---- Key (spec §7.6, §13.5) ----
 
 	/// A key and scale change. While playing it queues to the next phrase line, or an Arc Drop if one lands first
@@ -286,6 +335,8 @@ private:
 	PressOutcome steer(const Command& command);
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
 	void pushMacro(Macro macro, int32_t units);
+	/// Pushes a SetBias while Perform is entered. @return false if the queue was full.
+	bool pushBias(int32_t part, Macro macro, int32_t units);
 	/// pressTake() past the pending gate.
 	PressOutcome pressTakeUngated(uint8_t part, int32_t take);
 	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
@@ -368,6 +419,11 @@ void PerformSteering<Adapter>::instanceStarts(bool fillDown) {
 		if (const int32_t held = macroSteering_.resend(macro); held != MacroSteering::kNotHeld) {
 			pushMacro(macro, held);
 		}
+		// A fader still holding a part's bias too: the new instance starts from the Recipe's or carries the last
+		// one's, either way not the held one.
+		if (const int32_t part = macroSteering_.biasHeldOn(macro); part != MacroSteering::kNoPart) {
+			pushBias(part, macro, macroSteering_.heldBias(macro));
+		}
 	}
 }
 
@@ -381,7 +437,19 @@ template <typename Adapter>
 void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	Recipe& recipe = adapter().recipe();
 	const Macros live = recipe.macros;
+	const PartBiases liveBias = recipe.bias;
+	// A Regenerate keeps each part's bias: the same roster. A genre change starts at the new Recipe's (0), a LOAD at
+	// its file's, and a fader still holding a bias lets go of it (spec §3.3).
+	const bool keepsBias = keepsPartBias(pending.macros, pending.recipe.genre, recipe.genre);
 	recipe = pending.recipe;
+	if (keepsBias) {
+		recipe.bias = liveBias;
+	}
+	else {
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			macroSteering_.letGoBias(static_cast<Macro>(m));
+		}
+	}
 	if (pending.macros == HandoverMacros::Live) {
 		recipe.macros = live;
 	}
@@ -721,6 +789,68 @@ template <typename Adapter>
 void PerformSteering<Adapter>::springMacroBack(Macro macro) {
 	macroSteering_.letGo(macro);
 	pushMacro(macro, adapter().recipe().macros[macro]);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::setBias(int32_t part, Macro macro, int32_t units) {
+	if (!takesBias(part)) {
+		return;
+	}
+	PartBiases& bias = adapter().recipe().bias;
+	const int32_t before = bias.of(part, macro);
+	bias.set(part, macro, units);
+	// A full queue loses the turn: the Recipe keeps what the core plays, as a macro's centre does.
+	if (macroSteering_.biasHeldOn(macro) != part && !pushBias(part, macro, bias.of(part, macro))) {
+		bias.set(part, macro, before);
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::holdBias(int32_t part, Macro macro, int32_t units) {
+	if (!takesBias(part)) {
+		return;
+	}
+	PartBiases held;
+	held.set(part, macro, units); // clamped as the Recipe's
+	if (pushBias(part, macro, held.of(part, macro))) {
+		macroSteering_.holdBias(part, macro, held.of(part, macro));
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::keepBias(int32_t part, Macro macro, int32_t units) {
+	macroSteering_.letGoBias(macro);
+	setBias(part, macro, units);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::springBiasBack(int32_t part, Macro macro) {
+	macroSteering_.letGoBias(macro);
+	if (takesBias(part)) {
+		pushBias(part, macro, adapter().recipe().bias.of(part, macro));
+	}
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::resetBias(int32_t part) {
+	for (int32_t p = 0; p < rosterParts(); p++) {
+		if (part >= 0 && p != part) {
+			continue;
+		}
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			if (adapter().recipe().bias.of(p, macro) != 0) {
+				setBias(p, macro, 0);
+			}
+		}
+	}
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::pushBias(int32_t part, Macro macro, int32_t units) {
+	Command command{CommandKind::SetBias, static_cast<uint8_t>(part), units};
+	command.length = static_cast<uint16_t>(macro);
+	return !entered_ || queue_.push(command);
 }
 
 template <typename Adapter>

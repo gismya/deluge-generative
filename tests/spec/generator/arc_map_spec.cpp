@@ -244,6 +244,11 @@ describe arc_map("Arc map", $ {
 		piece.pushAndDecide({CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(40)});
 		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true(); // a macro centre moved (spec §2.8)
 		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_false();
+		Command bias{CommandKind::SetBias, 1, -macroPoints(20)};
+		bias.length = static_cast<uint16_t>(Macro::Density);
+		piece.pushAndDecide(bias);
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true(); // a Part bias moves its gate (§3.3)
+		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_false();
 		piece.decideBefore(2 * kPhraseSteps + 1); // the next phrase on the decided side
 		expect(piece.state.refreshPlan(piece.driver.playing(), 0)).to_be_true();
 		expect(piece.state.refreshPlan(piece.driver.playing(), 1)).to_be_true(); // a new roster

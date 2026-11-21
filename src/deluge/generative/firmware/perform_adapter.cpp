@@ -58,6 +58,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	instanceStarts();
 #if ENABLE_SYSEX_TEST
 	macrosShown_ = generator_->recipe().macros;
+	biasShown_ = generator_->recipe().bias;
 #endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
@@ -154,6 +155,17 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 		}
 	}
 	for (int32_t p = 0; p < kMaxParts; p++) {
+		// A SetBias (an F8 turn with the part focused, a KEYBOARD fader, RESET PART BIAS) landed on the last decided
+		// step, or a transition's start step brought the new roster's.
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			if (generator_->recipe().bias.of(p, macro) != biasShown_.of(p, macro)) {
+				biasShown_.set(p, macro, generator_->recipe().bias.of(p, macro));
+				TEST_EVENT("gen_bias_landed part=%ld macro=%ld units=%ld step=%ld", static_cast<long>(p),
+				           static_cast<long>(m), static_cast<long>(biasShown_.of(p, macro)),
+				           static_cast<long>(generator_->nextStep() - 1));
+			}
+		}
 		// A SetOctave landed on the last decided step: the Current Recipe still has the shift before it.
 		if (generator_->octave(p) != currentRecipe.recipe.octave[p]) {
 			const int32_t landed = generator_->nextStep() - 1;
@@ -282,7 +294,9 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
 	// modulo 8, as with the sound picks (perform/pending_recipe.h); both objects are aligned to 8, so the
-	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions. The steering's size moves `sink_`:
+	// MacroSteering's Part bias holds keep their part in 16 bits so they grow it by 16 B; with 8 bits, 12 B broke this
+	// (#303).
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 	static_assert((Transitions::incomingOffset() - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8
