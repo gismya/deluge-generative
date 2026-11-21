@@ -84,6 +84,52 @@ std::vector<ArcStep> arcSteps(const Recipe& recipe, uint32_t seed, int32_t count
 }
 
 /// A Control event's set and control.
+/// Over Pad chord changes: a pitch class the voicings on both sides share, held at its pitch, or moved an octave and
+/// struck again there (round 2's HOLD). The Pad played from a copy of Ambient whose holdSharedChance is `chance`.
+struct SharedTones {
+	int32_t held = 0;
+	int32_t moved = 0;
+};
+
+SharedTones padSharedTones(int32_t chance) {
+	std::vector<PartSpec> parts(ambientGenre.parts.begin(), ambientGenre.parts.end());
+	parts[kPadPart].sustain.holdSharedChance = static_cast<uint16_t>(chance);
+	Genre genre = ambientGenre;
+	genre.parts = parts;
+	SharedTones out;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		for (Scale scale : ambientGenre.facts.scales) {
+			Recipe recipe = harness::movingRecipe(ambientGenre, scale, seed, 40);
+			recipe.genre = &genre;
+			const Walked walked = walk(recipe, seed, 128 * kStepsPerBar, {}, true);
+			const std::vector<Held> notes = heldNotes(walked.notes, kPadPart);
+			for (int32_t change : walked.changes()) {
+				const int32_t tick = change * kTicksPerStep;
+				std::set<int32_t> before;
+				std::set<int32_t> after;
+				for (const Held& note : notes) {
+					if (note.on < tick && note.off >= tick) {
+						before.insert(note.pitch);
+					}
+					if (note.on <= tick && note.off > tick) {
+						after.insert(note.pitch);
+					}
+				}
+				for (int32_t pitch : before) {
+					if (after.count(pitch) != 0) {
+						out.held++;
+						continue;
+					}
+					for (int32_t other : after) {
+						out.moved += pitchClass(other - pitch) == 0 ? 1 : 0;
+					}
+				}
+			}
+		}
+	}
+	return out;
+}
+
 using ControlKey = std::tuple<uint8_t, Lane, SoundControl>;
 
 ControlKey keyOf(const Event& e) {
@@ -98,7 +144,7 @@ describe ambient("Ambient", $ {
 		expect(std::string(ambientGenre.name)).to_equal(std::string("ambient"));
 		expect(std::string(ambientGenre.oledName)).to_equal(std::string("AMBIENT"));
 		expect(ambientGenre.parent == nullptr).to_be_true();
-		expect(ambientGenre.version).to_equal(1);
+		expect(ambientGenre.version).to_equal(2);
 		expect(findGenre("ambient") == &ambientGenre).to_be_true();
 		expect(partCount(ambientGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -114,11 +160,12 @@ describe ambient("Ambient", $ {
 		expect(rosterFits(ambientGenre)).to_be_true();
 	});
 
-	it("plays 60–90 BPM in Major, Lydian or Dorian, straight, in 8-bar phrases, every macro at 25", _ {
+	it("plays 60–90 BPM in Major, Lydian, Dorian, Minor or Mixolydian, straight, in 8-bar phrases, every macro at 25", _ {
 		expect(ambientGenre.facts.tempoLowBpm).to_equal(60);
 		expect(ambientGenre.facts.tempoHighBpm).to_equal(90);
 		std::set<Scale> scales(ambientGenre.facts.scales.begin(), ambientGenre.facts.scales.end());
-		expect(scales == std::set<Scale>{Scale::Major, Scale::Lydian, Scale::Dorian}).to_be_true();
+		expect(scales == std::set<Scale>{Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian})
+		    .to_be_true(); // Minor and Mixolydian: rules round 1's S6-scales A
 		expect(ambientGenre.facts.swing).to_equal(0);
 		expect(ambientGenre.phraseBars).to_equal(8);
 		for (int32_t m = 0; m < kNumMacros; m++) {
@@ -201,8 +248,9 @@ describe ambient("Ambient", $ {
 			const SectionOffsets& build = ambientGenre.arc.offsets[static_cast<int32_t>(SectionKind::Build)];
 			expect(build.energyTo).to_equal(ambientGenre.arc.dropLiftEnergy);
 			expect(build.densityTo).to_equal(ambientGenre.arc.dropLiftDensity);
-			expect(ambientGenre.arc.dropLiftEnergy).to_equal(macroPoints(3));
-			expect(ambientGenre.arc.dropLiftDensity).to_equal(macroPoints(3));
+			// +5 (owner, round 2's S4): the mallets (29) enter late in the Build and fade after the Drop.
+			expect(ambientGenre.arc.dropLiftEnergy).to_equal(macroPoints(5));
+			expect(ambientGenre.arc.dropLiftDensity).to_equal(macroPoints(5));
 		});
 
 		it("never lowers Energy or Density on a Drop's step, nor silences a part there, at three Densities", _ {
@@ -258,14 +306,17 @@ describe ambient("Ambient", $ {
 	});
 
 	context("its Chord graph (spec §4.5, §7.4)", _ {
-		it("is home I with the brief's moves, a heavy repeat, 8 bars a chord, no cadence target, Extensions 1–2", _ {
+		it("is home I with round 2's moves (iii and ♭VII, each mostly back home), a heavy repeat, 8 bars a chord, no cadence target, Extensions 1–2", _ {
 			const ChordGraph& graph = *ambientGenre.harmony.graph;
 			std::set<std::pair<int32_t, int32_t>> moves;
 			for (const ChordMove& move : graph.moves) {
 				moves.insert({move.from, move.to});
 				expect(move.weight).to_be_less_than(graph.repeatWeight);
 			}
-			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kIV, kI}, {kVI, kIV}, {kI, kV}, {kV, kI}, {kII, kI}, {kVI, kI}})
+			// Owner, round 2's S6: between today's graph and the review's, adding I–iii and I–♭VII, each mostly back home.
+			expect(moves == std::set<std::pair<int32_t, int32_t>>{{kI, kIV}, {kI, kVI}, {kI, kIII}, {kI, kVII}, {kI, kV},
+			                                                      {kIV, kI}, {kVI, kIV}, {kVI, kI}, {kIII, kIV},
+			                                                      {kVII, kI}, {kII, kI}, {kV, kI}})
 			    .to_be_true();
 			expect(graph.repeatWeight).to_equal(40);
 			expect(graph.homePull).to_equal(40); // owner, round 1's Q338 (#338)
@@ -367,9 +418,10 @@ describe ambient("Ambient", $ {
 					entries += v && (bar == 0 || walked.steps[(bar - 1) * kStepsPerBar].chord != kV) ? 1 : 0;
 				}
 			}
-			expect(entries).to_be_greater_than(30);
-			// With V–I (25) besides the home pull (10), V holds about 20 bars on average here; with the home pull
-			// alone it held about 29 (the walk's Section lines cut the longest holds short).
+			// I–V at 8 (round 2's S6, was 10): V entered 30 times here, about 13 bars a visit.
+			expect(entries).to_be_greater_than(20);
+			// With V–I (25) besides the home pull, V holds about 13 bars on average here; with the home pull alone at
+			// 10 it held about 29 (the walk's Section lines cut the longest holds short).
 			expect(onV).to_be_less_than(entries * 24);
 		});
 	});
@@ -381,10 +433,10 @@ describe ambient("Ambient", $ {
 			expect(bass.loop.answers.empty()).to_be_true();
 			expect(bass.loop.slide.atZero == 0 && bass.loop.slide.atFull == 0).to_be_true();
 			expect(bass.expression.spread).to_equal(0);
-			// The key's root between F#2 and F3, the Drone's own (bass-up), every chord root at or over it.
+			// The key's root between F#2 and F3, the Drone's own (bass-up); V, vi and ♭VII under it (round 2's BASS).
 			expect(bass.reg.anchor).to_equal(48);
-			expect(bass.reg.spanLow).to_equal(-1);
-			expect(bass.reg.spanHigh).to_equal(11);
+			expect(bass.reg.spanLow).to_equal(-6);
+			expect(bass.reg.spanHigh).to_equal(6);
 			for (uint8_t key = 0; key < 12; key++) {
 				const int32_t tonic = tonicNote(bass.reg, key);
 				expect(tonic >= 42 && tonic <= 53).to_be_true();
@@ -409,27 +461,35 @@ describe ambient("Ambient", $ {
 			expect(notes).to_be_greater_than(40);
 		});
 
-		it("keeps the Bass out of the lowest octaves: no note under F#2 (about 92 Hz) or the key's root, at Complexity "
-		   "50 too", _ {
-			const PartSpec& bass = ambientGenre.parts[kBassPart];
-			expect(bass.loop.draws.octaveDown.atZero == 0 && bass.loop.draws.octaveDown.atFull == 0).to_be_true();
-			int32_t aboveRoot = 0;
-			for (uint32_t seed = 1; seed <= 12; seed++) {
-				Recipe recipe = ambientRecipe(Scale::Major, static_cast<uint8_t>(seed % 12), seed);
-				recipe.macros.set(Macro::Complexity, macroPoints(50));
-				const int32_t tonic = tonicNote(bass.reg, recipe.keyRoot);
-				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar, {}, true);
-				for (const Event& e : walked.noteOns) {
-					if (e.part != kBassPart) {
-						continue;
-					}
-					expect(e.pitch).to_be_greater_than(41);
-					expect(e.pitch >= tonic && e.pitch < tonic + 12).to_be_true();
-					aboveRoot += e.pitch > tonic ? 1 : 0;
-				}
-			}
-			expect(aboveRoot).to_be_greater_than(0);
-		});
+		it("folds V, vi and ♭VII under the key's root and plays the other roots at or over it, never under C#2 (about "
+		   "69 Hz), at Complexity 50 too",
+		   _ {
+			   const PartSpec& bass = ambientGenre.parts[kBassPart];
+			   expect(bass.loop.draws.octaveDown.atZero == 0 && bass.loop.draws.octaveDown.atFull == 0).to_be_true();
+			   std::set<int32_t> under;
+			   std::set<int32_t> over;
+			   for (uint32_t seed = 1; seed <= 12; seed++) {
+				   const Scale scale = ambientGenre.facts.scales[seed % ambientGenre.facts.scales.size()];
+				   Recipe recipe = ambientRecipe(scale, static_cast<uint8_t>(seed % 12), seed);
+				   recipe.macros.set(Macro::Complexity, macroPoints(50));
+				   const int32_t tonic = tonicNote(bass.reg, recipe.keyRoot);
+				   const Walked walked = walk(recipe, seed, 96 * kStepsPerBar, {}, true);
+				   for (const Event& e : walked.noteOns) {
+					   if (e.part != kBassPart) {
+						   continue;
+					   }
+					   // C#2, the 5th under F#2: the lowest key's V.
+					   expect(e.pitch).to_be_greater_than(36);
+					   const int32_t chord = walked.steps[e.tick / kTicksPerStep].chord;
+					   const bool folds = chord == kV || chord == kVI || chord == kVII;
+					   expect(folds ? e.pitch < tonic && e.pitch >= tonic - 5 : e.pitch >= tonic && e.pitch < tonic + 6)
+					       .to_be_true();
+					   (folds ? under : over).insert(chord);
+				   }
+			   }
+			   expect(under == std::set<int32_t>{kV, kVI, kVII}).to_be_true();
+			   expect(over.count(kI) == 1 && over.count(kIV) == 1).to_be_true();
+		   });
 
 		it("voices each chord on its Pad, Extensions included, never more than 4 notes, with a 16-bar Sweep", _ {
 			const PartSpec& pad = ambientGenre.parts[kPadPart];
@@ -611,6 +671,20 @@ describe ambient("Ambient", $ {
 			expect(heldOverDrop).to_be_greater_than(2);
 		});
 
+		// Owner, round 2's HOLD: today's re-strike, or round 2's held common tones, "sometimes one, sometimes the other".
+		it("on a chord change, now holds a shared pitch class where today's voicing moved it an octave, about half the "
+		   "time",
+		   _ {
+			   expect(ambientGenre.parts[kPadPart].sustain.holdSharedChance).to_equal(500);
+			   const SharedTones today = padSharedTones(0);
+			   const SharedTones always = padSharedTones(1000);
+			   const SharedTones half = padSharedTones(ambientGenre.parts[kPadPart].sustain.holdSharedChance);
+			   // Measured: moved an octave 125 times at 0, 8 at 1000 and 63 at 500; held 418, 535 and 480.
+			   expect(always.moved).to_be_less_than(today.moved / 3);
+			   expect(half.moved).to_be_greater_than(always.moved + (today.moved - always.moved) / 4);
+			   expect(half.moved).to_be_less_than(today.moved - (today.moved - always.moved) / 4);
+		   });
+
 		// The Drone and the Pad are gated at 0 and count toward the Intro floor (spec §9.4), so the Intro builds from
 		// them: Density rises from 0 over the Intro's 16 bars, the bells (8) about 5 bars in, the Bass (15) about 10.
 		it("builds the Intro from the Drone: an Intro floor of 0, the bells about 5 bars in, the Bass about 10", _ {
@@ -751,6 +825,16 @@ describe ambient("Ambient", $ {
 			    .to_be_true();
 			const auto droneEntries = ambientGenre.palette->partEntries(ambientGenre.parts[kDronePart]);
 			expect(std::string(droneEntries.back().path).rfind("SYNTHS/GENERATIVE/", 0)).to_equal(std::string::npos);
+		});
+
+		it("rolls the Pad from 131, 151, 157 and 145, not 118 Small Bridge Pad (owner, round 2's I3-118)", _ {
+			std::set<std::string> pads;
+			for (const PaletteEntry& entry : ambientGenre.palette->partEntries(ambientGenre.parts[kPadPart])) {
+				pads.insert(entry.path);
+			}
+			expect(pads == std::set<std::string>{"SYNTHS/131 Warm Strings.XML", "SYNTHS/151 Radiant FM Pad.XML",
+			                                     "SYNTHS/157 Rich FM Pad 4.XML", "SYNTHS/145 Eerie High Pad.XML"})
+			    .to_be_true();
 		});
 
 		it("falls back to a factory bass, and to a factory drone, on a card without the pack (spec §10.1)", _ {
