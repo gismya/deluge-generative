@@ -64,6 +64,9 @@ wait 30
 button BACK up
 expect event gen_back_tap
 expect no_event gen_restart as_it_is within=8
+# Just after a phrase line, so the bar line can't come between the two presses
+mark now
+expect event gen_phrase bar= since=mark within=60
 button X_ENC down
 wait 100
 button PLAY down
@@ -81,6 +84,9 @@ expect no_event gen_restart as_it_is within=8
 expect playing=true
 
 # ---- A transition is refused while a restart waits (CHANGE PENDING), and the restart lands ----
+# Just after a phrase line, so the menu's presses all come before the restart's bar line
+mark now
+expect event gen_phrase bar= since=mark within=60
 button X_ENC down
 wait 100
 button PLAY down

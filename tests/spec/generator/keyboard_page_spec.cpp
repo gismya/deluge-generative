@@ -544,6 +544,14 @@ describe keyboard_page("The KEYBOARD page", $ {
 		}
 	});
 
+	it("opens SHIFT's param on the song on stock Performance view, and on the focused part elsewhere (spec §13.5)", _ {
+		expect(shiftEditorPart(GridPage::Performance, 2)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Performance, -1)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Keyboard, 2)).to_equal(2);
+		expect(shiftEditorPart(GridPage::Song, -1)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Clip, 0)).to_equal(0);
+	});
+
 	it("keeps a tapped value as the new centre", _ {
 		MacroFaderHolds holds;
 		holds.press(Macro::Density, 3, macroPoints(36), 100);

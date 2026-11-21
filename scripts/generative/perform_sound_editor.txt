@@ -1,9 +1,10 @@
-# The sound editor inside Perform (#116, spec §13.5, §13.7, F6, F7) over the sysex test port: SHIFT + a main pad opens
-# it at the printed param, on the focused part's Sound or with nothing focused the song FX, and SOUND EDITOR on the
-# CLIP page opens the part's root menu. Pads, PLAY and the gold knobs stay live under it, with no grey-out, and its
-# edits set homes. It never makes Perform a ClipMinder: SAVE, KEYBOARD and CLIP do nothing, SONG closes it back to the
-# SONG page, BACK closes it, and a sound swap on its part closes it. Runs on a Deluge (deluge_probe.py session) or in
-# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+# The sound editor inside Perform (#116, #442, spec §13.5, §13.7, F6, F7) over the sysex test port: SHIFT + a main pad
+# opens it at the printed param, on the focused part's Sound or with nothing focused (or on stock Performance view) the
+# song FX, and SOUND EDITOR on the CLIP page opens the part's root menu. Pads, PLAY and the gold knobs stay live under
+# it, with no grey-out, and its edits set homes. It never makes Perform a ClipMinder: SAVE, KEYBOARD and CLIP do
+# nothing, SONG closes it back to the SONG page, BACK closes it, and a sound swap on its part closes it. Runs on a
+# Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
+# current clip a synth or kit clip.
 #
 # Acid's parts: DRUMS row 1 (y 7, a Kit), ACID row 2 (y 6, a synth). Pad 8 7 is LPF FREQUENCY for a Sound, the song
 # and a Kit's affect-entire FX alike. gen_editor open part=<p|-1> kit=0|1 greyout=0|1: Perform opened the editor (or
@@ -20,7 +21,8 @@
 # covers: src/deluge/generative/firmware/runner.* src/deluge/generative/runner/
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/gui/context_menu/generative.cpp
-# covers: src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_performance.cpp
+# covers: src/deluge/generative/perform/grid_page.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
@@ -341,6 +343,49 @@ pad 14 1 up
 expect event gen_fill_press value=0
 expect ui=generative_perform
 expect no_event gen_editor open within=1
+
+# ---- Stock Performance view (KEYBOARD again): its pads are song FX, so SHIFT + LPF FREQUENCY opens the song FX there,
+# with DRUMS locked (spec §13.5) and with nothing focused ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page PERFORMANCE
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=-1 kit=0
+expect ui=sound_editor
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+button AFFECT_ENTIRE down
+wait 50
+button AFFECT_ENTIRE up
+expect event gen_focus part=-1 locked=-1
+button SHIFT down
+wait 50
+pad 8 7 down
+wait 50
+pad 8 7 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=-1 kit=0
+expect ui=sound_editor
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed
+expect ui=generative_perform
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
 
 # ---- OSC 1's file browser opens the sample browser over the editor on ACID; its part stays the current Clip ----
 button SESSION_VIEW down
