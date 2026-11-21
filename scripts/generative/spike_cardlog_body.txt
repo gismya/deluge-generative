@@ -3,7 +3,7 @@
 # DROP into Psytrance (the new piece's file and its 7 KB header land at the transition's start step), 1.5 min of
 # busy steering, HARD CUT AT PHRASE into Detroit (6 parts), 1 min of busy steering, stop. The wrappers
 # (spike_cardlog_*.txt) set the card log's holds first. Figures: --events 'gen_cardlog|gen_stream|gen_h1 |gen_h16|
-# gen_transition start|gen_log_piece'. The `expect playing=true within=` after each minute waits out its queued
+# gen_transition start|gen_log_piece|input_lag'. The `expect playing=true within=` after each minute waits out its queued
 # turns, so the next menu's expect gets its full window.
 include perform_open.txt
 include perform_confirm.txt
@@ -15,6 +15,7 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
+report input
 include capture_h13_minute.txt
 expect playing=true within=100
 
@@ -78,6 +79,7 @@ expect event gen_transition phase=idle within=60
 expect playing=true
 include capture_h13_minute.txt
 expect playing=true within=100
+report input
 button PLAY down
 wait 50
 button PLAY up
