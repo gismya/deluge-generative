@@ -146,6 +146,7 @@ Error CardLog::enter(SteeringLog& log) {
 	}
 	uint32_t highest = 0;
 	int32_t adopted = 0;
+	int32_t kept = 0;
 	int32_t deleted = 0;
 	DIR dir;
 	if (error == Error::NONE && f_opendir(&dir, kCaptureFolder) == FR_OK) {
@@ -154,9 +155,11 @@ Error CardLog::enter(SteeringLog& log) {
 		static constexpr int32_t kMaxFiles = 256;
 		uint32_t ids[kMaxFiles];
 		int32_t found = 0;
-		while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0 && found < kMaxFiles) {
+		// Every name counts for the next id, past the list's room too: a new file never lands on an old one.
+		while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
 			const uint32_t id = (info.fattrib & AM_DIR) != 0 ? 0 : idOf(info.fname);
-			if (id != 0) {
+			highest = std::max(highest, id);
+			if (id != 0 && found < kMaxFiles) {
 				ids[found++] = id;
 			}
 		}
@@ -164,21 +167,28 @@ Error CardLog::enter(SteeringLog& log) {
 		// Oldest first, so adopted pieces keep their set order.
 		std::sort(ids, ids + found);
 		for (int32_t i = 0; i < found; i++) {
-			highest = std::max(highest, ids[i]);
 			char path[40];
 			pathOf(ids[i], path);
 			uint8_t* image = nullptr;
 			int32_t bytes = 0;
-			bool keep = false;
+			bool marked = false;
+			int32_t slot = -1;
 			if (readAll(path, &image, &bytes) == FR_OK && SteeringLog::readImage(image, bytes)) {
 				const auto* info = reinterpret_cast<const PieceInfo*>(image);
-				keep = info->marked && info->id == ids[i] && log.adopt(*info);
+				marked = info->marked && info->id == ids[i];
+				slot = marked ? log.adopt(*info) : -1;
 			}
 			if (image != nullptr) {
 				delugeDealloc(image);
 			}
-			if (keep) {
+			if (slot >= 0) {
+				// On the card already, closed and as its info says: a later unmark rewrites it (spec §17.4).
+				closed_[slot] = true;
+				version_[slot] = log.infoVersion(slot);
 				adopted++;
+			}
+			else if (marked) {
+				kept++; // a marked piece the table has no room for stays on the card for a later entry
 			}
 			else {
 				f_unlink(path);
@@ -187,8 +197,9 @@ Error CardLog::enter(SteeringLog& log) {
 		}
 	}
 	log.continueIds(highest + 1);
-	TEST_EVENT("gen_card_log enter adopted=%ld deleted=%ld next=%lu error=%d", static_cast<long>(adopted),
-	           static_cast<long>(deleted), static_cast<unsigned long>(highest + 1), static_cast<int>(error));
+	TEST_EVENT("gen_card_log enter adopted=%ld deleted=%ld next=%lu error=%d kept=%ld", static_cast<long>(adopted),
+	           static_cast<long>(deleted), static_cast<unsigned long>(highest + 1), static_cast<int>(error),
+	           static_cast<long>(kept));
 	seenOpened_ = log.opened();
 	openedAt_ = getSystemTime();
 	lastSync_ = getSystemTime();
@@ -237,7 +248,7 @@ void CardLog::openFor(int32_t slot, uint32_t id) {
 	}
 	else {
 		writing_ = spare_ == 0 ? 1 : 0;
-		const FRESULT result = CARD_TIMED(openMax, f_open(&files_[writing_], path, FA_WRITE | FA_CREATE_ALWAYS));
+		const FRESULT result = CARD_TIMED(openMax, f_open(&files_[writing_], path, FA_WRITE | FA_CREATE_NEW));
 		if (result != FR_OK) {
 			writing_ = -1;
 			fail(slot, result);
@@ -271,8 +282,10 @@ void CardLog::closeWriting() {
 	const int32_t slot = writingSlot_;
 	FIL& file = files_[writing_];
 	bool ok = true;
-	if (!log_->dropped(slot) && !failed_[slot]) {
-		ok = writeInfo(file, slot); // the piece's end, its mark and its cut (spec §17.4)
+	if (!failed_[slot]) {
+		// The piece's end, its mark and its cut (spec §17.4); a piece thrown away says unmarked, whatever its last
+		// flush said, so a clean deletes it.
+		ok = writeInfo(file, slot);
 	}
 	const FRESULT closed = CARD_TIMED(closeMax, f_close(&file)); // f_close syncs
 	writing_ = -1;
@@ -310,7 +323,7 @@ void CardLog::makeSpare() {
 	char path[40];
 	pathOf(id, path);
 	const int32_t index = writing_ == 0 ? 1 : 0;
-	if (CARD_TIMED(openMax, f_open(&files_[index], path, FA_WRITE | FA_CREATE_ALWAYS)) == FR_OK) {
+	if (CARD_TIMED(openMax, f_open(&files_[index], path, FA_WRITE | FA_CREATE_NEW)) == FR_OK) {
 		spare_ = index;
 		spareId_ = id;
 	}
@@ -361,11 +374,13 @@ void CardLog::step(bool finishing) {
 	if (log_->opened() != seenOpened_) {
 		seenOpened_ = log_->opened();
 		openedAt_ = now;
+		spareTried_ = false;
 		errorShown_ = false; // a new piece shows its own card error
 	}
 	// A thrown-away piece's slot goes back once nothing of it is left to skip.
 	for (int32_t s = 0; s < kMaxLogPieces; s++) {
-		if (log_->used(s) && log_->dropped(s) && log_->allTaken(s) && writingSlot_ != s) {
+		const bool infoStale = closed_[s] && !failed_[s] && version_[s] != log_->infoVersion(s);
+		if (log_->used(s) && log_->dropped(s) && log_->allTaken(s) && writingSlot_ != s && !infoStale) {
 			log_->released(s);
 			failed_[s] = false;
 			closed_[s] = false;
@@ -387,7 +402,9 @@ void CardLog::step(bool finishing) {
 			}
 			flushing_ = flushing_ || now - lastSync_ >= kLogFlushSeconds;
 			// 4 KB at a time while it plays; all of it once it ends, or for a timed flush (spec §17.2).
-			const bool worth = finishing || flushing_ || !log_->growing(slot) || log_->ready(slot) >= kLogChunkBytes;
+			// The header at once: the next piece can't open over a kept piece's header still in RAM (spec §17.2).
+			const bool worth = finishing || flushing_ || !log_->growing(slot) || log_->ready(slot) >= kLogChunkBytes
+			                   || log_->taken(slot) < log_->headerBytes(slot);
 			if (!worth) {
 				return;
 			}
@@ -443,9 +460,11 @@ void CardLog::step(bool finishing) {
 			return;
 		}
 	}
-	// A mark changed on a piece whose file is closed (CAPTURE ▸, or RECORD while stopped): its info again.
-	for (int32_t s = 0; s < kMaxLogPieces; s++) {
-		if (log_->used(s) && !log_->dropped(s) && closed_[s] && !failed_[s] && version_[s] != log_->infoVersion(s)) {
+	// A mark changed on a piece whose file is closed (CAPTURE ▸, RECORD while stopped, a piece found at entry, or one
+	// thrown away once unmarked): its info again, a quiet moment after a piece change (spec §17.2, §17.4).
+	const bool quiet = finishing || now - openedAt_ >= kLogSpareAfterSeconds;
+	for (int32_t s = 0; s < kMaxLogPieces && quiet; s++) {
+		if (log_->used(s) && closed_[s] && !failed_[s] && version_[s] != log_->infoVersion(s)) {
 			char path[40];
 			pathOf(log_->idOf(s), path);
 			FRESULT result = f_open(&other_, path, FA_WRITE | FA_OPEN_EXISTING);
@@ -461,7 +480,8 @@ void CardLog::step(bool finishing) {
 		}
 	}
 	// The next piece's file, made ahead in a quiet moment (spec §17.2).
-	if (!finishing && spare_ < 0 && now - openedAt_ >= kLogSpareAfterSeconds) {
+	if (!finishing && spare_ < 0 && !spareTried_ && now - openedAt_ >= kLogSpareAfterSeconds) {
+		spareTried_ = true; // once a piece: a card that refuses it isn't asked again every step
 		makeSpare();
 	}
 }

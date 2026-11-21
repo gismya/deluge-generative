@@ -311,7 +311,7 @@ bool SampleLowLevelReader::assignClusters(SamplePlaybackGuide* guide, Sample* sa
 
 			if (!clusters[l] || !clusters[l]->loaded) {
 #if ENABLE_SYSEX_TEST
-				TestPort::clusterMissed(false); // #448: the card log on vs off (spec §17.2)
+				TestPort::clusterMissed(false); // Generative mode (spec §19, test-port hooks)
 #endif
 				return false;
 			}
@@ -357,7 +357,7 @@ bool SampleLowLevelReader::moveOnToNextCluster(SamplePlaybackGuide* guide, Sampl
 	if (!clusters[0]->loaded) {
 		D_PRINTLN("late  %d  p  %d", clusters[0]->sample->filePath.get(), clusters[0]->clusterIndex);
 #if ENABLE_SYSEX_TEST
-		TestPort::clusterMissed(true); // #448: the card log on vs off (spec §17.2)
+		TestPort::clusterMissed(true); // Generative mode (spec §19, test-port hooks)
 #endif
 
 		return false;

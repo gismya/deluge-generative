@@ -761,7 +761,7 @@ describe steering_log("The steering log", $ {
 			found.endStep = 64;
 			found.ended = PieceEnd::Stopped;
 			found.start = startOf(9);
-			expect(b.log.adopt(found)).to_be_true();
+			expect(b.log.adopt(found) >= 0).to_be_true();
 			expect(b.log.nextId()).to_equal(42u);
 			expect(b.log.current()).to_equal(-1); // not the current piece: RECORD can't unmark it
 			b.log.beginPiece(startOf(1));

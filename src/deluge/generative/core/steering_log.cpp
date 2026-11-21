@@ -577,7 +577,7 @@ void SteeringLog::storeFailed(int32_t slot) {
 	}
 }
 
-bool SteeringLog::adopt(const PieceInfo& info) {
+int32_t SteeringLog::adopt(const PieceInfo& info) {
 	for (int32_t s = 0; s < kMaxLogPieces && slots_ != nullptr; s++) {
 		Slot& slot = slots_[s];
 		if (slot.state == Slot::Free) {
@@ -590,10 +590,10 @@ bool SteeringLog::adopt(const PieceInfo& info) {
 			slot.ringFrom = head_;
 			pieces_++;
 			nextId_ = std::max(nextId_, info.id + 1);
-			return true;
+			return s;
 		}
 	}
-	return false;
+	return -1;
 }
 
 int32_t SteeringLog::copyUntaken(int32_t slot, int32_t from, uint8_t* out) const {

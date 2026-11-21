@@ -771,7 +771,7 @@ bool calledFromScheduler = false;
 	}
 
 #if ENABLE_SYSEX_TEST
-	TestPort::recordDrained(numSamples); // #448: the card log on vs off (spec §17.2)
+	TestPort::recordDrained(numSamples); // Generative mode (spec §19, test-port hooks)
 #endif
 	// From here on, MIDI is due when the playhead reaches the start of this window, until a MIDI tick in the window
 	// moves that along

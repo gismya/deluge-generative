@@ -433,6 +433,7 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 			songEdited_ = true;
 		}
 		else if (output >= 0) {
+			static_assert(kMaxParts <= 8, "editedParts_ holds a bit a part");
 			editedParts_ |= static_cast<uint8_t>(1U << output);
 		}
 	}

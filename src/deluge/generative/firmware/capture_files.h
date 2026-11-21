@@ -33,7 +33,8 @@ constexpr char kCaptureFolder[] = "GENERATIVE/CAPTURE";
 constexpr int32_t kLogChunkBytes = 4096;
 /// A piece still playing is written out and synced at least this often (*tuning*): a power-off loses at most this.
 constexpr double kLogFlushSeconds = 10.0;
-/// A spare file for the next piece is made only this long after a piece opened: away from the piece change.
+/// A spare file for the next piece is made, and a closed file's info rewritten, only this long after a piece opened:
+/// away from the piece change (*tuning*).
 constexpr double kLogSpareAfterSeconds = 2.0;
 
 class CardLog {
@@ -88,7 +89,8 @@ private:
 	int32_t spare_ = -1; ///< files_ index made ahead for the next piece, or -1
 	uint32_t spareId_ = 0;
 	bool flushing_ = false;
-	bool dirty_ = false; ///< Written since the last sync
+	bool dirty_ = false;      ///< Written since the last sync
+	bool spareTried_ = false; ///< The spare was tried since the last piece opened
 	double lastSync_ = 0;
 	uint32_t seenOpened_ = 0;
 	double openedAt_ = 0;

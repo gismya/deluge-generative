@@ -8,8 +8,9 @@
 # Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
 # current clip a synth or kit clip.
 #
-# gen_card_log enter adopted= deleted= next= error=: Perform's entry scanned the folder. gen_card_log open piece=
-# spare=0|1: a piece's file opened (spare=1: made ahead). gen_card_log flush piece= bytes=: a timed flush.
+# gen_card_log enter adopted= deleted= next= error= kept=: Perform's entry scanned the folder (kept=: marked files
+# the table had no room for, left on the card). gen_card_log open piece= spare=0|1: a piece's file opened (spare=1:
+# made ahead). gen_card_log flush piece= bytes=: a timed flush.
 # gen_card_log closed piece= bytes= dropped=: a piece's file closed at its end. gen_card_log removed piece= result=:
 # Capture saved its songs. gen_card_log clean keep_marked= deleted=: a leave or a Capture cleaned the folder.
 # covers: src/deluge/generative/firmware/capture_files.* src/deluge/generative/core/steering_log.*
@@ -22,7 +23,7 @@ start_state
 mark now
 include perform_open.txt
 include perform_confirm.txt
-expect event /^gen_card_log enter adopted=0 deleted=[0-9]+ next=[0-9]+ error=0$/ since=mark
+expect event /^gen_card_log enter adopted=0 deleted=[0-9]+ next=[0-9]+ error=0 kept=0$/ since=mark
 mark now
 button PLAY down
 wait 50
@@ -66,6 +67,36 @@ expect event /^gen_card_log removed piece=[0-9]+ result=0$/ within=120
 expect event /^gen_capture_end done songs=2 saved=2 / within=60 since=mark
 expect event /^gen_card_log clean keep_marked=1 deleted=0$/ within=10 since=mark
 
+# ---- A marked piece of a second: its header reaches the card at once, so the next piece opens (#448 R1) ----
+start_state
+include perform_open.txt
+include perform_confirm.txt
+mark now
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 / within=10 since=mark
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ within=15 since=mark
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ within=15
+mark now
+include perform_leave.txt
+expect event /^gen_card_log clean keep_marked=0 deleted=[0-9]+$/ within=10 since=mark
+
 # ---- A marked piece whose Capture failed stays on the card, and comes back marked at the next entry ----
 start_state
 hold compose_reserve
@@ -105,7 +136,49 @@ button RECORD down
 wait 50
 button RECORD up
 expect event /^gen_mark no_piece / within=5
-# A leave keeping NOTHING cleans everything, the adopted piece's file too
+# Unmarked in CAPTURE ▸ (its only row), its file says so (spec §17.4): the leave's clean deletes it, and the next
+# entry finds nothing to take back (#448 R1)
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 8
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark unmarked piece=0 current=-1 marks=0 within=5
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+expect ui=generative_perform
 mark now
 include perform_leave.txt
-expect event /^gen_card_log clean keep_marked=0 deleted=1$/ within=10 since=mark
+expect event /^gen_card_log clean keep_marked=1 deleted=1$/ within=10 since=mark
+start_state
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=0 deleted=0 / since=mark
+# A leave keeping NOTHING cleans everything, a marked piece's file too
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+wait 2000
+mark now
+include perform_leave.txt
+expect event /^gen_card_log clean keep_marked=0 deleted=[1-9][0-9]*$/ within=10 since=mark

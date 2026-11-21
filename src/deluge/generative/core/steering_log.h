@@ -88,7 +88,7 @@ struct LogRecord {
 /// Perform's log in RAM (spec §17.2, §20): the playing piece's opening and header, kept whole for AS IT BEGAN, and a
 /// ring its records pass through on their way to the card. 16 KB between them, in SDRAM.
 constexpr int32_t kLogHeaderBytes = 9 * 1024;
-constexpr int32_t kLogRingBytes = 7 * 1024;
+constexpr int32_t kLogRingBytes = 7 * 1024; ///< *tuning*: about 1,400 busy steps of card stall
 constexpr int32_t kPerformLogBytes = kLogHeaderBytes + kLogRingBytes;
 /// Pieces the log knows at once: the marked ones, the last one, and those still on their way to the store.
 constexpr int32_t kMaxLogPieces = 32;
@@ -219,8 +219,8 @@ public:
 	/// cut as on a full log (spec §17.2). What reached the store is still read back up to its last whole step.
 	void storeFailed(int32_t slot);
 	/// A piece the store kept from before (a marked file found at entry, spec §17.4): ended, marked, in the table
-	/// before any piece of this run. @return false if the table is full.
-	bool adopt(const PieceInfo& info);
+	/// before any piece of this run. @return its slot, or -1 if the table is full.
+	int32_t adopt(const PieceInfo& info);
 	/// The next piece's id: a consumer creates its file ahead (spec §17.2).
 	[[nodiscard]] uint32_t nextId() const { return nextId_; }
 	/// Ids go on from `id` (past every file the store holds).
@@ -228,6 +228,8 @@ public:
 	/// `slot`'s id and how much of it was taken (its file's length).
 	[[nodiscard]] uint32_t idOf(int32_t slot) const { return slots_[slot].info.id; }
 	[[nodiscard]] int32_t taken(int32_t slot) const { return slots_[slot].taken; }
+	/// `slot`'s opening and header records, in bytes.
+	[[nodiscard]] int32_t headerBytes(int32_t slot) const { return slots_[slot].info.headerBytes; }
 	/// Copies the bytes of `slot`'s image from `from` to its end that are still in RAM (not taken yet) into `out`:
 	/// the harness reads a piece while it plays. @return the bytes copied.
 	int32_t copyUntaken(int32_t slot, int32_t from, uint8_t* out) const;

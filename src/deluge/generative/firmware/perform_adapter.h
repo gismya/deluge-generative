@@ -80,8 +80,8 @@ public:
 	void outgoingThrowsCut() override;
 	/// Test builds time the piece's opening from here, with its header.
 	void pieceOpening() override;
-	/// A step of closing dropped pieces' room (spec §17.4); test builds time it (gen_log_compact).
-	/// The piece's header: the Current Recipe's picks and every param on the song and the roster (spec §17.2).
+	/// The piece's header: the Current Recipe's picks, and the params of the song and of each part edited since they
+	/// loaded (spec §17.2).
 	void logPieceHeader(SteeringLog& log) override;
 	/// A re-roll's new picks, from its waiting sound (spec §17.2).
 	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
