@@ -95,6 +95,7 @@ BUILDERS = {
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
     "gen_browser": (),
+    "gen_log": (),  # at=stop or at=phrase, literals beside it
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_compose": (),  # the outcome's name
     "gen_compose_pick": (

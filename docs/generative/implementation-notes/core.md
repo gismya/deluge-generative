@@ -27,8 +27,19 @@ otherwise.
   at offset 20, which is baked into `Generator::decideNextStep()`'s code: it addresses the queue from a constant
   (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
   bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
+  `PerformDriver`'s size also moves `PerformAdapter::sink_`, and with it the roster copy's mod-8 `static_assert` in
+  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
+- The steering log (`core/steering_log.*`, spec §17.2) holds pieces in one buffer: a `PieceInfo`, header records
+  (picks, snapshot blocks), then packed records (`encodeCommand()`). The core only calls `append()`; the Perform driver
+  opens a piece at its step 0's decision (`openPiece()`, outside H1's timer), ends it in `finish()` and at a
+  transition's start step (`switchToIncoming()`), logs re-roll paths by comparing `soundLanded()` around each decision
+  (`logLandedSounds()`: a new token always differs from the last), and `logSoundDropped()`. What only the firmware
+  knows comes through `NoteSink::logPieceHeader()` and `logSoundPaths()` (`firmware/log_header.*`). A new steering
+  command is logged with no log change: append its `CommandKind`, move `kLastCommandKind`, and have `apply()` return
+  true where it lands (`steering_log_spec` round-trips every kind). Recipe state it changes reaches the header through
+  the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins.
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
   (ADR 0005), so an effect done anywhere else is lost on replay.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in

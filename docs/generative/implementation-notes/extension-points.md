@@ -33,9 +33,14 @@ otherwise.
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
   command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
   A transition's confirm in the 12 ticks between a sound's SetSound landing and its Sound event drops the swap in
-  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token), but the core has logged the SetSound:
-  the log says a sound changed that never played (#261 decision 2, pinned in `sound_swap_spec`). M4 settles what the
-  steering log says there. It also needs the new pick's path for each landed token: tokens wrap at 255.
+  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token); the core has logged the SetSound, and
+  `swapDropped()` logs a SoundDropped record after it (#143): Capture keeps the part's old track. Each landed token
+  has its picks as SoundPath records on its step (tokens wrap at 255).
+  The header's opening (`PieceStart`) holds the incoming instance's carried-over macros and hold, read at its step 0.
+  Jumps (SPP, a clock scale change) still aren't logged: a replay doesn't skip to the next bar line.
+- **The steering log's lifetime (#146):** `PerformAdapter::freeBlocks()` frees the log's buffer with the Generator
+  blocks at the teardown. Capture's builds run after it, so #146 keeps the buffer (and `log_`) past the teardown
+  until the last build. Marks (#144): `SteeringLog::mark()` marks the newest piece, `full()` refuses a new mark.
 - **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
   mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
   re-roll's new Output, can share a preset name and folder with one still playing or retiring.

@@ -44,9 +44,9 @@ struct Piece : StepwisePiece<> {
 	/// The SetMacros the core logged, as they landed.
 	[[nodiscard]] std::vector<LogEntry> macrosLogged() const {
 		std::vector<LogEntry> out;
-		for (int32_t i = 0; i < log.size(); i++) {
-			if (log.at(i).command.kind == CommandKind::SetMacro) {
-				out.push_back(log.at(i));
+		for (int32_t i = 0; i < logSize(log); i++) {
+			if (logAt(log, i).command.kind == CommandKind::SetMacro) {
+				out.push_back(logAt(log, i));
 			}
 		}
 		return out;

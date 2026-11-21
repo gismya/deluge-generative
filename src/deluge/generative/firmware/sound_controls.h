@@ -83,6 +83,10 @@ public:
 		outgoingBoundCount_ = 0;
 	}
 
+	/// A param as the steering log keys it on its Output (SetHome's and SetParam's `length`, spec §17.2): bits 13–14
+	/// its collection's index in its ParamManager, 8–12 a patch cable's source, 0–7 its param id (a cable's
+	/// destination param).
+	static uint16_t paramKey(int32_t collection, PatchSource source, int32_t param);
 	/// A home a player edit moved (spec §11.6), as the steering log keys it.
 	struct HomeEdit {
 		uint8_t part = 0;
@@ -215,8 +219,7 @@ private:
 	};
 	/// The bound param `stack` addresses in the piece playing, if any.
 	std::optional<Match> find(const ModelStackWithAutoParam& stack);
-	/// A bound param as the steering log keys it on its Output (SetHome's `length`): bits 13–14 its collection, 8–12 a
-	/// patch cable's source, 0–7 its param id (a cable's destination param).
+	/// A bound param as the steering log keys it on its Output: paramKey() of its collection, source and param.
 	static uint16_t paramKey(const Bound& bound);
 	/// A bound param's id in its collection, as a model stack carries it: for a patch cable, its source and
 	/// destination.

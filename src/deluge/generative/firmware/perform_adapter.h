@@ -25,6 +25,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/entry_source.h"
 #include "generative/firmware/perform_song.h"
@@ -76,6 +77,10 @@ public:
 	void outgoingDrained() override;
 	/// A stop or jump cut its Throws short: its Space goes home (spec §11.4).
 	void outgoingThrowsCut() override;
+	/// The piece's header: the Current Recipe's picks and every param on the song and the roster (spec §17.2).
+	void logPieceHeader(SteeringLog& log) override;
+	/// A re-roll's new picks, from its waiting sound (spec §17.2).
+	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
 	/// A restart reached its line (spec §13.2): the adapter starts the piece again (PerformAdapter::restartPiece()).
 	void restartPiece(Generator& generator) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
@@ -214,6 +219,8 @@ public:
 	/// Generator ticks since step 0's grid line, while playing.
 	[[nodiscard]] int32_t clock() const { return driver_.clock(); }
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
+	/// The pieces played since Perform was entered (spec §17.2, §17.3): empty once it is left.
+	[[nodiscard]] const SteeringLog& steeringLog() const { return log_; }
 	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
 	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
@@ -264,6 +271,12 @@ private:
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();
+#if ENABLE_SYSEX_TEST
+	/// gen_log: the steering log's use, at a phrase line or a stop.
+	void reportLog(bool stopped) const;
+#else
+	void reportLog(bool /*stopped*/) const {}
+#endif
 	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
 	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
 	void instanceStarts();
@@ -300,13 +313,18 @@ private:
 	/// instruction grows the step's code (see implementation-notes/core.md).
 	Steering steering_;
 	perform::PerformDriver driver_;
-	OutputSink sink_;
+	/// Before sink_, where it puts the roster an odd 4 bytes from Transitions' incoming one (the static_assert in
+	/// incomingStarts()): the driver's size moves that.
 	int32_t lastSwungTick_ = 0;
+	OutputSink sink_;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+	/// The steering log, over its 128 KB SDRAM buffer from entry to the teardown (spec §17.2, §20).
+	uint8_t* logBuffer_ = nullptr;
+	SteeringLog log_{nullptr, 0};
 	uint32_t restarts_ = 0;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.

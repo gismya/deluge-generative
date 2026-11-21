@@ -19,6 +19,7 @@
 // the ARC page draws from the waiting commands (spec §13.5).
 
 #include "generative/core/generator.h"
+#include "generative/core/steering_log.h"
 #include <algorithm>
 
 namespace deluge::generative {
@@ -203,6 +204,10 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		return true;
 	case CommandKind::SetHome:
 		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
+	case CommandKind::SetParam:                     // the driver set the param: logged, nothing to apply
+		return command.target < partCount(*genre_) || command.target == kSongParams;
+	case CommandKind::TransitionTempo: // the driver's own glide: the Recipe's tempo stays the playing one's
+		return true;
 
 	case CommandKind::SetFreeze: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
