@@ -52,8 +52,26 @@ uint32_t passCCs = 0;
 uint32_t peakPassCCs = 0;
 #endif
 
-void send(int32_t cc, int32_t knobPos) {
-	midiFollow.sendCCForMidiFollowFeedback(cc, knobPos);
+/// midi_follow.cpp's PARAM_ID_NONE: in ccToSoundParam and ccToGlobalParam, a CC that maps to no param.
+constexpr uint8_t kNoFollowParam = 255;
+
+/// Stock's wait before it sends MIDI follow feedback for automation (view.cpp sets the same 25 ms).
+constexpr int32_t kAutomationFeedbackMs = 25;
+
+/// MIDI follow's feedback channels, worked out once for each pass that sends.
+struct FeedbackTargets {
+	MidiFollow::FeedbackChannelTypes types;
+	size_t count;
+};
+
+FeedbackTargets feedbackTargets() {
+	FeedbackTargets targets;
+	targets.count = midiFollow.getChannelTypesForFeedback(targets.types);
+	return targets;
+}
+
+void send(const FeedbackTargets& to, int32_t cc, int32_t knobPos) {
+	midiFollow.sendCCForMidiFollowFeedback(to.types, to.count, cc, knobPos);
 #if ENABLE_SYSEX_TEST
 	windowCCs++;
 	passCCs++;
@@ -61,9 +79,9 @@ void send(int32_t cc, int32_t knobPos) {
 }
 
 /// Sends `cc` at `knobPos` if that moved since `cc` last sent.
-void sendIfMoved(int32_t cc, int32_t knobPos) {
+void sendIfMoved(const FeedbackTargets& to, int32_t cc, int32_t knobPos) {
 	if (sent.changed(cc, knobPos + kKnobPosOffset)) {
-		send(cc, knobPos);
+		send(to, cc, knobPos);
 	}
 }
 
@@ -181,7 +199,8 @@ bool takesGlobalMidiCommand(GlobalMIDICommand command, bool on, int32_t note) {
 }
 
 void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutomation) {
-	if (!midiFollow.isFeedbackEnabled()) {
+	const FeedbackTargets to = feedbackTargets(); // none: feedback is off
+	if (to.count == 0) {
 		return;
 	}
 	Clip* clip = followedClip();
@@ -201,7 +220,7 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 		}
 		if (cc != MIDI_CC_NONE && !perform::macroForCC(cc).has_value()) {
 			sent.changed(cc, knobPos + kKnobPosOffset);
-			send(cc, knobPos);
+			send(to, cc, knobPos);
 			TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(cc),
 			           static_cast<long>(knobPos + kKnobPosOffset));
 		}
@@ -216,7 +235,9 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 	    setupModelStackWithSong(memory, currentSong)
 	        ->addTimelineCounter(clip != nullptr ? static_cast<TimelineCounter*>(clip) : currentSong);
 	for (int32_t cc = 0; cc <= kMaxMIDIValue; cc++) {
-		if (perform::macroForCC(cc).has_value()) {
+		// Most CCs map to no param: skip them before building a model stack
+		if ((midiFollow.ccToSoundParam[cc] == kNoFollowParam && midiFollow.ccToGlobalParam[cc] == kNoFollowParam)
+		    || perform::macroForCC(cc).has_value()) {
 			continue;
 		}
 		// The live value: home plus every layer, as the param plays now.
@@ -225,18 +246,19 @@ void sendFeedback(ModelStackWithAutoParam* stack, int32_t knobPos, bool isAutoma
 		if (param == nullptr || param->autoParam == nullptr) {
 			continue;
 		}
-		sendIfMoved(cc, param->paramCollection->paramValueToKnobPos(param->autoParam->getCurrentValue(), param));
+		sendIfMoved(to, cc, param->paramCollection->paramValueToKnobPos(param->autoParam->getCurrentValue(), param));
 	}
 	for (int32_t m = 0; m < kNumMacros; m++) {
 		const auto macro = static_cast<Macro>(m);
-		sendIfMoved(perform::macroCC(macro), macroKnobPos(macro));
+		sendIfMoved(to, perform::macroCC(macro), macroKnobPos(macro));
 	}
 	meterPass();
 }
 
 void sendMacroFeedback(Macro macro) {
-	if (midiFollow.isFeedbackEnabled() && sent.changed(perform::macroCC(macro), macroKnobPos(macro) + kKnobPosOffset)) {
-		send(perform::macroCC(macro), macroKnobPos(macro));
+	const FeedbackTargets to = feedbackTargets(); // none: feedback is off
+	if (to.count != 0 && sent.changed(perform::macroCC(macro), macroKnobPos(macro) + kKnobPosOffset)) {
+		send(to, perform::macroCC(macro), macroKnobPos(macro));
 		TEST_EVENT("gen_midi_feedback_edit cc=%ld value=%ld", static_cast<long>(perform::macroCC(macro)),
 		           static_cast<long>(macroKnobPos(macro) + kKnobPosOffset));
 	}
@@ -245,7 +267,7 @@ void sendMacroFeedback(Macro macro) {
 void keepFeedbackRunning() {
 	if (midiEngine.midiFollowFeedbackAutomation != MIDIFollowFeedbackAutomationMode::DISABLED
 	    && !uiTimerManager.isTimerSet(TimerName::SEND_MIDI_FEEDBACK_FOR_AUTOMATION)) {
-		uiTimerManager.setTimer(TimerName::SEND_MIDI_FEEDBACK_FOR_AUTOMATION, 25);
+		uiTimerManager.setTimer(TimerName::SEND_MIDI_FEEDBACK_FOR_AUTOMATION, kAutomationFeedbackMs);
 	}
 }
 

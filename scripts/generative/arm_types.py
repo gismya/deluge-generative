@@ -2,9 +2,9 @@
 
     python3 scripts/generative/arm_types.py [FILE.cpp ...]
 
-The harness builds the portable code (src/deluge/generative/core/, perform/, runner/) for the host, where int32_t is
-int. On ARM it is long, so a call that mixes the two (`std::clamp(x, 0, kMacroFull)` with an int32_t x) passes
-./dbt test --generator and CI, and fails only the Release build. This catches that without a build: each .cpp, and
+The harness builds the portable code (src/deluge/generative/core/, perform/, compose/, runner/) for the host, where
+int32_t is int. On ARM it is long, so a call that mixes the two (`std::clamp(x, 0, kMacroFull)` with an int32_t x)
+passes ./dbt test --generator and CI, and fails only the Release build. This catches that without a build: each .cpp, and
 each .h on its own (-x c++: some headers no portable .cpp includes, only the firmware), through arm-none-eabi-g++
 -fsyntax-only with the firmware's language flags and its -Werror=switch. Without FILEs it checks every portable .cpp
 and .h. Exits 1 on any error. check_all.py runs it first.
@@ -22,7 +22,7 @@ import arm_tools
 
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 # Under src/deluge/generative/; firmware/ is the firmware's own.
-PORTABLE = ("core", "perform", "runner")
+PORTABLE = ("core", "perform", "compose", "runner")
 # The firmware's flags that change what compiles (CMakeLists.txt): its CPU, signed plain char, no RTTI, and a switch
 # missing an enumerator as an error.
 FLAGS = [

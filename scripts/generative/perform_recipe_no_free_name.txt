@@ -1,0 +1,161 @@
+# Recipe SAVE with no letter variation free (#138 R1, spec §16.3, §16.4) over the sysex test port: playing, quick saves
+# take the default name and then A to Z; the next quick save is refused with NO FREE NAME. SHIFT+SAVE's full save UI
+# then offers the remembered name itself (not stock's numeric `<name> 2`), and saving under it asks to overwrite.
+# gen_recipe_save quick|full saved|refused|opened|overwrite? name=...
+# covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
+# covers: src/deluge/generative/perform/recipe_name.* src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/io/midi/test_port.cpp
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0 within=10
+
+# ---- The default name, then its 26 letter variations ----
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}A$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}B$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}C$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}D$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}E$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}F$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}G$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}H$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}I$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}J$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}K$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}L$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}M$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}N$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}O$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}P$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}Q$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}R$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}S$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}T$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}U$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}V$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}W$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}X$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}Y$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save quick saved name=ACID TECHNO [0-9A-Z]{7}Z$/ within=10
+
+# ---- None free: the quick save is refused ----
+button SAVE down
+wait 50
+button SAVE up
+expect event gen_recipe_save quick refused why=no_free_name within=10
+expect playing=true
+
+# ---- The full UI offers the remembered name itself; saving under it asks to overwrite ----
+button SHIFT down
+wait 50
+button SAVE down
+wait 50
+button SAVE up
+wait 50
+button SHIFT up
+expect event /^gen_recipe_save full opened name=ACID TECHNO [0-9A-Z]{7}Z$/ within=10
+button SAVE down
+wait 50
+button SAVE up
+expect event /^gen_recipe_save full overwrite\? name=ACID TECHNO [0-9A-Z]{7}Z$/ within=10
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /^gen_recipe_save full saved name=ACID TECHNO [0-9A-Z]{7}Z overwrite=1$/ within=10
+expect ui=generative_perform
+expect playing=true
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

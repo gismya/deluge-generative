@@ -24,17 +24,24 @@
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
+#include "gui/colour/colour.h"
+#include "gui/colour/palette.h"
+#include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
 #include "gui/ui/load/load_song_ui.h"
+#include "gui/ui/save/save_song_ui.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "hid/button.h"
 #include "hid/buttons.h"
 #include "hid/encoders.h"
+#include "hid/led/pad_leds.h"
 #include "hid/matrix/pad.h"
 #include "io/debug/log.h"
 #include "io/debug/print.h"
@@ -67,23 +74,48 @@ namespace encoders = deluge::hid::encoders;
 // Written by the MIDI routine (tail), read by the buttons-and-pads task (head). Both run as scheduler tasks, never
 // from an ISR, and each index has one writer, so no locking is needed.
 
-enum class Kind : uint8_t { Hid, Encoder, FastGold, Wait, HoldEntry, LoadSong, ReportInput, ResetRecipe, PickGenre };
+enum class Kind : uint8_t {
+	Hid,
+	Encoder,
+	FastGold,
+	Wait,
+	SetHold,
+	LoadSong,
+	SaveSong,    ///< Shares LoadSong's path buffer and its one-at-a-time queue slot
+	CheckRecipe, ///< As SaveSong: its name waits in songPath
+	ReportInput,
+	ReportBootDma,
+	ReportSidebar,
+	ResetRecipe,
+	PickGenre,
+	Compose,
+	ComposeScreen
+};
+
+/// A "load song", "save song" or "check recipe" line: its path or name waits in songPath, one at a time.
+constexpr bool songFile(Kind kind) {
+	return kind == Kind::LoadSong || kind == Kind::SaveSong || kind == Kind::CheckRecipe;
+}
 
 struct Entry {
 	Kind kind;
 	/// Hid: PIC byte. Encoder: 0 scroll Y, 1 scroll X, 2 tempo, 3 select, 4 upper gold, 5 lower gold. FastGold: 4 or
-	/// 5. HoldEntry: a row of kHolds, or kAllHolds. PickGenre: the genre's place in allGenres().
+	/// 5. SetHold: a row of kHolds, or kAllHolds. PickGenre, Compose: the genre's place in allGenres() (Compose:
+	/// kNoGenre for the Current Recipe). Unused for the rest.
 	uint8_t index;
-	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. HoldEntry: 1 or 0.
+	int32_t amount;     ///< Hid: velocity, 0 = release. Encoder, FastGold: signed detents. Wait: ms. SetHold: 1 or 0.
+	                    ///< Compose: LENGTH in seconds.
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
 constexpr size_t kLineLength = 64; ///< The longest inject line, with its 0
 
-/// The path of the queued "load song" entry: one at a time, so a second waits as a full queue would.
+/// The path of the queued "load song" entry, or the name of a "save song" one: one at a time, so a second waits as a
+/// full queue would.
 char songPath[kLineLength];
 bool songLoadQueued = false;
-bool songLoading = false; ///< While loadSong() runs: the test port can answer meanwhile, and must not say idle
+bool songLoading = false; ///< While loadSong() or saveSong() runs: the test port can answer meanwhile, and must not
+                          ///< say idle
 
 constexpr uint32_t kQueueSize = 64; // a power of two
 // One slot stays free, so putBackHidEvent() never lands on a slot the MIDI routine has refilled since the take.
@@ -96,19 +128,26 @@ uint32_t queueDepth() {
 	return queueTail - queueHead;
 }
 
-double resumeAt = 0;             ///< getSystemTime() at which a "wait" entry ends
-bool holdingEntry = false;       ///< See entryHeld()
-bool holdingRamps = false;       ///< See rampsHeld()
-bool holdingStress = false;      ///< See rampsStressed()
-bool holdingCardError = false;   ///< See cardErrorHeld()
-bool holdingPreload = false;     ///< See preloadHeld()
-bool holdingReactions = false;   ///< See reactionsHeld()
-bool holdingUiRelease = false;   ///< See uiReleaseHeld()
-bool holdingFree = false;        ///< See freeHeld()
-bool holdingQueueFull = false;   ///< See queueFullHeld()
-bool holdingDelaySetups = false; ///< See delaySetupsHeld()
-bool pinningEntropy = false;     ///< See pinnedEntropy()
-uint32_t pinnedDraws = 0;        ///< Draws pinnedEntropy() has given since the hold went on
+double resumeAt = 0;                ///< getSystemTime() at which a "wait" entry ends
+bool holdingEntry = false;          ///< See entryHeld()
+bool holdingRamps = false;          ///< See rampsHeld()
+bool holdingStress = false;         ///< See rampsStressed()
+bool holdingCardError = false;      ///< See cardErrorHeld()
+bool holdingPreload = false;        ///< See preloadHeld()
+bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
+bool holdingCommitted = false;      ///< See soundCommittedHeld()
+bool holdingReactions = false;      ///< See reactionsHeld()
+bool holdingUiRelease = false;      ///< See uiReleaseHeld()
+bool holdingFree = false;           ///< See freeHeld()
+bool holdingQueueFull = false;      ///< See queueFullHeld()
+bool holdingDelaySetups = false;    ///< See delaySetupsHeld()
+bool holdingCompose = false;        ///< See composeHeld()
+bool holdingComposeAlone = false;   ///< See composeAloneHeld()
+bool holdingComposeRoll = false;    ///< See composeRollHeld()
+bool holdingComposeReserve = false; ///< See composeReserveHeld()
+bool holdingGolden = false;         ///< See goldenHeld()
+bool pinningEntropy = false;        ///< See pinnedEntropy()
+uint32_t pinnedDraws = 0;           ///< Draws pinnedEntropy() has given since the hold went on
 
 /// "hold midi_setup": MIDI settings for scripts, set in RAM only, so a script on a Deluge doesn't write over the
 /// player's own (SETTINGS > MIDI saves to flash). Any cable: MIDI follow channel A on channel 16, its feedback at
@@ -167,7 +206,8 @@ void holdMidiSetup(bool hold) {
 	savedMidiSetup.feedbackFilter = midiEngine.midiFollowFeedbackFilter;
 	copyMappings(midiFollow, savedMidiSetup);
 	copyMappings(*new (defaultFollowMemory) MidiFollow(), midiFollow);
-	constexpr uint8_t kCommandNotes[kNumGlobalMIDICommands] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	constexpr uint8_t kCommandNotes[] = {60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 255};
+	static_assert(std::size(kCommandNotes) == kNumGlobalMIDICommands, "a note (or 255, none) for each command");
 	for (int32_t c = 0; c < kNumGlobalMIDICommands; c++) {
 		LearnedMIDI& command = midiEngine.globalMIDICommands[c];
 		command.clear();
@@ -207,8 +247,14 @@ constexpr Hold kHolds[] = {
     {"stress", [](bool on) { holdingStress = on; }},
     /// Perform's card reads fail as a pulled card's would (see cardErrorHeld())
     {"card_error", [](bool on) { holdingCardError = on; }},
-    /// Holds a sound re-roll's or a transition's preload at its start, or lets it go (see preloadHeld())
+    /// Holds a sound re-roll's or a transition's preload, or a Compose screen card edit (a roll, a LOAD), at its
+    /// start, or lets it go (see preloadHeld())
     {"preload", [](bool on) { holdingPreload = on; }},
+    /// Injected presses reach their handlers as inside a card wait (sdRoutineLock set, inCardRoutine true), or as
+    /// they come (see cardRoutineHeld())
+    {"card_routine", [](bool on) { holdingCardRoutine = on; }},
+    /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
+    {"sound_committed", [](bool on) { holdingCommitted = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
     /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
@@ -219,6 +265,17 @@ constexpr Hold kHolds[] = {
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
     /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
     {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
+    /// Holds a Compose build after its first bar, or lets it go (see composeHeld())
+    {"compose", [](bool on) { holdingCompose = on; }},
+    /// A Compose build's estimate fits only alone, or as it is (see composeAloneHeld())
+    {"compose_alone", [](bool on) { holdingComposeAlone = on; }},
+    /// Holds a Compose build after its genre roll, or lets it go (see composeRollHeld())
+    {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
+    /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
+    {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
+    /// A genre roll makes the golden case and a Compose build starts in the Groove, or both as they are (see
+    /// goldenHeld())
+    {"golden", [](bool on) { holdingGolden = on; }},
     /// The song's fill mode on or off, as the MIDI-learnable FILL command (GlobalMIDICommand::FILL) sets it. There is
     /// no song partway through a song load, and start_state's "release all" can land there.
     {"midi_fill",
@@ -238,6 +295,7 @@ constexpr Hold kHolds[] = {
      }},
 };
 constexpr uint8_t kAllHolds = 0xFF; ///< Entry::index of "release all"
+constexpr uint8_t kNoGenre = 0xFF;  ///< Entry::index of a "compose" line with no genre: the Current Recipe
 static_assert(std::size(kHolds) < kAllHolds);
 /// Input lag (spec §12.10's acceptance test), since the last "report input": the longest wait from a press being due
 /// (its line arrived and the waits before it ended) to the buttons task taking it, and the longest gap between two
@@ -387,14 +445,27 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   pick genre <name>           focuses a genre's row in the open GENRE menu by its name (techno-dub), see
 ///                               pickGenre()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
+///   compose screen              opens the Compose screen over the current UI, see openComposeScreenForTest()
+///   compose <seconds> [<genre>] starts a Compose build of that LENGTH (10-3600 s) under the COMPOSING screen, of the
+///                               Current Recipe, or of a fresh roll of <genre> (techno-dub), see startCompose()
 ///   report input                an input_lag event: the longest press lag and gold-knob edge gap since the last one
-///   report boot_dma             boot_dma events: the DMA channels that were still running when this firmware started
-///                               (left by the firmware that chainloaded it, see dmaRecordBootStates())
-/// For a "load song" line, *path points at its path inside `line`.
+///   report sidebar              pads_sidebar lit=<n>: how many of the 16 sidebar pads are lit in the frame sent to
+///                               the pads (PadLEDs::image)
+///   report boot_dma             boot_dma events: the DMA channels that were still running, or had stopped on an
+///                               error, when this firmware started (left by the firmware that chainloaded it, see
+///                               dmaRecordBootStates() and reportBootDma())
+///   save song <name>            saves the current song as SONGS/<name>.XML (the rest of the line), see saveSong()
+///   check recipe <name>|*       reads RECIPES/<name>.XML back against the Current Recipe, see checkRecipe()
+/// For a "load song" line, *path points at its path inside `line`; for "save song" and "check recipe", at the name.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
-	if (strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
-		char* start = line + sizeof(kLoadSong) - 1;
+	constexpr char kSaveSong[] = "save song ";
+	constexpr char kCheckRecipe[] = "check recipe ";
+	static_assert(sizeof(kLoadSong) == sizeof(kSaveSong));
+	const bool save = strncmp(line, kSaveSong, sizeof(kSaveSong) - 1) == 0;
+	const bool check = strncmp(line, kCheckRecipe, sizeof(kCheckRecipe) - 1) == 0;
+	if (save || check || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
+		char* start = line + (check ? sizeof(kCheckRecipe) : sizeof(kLoadSong)) - 1;
 		while (isSeparator(*start)) {
 			start++;
 		}
@@ -406,7 +477,7 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return false;
 		}
 		*path = start;
-		*entry = {Kind::LoadSong, 0, 0};
+		*entry = {save ? Kind::SaveSong : check ? Kind::CheckRecipe : Kind::LoadSong, 0, 0};
 		return true;
 	}
 
@@ -460,12 +531,12 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		const bool on = kind[0] == 'h';
 		if (!on && strcmp(t.token[1], "all") == 0) {
-			*entry = {Kind::HoldEntry, kAllHolds, 0};
+			*entry = {Kind::SetHold, kAllHolds, 0};
 			return true;
 		}
 		for (uint8_t row = 0; row < std::size(kHolds); row++) {
 			if (strcmp(t.token[1], kHolds[row].name) == 0) {
-				*entry = {Kind::HoldEntry, row, on ? 1 : 0};
+				*entry = {Kind::SetHold, row, on ? 1 : 0};
 				return true;
 			}
 		}
@@ -478,7 +549,11 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			return true;
 		}
 		if (t.count == 2 && strcmp(t.token[1], "boot_dma") == 0) {
-			*entry = {Kind::ReportInput, 1, 0};
+			*entry = {Kind::ReportBootDma, 0, 0};
+			return true;
+		}
+		if (t.count == 2 && strcmp(t.token[1], "sidebar") == 0) {
+			*entry = {Kind::ReportSidebar, 0, 0};
 			return true;
 		}
 		return false;
@@ -502,6 +577,29 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 		}
 		const auto genres = deluge::generative::allGenres();
 		*entry = {Kind::PickGenre, static_cast<uint8_t>(std::ranges::find(genres, genre) - genres.begin()), 0};
+		return true;
+	}
+
+	if (strcmp(kind, "compose") == 0 && t.count == 2 && strcmp(t.token[1], "screen") == 0) {
+		*entry = {Kind::ComposeScreen, 0, 0};
+		return true;
+	}
+
+	if (strcmp(kind, "compose") == 0) {
+		int32_t seconds;
+		if ((t.count != 2 && t.count != 3) || !parseInt(t.token[1], 10, 3600, &seconds)) {
+			return false;
+		}
+		uint8_t index = kNoGenre;
+		if (t.count == 3) {
+			const deluge::generative::Genre* genre = deluge::generative::findGenre(t.token[2]);
+			if (genre == nullptr) {
+				return false;
+			}
+			const auto genres = deluge::generative::allGenres();
+			index = static_cast<uint8_t>(std::ranges::find(genres, genre) - genres.begin());
+		}
+		*entry = {Kind::Compose, index, seconds};
 		return true;
 	}
 
@@ -612,11 +710,11 @@ void injectReceived(MIDICable& cable, uint8_t* data, int32_t len) {
 		sendStatus(cable, seq, Status::ParseError);
 		return;
 	}
-	if (queueDepth() >= kQueueCapacity || (entry.kind == Kind::LoadSong && songLoadQueued)) {
+	if (queueDepth() >= kQueueCapacity || (songFile(entry.kind) && songLoadQueued)) {
 		sendStatus(cable, seq, Status::QueueFull);
 		return;
 	}
-	if (entry.kind == Kind::LoadSong) {
+	if (songFile(entry.kind)) {
 		strcpy(songPath, path); // both are kLineLength
 		songLoadQueued = true;
 	}
@@ -637,12 +735,17 @@ uint32_t actionLogLength(TimeType time) {
 	return count;
 }
 
-/// "report boot_dma": boot_dma running=<n> mask=<channels>, then boot_dma_channel ch=... for each one that ran.
+/// "report boot_dma": boot_dma running=<n> mask=<channels> (running or errored), then boot_dma_channel ch=... for each
+/// of them. A channel counts if it was enabled or mid-transfer (EN, TACT), or had stopped on an error (ER, DER): a load
+/// whose channel stopped on an error doesn't pass. END alone (a channel that finished) doesn't count.
 void reportBootDma() {
+	// Every line fits in the event queue, also with a few others already queued
+	static_assert(kEventQueueSize >= 2 * (1 + NUM_DMA_CHANNELS));
+	constexpr uint32_t kCounted = DMAC0_CHSTAT_n_EN | DMAC0_CHSTAT_n_TACT | DMAC0_CHSTAT_n_ER | DMAC0_CHSTAT_n_DER;
 	uint32_t mask = 0;
 	int32_t running = 0;
 	for (int32_t ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
-		if (dmaBootStates[ch].chstat & DMAC0_CHSTAT_n_EN) {
+		if (dmaBootStates[ch].chstat & kCounted) {
 			mask |= 1u << ch;
 			running++;
 		}
@@ -785,6 +888,88 @@ void pickGenre(const deluge::generative::Genre& genre) {
 	      static_cast<int>(from.size()), from.data());
 }
 
+/// "save song <name>": saves the current song as SONGS/<name>.XML through the stock save UI, overwriting, as SAVE twice
+/// with that name would, then sends song_saved name=... ms=..., or song_save_failed name=... why=busy|save (busy: in
+/// Perform, or something open over the root UI). For songs the scripts build (a Compose song for H19).
+void saveSong(const char* name) {
+	if (rootUIIsGenerativePerform() || getCurrentUI() != getRootUI()) {
+		event("song_save_failed name=%s why=busy", name);
+		return;
+	}
+	double start = getSystemTime();
+	songLoading = true;
+	currentSong->name.set(name);
+	currentSong->dirPath.set("SONGS");
+	const bool saved = openUI(&saveSongUI) && saveSongUI.performSave(true);
+	if (getCurrentUI() == &saveSongUI) {
+		saveSongUI.close(); // performSave() closes it only on success
+	}
+	songLoading = false;
+	if (saved) {
+		// Where the save UI wrote it: it names the song after the file.
+		event("song_saved name=%s ms=%d path=%s/%s.XML", name, static_cast<int>((getSystemTime() - start) * 1000),
+		      currentSong->dirPath.get(), currentSong->name.get());
+	}
+	else {
+		event("song_save_failed name=%s why=save", name);
+	}
+}
+
+/// "check recipe <name>": reads RECIPES/<name>.XML as a Recipe LOAD would (spec §16.1) and compares it with the Current
+/// Recipe: gen_recipe_check name=... read=ok|other_version|unknown_genre|unreadable error=<card error> match=1|0
+/// recipe=1|0 seed=1|0 takes=1|0 sounds=1|0, each 1 when the file's equals the Current Recipe's. A saved Recipe
+/// reloads to the same Recipe, seed and takes (#138's Done-when). The name `*` is the one the Current Recipe remembers.
+void checkRecipe(const char* name) {
+	using namespace deluge::generative;
+	if (strcmp(name, "*") == 0) {
+		name = firmware::currentRecipe.name.text;
+	}
+	static PLACE_SDRAM_BSS RecipeFile file; // a set of sound picks: not on the stack
+	char path[perform::kMaxRecipeNameChars + 16];
+	snprintf(path, sizeof(path), "%s/%s.XML", firmware::kRecipeFolder, name);
+	Error error = Error::NONE;
+	const RecipeFileRead read = firmware::readRecipeFile(path, file, error);
+	constexpr const char* kReads[] = {"ok", "other_version", "unknown_genre", "unreadable"};
+	const firmware::CurrentRecipe& current = firmware::currentRecipe;
+	const bool loaded = read == RecipeFileRead::Ok || read == RecipeFileRead::OtherVersion;
+	const bool recipe = loaded && file.recipe == current.recipe;
+	const bool seed = loaded && file.seed == current.seed;
+	const bool takes = loaded && file.takes == current.takes;
+	bool sounds = loaded;
+	for (int32_t p = 0; sounds && p < kMaxParts; p++) {
+		sounds = strcmp(file.sounds.part[p].c_str(), current.sounds.part[p].c_str()) == 0;
+	}
+	for (int32_t l = 0; sounds && l < kNumLanes; l++) {
+		sounds = strcmp(file.sounds.lane[l].c_str(), current.sounds.lane[l].c_str()) == 0;
+	}
+	event("gen_recipe_check name=%s read=%s error=%d match=%d recipe=%d seed=%d takes=%d sounds=%d", name,
+	      kReads[static_cast<int32_t>(read)], static_cast<int>(error), recipe && seed && takes && sounds ? 1 : 0,
+	      recipe ? 1 : 0, seed ? 1 : 0, takes ? 1 : 0, sounds ? 1 : 0);
+}
+
+/// "compose <seconds> [<genre>]": a Compose build as BUILD starts it (spec §14.5), without the screen and DISCARD
+/// SONG?, and of any length or a fresh genre roll, for scripts that test the build itself: beginCompose() opens the
+/// COMPOSING screen over the view and starts the job; gen_compose refused why=perform|busy|recipe says why not (Perform
+/// is active, the runner is busy, no Current Recipe exists). The job's own events follow.
+void startCompose(const deluge::generative::Genre* genre, int32_t seconds) {
+	using namespace deluge::generative::firmware;
+	const ComposeStart start = beginCompose(genre, seconds, nullptr);
+	if (start != ComposeStart::Started) {
+		event("gen_compose refused why=%s", start == ComposeStart::PerformActive ? "perform"
+		                                    : start == ComposeStart::RunnerBusy  ? "busy"
+		                                                                         : "recipe");
+	}
+}
+
+/// "compose screen": opens the Compose screen (spec §14.4) over the current UI, with no Recipe too, which the
+/// Generative menu's COMPOSE FROM never shows (its rows make one first). The screen sends gen_compose_screen opened
+/// as it opens; gen_compose_screen refused why=perform says it can't (Perform is the root UI).
+void openComposeScreenForTest() {
+	if (!deluge::gui::menu_item::generative::openComposeScreen()) {
+		event("gen_compose_screen refused why=perform");
+	}
+}
+
 } // namespace
 
 std::optional<HidEvent> takeHidEvent() {
@@ -793,7 +978,7 @@ std::optional<HidEvent> takeHidEvent() {
 			return std::nullopt;
 		}
 		Entry entry = queue[queueHead % kQueueSize];
-		if (entry.kind == Kind::LoadSong && sdRoutineLock) {
+		if (songFile(entry.kind) && sdRoutineLock) {
 			return std::nullopt; // the browser loads only outside the card routine
 		}
 		queueHead++;
@@ -823,11 +1008,23 @@ std::optional<HidEvent> takeHidEvent() {
 			waitEnded = resumeAt;
 			break;
 
-		case Kind::ReportInput: {
-			if (entry.index == 1) {
-				reportBootDma();
-				break;
+		case Kind::ReportBootDma:
+			reportBootDma();
+			break;
+
+		case Kind::ReportSidebar: {
+			// What the sidebar pads show: PadLEDs::image is the frame last sent to them.
+			int32_t lit = 0;
+			for (int32_t y = 0; y < kDisplayHeight; y++) {
+				for (int32_t x = kDisplayWidth; x < kDisplayWidth + kSideBarWidth; x++) {
+					lit += PadLEDs::image[y][x] != deluge::gui::colours::black ? 1 : 0;
+				}
 			}
+			event("pads_sidebar lit=%d", static_cast<int>(lit));
+			break;
+		}
+
+		case Kind::ReportInput: {
 			// Spec §12.10's bounds: a press within 20 ms, and a knob edge late by no more than a card wait.
 			const bool ok = maxPressLag <= kMaxPressLag && maxGoldGap <= kGoldEdgeInterval + kMaxCardWait;
 			event("input_lag ok=%s max_ms=%d presses=%d gold_gap_ms=%d", ok ? "yes" : "no",
@@ -839,7 +1036,7 @@ std::optional<HidEvent> takeHidEvent() {
 			break;
 		}
 
-		case Kind::HoldEntry:
+		case Kind::SetHold:
 			if (entry.index == kAllHolds) {
 				for (const Hold& hold : kHolds) {
 					hold.set(false);
@@ -857,10 +1054,29 @@ std::optional<HidEvent> takeHidEvent() {
 			pickGenre(*deluge::generative::allGenres()[entry.index]);
 			break;
 
+		case Kind::ComposeScreen:
+			openComposeScreenForTest();
+			break;
+
+		case Kind::Compose:
+			startCompose(entry.index == kNoGenre ? nullptr : deluge::generative::allGenres()[entry.index],
+			             entry.amount);
+			break;
+
 		case Kind::LoadSong:
 			loadSong(songPath);
 			songLoadQueued = false;
 			return std::nullopt; // one load per call: let the main loop catch up after it
+
+		case Kind::SaveSong:
+			saveSong(songPath);
+			songLoadQueued = false;
+			return std::nullopt; // as a load: let the main loop catch up after it
+
+		case Kind::CheckRecipe:
+			checkRecipe(songPath);
+			songLoadQueued = false;
+			return std::nullopt;
 
 		case Kind::Encoder:
 		case Kind::FastGold:
@@ -955,8 +1171,40 @@ bool cardErrorHeld() {
 	return holdingCardError;
 }
 
+bool composeHeld() {
+	return holdingCompose;
+}
+
+bool composeAloneHeld() {
+	return holdingComposeAlone;
+}
+
+bool composeRollHeld() {
+	return holdingComposeRoll;
+}
+
+bool composeReserveHeld() {
+	return holdingComposeReserve;
+}
+
+bool goldenHeld() {
+	return holdingGolden;
+}
+
 bool preloadHeld() {
 	return holdingPreload;
+}
+
+bool cardRoutineHeld() {
+	return holdingCardRoutine;
+}
+
+bool soundCommittedHeld() {
+	return holdingCommitted;
+}
+
+void releaseSoundCommitted() {
+	holdingCommitted = false;
 }
 
 bool reactionsHeld() {

@@ -73,6 +73,27 @@ bool cardUnusable() {
 }
 } // namespace
 
+LoadOutcome CardFiles::exists(const char* path) {
+	if (chunks_ != nullptr) {
+		if (chunks_->boundary()) {
+			cancelled_ = true;
+			return LoadOutcome::CardError;
+		}
+	}
+	else {
+		AudioEngine::routineWithClusterLoading();
+	}
+	if (cardUnusable()) {
+		return LoadOutcome::CardError;
+	}
+	auto info = FatFS::stat(path);
+	if (!info) {
+		// Not there, or a name FatFs can't take: missing. Only the card's own failure stops the load.
+		return cardFailed(info.error()) ? LoadOutcome::CardError : LoadOutcome::Missing;
+	}
+	return (info->fattrib & AM_DIR) == 0 ? LoadOutcome::Loaded : LoadOutcome::Missing;
+}
+
 bool CardFolders::list(const char* folder, FileVisitor& visitor) {
 	if (chunks_ != nullptr) {
 		if (chunks_->boundary()) {

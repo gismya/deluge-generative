@@ -226,6 +226,13 @@ RolledKit rolledKit(const Palette& palette, const PartSpec& part, int32_t p, uin
 bool rollPartSounds(const Genre& genre, const Palette& palette, int32_t part, SoundPicks& sounds, uint32_t entropy,
                     FolderLister& lister);
 
+/// A lane re-roll (the Compose screen's lane list, spec §14.4): rolls `lane`'s pick again from `palette` and fresh
+/// entropy, moving away from the one in `sounds` as rollPartSounds() does. The Open hat doesn't lean on the Closed
+/// hat's tag here: the player picked this lane alone. Every other pick stays; a lane the genre doesn't play leaves
+/// them all. Returns false on a card error, with the lane's pick partly rolled: roll into a copy.
+bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundPicks& sounds, uint32_t entropy,
+                   FolderLister& lister);
+
 /// Regenerate's sound picks (spec §9.7): every part re-rolled as rollPartSounds() re-rolls one, so no part or lane
 /// keeps the sound it has where its palette offers another, but a Kit's drum machine rolls by its weights and may stay
 /// (spec §10.2). Returns false on a card error, with the picks partly
@@ -256,6 +263,25 @@ enum class LoadOutcome : uint8_t {
 	Missing,   ///< Absent or unloadable: fall back.
 	CardError, ///< The card failed: stop, and cancel the load like BACK would (spec §10.7).
 };
+
+/// Says whether card files are there, for a Recipe file's load (spec §16.6).
+class FileChecker {
+public:
+	/// Loaded if `path` is on the card, Missing if it isn't, CardError if the card failed.
+	virtual LoadOutcome exists(const char* path) = 0;
+
+protected:
+	~FileChecker() = default;
+};
+
+/// A loaded Recipe file's missing sounds (spec §16.6): each pick whose file `files` can't find is re-rolled from
+/// `palette` (this card's) and `entropy`, a synth part's as rollPartSounds() rolls it and a lane's as rollLaneSound()
+/// does, so it moves away from the missing path where the palette offers another. A synth part with no pick is rolled
+/// too; a lane with none stays empty (an FX lane falls back to its presets). Lanes the genre doesn't play aren't
+/// checked. Every other pick stays.
+/// @return the picks replaced, or -1 on a card error, with the picks partly replaced: work on a copy.
+int32_t replaceMissingSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
+                             FolderLister& lister, FileChecker& files);
 
 /// Loads card sounds for the core's fallback chain. The firmware's loader keeps what it loaded.
 class SoundLoader {

@@ -34,6 +34,7 @@
 #include "generative/core/event.h"
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
+#include "generative/core/part_bias.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
@@ -242,8 +243,9 @@ public:
 	/// the outgoing instance stops.
 	void startIncoming(const Recipe& recipe, uint32_t seed, const Takes& takes, TransitionStyle style);
 	/// At the start step, before the first decision: the new roster plays the live macros, as a genre change and
-	/// Regenerate keep them (spec §12.9), and a held Arc stays held from its first Groove (spec §9.7).
-	void carryOver(const Macros& macros, bool held);
+	/// Regenerate keep them (spec §12.9), and the Part biases `bias` (a Regenerate's live ones, spec §3.3), and a held
+	/// Arc stays held from its first Groove (spec §9.7).
+	void carryOver(const Macros& macros, const PartBiases& bias, bool held);
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
@@ -300,8 +302,23 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
+	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser
+	/// from here (perform/riser_timing.h).
+	[[nodiscard]] int32_t riserDropTick() const {
+		return arc_.section() == SectionKind::Build ? stepTick(nextStep_ - 1 + arc_.stepsToDrop()) : -1;
+	}
+	/// A sound control's macro layer at the Recipe's own macros, its centre, with no Section offset (spec §11.3), on
+	/// the set `part`'s events on `lane` move, within ±kControlFull: the base Compose stores for a param it automates
+	/// (spec §15.6). A Drums lane's row takes none.
+	[[nodiscard]] int32_t centreLayer(uint8_t part, Lane lane, SoundControl control) const;
 	/// A macro as the last decided step played it: the Recipe centre plus the Arc's offset.
 	[[nodiscard]] int32_t effectiveMacro(Macro macro) const;
+	/// `shared`, a value of `macro` every part shares, as part `part` plays it: moved by its Part bias through
+	/// partBiased() (spec §3.3). `shared` itself at bias 0.
+	[[nodiscard]] int32_t biasedOn(int32_t part, Macro macro, int32_t shared) const {
+		return partBiased(shared, recipe_.bias.of(part, macro));
+	}
 	/// The chord playing on the last decided step, in steps from the tonic (spec §7.4): `voiced_`, which
 	/// voiceChordAt() voices on each bar line, and as a piece starts, from the walk's root at the Extension level the
 	/// Recipe's Complexity gives then, within the genre's floor and ceiling (the Arc never moves Complexity). Its root
@@ -334,6 +351,13 @@ public:
 	[[nodiscard]] int32_t take(int32_t part) const { return takes_.take[part]; }
 	/// The take waiting for a part's next phrase line, or -1.
 	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
+	/// A part's octave shift on the last decided step (spec §7.3): 0 for Drums and FX.
+	[[nodiscard]] int32_t octave(int32_t part) const { return recipe_.octave[part]; }
+	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
+	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
+		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
+		return waiting != nullptr ? waiting->value : kNoOctaveWaiting;
+	}
 	/// The token of a part's new sound waiting for its phrase line, or -1 (spec §10.7).
 	[[nodiscard]] int32_t soundWaiting(int32_t part) const { return waitingValue(CommandKind::SetSound, part); }
 	/// The token of the last sound that landed on a part in this piece, or -1. Its Sound event plays on the line.
@@ -404,6 +428,10 @@ private:
 		int32_t density = 0;
 		int32_t complexity = 0;
 		int32_t motion = 0;
+		/// The Density every part shares on this step, before its Part bias. A part decides on a copy of the step at
+		/// its own biased macros (partStep()), and planned() biases this for whichever part it asks about, so an
+		/// interplay rule's target plans at its own Density (spec §3.3, §5.5).
+		int32_t sharedDensity = 0;
 		/// Where patterns change (spec §8.1): a Drop opens a fresh pick, and a phrase line inside a Groove may re-pick.
 		bool drop = false;
 		bool repickLine = false;
@@ -491,8 +519,9 @@ private:
 	/// control whose target changed since it was last sent: ramped over the step, or snapped on the piece's first
 	/// step, a Reset, and where a Throw starts or a part playing again ends it (spec §11.3–§11.7).
 	void updateControls(const Step& step);
-	/// The macro layer's offset for `control` on the last decided step (spec §11.3).
-	[[nodiscard]] int32_t macroLayer(SoundControl control) const;
+	/// The macro layer's offset for `control` on the last decided step (spec §11.3), as part `part` plays it: at its
+	/// biased macros. -1: unbiased, the layer every part with no Part bias shares.
+	[[nodiscard]] int32_t macroLayer(SoundControl control, int32_t part) const;
 	/// Where a Throw's line is, if the step just decided is in the window before it (spec §11.4).
 	struct ThrowLine {
 		bool near = false;
@@ -585,6 +614,9 @@ private:
 	void endAtStop();
 	/// How long the transition `command` plays before its start step: its Build, the Outro, or nothing for a cut.
 	[[nodiscard]] int32_t transitionSteps(const Command& command) const;
+	/// `step` as part `partIndex` decides it: its four macros moved by the part's Part bias (spec §3.3). `step` itself
+	/// when the part has none.
+	[[nodiscard]] Step partStep(int32_t partIndex, const Step& step) const;
 	/// Decides part `partIndex` on `step`. @return Whether Avoid kept it off the step (avoided()), which ended its
 	/// notes sounding into it.
 	bool decidePart(int32_t partIndex, const Step& step);
@@ -720,8 +752,9 @@ private:
 	/// its notes from earlier steps end there, and none held back enters late there, so nothing sounds on the target's
 	/// planned onset.
 	[[nodiscard]] bool avoided(int32_t partIndex, const Step& step) const;
-	/// A rule's effective strength for the Recipe's Complexity: the free effectiveStrength() (genre.h).
-	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule) const;
+	/// A rule's effective strength for its source part `part`'s Complexity, biased: the free effectiveStrength()
+	/// (genre.h).
+	[[nodiscard]] int32_t effectiveStrength(const InterplayRule& rule, int32_t part) const;
 	/// Energy's velocity layer at `energy`, scaled by the genre's weight (spec §8.4).
 	[[nodiscard]] int32_t energyLayer(int32_t energy) const;
 	/// A note's velocity: its base (the flavour's level) plus Energy's layer, clamped to 1–127.
@@ -776,7 +809,11 @@ private:
 	/// Steps from this step to the harmonic rhythm's next grid line at or after it, 0 on one.
 	[[nodiscard]] int32_t stepsToChordLine() const;
 	/// A pitch in scale steps from the chord root → snap → Register fold → absolute note (spec §7.5).
-	[[nodiscard]] uint8_t resolvePitch(const PartSpec& spec, int32_t steps) const;
+	[[nodiscard]] uint8_t resolvePitch(int32_t partIndex, int32_t steps) const;
+	/// The part's Register, moved by its octave shift (spec §7.3).
+	[[nodiscard]] Register partRegister(int32_t partIndex) const {
+		return shiftedRegister(genre_->parts[partIndex].registerOrDefault(), recipe_.octave[partIndex]);
+	}
 
 	/// One hit of a note, for noteOn() to start.
 	struct Note {
@@ -803,10 +840,10 @@ private:
 	Takes takes_;
 	/// What the last decided step's Space was made of that a command landing on the stop step could change, so
 	/// fallThrows() keeps a stopped instance's Space where that step left it: the Motion drift's walk moved on by after
-	/// it, and the macro layer's Space. Beside takes_: the first fills its 2 B of padding, the second costs 4 B with
-	/// the padding after it.
+	/// it, and each part's macro layer's Space (its Part bias moves it). Beside takes_: the first fills its 2 B of
+	/// padding.
 	int16_t driftLastMotion_ = 0;
-	int16_t lastSpaceMacro_ = 0;
+	int16_t lastSpaceMacro_[kMaxParts] = {};
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
 	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
 	              "lastSpaceMacro_ holds the macro layer in 16 bits");
@@ -893,9 +930,9 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 3 + 4 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo and a sound per "
-              "part at once");
+static_assert(PendingList::kCapacity >= 3 + 5 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo, a sound and an "
+              "octave shift per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

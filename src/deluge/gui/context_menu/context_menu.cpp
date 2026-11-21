@@ -159,6 +159,8 @@ const uint32_t buttonAndPadActionUIModes[] = {UI_MODE_STEM_EXPORT, UI_MODE_CLIP_
                                               UI_MODE_MIDI_LEARN, 0};
 
 // Generative mode (F5, spec §14.1): the GENERATIVE menu's BACK, accept and pads act under the same UI modes as stock's.
+// Stock's three call sites below keep their own isUIModeWithinRange() test, so this file differs from v1.3.0 only by
+// this function.
 bool ContextMenu::uiModeAllowsActions() {
 	return isUIModeWithinRange(buttonAndPadActionUIModes);
 }

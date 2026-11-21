@@ -24,6 +24,7 @@
 #pragma once
 
 #include "generative/core/generator.h"
+#include "generative/core/part_bias.h"
 #include "generative/core/recipe.h"
 #include <cstdint>
 
@@ -67,6 +68,11 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
 int32_t macroLevelUnits(int32_t level);
 /// The level that shows `units`, to the nearest.
 int32_t macroLevel(int32_t units);
+/// The Part bias a fader row sets with a part focused (spec §13.5): the one that puts the part on the row's value
+/// `units` from the Recipe's `centre` (biasFor()), and 0 on the centre's own row.
+inline int32_t faderBias(int32_t centre, int32_t units) {
+	return macroLevel(units) == macroLevel(centre) ? 0 : biasFor(centre, units);
+}
 
 /// A fader press let go sooner than this, in milliseconds, is a tap; held this long or longer, it is a hold. The user's
 /// choice after trying stock's Hold Press Time (100 ms by default) on the Deluge and finding it too short. Fixed, so
@@ -78,10 +84,10 @@ constexpr uint32_t kMacroTapMs = 300;
 /// once, and on the last pad's release keeps it as the centre or steers back to the centre.
 class MacroFaderHolds {
 public:
-	/// A pad of `macro`'s fader (`pad`, 0 to kMacroFaderWidth * kMacroFaderLevels - 1) went down at `now`: the macro
-	/// plays `units` while it is held. A second pad on the same fader moves the held value; the hold dates from the
-	/// first.
-	void press(Macro macro, int32_t pad, int32_t units, uint32_t now);
+	/// A pad of `macro`'s fader (`pad`, 0 to kMacroFaderWidth * kMacroFaderLevels - 1) went down at `now` with `part`
+	/// focused (-1: the Recipe level): the macro, or the part's biased value, shows `units` while it is held. A second
+	/// pad on the same fader moves the held value; the hold, and the part it steers, date from the first.
+	void press(Macro macro, int32_t pad, int32_t units, uint32_t now, int32_t part = -1);
 
 	enum class Release : uint8_t {
 		None,       ///< not the fader's last pad held, or a pad this never saw go down
@@ -94,6 +100,8 @@ public:
 	/// Whether any pad of `macro`'s fader is held, and the value it plays.
 	[[nodiscard]] bool held(Macro macro) const { return pads_[index(macro)] != 0; }
 	[[nodiscard]] int32_t units(Macro macro) const { return units_[index(macro)]; }
+	/// The part focused when `macro`'s fader was first pressed, whose Part bias the hold steers, or -1.
+	[[nodiscard]] int32_t part(Macro macro) const { return part_[index(macro)]; }
 	/// Whether `pad` of `macro`'s fader is held.
 	[[nodiscard]] bool held(Macro macro, int32_t pad) const { return (pads_[index(macro)] >> pad & 1) != 0; }
 
@@ -102,6 +110,7 @@ private:
 	uint16_t pads_[kNumMacros] = {}; ///< per fader, a bit per pad held
 	int16_t units_[kNumMacros] = {};
 	uint32_t pressedAt_[kNumMacros] = {};
+	int8_t part_[kNumMacros] = {-1, -1, -1, -1};
 	static_assert(kMacroFaderWidth * kMacroFaderLevels <= 16, "a fader's pads fit pads_");
 };
 
@@ -129,9 +138,24 @@ public:
 	/// the core has it already.
 	[[nodiscard]] int32_t resend(Macro macro) const;
 
+	/// `macro`'s fader held on a focused part, `part`, at the Part bias `units` (spec §3.3), or let go. Apart from the
+	/// Recipe-level hold above: a part's hold leaves the centre to the knobs.
+	void holdBias(int32_t part, Macro macro, int32_t units) {
+		biasPart_[static_cast<int32_t>(macro)] = static_cast<int16_t>(part);
+		bias_[static_cast<int32_t>(macro)] = static_cast<int16_t>(units);
+	}
+	void letGoBias(Macro macro) { biasPart_[static_cast<int32_t>(macro)] = kNoPart; }
+	/// The part whose bias on `macro` a fader holds, or kNoPart, and the bias it holds.
+	[[nodiscard]] int32_t biasHeldOn(Macro macro) const { return biasPart_[static_cast<int32_t>(macro)]; }
+	[[nodiscard]] int32_t heldBias(Macro macro) const { return bias_[static_cast<int32_t>(macro)]; }
+	static constexpr int8_t kNoPart = -1;
+
 private:
 	Macros sent_;
 	int16_t held_[kNumMacros] = {kNotHeld, kNotHeld, kNotHeld, kNotHeld};
+	int16_t bias_[kNumMacros] = {};
+	/// 16 bits, not 8: see PerformAdapter::incomingStarts().
+	int16_t biasPart_[kNumMacros] = {kNoPart, kNoPart, kNoPart, kNoPart};
 };
 
 /// What holds FILL: the SYNC-SCALING button and the KEYBOARD page's FILL pads (spec §13.5). FILL is on while any of
@@ -160,6 +184,11 @@ struct KeyboardPageInput {
 	const MacroFaderHolds* holds = nullptr;
 	/// The piece playing, or nullptr while stopped: each fader shows where the Arc has its macro now.
 	const Generator* piece = nullptr;
+	/// The part on the knobs, or -1 (spec §13.5): each fader then fills to the part's biased value at the centre, with
+	/// the centre's level white instead of the Arc's.
+	int32_t focused = -1;
+	/// The Recipe's Part biases.
+	PartBiases bias;
 	/// A Section has been heard, and `section` is it: the phrase column shows where its phrase is.
 	bool sounding = false;
 	SectionKind section = SectionKind::Intro;
@@ -174,7 +203,8 @@ struct KeyboardCell {
 	enum class Look : uint8_t {
 		Off,
 		Fader,     ///< a fader pad of `macro`: `lit` on the value's level and below it
-		FaderArc,  ///< where the Arc has `macro` now: white, on the value's level too. `lit` as Fader
+		FaderArc,  ///< where the Arc has `macro` now, or the Recipe centre with a part focused: white, on the value's
+		           ///< level too. `lit` as Fader
 		Phrase,    ///< a phrase quarter: `lit` once it has passed
 		PhraseNow, ///< the phrase quarter playing
 		Fill,      ///< `lit` while FILL is on
@@ -194,6 +224,8 @@ struct KeyboardPage {
 	SectionKind section = SectionKind::Intro;
 	/// Rows from the top, 0 = row 1.
 	KeyboardCell cell[kRows][kColumns];
+	/// The part the faders show, or -1 for the Recipe level.
+	int8_t focused = -1;
 };
 
 void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out);

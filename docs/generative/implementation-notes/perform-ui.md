@@ -48,21 +48,29 @@ otherwise.
   `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
-  across openings, so probe scripts choose a row from the top (`encoder 3 -5`). The sound editor's `setLedStates()` and
-  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
-  the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
-  sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
-  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
-  part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
-  afresh; `refreshPerformMenu()` redraws the open item then.
-- GENRE ▸ is built twice, in PERFORM FROM (`perform_from.cpp`) and the Perform menu (`perform_menu.cpp`), from the
-  same rows and items (`gui/menu_item/generative/genre_rows.h`: `GenreMenuItems<Item>`, each menu with its own genre
-  item; laid out by the portable `perform/genre_menu.h`). Stock
+  across openings, so probe scripts choose a row from the top (`encoder 3 -20`, as `compose_screen.txt` does: `-5`
+  stopped short of the Perform menu's top once a script had left it on RESET PART BIAS, its 7th row, #303). The sound
+  editor's `setLedStates()` and its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady,
+  SCALE off and the page LEDs the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's
+  `graphicsRoutine()` runs under the sound editor, which can see the view underneath). A menu value held while it's open
+  (the edited key, a take row) records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started,
+  and the key presses or that part's take presses, BACK taps counting as both) and is read again when that moves, or
+  when its submenu opens afresh; `refreshPerformMenu()` redraws the open item then.
+- The Generative menu (§14.1): GENERATIVE is a context menu (`gui/context_menu/generative.*`); PERFORM FROM, COMPOSE
+  FROM and the Compose screen's FROM are `SourceMenu`s (`gui/menu_item/generative/source_rows.h`) of CURRENT RECIPE
+  (hidden until a Recipe exists), GENRE ▸ and FILE.... PERFORM FROM's rows all end in `DiscardSong::setPerform()` with
+  an `EntrySource`; FILE... gets there through the load browser's `loadChosen()` (`performFromShowing()`). A list
+  remembers its row (stock), so probe scripts reach GENRE from the bottom: `encoder 3 5`, `encoder 3 -1`
+  (`perform_pick_acid.txt`), which holds with or without CURRENT RECIPE. `gen_from_menu perform|compose|screen
+  current=0|1` comes each time a list shows afresh (a UI over it closing too).
+- GENRE ▸ is built three times, in PERFORM FROM (`perform_from.cpp`), the Compose lists (`compose_screen.cpp`) and the
+  Perform menu (`perform_menu.cpp`), from the same rows and items (`gui/menu_item/generative/genre_rows.h`:
+  `GenreMenuItems<Item>`, each menu with its own genre item; laid out by the portable `perform/genre_menu.h`). Stock
   `Submenu`s have fixed item lists and a row can't be a leaf one time and a submenu the next (`selectButtonPress()` is
   final in `Submenu`), so each row slot holds both a genre item and a `GenreGroup`, and `isRelevant()` shows the one
-  that fits. All groups share one list of genre items, which read the open parent (set in
-  `GenreGroup::beginSession()`). Both menus open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a
-  probe script that picks a genre counts rows from there, not from the top.
+  that fits. All groups share one list of genre items, which read the open parent (set in `GenreGroup::beginSession()`).
+  All three open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a probe script that picks a genre
+  counts rows from there, not from the top.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
   editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
   the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.
@@ -132,3 +140,19 @@ otherwise.
   presses and releases meanwhile, to the new UI, which `openUI()` has made current before `opened()`. A Perform hold
   that a release would act on checks that Perform is on top (End: `endPadActs()`) rather than letting go before
   `openUI()`.
+- SHIFT + Y (`PerformView::octaveTurn()`) and OCTAVES ▸ step from `PerformSteering::octaveAhead()`, which reads the
+  newest SetOctave still in the steering queue (`SteeringQueue::newest()`): stepping from the core's value, two turns
+  inside one step window would press the same shift twice, and the second cancels the first. The rows read it at each
+  draw, so they need no `Basis`. `octavePresses_` is a byte, in padding: the steering's size moves
+  `PerformAdapter::sink_`, which the start step's modulo-8 `static_assert` in `incomingStarts()` pins (a `uint32_t`
+  there broke it).
+- Part bias on the KEYBOARD faders and F8 (#303): `PerformSteering::holdFader()` / `keepFader()` /
+  `springFaderBack()` take the part the press steers (-1 for the Recipe level), which `MacroFaderHolds::part()`
+  remembers from the first pad down, so a release after the focus moved still lets go of the part it held. A row's
+  bias is `faderBias()` (`keyboard_page.h`). A part's fader hold is apart from the Recipe-level one in
+  `MacroSteering` (`holdBias()`, `biasHeldOn()`), so a knob turn still moves the centre. `onMacroPage()` no longer
+  needs the Recipe level: with a part focused, F8 turns its bias (`modEncoderAction()`), and the rings read
+  `biasedCentre()`.
+- Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
+  broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
+  firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).

@@ -21,6 +21,7 @@
 # covers: src/deluge/generative/firmware/retirements.cpp src/deluge/generative/firmware/sound_swaps.*
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/core/lane_names.h
 start_state
 include perform_open.txt
 

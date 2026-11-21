@@ -20,7 +20,10 @@
 
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/blank_song.h"
+#include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
@@ -34,6 +37,8 @@
 #include "playback/playback_handler.h"
 #include "storage/audio/audio_file_manager.h"
 #include "storage/storage_manager.h"
+#include <cassert>
+#include <iterator>
 #include <new>
 #include <span>
 
@@ -71,21 +76,29 @@ public:
 	EntryJob() : Job(Kind::Modal) {}
 
 	/// Before each submit: a job whose task can't start ends Failed without run(), so nothing else resets these.
-	void prepare(const Genre& genre, EntryEnded ended) {
-		genre_ = &genre;
+	void prepare(const EntrySource& source, EntryEnded ended) {
+		source_ = source;
 		ended_ = ended;
 		error_ = Error::NONE;
 		soundsMissing_ = 0;
+		soundsReplaced_ = 0;
 		ran_ = false;
 		submitted_ = getSystemTicks();
 	}
 
 	JobOutcome run(Chunks& chunks) override {
 		ran_ = true;
-		// A fresh Recipe for the genre (spec §14.1). Its sound picks read the card, so it rolls here, in the job; on a
-		// card error the Current Recipe stays as it was. Once rolled, it stays the Current Recipe: a later cancel or a
-		// load error leaves the new roll in place (spec §14.2).
-		error_ = currentRecipe.rollFromGenre(*genre_, &chunks);
+		// A fresh Recipe for a genre, or a Recipe file's (spec §14.1). Its sound picks read the card, so it rolls or
+		// loads here, in the job; on a card error the Current Recipe stays as it was. Once rolled or loaded, it stays
+		// the Current Recipe: a later cancel or a load error leaves it in place (spec §14.2). CURRENT RECIPE builds the
+		// Current Recipe as it is.
+		if (source_.genre != nullptr) {
+			error_ = currentRecipe.rollFromGenre(*source_.genre, &chunks);
+		}
+		else if (source_.file != nullptr) {
+			error_ = currentRecipe.load(*source_.file, *source_.name, soundsReplaced_, &chunks);
+		}
+		assert(source_.buildable(currentRecipe.exists)); // beginEntry() refuses one with nothing to build
 		if (error_ == Error::ABORTED_BY_USER) {
 			return JobOutcome::Cancelled;
 		}
@@ -134,7 +147,11 @@ public:
 		                                              : "failed",
 		           ran_ ? 1 : 0, msSince(submitted_));
 #endif
-		if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
+		if (outcome == JobOutcome::Done && soundsReplaced_ > 0) {
+			// A file's missing sounds were re-rolled: that popup comes first, as a LOAD's does (spec §16.6).
+			showSoundsReplaced(soundsReplaced_);
+		}
+		else if (outcome == JobOutcome::Done && soundsMissing_ > 0) {
 			// One warning however many sounds fell back: a part on the default synth or a silent lane (spec §10.1).
 			display->displayPopup(l10n::get(l10n::String::STRING_FOR_SOUND_MISSING));
 			TEST_EVENT("gen_sound_missing sounds=%ld", static_cast<long>(soundsMissing_));
@@ -146,11 +163,12 @@ public:
 	}
 
 private:
-	const Genre* genre_ = nullptr;
+	EntrySource source_;
 	EntryEnded ended_ = nullptr;
 	uint32_t submitted_ = 0;
 	bool ran_ = false;
 	int32_t soundsMissing_ = 0;
+	int32_t soundsReplaced_ = 0; ///< A file's missing sounds, re-rolled
 	Error error_ = Error::NONE;
 };
 
@@ -178,35 +196,18 @@ public:
 		performAdapter.dropSong();
 
 		// From here this mirrors stock ClearSong::acceptCurrentOption() (gui/context_menu/clear_song.cpp) on its
-		// stopped path, landing in session view. No yield from the delete to the swap: nothing may run without a
-		// current song but the card loader's waits, as in Clear song.
-		actionLogger.deleteAllLogs();
-		nullifyUIs();
+		// stopped path, landing in session view (spec §13.8).
 #if ENABLE_SYSEX_TEST
-		uint32_t started = getSystemTicks();
+		const uint32_t started = getSystemTicks();
 #endif
-		deleteOldSongBeforeLoadingNew(); // Perform's song: every Output of both rosters
-		performAdapter.freeBlocks();
-		deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
+		swapInBlankSong([&] {
+			// Perform's song is gone: every Output of both rosters.
+			performAdapter.freeBlocks();
+			deleteUnusedAudioFiles(); // before the blank song exists, so it lands in the same place every time
 #if ENABLE_SYSEX_TEST
-		deleteCounts_ = getSystemTicks() - started;
+			deleteCounts_ = getSystemTicks() - started;
 #endif
-
-		void* songMemory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Song));
-		if (songMemory == nullptr) {
-			// As Clear song: the old song is gone and the UIs are nullified, so there's nothing to resume into.
-			FREEZE_WITH_ERROR("E458");
-			while (true) {}
-		}
-		preLoadedSong = new (songMemory) Song();
-		preLoadedSong->paramManager.setupUnpatched();
-		GlobalEffectable::initParams(&preLoadedSong->paramManager);
-		preLoadedSong->setupDefault();
-		preLoadedSong->inClipMinderViewOnLoad = false; // session view (spec §13.8), not stock NEW's clip view
-		preLoadedSong->ensureAtLeastOneSessionClip();  // loads a synth preset from the card
-		playbackHandler.doSongSwap(false);
-		audioFileManager.deleteAnyTempRecordedSamplesFromMemory();
-		currentSong->loadAllSamples();
+		});
 		return JobOutcome::Done;
 	}
 
@@ -240,6 +241,8 @@ private:
 	LeaveEnded ended_ = nullptr;
 	uint32_t submitted_ = 0;
 #if ENABLE_SYSEX_TEST
+	/// gen_left's delete_us: from the undo log's clear, which is empty in Perform (spec §12.9), and the UIs' to the
+	/// sample cache's; since #136 the delete starts there (swapInBlankSong()), before it started at the song's delete.
 	uint32_t deleteCounts_ = 0;
 #endif
 };
@@ -303,21 +306,35 @@ const Genre& delayTestGenre(const Genre& genre) {
 } // namespace
 #endif
 
-bool PerformAdapter::beginEntry(const Genre& genre, EntryEnded ended) {
+bool PerformAdapter::beginEntry(const EntrySource& source, EntryEnded ended) {
 	if (active() || runner.busy()) {
+		return false;
+	}
+	if (!source.buildable(currentRecipe.exists)) {
 		return false;
 	}
 #if ENABLE_SYSEX_TEST
 	reportFreeMemory("before_entry");
-	entry.prepare(TestPort::delaySetupsHeld() ? delayTestGenre(genre) : genre, ended);
+	// "hold delay_setups" changes a genre pick's genre only: a file's or the Current Recipe's plays as it is.
+	entry.prepare(TestPort::delaySetupsHeld() && source.genre != nullptr
+	                  ? EntrySource::of(delayTestGenre(*source.genre))
+	                  : source,
+	              ended);
 #else
-	entry.prepare(genre, ended);
+	entry.prepare(source, ended);
 #endif
 	return runner.submit(entry); // only false if entry is already queued, which the busy check rules out
 }
 
 Error PerformAdapter::allocateBlocks() {
-	// Two Generator blocks, from the internal heap, once per entry (spec §2.1).
+	// Two Generator blocks, once per entry (spec §2.1). allocMaxSpeed: the internal heap first, SDRAM when it has no
+	// room.
+#if ENABLE_SYSEX_TEST
+	// #388: what the internal heap offered before the blocks. A block is past the small-object size, so it needs one
+	// free span of the internal general region: the free bytes alone don't say whether it fits.
+	const auto internalFree = static_cast<unsigned long>(freeInternal());
+	const auto largestSpan = static_cast<unsigned long>(largestFreeSpan(MEMORY_REGION_INTERNAL));
+#endif
 	for (Generator*& block : blocks_) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
 		if (memory == nullptr) {
@@ -326,6 +343,17 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+#if ENABLE_SYSEX_TEST
+	// Which heap each block landed in, so a probe can compare H1 between the two.
+	auto& allocator = GeneralMemoryAllocator::get();
+	for (size_t i = 0; i < std::size(blocks_); i++) {
+		const auto start = reinterpret_cast<uintptr_t>(blocks_[i]);
+		TEST_EVENT("gen_generator_heap block=%u %s start=0x%08lx end=0x%08lx internal_free=%lu largest_span=%lu",
+		           static_cast<unsigned>(i), isInternal(allocator.getRegion(blocks_[i])) ? "internal" : "sdram",
+		           static_cast<unsigned long>(start), static_cast<unsigned long>(start + sizeof(Generator)),
+		           internalFree, largestSpan);
+	}
+#endif
 	return Error::NONE;
 }
 
@@ -345,21 +373,9 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	static_assert(offsetof(PerformAdapter, steering_) == 20, "offset 20 is baked into decideNextStep()'s code");
 #pragma GCC diagnostic pop
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
-	if (playbackHandler.playbackState) {
-		playbackHandler.endPlayback();
-	}
-	// RECORD armed in a stock view would stay on, and Perform can't turn it off (F9): disarm it.
-	playbackHandler.recording = RecordingMode::OFF;
-	playbackHandler.setLedStates();
-	actionLogger.deleteAllLogs();
-	nullifyUIs();
-	deleteOldSongBeforeLoadingNew();
-	preLoadedSong = song;
-	playbackHandler.doSongSwap(false);
-	audioFileManager.deleteAnyTempRecordedSamplesFromMemory(); // the old song's, as Clear song does
-	// The swap leaves its loading mode and animation up for the caller to clear, as Clear song does.
-	currentUIMode = UI_MODE_NONE;
-	display->removeWorkingAnimation();
+	stopForSwap();
+	deleteCurrentSong();
+	swapInSong(song);
 
 	sink_ = OutputSink{};
 	sink_.roster = roster;

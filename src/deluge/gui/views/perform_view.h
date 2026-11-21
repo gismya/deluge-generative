@@ -67,6 +67,11 @@ public:
 	ActionResult horizontalEncoderAction(int32_t offset) override;
 	/// Y turn: the focused part's take back or forward; forward past the newest makes a new take (spec §13.5).
 	ActionResult verticalEncoderAction(int32_t offset, bool inCardRoutine) override;
+	/// SHIFT + Y turn: the focused part's octave shift one down or up, with a popup (spec §13.5).
+	void octaveTurn(int32_t part, int32_t offset);
+	/// A SHIFT + Y or OCTAVES ▸ turn `direction` past `part`'s octave range: shows `BASS OCT -1 LOWEST` (or HIGHEST)
+	/// and returns true; the turn is refused. False, and nothing shown, inside the range.
+	static bool octaveEdgePopup(int32_t part, int32_t direction);
 	/// F4: the tempo encoder while Perform is the root UI, under any overlay too (spec §13.5, §13.7). Turn = Recipe
 	/// tempo, SHIFT = swing, TAP held = swing interval, X held = stock sync nudge; LEARN+turn is swallowed. Under an
 	/// external clock a tempo turn shows the tempo marked EXT and changes nothing.
@@ -159,6 +164,9 @@ private:
 	[[nodiscard]] bool keyboardPadHeld(int32_t x, int32_t y) const;
 	/// A macro's popup, as its gold knob shows it: its name and `units` in points.
 	static void showMacroPopup(deluge::generative::Macro macro, int32_t units);
+	/// With a part focused: the macro's name, the part's biased value `units` and its bias `bias`, in points
+	/// (`ENERGY 38 +13`, spec §13.5).
+	static void showBiasPopup(deluge::generative::Macro macro, int32_t units, int32_t bias);
 	/// A main pad on the CLIP page (spec §13.5): row 1 queues a take, row 2 is FREEZE, NEW SOUND (SHIFT: the
 	/// previous sound) and SOUND EDITOR, and a tap on rows 3–8 sets that control's home.
 	ActionResult clipPadAction(int32_t x, int32_t y, bool on);

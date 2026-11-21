@@ -96,6 +96,17 @@ BUILDERS = {
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
     "gen_browser": (),
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_compose": (),  # the outcome's name
+    "gen_compose_pick": (
+        *_GENRE,
+        "src/deluge/generative/core/lane_names.h",
+    ),  # a part's or laneName()'s row
+    "gen_compose_recipe": _GENRE,  # the genre's name
+    "gen_compose_seed": ("src/deluge/generative/perform/clip_page.*",),  # seedCode()
+    "gen_compose_song": (
+        *_GENRE,
+        "src/deluge/generative/perform/clip_page.*",
+    ),  # name=GEN <oledName> <seedCode()>
     "gen_confirm": _GENRE,
     "gen_controls": _L10N,  # " BRI=..": upperControlName() reads l10n
     "gen_delay_setups": _GENRE,  # the genre's name
@@ -104,6 +115,8 @@ BUILDERS = {
     "gen_entry": (),
     "gen_faders": ("src/deluge/generative/perform/clip_page.*",),
     "gen_fill_button": (),
+    "gen_from_menu": (),  # the list's name
+    "gen_generator_heap": (),  # the heap's name
     "gen_h16": (
         *_GENRE,
         "src/deluge/generative/firmware/output_sink.cpp",
@@ -124,6 +137,11 @@ BUILDERS = {
     ),
     "gen_menu": (),
     "gen_menu_cancel_change": (),
+    "gen_octave_landed": (),
+    "gen_octave_popup": (
+        "src/deluge/generative/perform/queue_text.*",
+        *_L10N,
+    ),  # queueLabel(), LOWEST|HIGHEST
     "gen_page": (),
     "gen_page_leds": (),
     "gen_palette_override": _GENRE,
@@ -135,6 +153,13 @@ BUILDERS = {
     "gen_peek_page": (),
     "gen_perform_entered": _GENRE,
     "gen_press": _SECTIONS,  # "gen_press force GROOVE"
+    "gen_recipe_roll": (),  # the roll's and the outcome's names
+    "gen_recipe_load": _GENRE,  # file names from the card, genre=<stable name>, older|newer
+    "gen_recipe_save": (
+        *_GENRE,
+        "src/deluge/generative/perform/clip_page.*",
+        "src/deluge/generative/perform/recipe_name.*",
+    ),  # quick|full, and name=<oledName> <seedCode()>[letter]
     "gen_retire_referenced": (),
     "gen_rings": (),
     "gen_row_level": _GENRE,  # part and lane names
@@ -145,13 +170,16 @@ BUILDERS = {
         "src/deluge/generative/perform/queue_text.*",  # keyName(), scaleName()
     ),
     "gen_sidebar": ("src/deluge/generative/perform/sidebar.*",),
-    "gen_sound": _GENRE,
+    "gen_sound": (*_GENRE, "src/deluge/generative/core/lane_names.h"),  # laneName()
     "gen_sound_delay": _GENRE,  # part and lane names
     "gen_sound_level": _GENRE,
     "gen_sound_preload": (
         "src/deluge/generative/perform/sound_swap_lifecycle.h",
     ),  # sourceName()
-    "gen_sound_transpose": _GENRE,
+    "gen_sound_transpose": (
+        *_GENRE,
+        "src/deluge/generative/core/lane_names.h",
+    ),  # laneName()
     "gen_status": _SCREEN,
     "gen_tempo_popup": (
         "src/deluge/playback/playback_handler.cpp",  # getTempoStringForOLED()
@@ -564,13 +592,17 @@ def all_scripts(here=HERE):
 
 
 def probe_scripts(here=HERE):
-    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt that is a check on its own (not an include)
+    """(scripts, skipped): test_port_smoke.txt, then every perform_*.txt and compose_*.txt that is a check on its own
+    (not an include)
     and that delugemu can run (deluge_probe.script_needs(): no "# needs:" line but "# needs: card DIR"); and the names
     of the checks it can't run."""
     import deluge_probe
 
     scripts, skipped = [os.path.join(here, os.path.basename(SMOKE))], []
-    for path in sorted(glob.glob(os.path.join(here, "perform_*.txt"))):
+    paths = glob.glob(os.path.join(here, "perform_*.txt")) + glob.glob(
+        os.path.join(here, "compose_*.txt")
+    )
+    for path in sorted(paths):
         text = script_text(path)
         if not START_STATE.search(text):
             continue  # an include (perform_open.txt and the like)

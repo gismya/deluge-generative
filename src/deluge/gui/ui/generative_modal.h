@@ -15,10 +15,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The screen over a modal runner job (spec §12.10): Perform entry, and tearing Perform's song down on leave. The
-// current song keeps playing untouched with its pads and knobs ignored, the stock working animation shows, and only
-// BACK acts: it cancels the job at once, if the job can still be cancelled. Every handler acts at once, inside a card
-// wait too, so none ever returns REMIND_ME_OUTSIDE_CARD_ROUTINE.
+// The screen over a modal runner job (spec §12.10): Perform entry, tearing Perform's song down on leave, and the
+// Compose build's COMPOSING screen (spec §14.5). The current song keeps playing untouched with its pads and knobs
+// ignored, and only BACK acts: it cancels the job at once, if the job can still be cancelled. Every handler acts at
+// once, inside a card wait too, so none ever returns REMIND_ME_OUTSIDE_CARD_ROUTINE.
 
 #pragma once
 
@@ -38,7 +38,10 @@ public:
 	/// modal keeps `job`'s address until it closes, so `job` must outlive it (Perform's entry and leave jobs are
 	/// file-scope objects).
 	void open(const deluge::generative::Job& job);
-	/// The job ended: closes, if BACK hasn't already.
+	/// As open(), with the COMPOSING screen in place of the song's: a progress bar of bars rendered
+	/// (composeProgress()) and BACK = CANCEL (spec §14.5).
+	void openComposing(const deluge::generative::Job& job);
+	/// The job ended: closes, if BACK or a new song's UI (setUIForLoadedSong()) hasn't already.
 	void jobEnded();
 
 	ActionResult buttonAction(deluge::hid::Button b, bool on, bool inCardRoutine) override;
@@ -51,12 +54,13 @@ public:
 	void modEncoderButtonAction(uint8_t whichModEncoder, bool on) override {}
 	ActionResult exitUI() override { return ActionResult::DEALT_WITH; }
 	bool canSeeViewUnderneath() override { return true; }
-	void renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) override {}
+	void renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) override;
 	UIType getUIType() override { return UIType::GENERATIVE_MODAL; }
 
 private:
 	void dismiss();
 	const deluge::generative::Job* job_ = nullptr;
+	bool composing_ = false;
 };
 
 extern GenerativeModalUI generativeModalUI;

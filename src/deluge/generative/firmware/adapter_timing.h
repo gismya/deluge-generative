@@ -54,6 +54,9 @@ public:
 		}
 	}
 
+	/// Starts a fresh window, at Perform entry.
+	void reset() { steps_ = totalCounts_ = maxCounts_ = 0; }
+
 private:
 	uint32_t started_ = 0;
 	uint32_t steps_ = 0;

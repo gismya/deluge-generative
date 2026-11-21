@@ -61,14 +61,19 @@ describe genre_menu("GENRE ▸", $ {
 		expect(genreSpot(kGenres, kAmbient).row).to_equal(2);
 	});
 
-	it("puts the built-in Techno subgenres in one TECHNO row, opening on the default genre, then Ambient, Psytrance, Dub and House", _ {
+	it("puts the built-in Techno subgenres in one TECHNO row, opening on the default genre, then Ambient, a PSYTRANCE row, Dub and House", _ {
 		const GenreRow first = genreRow(allGenres(), 0);
 		expect(first.group).to_be_true();
 		expect(std::string(first.genre->oledName)).to_equal(std::string("TECHNO"));
 		expect(genreRow(allGenres(), 1).genre == &genres::ambient).to_be_true();
 		expect(genreRow(allGenres(), 1).group).to_be_false();
-		expect(genreRow(allGenres(), 2).genre == &genres::psytrance).to_be_true();
-		expect(genreRow(allGenres(), 2).group).to_be_false();
+		// Psytrance is a parent too (#319): its row opens a submenu that holds Classic.
+		const GenreRow psytrance = genreRow(allGenres(), 2);
+		expect(psytrance.group).to_be_true();
+		expect(psytrance.genre == genres::psytranceClassic.parent).to_be_true();
+		expect(std::string(psytrance.genre->oledName)).to_equal(std::string("PSYTRANCE"));
+		expect(subgenreAt(allGenres(), *psytrance.genre, 0) == &genres::psytranceClassic).to_be_true();
+		expect(subgenreAt(allGenres(), *psytrance.genre, 1) == nullptr).to_be_true();
 		expect(genreRow(allGenres(), 3).genre == &genres::dub).to_be_true();
 		expect(genreRow(allGenres(), 3).group).to_be_false();
 		expect(genreRow(allGenres(), 4).genre == &genres::house).to_be_true();
@@ -78,7 +83,8 @@ describe genre_menu("GENRE ▸", $ {
 		// House fills kMaxGenres.
 		expect(static_cast<int32_t>(allGenres().size())).to_equal(kMaxGenres);
 		expect(genreSpot(allGenres(), genres::dub).row).to_equal(3);
-		expect(genreSpot(allGenres(), genres::psytrance).row).to_equal(2);
+		expect(genreSpot(allGenres(), genres::psytranceClassic).row).to_equal(2);
+		expect(genreSpot(allGenres(), genres::psytranceClassic).inGroup).to_equal(0);
 		expect(genreSpot(allGenres(), genres::ambient).row).to_equal(1);
 		const GenreSpot spot = genreSpot(allGenres(), defaultGenre());
 		expect(spot.row).to_equal(0);
@@ -98,7 +104,7 @@ describe genre_menu("GENRE ▸", $ {
 			expect(confirmStyle(*genre) == style).to_be_true();
 		}
 		expect(confirmStyle(genres::ambient) == TransitionStyle::Fade).to_be_true();
-		expect(confirmStyle(genres::psytrance) == TransitionStyle::BuildIntoDrop).to_be_true();
+		expect(confirmStyle(genres::psytranceClassic) == TransitionStyle::BuildIntoDrop).to_be_true();
 		expect(confirmStyle(genres::dub) == TransitionStyle::BuildIntoDrop).to_be_true();
 		expect(confirmStyle(genres::house) == TransitionStyle::BuildIntoDrop).to_be_true();
 	});

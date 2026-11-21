@@ -80,6 +80,21 @@ constexpr Register defaultRegister(Role role) {
 	}
 }
 
+/// Whether a role has a Register: the pitched ones. Drums and FX play lanes, not pitches (spec §7.3).
+constexpr bool hasRegister(Role role) {
+	return defaultRegister(role).anchor != 0;
+}
+
+/// A part's octave shift runs from -kMaxOctaveShift to kMaxOctaveShift octaves (spec §3.1, §7.3).
+constexpr int32_t kMaxOctaveShift = 2;
+
+/// `reg` moved by `octaves`: its anchor by 12 semitones an octave, its span with it (spec §7.3). The fold and snap
+/// rules run unchanged against the moved Register, so every note of the part moves by the same 12 × `octaves`.
+constexpr Register shiftedRegister(Register reg, int32_t octaves) {
+	reg.anchor = static_cast<uint8_t>(reg.anchor + 12 * octaves);
+	return reg;
+}
+
 /// The part's tonic: the instance of `keyRoot` nearest the Register's anchor, the lower one on a 6-semitone tie.
 int32_t tonicNote(const Register& reg, uint8_t keyRoot);
 

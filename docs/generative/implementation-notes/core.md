@@ -1,9 +1,9 @@
-# Implementation notes: Portable code (`generative/core/`, `perform/`, `runner/`): build, steering, capacity, genre data
+# Implementation notes: Portable code (`generative/core/`, `perform/`, `compose/`, `runner/`): build, steering, capacity, genre data
 
 Part of the [implementation notes](../implementation-notes.md). Paths are under `src/deluge/` unless they say
 otherwise.
 
-- The harness builds these three trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
+- The harness builds these four trees and nothing else (`tests/spec/generator/CMakeLists.txt`); `generative/firmware/`
   is the firmware side. The `generative-rules` hooks (`scripts/lint/generative_rules.py`) keep float, firmware
   includes and libc stdio out.
 - The Generator (`core/generator.h`) is one class whose code is split by area: `generator.cpp` (start, the step's
@@ -125,6 +125,11 @@ otherwise.
   genres, and a parent's `version` is 0. `gen_emu.py`'s `genre_names()` reads the genre files with a regex that knows
   both forms (a whole table, unless its version is 0, and `subgenreOf` then `genre.name`): keep new genres in one of
   them.
+- The Psytrance parent (`kPsytranceParent`, #319) is the other way round from Techno's: it holds the whole genre, and
+  Classic (`kPsytranceClassic`) is `subgenreOf` it with only its identity set, so its event stream is the old
+  `psytrance`'s. A subgenre's OLED name is the confirm title and the palette override's file name, capped at 14
+  characters (`genre_data_spec`): `CLASSIC PSYTRANCE` doesn't fit, so it is `CLASSIC PSY`. Picking it in a probe
+  script takes two picks (`row=PSYTRANCE`, SELECT, `row=CLASSIC`), as a Techno subgenre does.
 - The Techno parent (`kTechnoParent`) holds only the Drums and FX parts (`kTechnoDrums`, `kTechnoFx`), the
   fills, the Arc, Break keeps of Kick, Rim and Closed hat (a subgenre that names none breaks down to those, not
   a full Groove) and a palette of drum and FX lanes (`technoPalette`). Each subgenre lists its whole roster, Drums
@@ -199,3 +204,11 @@ otherwise.
   the tonics are octaves apart in every key, and spans that don't meet (House's, §4.5).
 - A spec that mutates a genre table rebuilds `generator_render` too: rebuild (`./dbt test --generator`) after
   restoring the table, or `theory_review.py` and later probes read the mutant.
+- Part bias (§3.3, #303): `Recipe::bias` (`PartBiases`), the curve `partBiased()` / its inverse `biasFor()` in
+  `core/part_bias.h` (swap the curve there only: `biasFor()` searches whatever monotonic curve it is), and
+  `Generator::biasedOn(part, macro, shared)`. A part decides on its own copy of the step (`partStep()`, only when
+  `recipe_.bias.any(p)`); the shared step stays what the Arc, fills, accents and drift read. `Step::sharedDensity` is
+  the unbiased Density: `planned()` takes the shared one and biases it for whichever part it asks about, so every
+  caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
+  per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
+  macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.

@@ -58,6 +58,7 @@ void PerformAdapter::startPiece(int32_t swungTick, int32_t magnitude) {
 	instanceStarts();
 #if ENABLE_SYSEX_TEST
 	macrosShown_ = generator_->recipe().macros;
+	biasShown_ = generator_->recipe().bias;
 #endif
 	TEST_EVENT("gen_start master=%ld to_step0=%ld groove=%d tempo=%ld", static_cast<long>(master),
 	           static_cast<long>(-driver_.clock()), groove ? 1 : 0, static_cast<long>(currentRecipe.recipe.tempo));
@@ -153,8 +154,28 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
 	}
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		// A SetBias (an F8 turn with the part focused, a KEYBOARD fader, RESET PART BIAS) landed on the last decided
+		// step, or a transition's start step brought the new roster's.
+		for (int32_t m = 0; m < kNumMacros; m++) {
+			const auto macro = static_cast<Macro>(m);
+			if (generator_->recipe().bias.of(p, macro) != biasShown_.of(p, macro)) {
+				biasShown_.set(p, macro, generator_->recipe().bias.of(p, macro));
+				TEST_EVENT("gen_bias_landed part=%ld macro=%ld units=%ld step=%ld", static_cast<long>(p),
+				           static_cast<long>(m), static_cast<long>(biasShown_.of(p, macro)),
+				           static_cast<long>(generator_->nextStep() - 1));
+			}
+		}
+		// A SetOctave landed on the last decided step: the Current Recipe still has the shift before it.
+		if (generator_->octave(p) != currentRecipe.recipe.octave[p]) {
+			const int32_t landed = generator_->nextStep() - 1;
+			TEST_EVENT("gen_octave_landed part=%ld shift=%ld step=%ld bar_line=%s", static_cast<long>(p),
+			           static_cast<long>(generator_->octave(p)), static_cast<long>(landed),
+			           landed % kStepsPerBar == 0 ? "yes" : "no");
+		}
+	}
 #endif
-	steering_.recordTakes(*generator_);
+	steering_.recordLanded(*generator_);
 	if (driver_.jumps() != jumps) {
 		TEST_EVENT("gen_jump clock delta=%ld", static_cast<long>(delta));
 	}
@@ -273,7 +294,9 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
 	// modulo 8, as with the sound picks (perform/pending_recipe.h); both objects are aligned to 8, so the
-	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions. The steering's size moves `sink_`:
+	// MacroSteering's Part bias holds keep their part in 16 bits so they grow it by 16 B; with 8 bits, 12 B broke this
+	// (#303).
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 	static_assert((Transitions::incomingOffset() - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8
@@ -283,7 +306,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming);
 	generator_ = idleBlock(); // the incoming instance started there
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
 }
 
@@ -294,11 +317,11 @@ void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRec
 	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
 	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the
 	// interval: nothing is rescheduled, which the tick must not do.
-	steering_.takeOverStopped(pending, perform::HandoverMacros::Live);
+	steering_.takeOverStopped(pending);
 }
 
 void PerformAdapter::pendingCommitsOnLeave(const perform::PendingRecipe& pending) {
-	steering_.handOver(pending, perform::HandoverMacros::Live);
+	steering_.handOver(pending);
 }
 
 void PerformAdapter::retireOutgoing(uint32_t capSamples) {
@@ -312,6 +335,7 @@ void PerformAdapter::instanceStarts() {
 	fillShown_ = -1;
 	sink_.fillFrom = sink_.fillTo = INT32_MAX;
 	controlTiming.reset();
+	decisionTiming.reset(); // H1's windows start with the instance: the first carries no older steps
 #endif
 }
 
