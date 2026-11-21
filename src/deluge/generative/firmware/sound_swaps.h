@@ -65,7 +65,7 @@ public:
 	[[nodiscard]] bool queueHeldFull() const;
 	[[nodiscard]] bool runnerBusy() const;
 	[[nodiscard]] bool preloadRunning() const;
-	bool submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen);
+	bool submitPreload(int32_t part, Source source, uint8_t token, const SoundChoice* chosen);
 	void cancelJob();
 	[[nodiscard]] int32_t retirementRoom() const;
 	void swapIn(int32_t part);

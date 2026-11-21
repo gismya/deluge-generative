@@ -32,9 +32,9 @@ include perform_confirm.txt
 hold preload
 pad 9 7 down
 expect event gen_focus part=0 locked=-1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 expect event gen_sound_preload_held part=0 within=10
 release preload
 expect event gen_sound_swap part=0 stopped within=30
@@ -160,9 +160,9 @@ wait 50
 button F4 up
 encoder 5 64 fast
 wait 300
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40
@@ -184,9 +184,9 @@ expect event gen_outputs_freed outputs=1 within=40
 hold preload
 pad 9 7 down
 expect event gen_focus part=0 locked=-1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload_held part=0 within=10
 pad 9 6 down
@@ -229,9 +229,9 @@ expect ui=generative_perform
 hold preload
 pad 9 7 down
 expect event gen_focus part=0 locked=1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload_held part=0 within=10
 button SHIFT down
@@ -279,9 +279,9 @@ wait 50
 button F4 up
 encoder 5 64 fast
 wait 300
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_preload done part=0 within=30
 expect event gen_sound_swap part=0 line=1 within=40
@@ -320,9 +320,9 @@ include perform_confirm.txt
 hold free
 pad 9 7 down
 expect event gen_focus part=0 locked=-1
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 pad 9 7 up
 expect event gen_sound_swap part=0 stopped within=30
 expect event gen_free_held outputs=1 within=10

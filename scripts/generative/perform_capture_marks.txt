@@ -11,7 +11,7 @@
 # marked= full= marks=: the marks as the dot and the LED read them. gen_record_led off|on|blink. gen_peek_page and
 # gen_peek N LABEL|VALUE: the peek. Menus remember their last row, so a row is chosen from the top (encoder 3 -20
 # first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE,
-# SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART, CAPTURE.
+# SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART, CAPTURE, BROWSER PREVIEW.
 # covers: src/deluge/generative/perform/capture.* src/deluge/generative/core/steering_log.*
 # covers: src/deluge/generative/perform/perform_driver.*
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/playback/playback_handler.cpp

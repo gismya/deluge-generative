@@ -128,6 +128,13 @@ struct SoundPicks {
 	SoundPath lane[kNumLanes];
 };
 
+/// A sound the player chose (spec §10.1, §13.5): a card preset for a synth part (`lane` None), or a file for one of a
+/// Drums or FX part's lanes, a sample, or a preset for an FX lane that takes one (spec §10.5).
+struct SoundChoice {
+	SoundPath path;
+	Lane lane = Lane::None;
+};
+
 // ---- The Recipe (spec §3.1, §3.2) ----
 
 /// The longest swing interval a Recipe holds: 5 doublings of a 16th (2 bars), the coarsest sync level at the

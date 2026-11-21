@@ -180,6 +180,17 @@ describe recipe_file("Recipe files", $ {
 			expect(samePicks(loaded->sounds, saved->sounds)).to_be_true();
 		});
 
+		it("keeps a lane pick the player chose: any card sample, or a preset on an FX lane (spec §13.5)", _ {
+			auto saved = rolledFile(genres::technoAcid, 2, *std::make_unique<FakeCard>());
+			saved->sounds.lane[static_cast<int32_t>(Lane::ClosedHat)].set("MY SAMPLES/Loops", "Hat loop.aiff");
+			saved->sounds.lane[static_cast<int32_t>(Lane::Riser)].set("SYNTHS/GENERATIVE/FX", "GEN Riser 2.XML");
+			auto loaded = std::make_unique<RecipeFile>();
+			expect(parseRecipeFile(written(*saved), *loaded) == RecipeFileRead::Ok).to_be_true();
+			expect(std::string(loaded->sounds.lane[static_cast<int32_t>(Lane::Riser)].c_str()))
+			    .to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Riser 2.XML"));
+			expect(samePicks(loaded->sounds, saved->sounds)).to_be_true();
+		});
+
 		it("writes the genre's stable name and version, and the values a reader can see", _ {
 			auto saved = rolledFile(genres::technoAcid, 2, *std::make_unique<FakeCard>());
 			const std::string text = written(*saved);

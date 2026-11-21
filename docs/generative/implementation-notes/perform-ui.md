@@ -108,7 +108,7 @@ otherwise.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
-- The preset browser (`gui/ui/browser/perform_preset_browser.*`, §13.5) is its own `SlotBrowser`, not stock's
+- The sound browser (`gui/ui/browser/perform_sound_browser.*`, §13.5: the preset browser and the lane browser) is its own `SlotBrowser`, not stock's
   `LoadInstrumentPresetUI`, whose `currentFileChanged()` loads and swaps the instrument on every scroll step. Its
   `outputTypeToLoad` is NONE, as the sample and DX browsers' are: stock otherwise adds the current song's Instruments
   to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
@@ -118,6 +118,20 @@ otherwise.
   End's pad acts only while Perform is on top (`endPadActs()`), as under every overlay (§13.5). Its choice goes to
   `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
   SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
+- The lane list (`gui/menu_item/generative/perform_lanes.*`) is a Perform menu opened by `openMenu()`, and a lane's
+  browser opens over it with `openUI()` (as stock's sample browser opens over the sound editor), so the browser's
+  `close()` lands back on the list. A choice closes the list too (`soundEditor.exitCompletely()`) before
+  `chooseSound()`, so Perform is on top for the press's popup. Where a browser opens is `perform::browserStart()`
+  (`generative/perform/sound_browser.h`): the pick's folder, the palette's, then SYNTHS or SAMPLES.
+- Trap: a leaf row in the sound editor (`shouldEnterSubmenu()` false) has its `selectButtonPress()` called, and what
+  it returns is dropped (`SoundEditor::buttonAction()`). A row that leads to a submenu enters it itself with
+  `soundEditor.enterSubmenu()` (the lane list's FX rows, `perform_lanes.cpp`).
+- Trap: `Browser::arrivedInNewFolder()`'s `defaultDirToAlsoTry` is **created** (`f_mkdir`) when it is missing too.
+  Pass only a top folder (SYNTHS, SAMPLES) there: a palette folder (`SYNTHS/GENERATIVE/FX`) would be made on a card
+  without the pack. The lane browser tries the palette folder with no default first, then the top folder.
+- The lane browser previews through stock's preview voice (`AudioEngine::previewSample()`), at the lane's volume from
+  `previewVolumeFor()` (F20, shared with stock's sample browser), reading the row's NoteRow param manager and the
+  Kit clip's. `AudioEngine::stopAnyPreviewing()` on every move, folder change and close.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.
@@ -158,9 +172,10 @@ otherwise.
   firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
 - X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
   CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
-  `playOrStop()` is PLAY without it. RESTART ▸ is the Perform menu's last row, after RESET PART BIAS, so scripts that count
-  rows from the top didn't move; a script that leaves the menu on a low row goes back to the top before closing it
-  (`perform_restart.txt`), since the menu remembers its row.
+  `playOrStop()` is PLAY without it. RESTART ▸ comes after RESET PART BIAS, then CAPTURE ▸, and BROWSER PREVIEW is the
+  last row (`perform_lane_browser.txt` reaches it with `encoder 3 20`, so keep it last): rows are added before it, and
+  scripts that count from the top don't move. A script that leaves the menu on a low row goes back to the top before
+  closing it (`perform_restart.txt`), since the menu remembers its row.
 - Capture marks (#144, spec §17.4): RECORD and MIDI RECORD both reach `PlaybackHandler::recordButtonPressed()`
   (the panel's on a short press's release), which under Perform calls `PerformAdapter::pressMark()`; SHIFT+RECORD
   resamples before that and uses the press up. What a press does, the dot, the RECORD LED, the CAPTURE peek's lines
