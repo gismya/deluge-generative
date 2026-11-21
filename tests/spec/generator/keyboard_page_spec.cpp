@@ -366,6 +366,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 			expect(piece.currentRecipe.bias.of(1, Macro::Motion)).to_equal(0);
 			expect(piece.text().substr(18, 7)).to_equal(std::string("M=6h/5 "));
 			piece.focused = -1; // the release goes to the part the press held, whatever is focused by then
+			expect(piece.text().substr(18, 7)).to_equal(std::string("M=5/5 ")); // the Recipe level shows no part's hold
 			piece.releaseFader(kMotionColumn, 2, 1000);
 			piece.decideMore(2);
 			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(0);

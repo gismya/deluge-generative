@@ -487,6 +487,8 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			}
 			macro = biased;
 		}
+		// What fallThrows() keeps for a stopped instance's Throws: the part's Space as this step played it.
+		lastSpaceMacro_[set.part] = static_cast<int16_t>(macro[static_cast<int32_t>(SoundControl::Space)]);
 		for (int32_t c = 0; c < kNumSoundControls; c++) {
 			const auto control = static_cast<SoundControl>(c);
 			if (!kSetMoves[kind][c]) {
@@ -508,11 +510,6 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	driftPoint_ += static_cast<uint32_t>(driftTowards_ / kDriftApart);
 	driftTowards_ %= kDriftApart;
 	driftLastMotion_ = static_cast<int16_t>(step.motion);
-	constexpr auto kSpace = static_cast<int32_t>(SoundControl::Space);
-	for (int32_t p = 0; p < kMaxParts; p++) {
-		lastSpaceMacro_[p] = static_cast<int16_t>(
-		    p < partCount(*genre_) && recipe_.bias.any(p) ? macroLayer(SoundControl::Space, p) : shared[kSpace]);
-	}
 }
 
 } // namespace deluge::generative

@@ -294,7 +294,9 @@ void PerformAdapter::takeRoster(Roster& incoming) {
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
 	// The incoming roster is cold in SDRAM. Its copy prefetches only when the two rosters differ in their address
 	// modulo 8, as with the sound picks (perform/pending_recipe.h); both objects are aligned to 8, so the
-	// offsets decide. If a new member breaks this, move `incoming_` in Transitions.
+	// offsets decide. If a new member breaks this, move `incoming_` in Transitions. The steering's size moves `sink_`:
+	// MacroSteering's Part bias holds keep their part in 16 bits so they grow it by 16 B; with 8 bits, 12 B broke this
+	// (#303).
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 	static_assert((Transitions::incomingOffset() - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8

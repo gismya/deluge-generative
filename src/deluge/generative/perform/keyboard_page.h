@@ -154,8 +154,7 @@ private:
 	Macros sent_;
 	int16_t held_[kNumMacros] = {kNotHeld, kNotHeld, kNotHeld, kNotHeld};
 	int16_t bias_[kNumMacros] = {};
-	/// 16 bits, not 8: the two arrays grow the steering by 16 B, and the firmware's start step pins its size modulo 8
-	/// (PerformAdapter::incomingStarts()); 12 B broke it.
+	/// 16 bits, not 8: see PerformAdapter::incomingStarts().
 	int16_t biasPart_[kNumMacros] = {kNoPart, kNoPart, kNoPart, kNoPart};
 };
 

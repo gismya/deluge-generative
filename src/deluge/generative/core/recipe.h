@@ -21,6 +21,7 @@
 
 #include "generative/core/pitch.h"
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 
@@ -89,9 +90,8 @@ struct PartBiases {
 		return value[part][static_cast<int32_t>(macro)];
 	}
 	constexpr void set(int32_t part, Macro macro, int32_t units) {
-		value[part][static_cast<int32_t>(macro)] = static_cast<int16_t>(units < -kMacroFull  ? -kMacroFull
-		                                                                : units > kMacroFull ? kMacroFull
-		                                                                                     : units);
+		value[part][static_cast<int32_t>(macro)] =
+		    static_cast<int16_t>(std::clamp<int32_t>(units, -kMacroFull, kMacroFull));
 	}
 	/// Whether `part` has a bias on any macro.
 	[[nodiscard]] constexpr bool any(int32_t part) const {

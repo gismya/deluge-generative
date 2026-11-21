@@ -37,10 +37,6 @@ constexpr RGB kFillColour = RGB::monochrome(70);
 /// A KEYBOARD fader press let go sooner than this is a tap, a new centre; held longer, it springs back (spec §13.5).
 constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform::kMacroTapMs / 1000;
 
-} // namespace
-
-namespace {
-
 /// What the Recipe keeps for a fader let go: the macro's centre, or `part`'s bias on it (test events).
 [[maybe_unused]] int32_t keptByFader(Macro macro, int32_t part) {
 	return part >= 0 ? currentRecipe.recipe.bias.of(part, macro) : currentRecipe.recipe.macros[macro];
@@ -65,9 +61,8 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
 		           static_cast<long>(units), static_cast<long>(part));
 		if (part >= 0) {
-			const int32_t centre = currentRecipe.recipe.macros[at.macro];
-			const int32_t bias = faderBias(centre, units);
-			showBiasPopup(at.macro, deluge::generative::partBiased(centre, bias), bias);
+			const int32_t bias = performAdapter.steering().heldBias(at.macro);
+			showBiasPopup(at.macro, deluge::generative::partBiased(currentRecipe.recipe.macros[at.macro], bias), bias);
 		}
 		else {
 			showMacroPopup(at.macro, units);

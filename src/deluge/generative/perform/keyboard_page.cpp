@@ -98,7 +98,8 @@ void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 		// Each fader shows the value in effect, a held one while held, and where the Arc has the macro now. Both
 		// stay on the fader's levels, so describeKeyboard() reads back from the cells what was put there.
 		// With a part focused, the part's biased value and the centre it is biased from (spec §13.5).
-		const bool held = in.holds != nullptr && in.holds->held(macro);
+		// A hold shows only on the level it steers: a part's on that part, the Recipe level's with nothing focused.
+		const bool held = in.holds != nullptr && in.holds->held(macro) && in.holds->part(macro) == in.focused;
 		const bool part = in.focused >= 0;
 		const int32_t shown = part ? partBiased(in.centres[macro], in.bias.of(in.focused, macro)) : in.centres[macro];
 		const int32_t value = faderLevel(held ? in.holds->units(macro) : shown);

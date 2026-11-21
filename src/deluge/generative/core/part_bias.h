@@ -28,7 +28,7 @@
 
 namespace deluge::generative {
 
-/// The narrowest knee: a small bias eases into its end over the last 10 points, instead of hitting it.
+/// The narrowest knee: a small bias eases into its end over the last 10 points, instead of hitting it (tuning).
 constexpr int32_t kPartBiasKneeMin = macroPoints(10);
 
 /// `shared`, the value every part plays a macro at (after the Arc, effectiveOn()), moved by a part's `bias`, both in
@@ -48,7 +48,8 @@ constexpr int32_t partBiased(int32_t shared, int32_t bias) {
 	if (room >= knee) {
 		return shared + o;
 	}
-	// Each way rounds towards the shared value, so a bias never overshoots its end.
+	// Up rounds towards the shared value, down away from it (as the prototype); neither passes its end, since
+	// |bias| ≤ K.
 	if (o > 0) {
 		return shared + static_cast<int32_t>(int64_t{o} * room / knee);
 	}

@@ -106,7 +106,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
-encoder 3 -8
+encoder 3 -20
 encoder 3 5
 button SELECT_ENC down
 wait 50

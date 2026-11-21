@@ -285,6 +285,8 @@ public:
 	[[nodiscard]] int32_t biasedCentre(int32_t part, Macro macro) const {
 		return partBiased(adapter().recipe().macros[macro], adapter().recipe().bias.of(part, macro));
 	}
+	/// The Part bias a KEYBOARD fader holds on `macro` (its popup), whichever part it holds.
+	[[nodiscard]] int32_t heldBias(Macro macro) const { return macroSteering_.heldBias(macro); }
 	/// Whether `part` is in the roster, so it takes a Part bias.
 	[[nodiscard]] bool takesBias(int32_t part) const { return part >= 0 && part < rosterParts(); }
 
@@ -333,8 +335,8 @@ private:
 	PressOutcome steer(const Command& command);
 	/// Pushes a SetMacro while Perform is entered, and records it in macroSteering_.
 	void pushMacro(Macro macro, int32_t units);
-	/// Pushes a SetBias while Perform is entered.
-	void pushBias(int32_t part, Macro macro, int32_t units);
+	/// Pushes a SetBias while Perform is entered. @return false if the queue was full.
+	bool pushBias(int32_t part, Macro macro, int32_t units);
 	/// pressTake() past the pending gate.
 	PressOutcome pressTakeUngated(uint8_t part, int32_t take);
 	/// Calls `visit(part, take)` for each part with a take waiting, in the playing piece or in the queue, with the
@@ -438,7 +440,7 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	const PartBiases liveBias = recipe.bias;
 	// A Regenerate keeps each part's bias: the same roster. A genre change starts at the new Recipe's (0), a LOAD at
 	// its file's, and a fader still holding a bias lets go of it (spec §3.3).
-	const bool keepsBias = pending.macros == HandoverMacros::Live && pending.recipe.genre == recipe.genre;
+	const bool keepsBias = keepsPartBias(pending.macros, pending.recipe.genre, recipe.genre);
 	recipe = pending.recipe;
 	if (keepsBias) {
 		recipe.bias = liveBias;
@@ -794,9 +796,12 @@ void PerformSteering<Adapter>::setBias(int32_t part, Macro macro, int32_t units)
 	if (!takesBias(part)) {
 		return;
 	}
-	adapter().recipe().bias.set(part, macro, units);
-	if (macroSteering_.biasHeldOn(macro) != part) {
-		pushBias(part, macro, adapter().recipe().bias.of(part, macro));
+	PartBiases& bias = adapter().recipe().bias;
+	const int32_t before = bias.of(part, macro);
+	bias.set(part, macro, units);
+	// A full queue loses the turn: the Recipe keeps what the core plays, as a macro's centre does.
+	if (macroSteering_.biasHeldOn(macro) != part && !pushBias(part, macro, bias.of(part, macro))) {
+		bias.set(part, macro, before);
 	}
 }
 
@@ -805,9 +810,11 @@ void PerformSteering<Adapter>::holdBias(int32_t part, Macro macro, int32_t units
 	if (!takesBias(part)) {
 		return;
 	}
-	units = std::clamp<int32_t>(units, -kMacroFull, kMacroFull);
-	macroSteering_.holdBias(part, macro, units);
-	pushBias(part, macro, units);
+	PartBiases held;
+	held.set(part, macro, units); // clamped as the Recipe's
+	if (pushBias(part, macro, held.of(part, macro))) {
+		macroSteering_.holdBias(part, macro, held.of(part, macro));
+	}
 }
 
 template <typename Adapter>
@@ -840,12 +847,10 @@ void PerformSteering<Adapter>::resetBias(int32_t part) {
 }
 
 template <typename Adapter>
-void PerformSteering<Adapter>::pushBias(int32_t part, Macro macro, int32_t units) {
+bool PerformSteering<Adapter>::pushBias(int32_t part, Macro macro, int32_t units) {
 	Command command{CommandKind::SetBias, static_cast<uint8_t>(part), units};
 	command.length = static_cast<uint16_t>(macro);
-	if (entered_) {
-		queue_.push(command);
-	}
+	return !entered_ || queue_.push(command);
 }
 
 template <typename Adapter>

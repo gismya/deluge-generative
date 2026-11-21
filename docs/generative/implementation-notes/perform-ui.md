@@ -48,13 +48,14 @@ otherwise.
   `generative-perform-l10n` hook catches literals passed straight to OLED calls.
 - Perform's menus (`gui/menu_item/generative/perform_menu.*`) open with `soundEditor.setup(nullptr, &menu)`, as stock
   song-level menus do; `PerformView::openMenu()` lets go of held pads first. A stock `Submenu` remembers its last row
-  across openings, so probe scripts choose a row from the top (`encoder 3 -9` on the Perform menu, which has up to 8 rows with CANCEL CHANGE and RESET PART BIAS: -5 stopped short of the top once a script had left it on RESET PART BIAS, #303). The sound editor's `setLedStates()` and
-  its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady, SCALE off and the page LEDs
-  the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's `graphicsRoutine()` runs under the
-  sound editor, which can see the view underneath). A menu value held while it's open (the edited key, a take row)
-  records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started, and the key presses or that
-  part's take presses, BACK taps counting as both) and is read again when that moves, or when its submenu opens
-  afresh; `refreshPerformMenu()` redraws the open item then.
+  across openings, so probe scripts choose a row from the top (`encoder 3 -20`, as `compose_screen.txt` does: `-5`
+  stopped short of the Perform menu's top once a script had left it on RESET PART BIAS, its 7th row, #303). The sound
+  editor's `setLedStates()` and its SELECT/BACK handling run `View::setModLedStates()`, which sets F7 and F8 steady,
+  SCALE off and the page LEDs the stock way: `PerformView::assertLeds()` puts them back every frame (Perform's
+  `graphicsRoutine()` runs under the sound editor, which can see the view underneath). A menu value held while it's open
+  (the edited key, a take row) records what it was read under (`Basis` in `perform_menu.cpp`: playing, pieces started,
+  and the key presses or that part's take presses, BACK taps counting as both) and is read again when that moves, or
+  when its submenu opens afresh; `refreshPerformMenu()` redraws the open item then.
 - The Generative menu (§14.1): GENERATIVE is a context menu (`gui/context_menu/generative.*`); PERFORM FROM, COMPOSE
   FROM and the Compose screen's FROM are `SourceMenu`s (`gui/menu_item/generative/source_rows.h`) of CURRENT RECIPE
   (hidden until a Recipe exists), GENRE ▸ and FILE.... PERFORM FROM's rows all end in `DiscardSong::setPerform()` with

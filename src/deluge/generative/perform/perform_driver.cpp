@@ -16,6 +16,7 @@
  */
 
 #include "generative/perform/perform_driver.h"
+#include "generative/perform/pending_recipe.h"
 #include "generative/perform/riser_timing.h"
 #include <algorithm>
 
@@ -421,10 +422,10 @@ void PerformDriver::switchToIncoming(NoteSink& sink) {
 	outgoingBase_ = startTick;
 	// The new roster plays the macros as they are now (spec §12.9), a turn since the confirm included, and keeps a
 	// hold (spec §9.7). A LOAD's plays the file's macros instead.
-	// The Part biases carry over with them when the roster stays (a Regenerate); a genre change starts the new parts
-	// at its Recipe's, 0 (spec §3.3).
+	// The Part biases carry over with them on a Regenerate (keepsPartBias(), spec §3.3).
 	const Recipe& live = generator_->recipe();
-	const bool keepsBias = !incomingKeepsMacros_ && incoming_->recipe().genre == live.genre;
+	const bool keepsBias = keepsPartBias(incomingKeepsMacros_ ? HandoverMacros::Pending : HandoverMacros::Live,
+	                                     incoming_->recipe().genre, live.genre);
 	incoming_->carryOver(incomingKeepsMacros_ ? incoming_->recipe().macros : live.macros,
 	                     keepsBias ? live.bias : incoming_->recipe().bias, generator_->arc().held());
 	// A Riser still held here never sounds: before a Drop transition's start step it is shorter than the lookahead,

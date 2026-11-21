@@ -23,6 +23,7 @@
 #include "generative/core/golden_case.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/card_text.h"
+#include "generative/perform/pending_recipe.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "processing/engines/audio_engine.h"
@@ -235,7 +236,9 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	const Genre& genre = *recipe.genre;
 	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
 	rolled.macros = recipe.macros;
-	rolled.bias = recipe.bias; // the same roster: each part keeps its bias (spec §3.3)
+	if (perform::keepsPartBias(perform::HandoverMacros::Live, rolled.genre, recipe.genre)) {
+		rolled.bias = recipe.bias; // always: a Regenerate keeps the roster
+	}
 	stagedSounds_ = sounds;
 	CardFolders folders(chunks);
 	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
