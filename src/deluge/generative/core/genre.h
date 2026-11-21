@@ -1637,6 +1637,16 @@ constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
 }
 
+/// The genre's Drums part, the one the punch-ins act on and Pump leaves out (spec §8.9), or -1 with none.
+constexpr int32_t drumsPart(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (genre.parts[p].role == Role::Drums) {
+			return p;
+		}
+	}
+	return -1;
+}
+
 /// What a control set is, which decides the layers that move it (spec §11.3–§11.5).
 enum class ControlSetKind : uint8_t {
 	Part,    ///< A pitched part's own: every layer.

@@ -225,3 +225,13 @@ otherwise.
   caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
   per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
   macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.
+- Punch-ins (§8.9, #301): `PunchIns` (`core/punch_ins.h`) in `Generator::punch_`, set by `SetPunch` in `apply()`.
+  Their effects act at output, after the plan: a LaneMute in `noteOn()`'s muted flag, the rolls in `decideKit()` after
+  the Replace pairs (`punchRoll()`), Flam and Double kick in `express()` after `ornamentFor()` (`punchOrnament()`),
+  so no draw moves and the piece after a release is the one with none. Pump is the core's one event the driver acts
+  on for a punch-in (`EventKind::Pump`, appended after NoteOn so the other kinds keep their values, which the goldens'
+  fingerprints hash); `stepEventsOf()` counts one a step. The harness driver drops a muted note-on, so a spec of a
+  LaneMute reads the lane's notes as gone, not flagged (`punch_in_spec`).
+  Flam's lanes are `flams()` (`punch_ins.h`, shared with the spec). Pump changes in `apply()` push at most one Pump a
+  step: a second change in the same drain removes the first (they cancel), as `stepEventsOf()` counts one.
+

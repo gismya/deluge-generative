@@ -102,14 +102,33 @@ enum class CommandKind : uint8_t {
 	/// a cancel. value: the target, hundredths of a BPM. length: its glide, in Generator ticks from the entry's step.
 	/// Never pushed; apply() keeps nothing, so the outgoing Recipe's tempo stays as it played.
 	TransitionTempo,
+	/// A tier 2 punch-in pad (spec §8.9, §13.5). target: PunchIn. lane: the Drums lane a LaneMute silences, else
+	/// Lane::None. value: 1 on, 0 off, as the KEYBOARD page's hold or latch left it: the core resolves no press. Lands
+	/// on the next undecided step.
+	SetPunch,
+	/// Driver-side steering, logged only (spec §17.2): stock's stutter starts (value 1) or ends (0), from stock
+	/// Performance view's stutter column or a gold knob's push. Stutter isn't a param edit, so Capture needs it apart
+	/// from the stutter rate's SetParam. The core keeps nothing. Lands on the next undecided step.
+	SetStutter,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::TransitionTempo;
+constexpr CommandKind kLastCommandKind = CommandKind::SetStutter;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;
+
+/// The tier 2 punch-ins (spec §8.9): each plays a fixed amount while on. All but Pump act on the Drums part.
+enum class PunchIn : uint8_t {
+	LaneMute,   ///< One Drums lane plays nothing (Command::lane).
+	HatRoll,    ///< The Closed hat plays 32nds.
+	SnareRoll,  ///< The Snare, or the Clap where there's none, plays 16ths.
+	Flam,       ///< Snare, Clap and Rim hits flam, or every hit but the Kick's in a kit with none (flams()).
+	DoubleKick, ///< Each Kick hit plays twice, a 32nd apart.
+	Pump,       ///< Every other part ducks under the Kick through its sidechain (the driver's, on Event::pump()).
+};
+constexpr int32_t kNumPunchIns = static_cast<int32_t>(PunchIn::Pump) + 1; ///< Pump is the last
 
 /// How a transition plays (spec §9.7), chosen in the confirm.
 enum class TransitionStyle : uint8_t {

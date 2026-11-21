@@ -21,6 +21,7 @@
 #include "generative/firmware/perform_midi.h"
 #include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
@@ -71,6 +72,7 @@ void PerformAdapter::pieceBegins() {
 #if ENABLE_SYSEX_TEST
 	macrosShown_ = generator_->recipe().macros;
 	biasShown_ = generator_->recipe().bias;
+	punchesShown_ = {}; // a start begins with none: the re-sent ones land on step 0
 #endif
 }
 
@@ -106,6 +108,7 @@ void PerformAdapter::stopPiece() {
 		reportLog(true);
 	}
 	sink_.allNotesOff();
+	sidechainPump.release();      // the next start's pump ducks again (spec §8.9)
 	soundControls.restoreHomes(); // every sound back as its preset was, or as the player left it while stopped
 }
 
@@ -132,6 +135,7 @@ void PerformAdapter::reportLog(bool stopped) const {
 
 void PerformAdapter::dropSong() {
 	soundControls.forget();
+	sidechainPump.forget();
 	soundSwaps.forgetSong();
 	restartBegan.forgetSong();
 	transitions.forget();
@@ -212,6 +216,13 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			TEST_EVENT("gen_macro_landed macro=%ld units=%ld step=%ld", static_cast<long>(m),
 			           static_cast<long>(macrosShown_[macro]), static_cast<long>(generator_->nextStep() - 1));
 		}
+	}
+	if (const PunchIns& punches = generator_->punchIns();
+	    punches.lanes != punchesShown_.lanes || punches.effects != punchesShown_.effects) {
+		// A SetPunch (a KEYBOARD punch-in pad, or the steering's re-send at a start) landed on the last decided step.
+		punchesShown_ = punches;
+		TEST_EVENT("gen_punch_landed lanes=%x effects=%x step=%ld", static_cast<unsigned>(punches.lanes),
+		           static_cast<unsigned>(punches.effects), static_cast<long>(generator_->nextStep() - 1));
 	}
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		// A SetBias (an F8 turn with the part focused, a KEYBOARD fader, RESET PART BIAS) landed on the last decided
@@ -447,6 +458,10 @@ void PerformAdapter::retireOutgoing(uint32_t capSamples) {
 
 void PerformAdapter::instanceStarts() {
 	restartStepCounters();
+	// Every part ducked lets go: the new instance starts with no pump, and the steering's re-send below ducks again
+	// from its step 0 only if PUMP is still on. A release made after the last instance's final decision (a restart's
+	// line, a transition's start step) never reached that instance, and its queue is gone (spec §8.9).
+	sidechainPump.release();
 	steering_.instanceStarts(currentSong->isFillModeActive());
 #if ENABLE_SYSEX_TEST
 	fillShown_ = -1;

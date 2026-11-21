@@ -1,0 +1,90 @@
+# H1 and H16 with several punch-ins latched (#301, spec §8.9, §20): Acid techno from its first Groove, 8 bars plain,
+# then a lane mute (Open hat), HAT ROLL, SNARE ROLL, FLAM, DOUBLE KICK and PUMP all latched for 16 bars, then all let
+# go. Run with --events 'gen_h1 |gen_h16|gen_punch_landed|gen_pump' and compare the gen_h1 mean_ns/max_ns and gen_h16
+# culls before and while they are on (the H1 stop limit: a step decision's mean over 150 µs, or a Kick or Bass voice
+# culled). gen_h1 and gen_h16 come every 4 bars. For a Deluge (deluge_probe.py session); delugemu's timing means
+# nothing.
+# covers: src/deluge/generative/core/punch_ins.h src/deluge/generative/firmware/sidechain_pump.*
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/views/perform_view_keyboard.cpp src/deluge/generative/perform/keyboard_page.*
+# covers: src/deluge/generative/core/types.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+
+# ---- 8 bars plain: two gen_h1 reports (a regex: gen_h1 alone also matches gen_h16) ----
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+
+# ---- Latch them all: the Open hat's mute (5th lane, x 8 y 3), the rolls, FLAM, DOUBLE KICK, PUMP ----
+pad 8 3 down
+wait 50
+pad 8 3 up
+pad 14 7 down
+wait 50
+pad 14 7 up
+pad 15 7 down
+wait 50
+pad 15 7 up
+pad 14 6 down
+wait 50
+pad 14 6 up
+pad 15 6 down
+wait 50
+pad 15 6 up
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event /^gen_punch_landed lanes=20 effects=3e/ within=5
+expect event gen_pump on=1 within=5
+
+# ---- 20 bars with them on: the report in flight, then four ----
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+expect event /^gen_h1 / within=20
+
+# ---- All let go ----
+pad 8 3 down
+wait 50
+pad 8 3 up
+pad 14 7 down
+wait 50
+pad 14 7 up
+pad 15 7 down
+wait 50
+pad 15 7 up
+pad 14 6 down
+wait 50
+pad 14 6 up
+pad 15 6 down
+wait 50
+pad 15 6 up
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_punch lanes=....... punch=.....
+expect event gen_pump on=0 within=5
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

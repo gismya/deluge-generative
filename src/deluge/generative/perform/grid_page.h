@@ -15,8 +15,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Perform's grid pages (spec §13.5): SONG, CLIP and KEYBOARD, and which main pads SHIFT turns into the sound editor's
-// shortcuts (spec §13.7).
+// Perform's grid pages (spec §13.5): SONG, CLIP, KEYBOARD and stock Performance view (KEYBOARD's second press), and
+// which main pads SHIFT turns into the sound editor's shortcuts (spec §13.7).
 
 #pragma once
 
@@ -24,7 +24,7 @@
 
 namespace deluge::generative::perform {
 
-enum class GridPage : uint8_t { Song, Clip, Keyboard };
+enum class GridPage : uint8_t { Song, Clip, Keyboard, Performance };
 
 /// Whether SHIFT + main pad (`x`, `row`), its row counted from the top from 0, opens the sound editor at the printed
 /// param on `page`. Every main pad does, but those whose SHIFT means something already: the KEYBOARD page's FILL pads

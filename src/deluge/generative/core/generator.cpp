@@ -58,6 +58,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
+	punch_ = {};    // and each punch-in still on (spec §8.9)
 	rested_ = 0;
 	busyHalves_[0] = {};
 	busyHalves_[1] = {};
@@ -429,7 +430,8 @@ GEN_STEP_CODE void Generator::noteOn(int32_t partIndex, const Note& note) {
 	const int32_t onTick = note.onTick;
 	Event on = Event::noteOn(onTick, part, lane, pitch, note.velocity);
 	on.ornament = note.ornament;
-	on.muted = !mutes_.audible(partIndex);
+	// A LaneMute punch-in flags its lane's notes as a part mute does (spec §8.9).
+	on.muted = !mutes_.audible(partIndex) || (punch_.lanes != 0 && punchesPart(partIndex) && punch_.muted(lane));
 
 	// A note held back on this key for late entry won't need it: this one takes its place.
 	held_.release(on);

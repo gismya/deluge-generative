@@ -216,6 +216,23 @@ public:
 	void dropWaitingTakes();
 	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
 	PressOutcome pressFreeze(uint8_t part);
+	/// A KEYBOARD punch-in pad turns `punch` on or off (spec §8.9, §13.5): the core plays it from the next undecided
+	/// step. The steering keeps what is on, stopped too, and sends it again to each instance that starts
+	/// (instanceStarts()). @return false if Perform isn't in, the command names no punch-in, or the queue was full: the
+	/// pad stays as it was.
+	bool setPunch(PunchIn punch, Lane lane, bool on);
+	/// Stock's stutter started or ended (spec §17.2): logged where it lands, for Capture, and a stutter still on is
+	/// logged again at each instance's step 0 (instanceStarts()). @return false only if the queue was full while a
+	/// piece plays: the caller tries again. While stopped there is nothing to log.
+	bool setStutter(bool on) {
+		if (entered_ && !leaving_ && playing() != nullptr && !queue_.push({CommandKind::SetStutter, 0, on ? 1 : 0})) {
+			return false;
+		}
+		stutterOn_ = on;
+		return true;
+	}
+	/// The punch-ins on, as the pads last set them.
+	[[nodiscard]] PunchIns punchIns() const { return {.lanes = punchLanes_, .effects = punchEffects_}; }
 	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
 	[[nodiscard, gnu::noinline]] TakeRow takeRow(int32_t part) const;
 	/// A Y turn or a SEED + TAKES turn: the take one back or forward (`direction`) from `row`'s waiting take, or else
@@ -411,13 +428,20 @@ private:
 	/// Perform's song is in, and LEAVE hasn't started its teardown.
 	bool entered_ = false;
 	bool leaving_ = false;
-	/// The restart ahead's (pressRestart()), and AS IT BEGAN's sounds preloading (restartPreloads()).
-	RestartFrom restartFrom_ = RestartFrom::AsItIs;
-	bool restartPreloading_ = false;
+	/// Stock's stutter is on (setStutter()), in what was padding: see punchEffects_.
+	bool stutterOn_ = false;
+	/// The restart ahead's (pressRestart()), and AS IT BEGAN's sounds preloading (restartPreloads()): one byte between
+	/// them, the last of the padding before fillSent_ (the steering's size is pinned, see punchEffects_).
+	RestartFrom restartFrom_ : 1 = RestartFrom::AsItIs;
+	bool restartPreloading_ : 1 = false;
 	/// The SetFill value last pushed in this instance: kFillReleased while FILL is up.
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
 	bool fillShift_ = false;
+	/// The punch-ins on (PunchIns' fields), in what was padding: the steering's size moves PerformAdapter::sink_,
+	/// which the start step's modulo-8 `static_assert` pins (implementation-notes/perform-ui.md).
+	uint8_t punchEffects_ = 0;
+	uint16_t punchLanes_ = 0;
 	/// What the core's macros were steered with, and the KEYBOARD faders held: a start drops the queue.
 	MacroSteering macroSteering_;
 	uint32_t pieces_ = 0;
@@ -442,6 +466,9 @@ void PerformSteering<Adapter>::enter() {
 	leaving_ = false;
 	queue_.clear();
 	macroSteering_ = MacroSteering{};
+	punchEffects_ = 0; // an entry starts with no punch-in on
+	punchLanes_ = 0;
+	stutterOn_ = false;
 	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
 }
 
@@ -470,6 +497,25 @@ void PerformSteering<Adapter>::instanceStarts(bool fillDown) {
 		if (const int32_t part = macroSteering_.biasHeldOn(macro); part != MacroSteering::kNoPart) {
 			pushBias(part, macro, macroSteering_.heldBias(macro));
 		}
+	}
+	// Each punch-in still on, as FILL is (spec §8.9). The queue has just emptied, so it takes them all.
+	for (int32_t p = 0; p < kNumPunchIns; p++) {
+		const auto punch = static_cast<PunchIn>(p);
+		if (punch != PunchIn::LaneMute && punchIns().on(punch)) {
+			queue_.push({CommandKind::SetPunch, static_cast<uint8_t>(p), 1});
+		}
+	}
+	for (int32_t l = 0; l < kNumDrumLanes; l++) {
+		if (punchIns().muted(static_cast<Lane>(l))) {
+			Command mute{CommandKind::SetPunch, static_cast<uint8_t>(PunchIn::LaneMute), 1};
+			mute.lane = static_cast<Lane>(l);
+			queue_.push(mute);
+		}
+	}
+	// A stutter still on is logged again in the new instance; one let go since the last one's final decision isn't,
+	// so the new piece's log has no stutter (spec §17.2).
+	if (stutterOn_) {
+		queue_.push({CommandKind::SetStutter, 0, 1});
 	}
 }
 
@@ -713,6 +759,23 @@ void PerformSteering<Adapter>::dropWaitingTakes() {
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::setPunch(PunchIn punch, Lane lane, bool on) {
+	Command command{CommandKind::SetPunch, static_cast<uint8_t>(punch), on ? 1 : 0};
+	command.lane = lane;
+	PunchIns next = punchIns();
+	if (!entered_ || !next.set(command)) {
+		return false;
+	}
+	// While stopped or leaving, the next start sends it (instanceStarts()).
+	if (!leaving_ && playing() != nullptr && !queue_.push(command)) {
+		return false;
+	}
+	punchEffects_ = next.effects;
+	punchLanes_ = next.lanes;
+	return true;
 }
 
 template <typename Adapter>
