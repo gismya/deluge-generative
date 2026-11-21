@@ -1,0 +1,133 @@
+# Building on leave (#146, spec §13.8, §17.7) over the sysex test port: the leave menu's options follow the marks, and
+# a keep choice builds the kept pieces behind the teardown, one song at a time, saves each to SONGS/ as
+# GEN <GENRE> <seed code> LIVE (a name already on the card takes the next free variation, LIVE 2), and lands on the last
+# saved song in arranger view. The songs then load back on a Deluge with nothing else in memory. Writes two songs to
+# SONGS/ (their names below; a run on a Deluge deletes them after). Runs on a Deluge (deluge_probe.py session) or in
+# delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# gen_leave_menu open: the menu is up. gen_capture_begin keep=N: Capture is queued behind the teardown (LeaveOption N).
+# gen_capture_piece songs= notes= nodes= cuts= tracks= dropped= off_scale=: a piece replayed. gen_capture_song n= of=
+# error= name=: a song saved (error=0) or not. gen_capture_end done|cancelled|failed songs= saved= ms= error= name=:
+# Capture ended, and the song it landed on.
+# covers: src/deluge/generative/firmware/capture_job.* src/deluge/generative/firmware/song_file.*
+# covers: src/deluge/generative/firmware/compose_song.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/perform/capture.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/ui/generative_modal.* src/deluge/generative/compose/compose_driver.*
+# covers: src/deluge/generative/compose/clip_builder.* src/deluge/generative/firmware/log_header.*
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/gui/views/perform_view.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/gui/l10n/english.json
+# covers: src/deluge/gui/l10n/g_english.cpp src/deluge/gui/l10n/strings.h
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/generative/perform/sound_swap_lifecycle.h
+
+start_state
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- The first piece: a tempo move, a chosen sound on ACID (a new track) and a key change (clip cuts), marked ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+encoder 2 4
+include perform_choose_002.txt
+expect event gen_sound_swap part=1 line=1 within=40
+mark now
+button SCALE_MODE down
+wait 50
+button SCALE_MODE up
+expect event gen_menu KEY_SCALE
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 2
+expect event /^gen_key_set root=\d+ scale=\d+ queued$/ since=mark
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+expect event /^gen_key root=\d+ scale=\d+ phrase_line=yes$/ within=40 since=mark
+wait 2000
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- The second piece, unmarked: the last one ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 / within=10
+wait 4000
+
+# ---- KEEP: 1 MARKED, its first option MARKED + LAST: both pieces build and save, one song in RAM at a time ----
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event gen_capture_begin keep=0 within=10 since=mark
+expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=[1-9]\d* cuts=[1-9]\d* tracks=1 dropped=0 / within=120 since=mark
+expect event /^gen_capture_song n=1 of=2 error=0 name=GEN .+ LIVE$/ within=60 since=mark
+expect event /^gen_capture_song n=2 of=2 error=0 name=GEN .+ LIVE 2$/ within=180 since=mark
+expect event /^gen_capture_end done songs=2 saved=2 .* name=GEN .+ LIVE 2$/ within=60 since=mark
+expect ui=arranger within=10
+expect root_ui=arranger within=10
+expect playing=false
+
+# ---- Each song loads back through the stock load path, the other freed: nothing of Perform's left in memory ----
+# hold entropy pins the roll, so the names are known: the seed code is the pinned roll's.
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML
+expect event /^song_loaded / within=60
+expect root_ui=arranger within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 2000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE 2.XML
+expect event /^song_loaded / within=60
+expect root_ui=arranger within=10
+
+# ---- The scripts' shared leave keeps nothing after a piece: NOTHING, with no Capture and nothing written ----
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+wait 2000
+mark now
+include perform_leave.txt
+expect no_event gen_capture_begin within=3 since=mark
+release all

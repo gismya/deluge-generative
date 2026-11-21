@@ -59,6 +59,36 @@ std::string row(const SteeringLog& log, int32_t piece) {
 	return std::string{out.label} + "|" + out.value;
 }
 
+/// The leave menu as text: its title, then each option.
+std::string menu(const SteeringLog& log) {
+	static const char* const kNames[] = {"MARKED + LAST", "MARKED ONLY", "MARKED", "LAST",
+	                                     "NOTHING",       "LEAVE",       "CANCEL"};
+	LeaveMenu out;
+	leaveMenu(log, out);
+	std::string text = out.title;
+	for (int32_t i = 0; i < out.count; i++) {
+		text += std::string{"|"} + kNames[static_cast<int32_t>(out.options[i])];
+	}
+	return text;
+}
+
+/// The pieces `option` keeps, in set order.
+std::vector<int32_t> kept(const SteeringLog& log, LeaveOption option) {
+	std::vector<int32_t> out;
+	for (int32_t i = nextKept(log, option, -1); i >= 0; i = nextKept(log, option, i)) {
+		out.push_back(i);
+	}
+	return out;
+}
+
+/// A piece of `genre` that plays `steps` steps and stops, marked if `marked`.
+void play(SteeringLog& log, const Genre& genre, int32_t steps, bool marked) {
+	log.beginPiece(startOf(genre));
+	log.append(0, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), 1});
+	log.mark(marked);
+	log.endPiece(steps, PieceEnd::Stopped);
+}
+
 } // namespace
 
 // clang-format off
@@ -185,6 +215,84 @@ describe capture_marks("Capture marks", $ {
 		b.log.beginPiece(startOf(genres::technoAcid));
 		expect(b.log.pieces()).to_equal(2);
 		expect(row(b.log, 0)).to_equal(std::string{"1 MELODIC TECHNO|MARKED"});
+	});
+
+	context("leaving (§13.8, §17.7)", _ {
+		it("no piece played: LEAVE PERFORM?, and nothing is kept", _ {
+			Buffer b(4096);
+			expect(menu(b.log)).to_equal(std::string{"LEAVE PERFORM?|LEAVE|CANCEL"});
+			expect(kept(b.log, LeaveOption::Leave).empty()).to_be_true();
+		});
+
+		it("no marks: LAST keeps the last piece, playing or stopped", _ {
+			Buffer b(16384);
+			play(b.log, genres::technoAcid, 40, false);
+			b.log.beginPiece(startOf(genres::technoMelodic)); // still playing as the menu opens
+			b.log.append(0, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), 1});
+			expect(menu(b.log)).to_equal(std::string{"LEAVE, KEEP:|LAST|NOTHING|CANCEL"});
+			b.log.endPiece(12, PieceEnd::Stopped); // a choice stops the transport
+			expect(kept(b.log, LeaveOption::Last) == std::vector<int32_t>{0}).to_be_true();
+			expect(kept(b.log, LeaveOption::Nothing).empty()).to_be_true();
+		});
+
+		it("marks and an unmarked last piece: MARKED + LAST or MARKED ONLY, in set order", _ {
+			Buffer b(32768);
+			play(b.log, genres::technoAcid, 40, true);
+			play(b.log, genres::technoMelodic, 40, true);
+			play(b.log, genres::technoAcid, 20, false);
+			expect(menu(b.log)).to_equal(std::string{"KEEP: 2 MARKED|MARKED + LAST|MARKED ONLY|NOTHING|CANCEL"});
+			expect(kept(b.log, LeaveOption::MarkedAndLast) == std::vector<int32_t>{0, 1, 2}).to_be_true();
+			expect(kept(b.log, LeaveOption::MarkedOnly) == std::vector<int32_t>{0, 1}).to_be_true();
+		});
+
+		it("the last piece itself marked: MARKED keeps every mark", _ {
+			Buffer b(32768);
+			play(b.log, genres::technoAcid, 40, true);
+			play(b.log, genres::technoMelodic, 40, true);
+			expect(menu(b.log)).to_equal(std::string{"KEEP: 2 MARKED|MARKED|NOTHING|CANCEL"});
+			expect(kept(b.log, LeaveOption::Marked) == std::vector<int32_t>{0, 1}).to_be_true();
+		});
+
+		it("an earlier piece unmarked in CAPTURE ▸, still in the log, isn't kept", _ {
+			Buffer b(32768);
+			play(b.log, genres::technoAcid, 40, true);
+			play(b.log, genres::technoMelodic, 40, true);
+			play(b.log, genres::technoAcid, 20, false);
+			expect(pressMark(b.log, 0) == MarkOutcome::Unmarked).to_be_true();
+			expect(b.log.pieces()).to_equal(3);
+			expect(menu(b.log)).to_equal(std::string{"KEEP: 1 MARKED|MARKED + LAST|MARKED ONLY|NOTHING|CANCEL"});
+			expect(kept(b.log, LeaveOption::MarkedAndLast) == std::vector<int32_t>{1, 2}).to_be_true();
+		});
+
+		it("a piece with nothing logged builds nothing: stopped on its first step, or its header cut", _ {
+			Buffer b(16384);
+			play(b.log, genres::technoAcid, 40, true);
+			b.log.beginPiece(startOf(genres::technoMelodic));
+			b.log.endPiece(0, PieceEnd::Stopped);
+			expect(menu(b.log)).to_equal(std::string{"KEEP: 1 MARKED|MARKED|NOTHING|CANCEL"});
+			expect(kept(b.log, LeaveOption::Marked) == std::vector<int32_t>{0}).to_be_true();
+		});
+
+		it("names a song GEN <GENRE> <seed code> LIVE, and a split piece's later songs LIVE 2, LIVE 3", _ {
+			char name[kCaptureNameChars + 1];
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 1, name);
+			char code[kSeedCodeChars + 1];
+			seedCode(0x1A2B3C4, code);
+			expect(std::string{name}).to_equal("GEN " + std::string{genres::technoAcid.oledName} + " " + code + " LIVE");
+			captureSongName(genres::technoAcid, 0x1A2B3C4, 3, name);
+			expect(std::string{name}).to_equal("GEN " + std::string{genres::technoAcid.oledName} + " " + code +
+			                                   " LIVE 3");
+		});
+
+		it("titles the screen BUILDING n OF m, SAVING n OF m, and after a failure n OF m SAVED", _ {
+			char title[kCaptureTitleChars + 1];
+			captureTitle(CaptureStage::Building, 2, 3, title);
+			expect(std::string{title}).to_equal("BUILDING 2 OF 3");
+			captureTitle(CaptureStage::Saving, 12, 13, title);
+			expect(std::string{title}).to_equal("SAVING 12 OF 13");
+			captureTitle(CaptureStage::Saved, 1, 3, title);
+			expect(std::string{title}).to_equal("1 OF 3 SAVED");
+		});
 	});
 });
 

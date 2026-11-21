@@ -7,6 +7,7 @@
 #include "harness.h"
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <string>
 #include <tuple>
@@ -37,6 +38,7 @@ struct RecordingWriter final : SongWriter {
 	}
 	void node(const Automated& a, const Node& n) override {
 		nodes.push_back({a, n});
+		lateNodes += n.tick < cutAt[a.part] ? 1 : 0;
 		calls++;
 	}
 	void base(const Automated& a, int8_t value) override {
@@ -71,13 +73,30 @@ struct RecordingWriter final : SongWriter {
 	std::vector<std::pair<Command, int32_t>> edits;
 	std::vector<std::pair<bool, int32_t>> stutters;
 	std::vector<int32_t> songs; ///< nextSong() ticks
-	void cutClip(uint8_t part, int32_t tick) override { cuts.emplace_back(part, tick); }
+	/// Each part's last clip cut or new track, and the nodes that came for the part after it with a tick before it.
+	std::array<int32_t, kMaxParts> cutAt = [] {
+		std::array<int32_t, kMaxParts> none{};
+		none.fill(INT32_MIN);
+		return none;
+	}();
+	int32_t lateNodes = 0;
+	void cutClip(uint8_t part, int32_t tick) override {
+		cuts.emplace_back(part, tick);
+		cutAt[part] = tick;
+	}
 	void soundPick(uint8_t part, uint8_t token, int32_t slot, const char* path, int32_t length) override {
 		picks.push_back({part, token, slot, std::string(path, length)});
 	}
-	void newTrack(uint8_t part, uint8_t token, int32_t tick) override { tracks.push_back({part, token, tick}); }
+	void newTrack(uint8_t part, uint8_t token, int32_t tick) override {
+		tracks.push_back({part, token, tick});
+		cutAt[part] = tick;
+	}
 	void tempo(const TempoNode& node) override { tempos.push_back(node); }
-	void paramEdit(const Command& edit, int32_t tick) override { edits.emplace_back(edit, tick); }
+	std::vector<size_t> editNodes; ///< nodes.size() at each paramEdit()
+	void paramEdit(const Command& edit, int32_t tick) override {
+		edits.emplace_back(edit, tick);
+		editNodes.push_back(nodes.size());
+	}
 	void stutter(bool on, int32_t tick) override { stutters.emplace_back(on, tick); }
 	void nextSong(int32_t tick) override { songs.push_back(tick); }
 

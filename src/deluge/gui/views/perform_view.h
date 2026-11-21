@@ -98,7 +98,8 @@ public:
 	UIType getUIType() override { return UIType::GENERATIVE_PERFORM; }
 
 	/// LEAVE with nothing kept: tears Perform down as a runner job, which lands on a new blank song in session view.
-	void leave();
+	/// A leave menu choice (spec §13.8): stops, tears Perform down, and Capture builds what `keep` keeps.
+	void leave(deluge::generative::perform::LeaveOption keep);
 	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::SONG; }
 	bool getAffectEntire() override { return true; }
 

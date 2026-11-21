@@ -89,4 +89,102 @@ void captureRow(const SteeringLog& log, int32_t piece, CaptureRow& out) {
 	Text(out.value).add(shown.marked() ? "MARKED" : "-");
 }
 
+// ---- Leaving ----
+
+namespace {
+
+/// Whether a piece has steps to build: some logged before its end, or before the log cut it. One still playing
+/// (the leave menu opens while it plays) counts unless the log cut its header.
+bool buildable(const SteeringLog::Piece& piece) {
+	const int32_t cut = piece.cutAt();
+	const int32_t end = piece.endStep();
+	if (cut == 0) {
+		return false;
+	}
+	return end != 0;
+}
+
+} // namespace
+
+bool keeps(const SteeringLog& log, LeaveOption option, int32_t piece) {
+	if (piece < 0 || piece >= log.pieces()) {
+		return false;
+	}
+	const SteeringLog::Piece shown = log.piece(piece);
+	if (!buildable(shown)) {
+		return false;
+	}
+	switch (option) {
+	case LeaveOption::MarkedAndLast:
+	case LeaveOption::Last:
+		return shown.marked() || piece == log.current();
+	case LeaveOption::MarkedOnly:
+	case LeaveOption::Marked:
+		return shown.marked();
+	default:
+		return false;
+	}
+}
+
+int32_t nextKept(const SteeringLog& log, LeaveOption option, int32_t after) {
+	for (int32_t i = after < 0 ? 0 : after + 1; i < log.pieces(); i++) {
+		if (keeps(log, option, i)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void leaveMenu(const SteeringLog& log, LeaveMenu& out) {
+	out = LeaveMenu{};
+	int32_t marked = 0;
+	for (int32_t i = 0; i < log.pieces(); i++) {
+		marked += keeps(log, LeaveOption::Marked, i) ? 1 : 0;
+	}
+	const int32_t current = log.current();
+	const bool last = current >= 0 && buildable(log.piece(current));
+	const bool lastMarked = last && log.piece(current).marked();
+	auto add = [&](LeaveOption option) { out.options[out.count++] = option; };
+	if (marked > 0) {
+		Text(out.title).add("KEEP: ").add(marked).add(" MARKED");
+		if (last && !lastMarked) {
+			add(LeaveOption::MarkedAndLast);
+			add(LeaveOption::MarkedOnly);
+		}
+		else {
+			add(LeaveOption::Marked); // the last piece is marked, or there's none to add (it found no room)
+		}
+		add(LeaveOption::Nothing);
+	}
+	else if (last) {
+		Text(out.title).add("LEAVE, KEEP:");
+		add(LeaveOption::Last);
+		add(LeaveOption::Nothing);
+	}
+	else {
+		Text(out.title).add("LEAVE PERFORM?");
+		add(LeaveOption::Leave);
+	}
+	add(LeaveOption::Cancel);
+}
+
+void captureSongName(const Genre& genre, uint32_t seed, int32_t song, char (&out)[kCaptureNameChars + 1]) {
+	char code[kSeedCodeChars + 1];
+	seedCode(seed, code);
+	Text text(out);
+	text.add("GEN ").add(genre.oledName).add(" ").add(code).add(" LIVE");
+	if (song > 1) {
+		text.add(" ").add(song);
+	}
+}
+
+void captureTitle(CaptureStage stage, int32_t song, int32_t songs, char (&out)[kCaptureTitleChars + 1]) {
+	Text text(out);
+	if (stage == CaptureStage::Saved) {
+		text.add(song).add(" OF ").add(songs).add(" SAVED");
+		return;
+	}
+	text.add(stage == CaptureStage::Building ? "BUILDING " : "SAVING ").add(song).add(" OF ").add(songs);
+}
+
 } // namespace deluge::generative::perform
