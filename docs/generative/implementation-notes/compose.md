@@ -184,5 +184,6 @@ otherwise.
 - Probe scripts that leave Perform take NOTHING: `perform_leave.txt` turns to the end and back one (NOTHING or LEAVE
   is always before CANCEL). One detent a line: a stock context menu refuses a turn that would pass its end, so
   `encoder 3 5` left it on LAST and every start_state leave ran a Capture and wrote a song to the card. The first
-  option after a piece is a Capture: a script that leaves any other way writes to SONGS/.
+  option after a piece is a Capture: a script that leaves any other way writes to SONGS/. gen_emu smoke turns one
+  detent (+1, NOTHING after its one piece): a delugemu turn back after the menu's end was lost.
 
