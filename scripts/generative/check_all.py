@@ -9,8 +9,9 @@ runs too. Whether the final run before a merge must be --full is mechanical (cov
 table's first line says which rule applied: "needs --full: WHY" for a merge into generative, a changed firmware input
 (covers.FIRMWARE: src/, lib/, the build files, the toolchain) no probe script's "# covers:" line names, or a change to what the emulator checks run on or what picks them (gen_emu.py,
 test_port_emu.py, deluge_probe.py, their imports and the scripts they name, the delugemu pin, the test port,
-check_all.py, covers.py); else "covers pick suffices", and the run without --full is the one a merge into a milestone
-branch needs. A run that needs --full and wasn't says so on its last line too; a run with no merge base runs everything, so counts as
+check_all.py, covers.py); else "covers pick suffices". On a milestone, agents run --quick plus the probe scripts they
+touched (--scripts), and the orchestrator runs --full on the milestone branch after merges and audits it
+(docs/agents/orchestration.md, "Full runs"). A run that needs --full and wasn't says so on its last line too; a run with no merge base runs everything, so counts as
 --full. In order:
   0. the portable Generator code compiled on ARM, syntax only, in about a second (arm_types.py): an int32_t/int mix
      that the host harness accepts fails here before any build
