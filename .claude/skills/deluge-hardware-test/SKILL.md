@@ -41,7 +41,9 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    `--force-build-mismatch` runs anyway with a warning; results from someone else's build say nothing about yours.
 
    Before the first script and after the last, the session lists `SONGS/` and `RECIPES/` and prints every new file as
-   `session: new on the card, declared|undeclared: /PATH`. An undeclared one fails the session: a script that saves
+   `session: new on the card, declared: /PATH` or `session: FAIL new on the card, undeclared: /PATH`. An undeclared
+   one fails the session (exit 1), and so does a listing that gets no reply (a card still busy with a song load or
+   save): that writes no hung marker. A script that saves
    names what it writes in `# writes: GLOB` lines ([scripts.md](scripts.md)). Delete the files your run wrote, declared
    or not, with [card-files.md](card-files.md); never files that were there before.
 

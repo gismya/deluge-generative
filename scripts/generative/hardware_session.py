@@ -19,7 +19,8 @@ In order:
    none answered before the load, young). No answer: writes the hung marker, exits 2. The old build answering near
    the end of the wait (STILL_ANSWERS_SECONDS), with no fresh one, means the load didn't take: that exits 1, with no
    marker. Silence for the rest of the wait is a hang (exit 2), whatever answered before it.
-5. Lists SONGS/ and RECIPES/ on the card (the file API, deluge_files.py). No reply is a hang (exit 2).
+5. Lists SONGS/ and RECIPES/ on the card (the file API, deluge_files.py). No reply or an error fails the session
+   (exit 1, no hung marker: a card still busy with a song load or save can miss the listing's reply).
 6. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
    `--events .` for all), counted from after its first start_state (a script should have only one, counting its
@@ -641,11 +642,13 @@ class Session:
 
     def card_files(self, port):
         """The entries of SONGS/ and RECIPES/ on the card, as "SONGS/NAME" ("SONGS/NAME/" for a folder), over the
-        test port's link. A missing folder has none. Raises deluge_files.CardError, or TimeoutError for no reply."""
+        test port's link. A missing folder has none. Raises deluge_files.CardError, or TimeoutError for no reply
+        (neither is a hang: the card can be busy with a song load or save the last script left running)."""
         import deluge_files
 
         card = deluge_files.Card(
             port.link,
+            timeout=10.0,
             blocks=deluge_files.DIN_BLOCKS
             if self.args.udp
             else deluge_files.USB_BLOCKS,
@@ -868,9 +871,7 @@ class Session:
         try:
             try:
                 before = self.card_files(port)
-            except TimeoutError as exc:
-                return self.hung(f"{exc} listing SONGS/ and RECIPES/")
-            except self.card_error() as exc:
+            except (TimeoutError, self.card_error()) as exc:
                 self.out(f"session: can't list SONGS/ and RECIPES/: {exc}")
                 return EXIT_FAILED
             for script in self.scripts:
@@ -887,10 +888,7 @@ class Session:
                 self.out("session: " + self.dp.result_line(*results[-1]))
             try:
                 after = self.card_files(port)
-            except TimeoutError as exc:
-                self.summary(results)
-                return self.hung(f"{exc} listing SONGS/ and RECIPES/ after the scripts")
-            except self.card_error() as exc:
+            except (TimeoutError, self.card_error()) as exc:
                 self.out(
                     f"session: can't list SONGS/ and RECIPES/ after the scripts: {exc}"
                 )
@@ -909,7 +907,12 @@ class Session:
 
     def check_new_files(self, before, after):
         """Prints each file new in SONGS/ and RECIPES/; exit 1 if a script's "# writes:" lines don't declare one."""
-        globs = [g for script in self.scripts for g in self.script_writes(script)]
+        globs = []
+        for script in self.scripts:
+            try:
+                globs += self.script_writes(script)
+            except (ValueError, OSError):
+                continue  # the script itself failed to read; its own result already says so
         declared, undeclared = self.dp.new_card_files(before, after, globs)
         for path in declared:
             self.out(f"session: new on the card, declared: /{path}")

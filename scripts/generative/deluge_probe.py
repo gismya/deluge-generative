@@ -755,7 +755,9 @@ def new_card_files(before, after, globs):
     declared ones match one of `globs`."""
     declared, undeclared = [], []
     for path in sorted(set(after) - set(before)):
-        hit = any(fnmatch.fnmatchcase(path.upper(), g.upper()) for g in globs)
+        hit = any(
+            fnmatch.fnmatchcase(path.upper(), g.lstrip("/").upper()) for g in globs
+        )
         (declared if hit else undeclared).append(path)
     return declared, undeclared
 

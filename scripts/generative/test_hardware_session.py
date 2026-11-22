@@ -473,6 +473,27 @@ class CardWrites(Base):
         )
         self.assertEqual(s.run(), 0)
 
+    def test_an_unreadable_script_still_lets_the_others_be_checked(self):
+        class Unreadable(FakeSession):
+            def script_writes(self, script):
+                if script == "a.txt":
+                    raise ValueError("include missing.txt: not found")
+                return super().script_writes(script)
+
+        s = Unreadable(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), {"RECIPES/ACID TECHNO 1234567.XML", "SONGS/X.XML"}],
+            writes={"b.txt": ["/RECIPES/ACID TECHNO *"]},
+        )
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertTrue(
+            any(
+                "declared: /RECIPES/ACID TECHNO 1234567.XML" in line for line in s.lines
+            )
+        )
+        self.assertTrue(any("undeclared: /SONGS/X.XML" in line for line in s.lines))
+
     def test_a_failed_script_still_gets_the_check(self):
         s = FakeSession(
             self.hw, scripts={"a.txt": (1, 3)}, listings=[set(), {"SONGS/X.XML"}]
@@ -480,10 +501,11 @@ class CardWrites(Base):
         self.assertEqual(s.run(), hs.EXIT_FAILED)
         self.assertTrue(any("SONGS/X.XML" in line for line in s.lines))
 
-    def test_no_reply_to_the_listing_is_a_hang(self):
-        s = FakeSession(self.hw, listings=[TimeoutError("no reply to dir within 5 s")])
-        self.assertEqual(s.run(), hs.EXIT_HUNG)
-        self.assertIn("no reply to dir", self.hw.hung_text())
+    def test_no_reply_to_the_listing_fails_without_a_hung_marker(self):
+        s = FakeSession(self.hw, listings=[TimeoutError("no reply to dir within 10 s")])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertTrue(any("no reply to dir" in line for line in s.lines))
         self.assertFalse(any("a.txt:" in line for line in s.lines))
 
     def test_a_listing_error_fails_before_any_script(self):
