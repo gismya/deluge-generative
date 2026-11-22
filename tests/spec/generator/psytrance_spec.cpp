@@ -463,7 +463,11 @@ describe psytrance("Psytrance", $ {
 			int32_t dropPhrases = 0;
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 240 * kStepsPerBar);
+				// Default Motion (25): Grooves run 2–4 phrases, so 3- and 4-phrase Grooves reach the third phrase
+				// after a Drop and show the Lead leaving on the phrase line (at Motion 50 Grooves last 1–2 phrases).
+				Recipe recipe = newRecipe(psyGenre, seed);
+				recipe.scale = Scale::Minor;
+				const Walked walked = walk(recipe, seed, 320 * kStepsPerBar);
 				const int32_t steps = static_cast<int32_t>(walked.steps.size());
 				// The first phrase after each Drop, counted from the step where it starts (as buildEnds() finds it).
 				std::vector<bool> dropPhrase(walked.steps.size(), false);
