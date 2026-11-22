@@ -324,8 +324,8 @@ private:
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
-	/// A transition's `incoming` roster plays, and is emptied.
-	void takeRoster(Roster& incoming);
+	/// A transition's `incoming` roster plays (for `genre`), and is emptied.
+	void takeRoster(Roster& incoming, const Genre* genre);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();

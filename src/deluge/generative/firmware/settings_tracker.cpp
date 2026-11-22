@@ -27,6 +27,7 @@
 #include "model/instrument/kit.h"
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
+#include "model/sample/sample_holder_for_voice.h"
 #include "model/song/song.h"
 #include "modulation/arpeggiator.h"
 #include "modulation/params/param.h"
@@ -111,7 +112,13 @@ int32_t packSampleFlags(const Source& source) {
 
 void unpackSampleFlags(int32_t packed, Source& source) {
 	source.repeatMode = static_cast<SampleRepeatMode>(packed & 0x0F);
-	source.setReversed((packed & (1 << 4)) != 0);
+	const bool reversed = (packed & (1 << 4)) != 0;
+	if (source.oscType == OscType::SAMPLE) {
+		source.setReversed(reversed); // stock Source::setReversed() casts ranges to MultisampleRange/Sample
+	}
+	else {
+		source.sampleControls.reversed = reversed;
+	}
 	source.sampleControls.pitchAndSpeedAreIndependent = (packed & (1 << 5)) != 0;
 	source.sampleControls.interpolationMode = static_cast<InterpolationMode>((packed >> 6) & 0x03);
 	source.timeStretchAmount = static_cast<int8_t>((packed >> 8) & 0xFF);
@@ -220,7 +227,11 @@ void readTarget(const TargetRefs& refs, Song* song, int32_t (&out)[kNumOutputSet
 		    static_cast<int32_t>(m.sidechain.syncLevel) | (static_cast<int32_t>(m.sidechain.syncType) << 8));
 		set(OutputSetting::CompAttack, m.compressor.getAttack());
 		set(OutputSetting::CompRelease, m.compressor.getRelease());
-		set(OutputSetting::CompThreshold, m.compressor.getThreshold());
+		if (refs.isSong) {
+			// Synths/Kits overwrite compressor.threshold from params::UNPATCHED_COMPRESSOR_THRESHOLD every render
+			// (already in the 0x91 snapshot and SetParam). Only Song::globalEffectable uses it as a non-param setting.
+			set(OutputSetting::CompThreshold, m.compressor.getThreshold());
+		}
 		set(OutputSetting::CompRatio, m.compressor.getRatio());
 		set(OutputSetting::CompSidechain, m.compressor.getSidechain());
 		set(OutputSetting::CompBlend, m.compressor.getBlend());
@@ -301,7 +312,9 @@ uint64_t validScalarMask(const TargetRefs& refs) {
 	if (refs.mod != nullptr) {
 		for (auto i = static_cast<uint16_t>(OutputSetting::LpfMode);
 		     i <= static_cast<uint16_t>(OutputSetting::StutterFlags); i++) {
-			mask |= uint64_t{1} << i;
+			if (i != static_cast<uint16_t>(OutputSetting::CompThreshold)) {
+				mask |= uint64_t{1} << i;
+			}
 		}
 	}
 	if (refs.sound != nullptr) {
@@ -317,6 +330,7 @@ uint64_t validScalarMask(const TargetRefs& refs) {
 		        | settingBit(OutputSetting::ArpSync);
 	}
 	if (refs.isSong) {
+		mask |= settingBit(OutputSetting::CompThreshold);
 		for (auto i = static_cast<uint16_t>(OutputSetting::ReverbModel);
 		     i <= static_cast<uint16_t>(OutputSetting::ReverbSidechainSync); i++) {
 			mask |= uint64_t{1} << i;
@@ -448,6 +462,9 @@ bool applyOutputSetting(OutputSetting setting, int32_t value, uint8_t target, La
 		refs.mod->compressor.setRelease(value);
 		return true;
 	case OutputSetting::CompThreshold:
+		if (!refs.isSong) {
+			return false;
+		}
 		refs.mod->compressor.setThreshold(value);
 		return true;
 	case OutputSetting::CompRatio:
@@ -741,6 +758,15 @@ bool applyOutputSettingPath(OutputSetting setting, const char* path, int32_t len
 		return false;
 	}
 	holder->setAudioFile(nullptr);
+	if (source.oscType == OscType::SAMPLE) {
+		// Reset zone/loop so a longer new sample isn't truncated to the old endPos while keeping manuallySelected =
+		// false (which leaves sampleBrowser.lastFilePathLoaded alone).
+		auto* sampleHolder = static_cast<SampleHolderForVoice*>(holder);
+		sampleHolder->startPos = 0;
+		sampleHolder->endPos = 9999999;
+		sampleHolder->loopStartPos = 0;
+		sampleHolder->loopEndPos = 0;
+	}
 	if (path == nullptr || length <= 0) {
 		holder->filePath.clear();
 		return true;
@@ -752,8 +778,8 @@ bool applyOutputSettingPath(OutputSetting setting, const char* path, int32_t len
 	if (holder->filePath.set(copy) != Error::NONE) {
 		return false;
 	}
-	// manuallySelected = false leaves the sample browser's last-path state alone.
-	holder->loadFile(false, false, true, CLUSTER_ENQUEUE);
+	// Match Source::loadAllSamples(): claim clusters in the current direction and accept wavetables without a chunk.
+	holder->loadFile(source.sampleControls.isCurrentlyReversed(), false, true, CLUSTER_ENQUEUE, nullptr, true);
 	return true;
 }
 
@@ -766,10 +792,17 @@ void finalizeSoundSettings(uint8_t target, Lane lane, const Roster& roster, cons
 }
 
 int32_t restoreSettings(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song,
-                        bool loadPaths, bool songIsCurrent) {
+                        bool loadPaths, bool songIsCurrent, bool includeSong) {
 	int32_t written = 0;
 	piece.forEachSettings([&](const void* data, int32_t length) {
+		if (length < static_cast<int32_t>(sizeof(SettingsBlockHeader))) {
+			return;
+		}
 		SettingsBlockHeader hdr{};
+		std::memcpy(&hdr, data, sizeof hdr);
+		if (!includeSong && hdr.output == kSongParams) {
+			return;
+		}
 		int32_t blockWritten = 0;
 		readSettingsBlock(
 		    data, length, hdr,
@@ -785,7 +818,17 @@ int32_t restoreSettings(const SteeringLog::Piece& piece, const Roster& roster, c
 			    }
 		    });
 		if (blockWritten > 0 && hdr.output != kSongParams) {
-			finalizeSoundSettings(hdr.output, hdr.lane, roster, genre, song);
+			if (loadPaths) {
+				finalizeSoundSettings(hdr.output, hdr.lane, roster, genre, song);
+			}
+			else {
+				// Tick context: PatchCableSet::setupPatching() allocates, so only run allocation-free initial patching
+				// here (all structural/filter-mode settings trigger a task-context rebuild in BeganJob).
+				const TargetRefs refs = resolveTarget(hdr.output, hdr.lane, roster, genre, &song);
+				if (refs.sound != nullptr && refs.manager != nullptr) {
+					refs.sound->patcher.performInitialPatching(*refs.sound, *refs.manager);
+				}
+			}
 		}
 		written += blockWritten;
 	});
@@ -793,6 +836,12 @@ int32_t restoreSettings(const SteeringLog::Piece& piece, const Roster& roster, c
 }
 
 void resetSongSettings(Song& song, bool songIsCurrent) {
+	const int32_t magnitude = song.insideWorldTickMagnitude + song.insideWorldTickMagnitudeOffsetFromBPM;
+	const int32_t defaultSidechainAttack =
+	    getParamFromUserValue(util::to_underlying(modulation::params::STATIC_SIDECHAIN_ATTACK), 7);
+	const int32_t defaultSidechainRelease =
+	    getParamFromUserValue(util::to_underlying(modulation::params::STATIC_SIDECHAIN_RELEASE), 28);
+
 	ModControllableAudio& m = song.globalEffectable;
 	m.lpfMode = FilterMode::TRANSISTOR_24DB;
 	m.hpfMode = FilterMode::HPLADDER;
@@ -801,8 +850,12 @@ void resetSongSettings(Song& song, bool songIsCurrent) {
 	m.clippingAmount = 0;
 	m.delay.pingPong = true;
 	m.delay.analog = false;
-	m.delay.syncLevel = static_cast<SyncLevel>(7 - song.insideWorldTickMagnitude);
+	m.delay.syncLevel = static_cast<SyncLevel>(8 - magnitude);
 	m.delay.syncType = SYNC_TYPE_EVEN;
+	m.sidechain.attack = defaultSidechainAttack;
+	m.sidechain.release = defaultSidechainRelease;
+	m.sidechain.syncLevel = static_cast<SyncLevel>(7 - magnitude);
+	m.sidechain.syncType = SYNC_TYPE_EVEN;
 	m.compressor = RMSFeedbackCompressor{};
 	m.compressor.setBaseGain(0.85f);
 	m.stutterConfig = StutterConfig{};
@@ -816,6 +869,8 @@ void resetSongSettings(Song& song, bool songIsCurrent) {
 	song.reverbPan = 0;
 	song.reverbSidechainVolume = getParamFromUserValue(modulation::params::STATIC_SIDECHAIN_VOLUME, -1);
 	song.reverbSidechainShape = -601295438;
+	song.reverbSidechainAttack = defaultSidechainAttack;
+	song.reverbSidechainRelease = defaultSidechainRelease;
 	song.reverbSidechainSync = SYNC_LEVEL_8TH;
 	if (songIsCurrent) {
 		AudioEngine::reverb.setModel(song.model);
@@ -827,6 +882,8 @@ void resetSongSettings(Song& song, bool songIsCurrent) {
 		AudioEngine::reverbPan = song.reverbPan;
 		AudioEngine::reverbSidechainVolume = song.reverbSidechainVolume;
 		AudioEngine::reverbSidechainShape = song.reverbSidechainShape;
+		AudioEngine::reverbSidechain.attack = song.reverbSidechainAttack;
+		AudioEngine::reverbSidechain.release = song.reverbSidechainRelease;
 		AudioEngine::reverbSidechain.syncLevel = song.reverbSidechainSync;
 		AudioEngine::reverbSidechain.syncType = SYNC_TYPE_EVEN;
 	}
@@ -880,6 +937,22 @@ void SettingsTracker::resetRoster(const Roster& roster, const Genre& genre) {
 		slots_[i].valid = false;
 		slots_[i].editedMask = 0;
 	}
+	// Drop any queued mid-piece edits for the outgoing roster's parts (including parts beyond the incoming genre's
+	// count).
+	int32_t keptScalars = 0;
+	for (int32_t i = 0; i < pendingScalarCount_; i++) {
+		if (pendingScalars_[i].target == kSongParams) {
+			pendingScalars_[keptScalars++] = pendingScalars_[i];
+		}
+	}
+	pendingScalarCount_ = keptScalars;
+	int32_t keptPaths = 0;
+	for (int32_t i = 0; i < pendingPathCount_; i++) {
+		if (pendingPaths_[i].target == kSongParams) {
+			pendingPaths_[keptPaths++] = pendingPaths_[i];
+		}
+	}
+	pendingPathCount_ = keptPaths;
 	for (int32_t p = 0; p < partCount(genre); p++) {
 		resetPart(p, roster, genre);
 	}
@@ -915,9 +988,13 @@ void SettingsTracker::resetPart(int32_t part, const Roster& roster, const Genre&
 void SettingsTracker::enqueueScalar(uint8_t target, Lane lane, OutputSetting setting, int32_t value) {
 	const auto id = static_cast<uint16_t>(setting);
 	for (int32_t i = 0; i < pendingScalarCount_; i++) {
-		Command& c = pendingScalars_[i];
-		if (c.target == target && c.lane == lane && c.length == id) {
-			c.value = value;
+		if (pendingScalars_[i].target == target && pendingScalars_[i].lane == lane && pendingScalars_[i].length == id) {
+			// Move updated entry to the back so chronological order is preserved (e.g. LpfMode -> SynthMode -> LpfMode
+			// within one step drains SynthMode before the final LpfMode).
+			for (int32_t j = i; j + 1 < pendingScalarCount_; j++) {
+				pendingScalars_[j] = pendingScalars_[j + 1];
+			}
+			pendingScalars_[pendingScalarCount_ - 1] = {CommandKind::SetSetting, target, value, id, lane};
 			return;
 		}
 	}
@@ -1051,6 +1128,12 @@ void SettingsTracker::scanAll(const Roster& roster, const Genre& genre, Song& so
 	}
 }
 
+void SettingsTracker::scanSong(const Roster& roster, const Genre& genre, Song& song) {
+	if (slots_[0].valid) {
+		scanSlot(0, roster, genre, song, false);
+	}
+}
+
 void SettingsTracker::drainToLog(SteeringLog& log, int32_t step) {
 	if (pendingScalarCount_ == 0 && pendingPathCount_ == 0) {
 		return;
@@ -1136,17 +1219,22 @@ void SettingsTracker::logHeader(SteeringLog& log, const Roster& roster, const Ge
 }
 
 bool SettingsTracker::partNeedsRebuild(const SteeringLog::Piece& piece, int32_t part) const {
-	constexpr uint64_t kPathBits =
-	    settingBit(OutputSetting::Osc0SamplePath) | settingBit(OutputSetting::Osc1SamplePath);
+	// Any allocating, structural, patching-changing, cluster-claiming, or card-reading setting (live or in the header)
+	// must rebuild the part in BeganJob (task context) so RestartBegan::restore() never allocates or reads card in the
+	// tick (spec §20).
+	constexpr uint64_t kRebuildBits =
+	    settingBit(OutputSetting::SynthMode) | settingBit(OutputSetting::Osc0Type) | settingBit(OutputSetting::Osc1Type)
+	    | settingBit(OutputSetting::LpfMode) | settingBit(OutputSetting::HpfMode) | settingBit(OutputSetting::ModFxType)
+	    | settingBit(OutputSetting::Unison) | settingBit(OutputSetting::Osc0SampleFlags)
+	    | settingBit(OutputSetting::Osc1SampleFlags) | settingBit(OutputSetting::Osc0SamplePath)
+	    | settingBit(OutputSetting::Osc1SamplePath);
 	for (int32_t s = 1; s < kMaxSlots; s++) {
 		const Slot& slot = slots_[s];
 		if (!slot.valid || slot.output != part) {
 			continue;
 		}
 		const uint64_t inHeader = headerMaskFor(piece, slot.output, slot.lane);
-		// Any setting edited since load that wasn't in the header, or any osc path change (which needs card I/O),
-		// requires rebuilding the part in task context.
-		if ((slot.editedMask & ~inHeader) != 0 || ((slot.editedMask | inHeader) & kPathBits) != 0) {
+		if ((slot.editedMask & ~inHeader) != 0 || ((slot.editedMask | inHeader) & kRebuildBits) != 0) {
 			return true;
 		}
 	}

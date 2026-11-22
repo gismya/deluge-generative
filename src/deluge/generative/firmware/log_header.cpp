@@ -210,7 +210,8 @@ std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster
 	return LoggedParam{manager, &set->params[id], collection, id};
 }
 
-int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song) {
+int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song,
+                        bool includeSong) {
 	int32_t written = 0;
 	piece.forEachSnapshot([&](const void* data, int32_t length) {
 		if (length < static_cast<int32_t>(sizeof(SnapshotBlock))) {
@@ -218,6 +219,9 @@ int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, c
 		}
 		SnapshotBlock block{};
 		std::memcpy(&block, data, sizeof block);
+		if (!includeSong && block.output == kSongParams) {
+			return;
+		}
 		const BlockParams params = paramsOf(block, roster, genre, song);
 		if (params.manager == nullptr) {
 			return;

@@ -191,6 +191,8 @@ Song::Song() : backedUpParamManagers(sizeof(BackedUpParamManager)) {
 	reverbPan = 0;
 	reverbSidechainVolume = getParamFromUserValue(params::STATIC_SIDECHAIN_VOLUME, -1);
 	reverbSidechainShape = -601295438;
+	reverbSidechainAttack = getParamFromUserValue(params::STATIC_SIDECHAIN_ATTACK, 7);
+	reverbSidechainRelease = getParamFromUserValue(params::STATIC_SIDECHAIN_RELEASE, 28);
 	reverbSidechainSync = SYNC_LEVEL_8TH;
 	model = deluge::dsp::Reverb::Model::MUTABLE;
 

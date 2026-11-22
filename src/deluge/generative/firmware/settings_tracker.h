@@ -43,11 +43,11 @@ bool applyOutputSettingPath(OutputSetting setting, const char* path, int32_t len
 /// Re-patches any Sound whose patching depends on settings changed during a batch apply (SynthMode, OscType, filters).
 void finalizeSoundSettings(uint8_t target, Lane lane, const Roster& roster, const Genre& genre, Song& song);
 
-/// Applies every kSettingsTag (0x92) header block in `piece` onto `roster` and `song`.
+/// Applies every kSettingsTag (0x92) header block in `piece` onto `roster` and (when `includeSong`) `song`.
 /// Set `loadPaths` true only in task context (Capture, BeganJob); false in the tick (RestartBegan::restore()).
 /// @return the number of settings written.
 int32_t restoreSettings(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song,
-                        bool loadPaths, bool songIsCurrent);
+                        bool loadPaths, bool songIsCurrent, bool includeSong = true);
 
 /// Resets Song-level non-param settings (globalEffectable FX/filters/compressor/stutter and Reverb) to a fresh Song's
 /// defaults (for AS IT BEGAN when Song settings were edited without a header block).
@@ -72,8 +72,10 @@ public:
 	/// Bounded per-frame poll from PerformView::graphicsRoutine(): checks at most 2 slots (the SoundEditor target or
 	/// focused part/Song, plus 1 round-robin slot) so frame time stays a few microseconds.
 	void poll(const Roster& roster, const Genre& genre, Song& song, bool playing, int32_t focusedPart);
-	/// Full sweep of all valid slots (piece start, piece stop, before logHeader).
+	/// Full sweep of all valid slots (piece start, piece stop, before logHeader, before AS IT BEGAN press).
 	void scanAll(const Roster& roster, const Genre& genre, Song& song, bool playing);
+	/// Single-slot sweep of the Song (slot 0, tick-safe, no allocation) before AS IT BEGAN checks songNeedsReset().
+	void scanSong(const Roster& roster, const Genre& genre, Song& song);
 
 	/// Clears pending mid-piece edits (called when a new piece opens: its header already holds the live state).
 	void clearPending();

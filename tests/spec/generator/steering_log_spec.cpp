@@ -735,7 +735,7 @@ describe steering_log("The steering log", $ {
 			std::vector<uint8_t> file = good;
 			expect(SteeringLog::readImage(file.data(), static_cast<int32_t>(file.size()))).to_be_true();
 			expect(SteeringLog::Piece(file.data()).start().recipe.genre == acidRecipe().genre).to_be_true();
-			for (const int32_t field : {0, 1, 2}) {
+			for (const int32_t field : {0, 1, 2, 3}) {
 				file = good;
 				PieceInfo info;
 				std::memcpy(&info, file.data(), sizeof info);
@@ -744,6 +744,9 @@ describe steering_log("The steering log", $ {
 				}
 				else if (field == 1) {
 					info.format++;
+				}
+				else if (field == 2) {
+					info.format = 1; // pre-settings-log format rejected
 				}
 				else {
 					info.genreVersion++;
@@ -1173,10 +1176,20 @@ describe steering_log("The steering log", $ {
 			const int32_t firstSlot = b.log.slotOf(0);
 			b.log.beginPiece(startOf(2));
 			b.log.append(2, macro(Macro::Energy, 10));
+			expect(b.log.isNewest(firstSlot)).to_be_false();
+			expect(b.log.isNewest(b.log.slotOf(1))).to_be_true();
 			b.log.storeFailed(firstSlot); // an earlier adopted/marked piece's info rewrite failed
 			expect(b.log.storeFailing()).to_be_false();
 			expect(b.log.full()).to_be_false();
 			expect(b.log.mark(true)).to_be_true();
+			// Stopping the newest piece ends growing(), but isNewest() stays true so a failed info rewrite still marks
+			// storeFailing().
+			const int32_t newestSlot = b.log.slotOf(1);
+			b.log.endPiece(8, PieceEnd::Stopped);
+			expect(b.log.growing(newestSlot)).to_be_false();
+			expect(b.log.isNewest(newestSlot)).to_be_true();
+			b.log.storeFailed(newestSlot);
+			expect(b.log.storeFailing()).to_be_true();
 		});
 
 		it("calls NoteSink::logSettings() after each decided step", _ {

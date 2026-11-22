@@ -370,8 +370,7 @@ void ComposeSong::cutClip(uint8_t part, int32_t tick) {
 		fail(error);
 		return;
 	}
-	clip->arpSettings.preset = ArpPreset::OFF;
-	clip->arpSettings.mode = ArpMode::OFF;
+	clip->arpSettings.cloneFrom(&old.clip->arpSettings);
 	clip->inScaleMode = true;
 	PartOutput output = roster_->parts[part];
 	output.clip = clip;
@@ -544,15 +543,15 @@ void ComposeSong::startSettingTrack(uint8_t part, int32_t tick) {
 	roster_->parts[part] = output;
 	addSegment(part, tick, output);
 	// Restore the part's state up to this step: header settings & params (if not re-rolled), then prior setting and
-	// param/home edits on this part.
+	// param/home edits on this part alone (never re-applying Song edits onto *song_).
 	Roster single{};
 	single.parts[part] = output;
 	if ((rerolled_ & partBit(part)) == 0 && piece_ != nullptr) {
-		restoreSettings(*piece_, single, *genre_, *song_, true, false);
-		restoreSnapshot(*piece_, single, *genre_, *song_);
+		restoreSettings(*piece_, single, *genre_, *song_, true, false, false);
+		restoreSnapshot(*piece_, single, *genre_, *song_, false);
 	}
-	restoreSettingsEdits(single, *song_);
-	restoreEdits(single, *song_);
+	restoreSettingsEdits(single, *song_, false);
+	restoreEdits(single, *song_, false);
 	soundControls.rebindPart(*roster_, *genre_, part);
 	newTracks_++;
 }
@@ -635,11 +634,14 @@ void ComposeSong::rememberSettingPath(uint8_t part, Lane lane, uint16_t setting,
 	}
 }
 
-void ComposeSong::restoreSettingsEdits(const Roster& roster, Song& song) const {
+void ComposeSong::restoreSettingsEdits(const Roster& roster, Song& song, bool includeSong) const {
 	// Apply in ascending OutputSetting order (SynthMode, OscType before filters/sample flags), then paths.
 	for (int32_t id = 0; id < kNumOutputSettings; id++) {
 		for (int32_t i = 0; i < settingEditCount_; i++) {
 			const Command& edit = settingEdits_[i];
+			if (!includeSong && edit.target == kSongParams) {
+				continue;
+			}
 			if (edit.length == static_cast<uint16_t>(id)) {
 				applyOutputSetting(static_cast<OutputSetting>(id), edit.value, edit.target, edit.lane, roster, *genre_,
 				                   song, false);
@@ -648,6 +650,9 @@ void ComposeSong::restoreSettingsEdits(const Roster& roster, Song& song) const {
 	}
 	for (int32_t i = 0; i < settingPathCount_; i++) {
 		const KeptSettingPath& kept = settingPaths_[i];
+		if (!includeSong && kept.target == kSongParams) {
+			continue;
+		}
 		applyOutputSettingPath(static_cast<OutputSetting>(kept.setting), kept.path.c_str(),
 		                       static_cast<int32_t>(std::strlen(kept.path.c_str())), kept.target, kept.lane, roster,
 		                       *genre_, song);
@@ -658,10 +663,19 @@ void ComposeSong::restoreSettingsEdits(const Roster& roster, Song& song) const {
 			finalizeSoundSettings(edit.target, edit.lane, roster, *genre_, song);
 		}
 	}
+	for (int32_t i = 0; i < settingPathCount_; i++) {
+		const KeptSettingPath& kept = settingPaths_[i];
+		if (kept.target != kSongParams) {
+			finalizeSoundSettings(kept.target, kept.lane, roster, *genre_, song);
+		}
+	}
 }
 
-void ComposeSong::restoreEdits(const Roster& roster, Song& song) const {
+void ComposeSong::restoreEdits(const Roster& roster, Song& song, bool includeSong) const {
 	for (int32_t i = 0; i < editCount_; i++) {
+		if (!includeSong && edits_[i].target == kSongParams) {
+			continue;
+		}
 		if (const std::optional<LoggedParam> found = loggedParam(edits_[i], roster, *genre_, song)) {
 			// A SetParam's value, or a SetHome's home: prepare()'s binding reads it as the home.
 			found->param->setCurrentValueBasicForSetup(edits_[i].value);

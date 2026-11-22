@@ -471,12 +471,12 @@ void PerformAdapter::pollSettings(int32_t focusedPart) {
 	}
 }
 
-void PerformAdapter::takeRoster(Roster& incoming) {
+void PerformAdapter::takeRoster(Roster& incoming, const Genre* genre) {
 	sink_.roster = incoming;
 	incoming = Roster{};
 	edited_.parts = 0; // a transition's new roster: every Output as its preset loaded
-	if (currentRecipe.recipe.genre != nullptr) {
-		settingsTracker.resetRoster(sink_.roster, *currentRecipe.recipe.genre);
+	if (genre != nullptr) {
+		settingsTracker.resetRoster(sink_.roster, *genre);
 	}
 }
 
@@ -493,7 +493,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	              "the start step's copy of the roster must not have the same address modulo 8 at both ends");
 #pragma GCC diagnostic pop
 	sink_.outgoing = sink_.roster;
-	takeRoster(incoming);
+	takeRoster(incoming, pending.recipe.genre);
 	generator_ = idleBlock(); // the incoming instance started there
 	steering_.handOver(pending);
 	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
@@ -501,7 +501,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 
 void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples) {
 	retirements.retireRoster(sink_.roster, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
-	takeRoster(incoming);
+	takeRoster(incoming, pending.recipe.genre);
 	// This can run in the tick, when the piece ended by itself with the transition Queued (the lifecycle's
 	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
 	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the

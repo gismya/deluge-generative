@@ -73,12 +73,13 @@ EditedOutputs snapshotParts(const SteeringLog::Piece& piece);
 /// tempo as it is.
 void resetSongParams(Song& song);
 
-/// The param snapshot of `piece`'s header written back (AS IT BEGAN, spec §13.2): each param on the song and on each
-/// part's Output and Kit rows that differs from the snapshot takes its value, and each patch cable whose destination
-/// and source are still there its amount. A Sound with any param written is patched again. Params the snapshot
-/// doesn't hold (a cable added since) keep theirs. Writes without notifying, so call it with no voice sounding: on a
-/// restart's line after its flush, or stopped. @return the params written.
-int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song);
+/// The param snapshot of `piece`'s header written back (AS IT BEGAN, spec §13.2): each param on the song (when
+/// `includeSong`) and on each part's Output and Kit rows that differs from the snapshot takes its value, and each patch
+/// cable whose destination and source are still there its amount. A Sound with any param written is patched again.
+/// Params the snapshot doesn't hold (a cable added since) keep theirs. Writes without notifying, so call it with no
+/// voice sounding: on a restart's line after its flush, or stopped. @return the params written.
+int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, const Genre& genre, Song& song,
+                        bool includeSong = true);
 
 /// The param a SetParam names (spec §17.2): on the song, or on part `edit.target`'s Output (its clip's params) or
 /// `edit.lane`'s Kit row, keyed by `edit.length` as paramEdit() keys it. A patch cable is found by its source and its

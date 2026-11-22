@@ -495,7 +495,7 @@ void CardLog::step(bool finishing) {
 			}
 			if (result != FR_OK && !wasFailed) {
 				failed_[s] = true; // closed-file rewrite failure on an earlier piece doesn't poison the playing piece
-				if (log_->growing(s)) {
+				if (log_->isNewest(s)) {
 					fail(s, result);
 				}
 			}

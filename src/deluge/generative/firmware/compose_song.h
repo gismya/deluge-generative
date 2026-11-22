@@ -90,12 +90,14 @@ public:
 	[[nodiscard]] const SoundPicks& playingPicks() const { return playing_; }
 	/// Parts whose sound a re-roll replaced: the header's param snapshot isn't theirs any more.
 	[[nodiscard]] uint32_t rerolledParts() const { return rerolled_; }
-	/// A split's next song, before restoreEdits() and restart(): the non-param settings heard so far, each setting's
-	/// newest, applied onto `roster` and `song` (spec §17.5).
-	void restoreSettingsEdits(const Roster& roster, Song& song) const;
-	/// A split's next song, before restart(): the param edits and homes heard so far, each param's newest, written
-	/// as its value on `roster` and `song` (spec §17.5).
-	void restoreEdits(const Roster& roster, Song& song) const;
+	/// A split's next song (or a setting-triggered new track with `includeSong = false`), before restoreEdits() and
+	/// restart(): the non-param settings heard so far, each setting's newest, applied onto `roster` and (when
+	/// `includeSong`) `song` (spec §17.5).
+	void restoreSettingsEdits(const Roster& roster, Song& song, bool includeSong = true) const;
+	/// A split's next song (or a setting-triggered new track with `includeSong = false`), before restart(): the param
+	/// edits and homes heard so far, each param's newest, written as its value on `roster` and (when `includeSong`)
+	/// `song` (spec §17.5).
+	void restoreEdits(const Roster& roster, Song& song, bool includeSong = true) const;
 
 	/// The first error a write met (no memory for a note or a node, or a new track's card read), or Error::NONE.
 	[[nodiscard]] Error error() const { return error_; }

@@ -713,6 +713,44 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			                                       "SAMPLES/TEST.WAV", stepTick(at)})
 			    .to_be_true();
 		});
+
+		it("replays ArpMain before a mid-piece key change (cutClip) and keeps same-step SetSetting order", _ {
+			StoredLog stored;
+			SteeringLog& log = stored.log;
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.seed = 4;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			const Command arpOn{CommandKind::SetSetting, kAcid, 1, static_cast<uint16_t>(OutputSetting::ArpMain),
+			                    Lane::None};
+			const Command keyChange{CommandKind::SetKey, 0, 5, static_cast<uint16_t>(Scale::Minor), Lane::None};
+			const Command synthFm{CommandKind::SetSetting, kAcid, 1, static_cast<uint16_t>(OutputSetting::SynthMode),
+			                      Lane::None};
+			const Command lpfNotch{CommandKind::SetSetting, kAcid, 5, static_cast<uint16_t>(OutputSetting::LpfMode),
+			                       Lane::None};
+			log.append(12, arpOn);
+			log.append(phrase, keyChange);
+			log.append(phrase + 4, synthFm);
+			log.append(phrase + 4, lpfNotch);
+			log.endPiece(2 * phrase, PieceEnd::Stopped);
+
+			const PieceImage img = image(log, 0);
+			auto replayed = replay(img.piece());
+			const RecordingWriter& w = replayed->writer;
+			expect(w.settings.size()).to_equal(3U);
+			expect(w.settings[0].first == arpOn && w.settings[0].second == stepTick(12)).to_be_true();
+			expect(w.settings[1].first == synthFm && w.settings[1].second == stepTick(phrase + 4)).to_be_true();
+			expect(w.settings[2].first == lpfNotch && w.settings[2].second == stepTick(phrase + 4)).to_be_true();
+			bool cutAcidAfterArp = false;
+			for (const auto& [part, tick] : w.cuts) {
+				if (part == kAcid && tick == stepTick(phrase)) {
+					cutAcidAfterArp = true;
+				}
+			}
+			expect(cutAcidAfterArp).to_be_true();
+		});
 	});
 });
 

@@ -213,6 +213,8 @@ public:
 	[[nodiscard]] int32_t ready(int32_t slot) const;
 	/// Whether `slot`'s piece is still being written (it plays).
 	[[nodiscard]] bool growing(int32_t slot) const { return slot == newest_ && open_; }
+	/// Whether `slot` is the newest piece (playing, or stopped as the last piece).
+	[[nodiscard]] bool isNewest(int32_t slot) const { return slot == newest_; }
 	/// Whether `slot`'s piece has ended and every byte of it was taken: its file can be closed.
 	[[nodiscard]] bool allTaken(int32_t slot) const;
 	/// Goes up whenever a slot's info changes (a mark, an end, a cut): the consumer writes it into the file again.
