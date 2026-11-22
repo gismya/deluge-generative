@@ -36,13 +36,13 @@
 		<envelope1>
 			<attack>0x4CCCCCA8</attack>
 			<decay>0xE6666654</decay>
-			<sustain>0x7FFFFFD2</sustain>
+			<sustain>0x7FFFFFFF</sustain>
 			<release>0x428F5C06</release>
 		</envelope1>
 		<envelope2>
 			<attack>0x80000000</attack>
 			<decay>0xE6666654</decay>
-			<sustain>0x7FFFFFD2</sustain>
+			<sustain>0x7FFFFFFF</sustain>
 			<release>0x428F5C06</release>
 		</envelope2>
 		<delayFeedback>0x80000000</delayFeedback>

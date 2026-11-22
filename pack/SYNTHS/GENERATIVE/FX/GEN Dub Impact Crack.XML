@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<firmwareVersion>c1.3.0</firmwareVersion>
+<sound>
+	<osc1>
+		<type>sample</type>
+		<loopMode>1</loopMode>
+		<fileName>SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav</fileName>
+	</osc1>
+	<osc2>
+		<type>sample</type>
+		<loopMode>1</loopMode>
+		<fileName>SAMPLES/DRUMS/Rim/808 Rim.wav</fileName>
+	</osc2>
+	<polyphonic>auto</polyphonic>
+	<mode>subtractive</mode>
+	<transpose>0</transpose>
+	<lpfMode>24dB</lpfMode>
+	<delay>
+		<pingPong>1</pingPong>
+		<analog>1</analog>
+		<syncLevel>6</syncLevel>
+		<syncType>19</syncType>
+	</delay>
+	<defaultParams>
+		<portamento>0x80000000</portamento>
+		<oscAVolume>0x75C28F30</oscAVolume>
+		<oscBVolume>0x6147ADEC</oscBVolume>
+		<noiseVolume>0x80000000</noiseVolume>
+		<volume>0x7FFFFFFF</volume>
+		<pan>0x00000000</pan>
+		<lpfFrequency>0x7FFFFFFF</lpfFrequency>
+		<lpfResonance>0x80000000</lpfResonance>
+		<hpfFrequency>0x80000000</hpfFrequency>
+		<envelope1>
+			<attack>0x80000000</attack>
+			<decay>0x7FFFFFFF</decay>
+			<sustain>0x7FFFFFFF</sustain>
+			<release>0x7FFFFFFF</release>
+		</envelope1>
+		<delayFeedback>0x051EB83A</delayFeedback>
+		<reverbAmount>0xFAE14798</reverbAmount>
+		<patchCables>
+			<patchCable>
+				<source>velocity</source>
+				<destination>volume</destination>
+				<amount>0x3FFFFFE8</amount>
+			</patchCable>
+		</patchCables>
+	</defaultParams>
+</sound>

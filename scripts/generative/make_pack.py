@@ -28,6 +28,7 @@ import struct
 import subprocess
 import sys
 import wave
+from typing import NamedTuple
 
 RATE = 44100
 # Files under pack/ that the script doesn't write but that belong there.
@@ -315,7 +316,10 @@ SAMPLES = {
 
 
 def knob(value):
-    """A 0–50 sound editor value as the param it stores (getParamFromUserValue's default branch)."""
+    """A 0–50 sound editor value as the param it stores, as the menu saves it (computeFinalValueForStandardMenuItem):
+    50 is INT32_MAX exactly, not 50 * 85899345 - 2**31, so a check against full sees a full knob as full (#483)."""
+    if value == 50:
+        return "0x7FFFFFFF"
     return f"0x{(value * 85899345 - 2**31) & 0xFFFFFFFF:08X}"
 
 
@@ -349,11 +353,16 @@ def preset(
     hpf=None,
     fold=None,
     pulse_width=None,
+    osc1_volume=50,
+    delay=None,
+    clipping=None,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
     and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults; `lfo2_type` and `lfo2_rate`
     LFO 2 (per voice) the same way. `unison` is (voices, detune, stereo spread); `mod_fx` is (type, rate knob, depth
-    knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults."""
+    knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults.
+    `delay` is a Delay (its feedback a knob, left out at 0); `clipping` the saturation (`clippingAmount`), left out at
+    none."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -368,6 +377,8 @@ def preset(
         "\t</osc2>",
         "\t<polyphonic>auto</polyphonic>",
     ]
+    if clipping is not None:
+        lines.append(f"\t<clippingAmount>{clipping}</clippingAmount>")
     if lfo1_type is not None:
         lines += [
             "\t<lfo1>",
@@ -393,10 +404,11 @@ def preset(
     lines.append(f"\t<lpfMode>{lpf_mode}</lpfMode>")
     if mod_fx is not None:
         lines.append(f"\t<modFXType>{mod_fx[0]}</modFXType>")
+    lines += delay.lines() if delay is not None else []
     lines += [
         "\t<defaultParams>",
         "\t\t<portamento>0x80000000</portamento>",
-        "\t\t<oscAVolume>0x7FFFFFFF</oscAVolume>",
+        f"\t\t<oscAVolume>{knob(osc1_volume)}</oscAVolume>",
         f"\t\t<oscBVolume>{knob(osc2_volume)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(noise)}</noiseVolume>",
         f"\t\t<volume>{knob(volume)}</volume>",
@@ -430,7 +442,7 @@ def preset(
             f"\t\t</{name}>",
         ]
     lines += [
-        "\t\t<delayFeedback>0x80000000</delayFeedback>",
+        f"\t\t<delayFeedback>{knob(delay.feedback if delay is not None else 0)}</delayFeedback>",
         f"\t\t<reverbAmount>{knob(reverb)}</reverbAmount>",
     ]
     lines.append("\t\t<patchCables>")
@@ -443,6 +455,106 @@ def preset(
             "\t\t\t</patchCable>",
         ]
     lines += ["\t\t</patchCables>", "\t</defaultParams>", "</sound>", ""]
+    return "\n".join(lines).encode()
+
+
+class Delay(NamedTuple):
+    """A preset's delay: ping-pong and analog on or off, the stock sync level and type (syncLevel 6 with syncType 19
+    is a dotted 8th at the song's default magnitude), and its feedback as a knob."""
+
+    ping_pong: bool
+    analog: bool
+    sync_level: int
+    sync_type: int
+    feedback: int
+
+    def lines(self):
+        return [
+            "\t<delay>",
+            f"\t\t<pingPong>{int(self.ping_pong)}</pingPong>",
+            f"\t\t<analog>{int(self.analog)}</analog>",
+            f"\t\t<syncLevel>{self.sync_level}</syncLevel>",
+            f"\t\t<syncType>{self.sync_type}</syncType>",
+            "\t</delay>",
+        ]
+
+
+# A dotted 8th, analog, ping-pong: Dub's echo (spec §4.5), and the Impact wash's and crack's.
+DOTTED_EIGHTH = {"ping_pong": True, "analog": True, "sync_level": 6, "sync_type": 19}
+
+
+def sample_preset(
+    osc1,
+    osc2=None,
+    osc1_volume=50,
+    osc2_volume=50,
+    reverb=0,
+    delay=None,
+    clipping=None,
+    velocity=8,
+):
+    """A preset playing one or two factory samples once through (loopMode 1, ONCE), with an open filter, full
+    sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob full,
+    `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
+    about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples stay on the factory
+    card: the pack holds only the preset."""
+    oscillators = []
+    for name, path in (("osc1", osc1), ("osc2", osc2)):
+        if path is None:
+            oscillators += [f"\t<{name}>", "\t\t<type>sine</type>", f"\t</{name}>"]
+        else:
+            oscillators += [
+                f"\t<{name}>",
+                "\t\t<type>sample</type>",
+                "\t\t<loopMode>1</loopMode>",
+                f"\t\t<fileName>{path}</fileName>",
+                f"\t</{name}>",
+            ]
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        "<firmwareVersion>c1.3.0</firmwareVersion>",
+        "<sound>",
+        *oscillators,
+        "\t<polyphonic>auto</polyphonic>",
+    ]
+    if clipping is not None:
+        lines.append(f"\t<clippingAmount>{clipping}</clippingAmount>")
+    lines += [
+        "\t<mode>subtractive</mode>",
+        "\t<transpose>0</transpose>",
+        "\t<lpfMode>24dB</lpfMode>",
+    ]
+    lines += delay.lines() if delay is not None else []
+    lines += [
+        "\t<defaultParams>",
+        "\t\t<portamento>0x80000000</portamento>",
+        f"\t\t<oscAVolume>{knob(osc1_volume)}</oscAVolume>",
+        f"\t\t<oscBVolume>{knob(osc2_volume if osc2 is not None else 0)}</oscBVolume>",
+        f"\t\t<noiseVolume>{knob(0)}</noiseVolume>",
+        f"\t\t<volume>{knob(50)}</volume>",
+        "\t\t<pan>0x00000000</pan>",
+        f"\t\t<lpfFrequency>{knob(50)}</lpfFrequency>",
+        f"\t\t<lpfResonance>{knob(0)}</lpfResonance>",
+        f"\t\t<hpfFrequency>{knob(0)}</hpfFrequency>",
+        "\t\t<envelope1>",
+        f"\t\t\t<attack>{knob(0)}</attack>",
+        f"\t\t\t<decay>{knob(50)}</decay>",
+        f"\t\t\t<sustain>{knob(50)}</sustain>",
+        f"\t\t\t<release>{knob(50)}</release>",
+        "\t\t</envelope1>",
+        f"\t\t<delayFeedback>{knob(delay.feedback if delay is not None else 0)}</delayFeedback>",
+        f"\t\t<reverbAmount>{knob(reverb)}</reverbAmount>",
+        "\t\t<patchCables>",
+        "\t\t\t<patchCable>",
+        "\t\t\t\t<source>velocity</source>",
+        "\t\t\t\t<destination>volume</destination>",
+        f"\t\t\t\t<amount>{cable(velocity)}</amount>",
+        "\t\t\t</patchCable>",
+        "\t\t</patchCables>",
+        "\t</defaultParams>",
+        "</sound>",
+        "",
+    ]
     return "\n".join(lines).encode()
 
 
@@ -496,6 +608,65 @@ PRESETS = {
         ],
         transpose=-12,
         osc2_transpose=-12,
+    ),
+    # The Drop's Impacts (#472, impact round 2): each plays out across the Drop's phrase (spec §10.5), with volume
+    # and sustain full. The owner found round 2's levels too quiet, so each is about 6 dB louder, by a lever past
+    # the volume knob's top measured in delugemu (Acid techno and Dub, the FX part alone). Saturation
+    # (`clippingAmount`) caps a voice at a fixed level, under round 2's boom peak, so it lifts only the wash.
+    # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz) on both
+    # oscillators, in phase: +6.0 dB.
+    "SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML": lambda: sample_preset(
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+    ),
+    # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
+    # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
+    # 8th analog ping-pong echo. Saturation 4: +6.1 dB on its first beat.
+    "SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML": lambda: preset(
+        "square",
+        "saw",
+        noise=50,
+        lpf=30,
+        resonance=10,
+        env1=(0, 28, 0, 28),
+        env2=(0, 28, 0, 24),
+        cables=[
+            ("velocity", "volume", 8),
+            ("velocity", "lpfFrequency", 10),
+            ("envelope2", "lpfFrequency", 36),
+        ],
+        transpose=12,
+        osc2_transpose=7,
+        osc2_cents=37,
+        osc2_volume=22,
+        osc1_volume=24,
+        reverb=44,
+        volume=50,
+        hpf=14,
+        delay=Delay(**DOTTED_EIGHTH, feedback=24),
+        clipping=4,
+    ),
+    # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo (feedback 26:
+    # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
+    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
+    # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
+    "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
+        "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
+        "SAMPLES/DRUMS/Rim/808 Rim.wav",
+        osc1_volume=48,
+        osc2_volume=44,
+        reverb=24,
+        delay=Delay(**DOTTED_EIGHTH, feedback=26),
+        velocity=50,
+    ),
+    # Dub's kick and crash: the factory 808 Kick and 808 Cymbal layered, into some reverb; velocity 50 as the crack's
+    # (about 5.1 dB, peak).
+    "SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML": lambda: sample_preset(
+        "SAMPLES/DRUMS/Kick/808 Kick.wav",
+        "SAMPLES/DRUMS/Crash/808 Cymbal.wav",
+        osc1_volume=44,
+        reverb=22,
+        velocity=50,
     ),
     # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
     # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its

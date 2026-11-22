@@ -106,10 +106,10 @@ constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}}
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 2}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
-/// The dub gunshot, and a factory boom (spec §18.3).
-constexpr const char* const kImpactFolders[] = {"SAMPLES/Artists/JS-Clipping", "SAMPLES/DRUMS/Kick"};
-constexpr TagWeight kImpactTags[] = {{"Gunshot", 2}, {"WaterJug-Hit", 1}, {"808 Kick descending", 1}};
-constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
+/// Impact: a pack preset per piece, a delay-thrown snare and rim crack or the 808 kick and cymbal (owner, #472 impact
+/// round 2). Like the Siren, it lists no folder, so the lane rolls one of its presets (spec §10.5).
+constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML"},
+                                          {"SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML"}};
 /// The Siren: always the pack's preset (spec §10.5). It lists no folder, and its default `SAMPLES/FX/Siren` holds no
 /// files, so it loads through the FX lane's synth fallback.
 constexpr PaletteEntry kSirenSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Siren.XML"}};
@@ -126,7 +126,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Perc2, .folders = kPerc2Folders, .tags = kPerc2Tags},
     {.lane = Lane::Riser, .folders = kRiserFolders, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
-    {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
+    {.lane = Lane::Impact, .synths = kImpactSynths},
     {.lane = Lane::Siren, .synths = kSirenSynths},
 };
 

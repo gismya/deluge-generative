@@ -18,6 +18,10 @@ differs from what it would write, and any file here it doesn't write.
 | `SYNTHS/GENERATIVE/FX/GEN Riser.XML` | Riser lane synth fallback: two saws and noise swelling over seconds, the filter and pitch lifting |
 | `SYNTHS/GENERATIVE/FX/GEN Fall.XML` | Fall lane synth fallback: a bright hit whose pitch and filter sink as it decays |
 | `SYNTHS/GENERATIVE/FX/GEN Impact.XML` | Impact lane synth fallback: a sine boom with a fast pitch drop and a noise crack |
+| `SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML` | Impact for Techno and Psytrance: the factory `808 Kick sustained.wav` on both oscillators, played once through (the preset only: the sample is the factory card's) |
+| `SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML` | Impact for Techno: white noise and a quiet square and detuned saw through a swept resonant low-pass, a short splash into reverb and a dotted 8th ping-pong echo |
+| `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the factory `DDD1 Snare wet.wav` and `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
+| `SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML` | Dub's Impact: the factory `808 Kick.wav` and `808 Cymbal.wav` layered into some reverb (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Siren.XML` | Dub's Siren: a square and a saw a fifth apart, a triangle LFO sweeping the pitch, a long release, velocity to volume |
 | `SAMPLES/FX/Riser/GEN Riser 1.wav` | 8 s noise riser, a resonant band-pass sweeping up, peaking at the file end |
 | `SAMPLES/FX/Riser/GEN Riser 2.wav` | 6 s riser, three detuned saws climbing three octaves |

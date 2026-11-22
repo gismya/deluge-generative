@@ -50,7 +50,7 @@
 		<oscBVolume>0x1999997E</oscBVolume>
 		<oscBPulseWidth>0x00000000</oscBPulseWidth>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x7FFFFFD2</volume>
+		<volume>0x7FFFFFFF</volume>
 		<pan>0x48000000</pan>
 		<lpfFrequency>0xEA000000</lpfFrequency>
 		<lpfResonance>0xAC000000</lpfResonance>

@@ -66,7 +66,7 @@ describe dub("Dub", $ {
 		expect(std::string(dubGenre.oledName)).to_equal(std::string("ROOTS DUB"));
 		expect(std::string(dubGenre.oledName).find("TECHNO")).to_equal(std::string::npos);
 		expect(dubGenre.parent == nullptr).to_be_true();
-		expect(dubGenre.version).to_equal(5);
+		expect(dubGenre.version).to_equal(6);
 		expect(findGenre("dub") == &dubGenre).to_be_true();
 		expect(partCount(dubGenre)).to_equal(5);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -762,7 +762,7 @@ describe dub("Dub", $ {
 			    .to_be_true();
 		});
 
-		it("lists GEN Siren alone on the Siren lane and no folder, and GEN Riser Short alone on the Riser", _ {
+		it("lists GEN Siren alone on the Siren lane and no folder, GEN Riser Short alone on the Riser, and its Impacts", _ {
 			const LaneSounds* siren = dubGenre.palette->laneSounds(Lane::Siren);
 			expect(siren != nullptr).to_be_true();
 			expect(siren->folders.empty() && siren->tags.empty()).to_be_true();
@@ -783,10 +783,12 @@ describe dub("Dub", $ {
 					    .to_equal(std::string::npos);
 				}
 			}
-			// No sample: the Siren loads its preset through the FX lane's synth fallback.
-			for (const std::string& path : picks[Lane::Siren]) {
-				expect(path).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Siren.XML"));
-			}
+			// No sample: the Siren rolls its preset (spec §10.5).
+			expect(picks[Lane::Siren] == std::set<std::string>{"SYNTHS/GENERATIVE/FX/GEN Siren.XML"}).to_be_true();
+			// The Impact rolls one of the owner's two presets a piece (#472).
+			expect(picks[Lane::Impact] == std::set<std::string>{"SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML",
+			                                                    "SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML"})
+			    .to_be_true();
 			// Every ungated Drums lane's own list finds at least 3 files, the kit aside (spec §10.1, §10.2).
 			picks = harness::lanePicks(dubGenre, card, 400, {}, false);
 			for (const LaneSpec& lane : dubGenre.parts[kDrumsPart].lanes) {

@@ -1,10 +1,10 @@
 # techno-dub's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre techno-dub version 4
+genre techno-dub version 5
 recipe entropy 0: G minor, 115.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 SUB, 2 STAB, 3 PAD, 4 FX
-fingerprint 12a9f0ca1d247b0d, 1892377 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
+fingerprint 11111562c172faa1, 1892377 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
 
       0  1.1.1     SECTION  GROOVE 1
       0  1.1.1     KEY      G minor

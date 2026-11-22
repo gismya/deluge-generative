@@ -173,6 +173,11 @@ constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, 
 constexpr bool isFxLane(Lane lane) {
 	return lane != Lane::None && static_cast<int32_t>(lane) >= kNumDrumLanes;
 }
+/// Whether a lane's note a gate held back may enter late (spec §5.6). The Fall and the Impact are one note from a
+/// Section's first step across it, so they never do: a late one would land mid-phrase (spec §9.5).
+constexpr bool entersLate(Lane lane) {
+	return lane != Lane::Fall && lane != Lane::Impact;
+}
 /// The lane's row in its part's Kit: every Kit carries one NoteRow per lane of its kind, in the fixed order, even
 /// for lanes the genre leaves silent (spec §5.3, §12.8).
 constexpr int32_t laneRow(Lane lane) {
