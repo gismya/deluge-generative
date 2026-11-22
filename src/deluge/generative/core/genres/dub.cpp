@@ -142,8 +142,9 @@ constexpr DelaySetup kRimEcho{.on = true, .note = DelayNote::Eighth, .feel = Del
 
 constexpr int16_t kPercGate = macroPoints(35);
 
-/// In the fixed lane order (spec §5.4). The Snare plays only Swaps, the Roll fill and the Build roll; the Crash only
-/// the Phrase accent; the Tom only the Swap.
+/// In the fixed lane order (spec §5.4). The Snare has no pool of its own: it plays Swaps, the Roll fill, the Build
+/// roll, and 20 % of Groove bars in place of the Rim (Rim's alternateLane, #460 Q-RIM B); the Crash plays only the
+/// Phrase accent; the Tom only the Swap.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 1}, .expression = {.spread = 4}},
     {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}, .expression = kLazySnare},
@@ -154,6 +155,8 @@ constexpr LaneSpec kDrumLanes[] = {
         .band = {0, 2},
         .expression = {.spread = 8},
         .delay = kRimEcho, // the Rim and drum drop-outs' throw target
+        .alternateLane = Lane::Snare,
+        .alternateChance = 200, // ~1 in 5 Groove bars on Snare; Rim stays the norm (#460 Q-RIM B)
     },
     {
         .lane = Lane::ClosedHat,
@@ -286,21 +289,23 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Roll, .mask = {.lanes = laneBit(Lane::Snare)}, .beats = 1, .weight = 1},
 };
 
-/// Drop-outs and spot echoes (spec §4.5, §8.8; round 2 S3, S3b): skank, melodica, drum-and-bass (tops out), drums but
-/// kick, hats and percussion, bass out, 1-bar spot echoes on Rim and Skank, and everything but the bass. Each thrown
-/// target has its dotted-8th echo.
+/// Drop-outs and spot echoes (spec §4.5, §8.8; round 2 S3, S3b; #460 Q-THROW C): skank, melodica, drum-and-bass (tops
+/// and FX out), drums but kick, hats and percussion, bass out, 1-bar spot echoes on Rim and Skank, and everything but
+/// the bass (FX included). Each thrown target has its dotted-8th echo.
 constexpr PartsAndLanes kSkankOnly{.parts = partBit(kSkankPart)};
 constexpr PartsAndLanes kRimOnly{.lanes = laneBit(Lane::Rim)};
 constexpr PartsAndLanes kMelodicaOnly{.parts = partBit(kMelodicaPart)};
-constexpr PartsAndLanes kTops{.parts = partBit(kSkankPart) | partBit(kMelodicaPart)};
+constexpr uint16_t kAllFxLanes =
+    laneBit(Lane::Riser) | laneBit(Lane::Fall) | laneBit(Lane::Impact) | laneBit(Lane::Siren);
+constexpr PartsAndLanes kTopsAndFx{.parts = partBit(kSkankPart) | partBit(kMelodicaPart), .lanes = kAllFxLanes};
 constexpr uint16_t kHatsAndPerc =
     laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat) | laneBit(Lane::Perc1) | laneBit(Lane::Perc2);
 constexpr DropOutEntry kDropOuts[] = {
     {.mask = kSkankOnly, .bars = 2, .weight = 2, .throwTarget = kSkankOnly},
     {.mask = kSkankOnly, .bars = 4, .weight = 1, .throwTarget = kSkankOnly},
     {.mask = kMelodicaOnly, .bars = 4, .weight = 3, .throwTarget = kMelodicaOnly},
-    // Drum and bass: the skank and the melodica out, the skank thrown.
-    {.mask = kTops, .bars = 4, .weight = 3, .throwTarget = kSkankOnly},
+    // Drum and bass: the skank, melodica and FX out, the skank thrown (#460 Q-THROW C).
+    {.mask = kTopsAndFx, .bars = 4, .weight = 3, .throwTarget = kSkankOnly},
     {.mask = {.lanes = kDrumsButKick}, .bars = 1, .weight = 1, .throwTarget = kRimOnly},
     // The drop alone under the band: hats and percussion out.
     {.mask = {.lanes = kHatsAndPerc}, .bars = 2, .weight = 1},
@@ -309,7 +314,9 @@ constexpr DropOutEntry kDropOuts[] = {
     // Spot echoes: one part or lane out for a bar, its last hit ringing through it.
     {.mask = kRimOnly, .bars = 1, .weight = 1, .throwTarget = kRimOnly},
     {.mask = kSkankOnly, .bars = 1, .weight = 1, .throwTarget = kSkankOnly},
-    {.mask = {.parts = partBit(kSkankPart) | partBit(kMelodicaPart), .lanes = kDrumsButKick | laneBit(Lane::Kick)},
+    // Everything but the bass: drums, skank, melodica and FX out, the melodica thrown (#460 Q-THROW C).
+    {.mask = {.parts = partBit(kSkankPart) | partBit(kMelodicaPart),
+              .lanes = kDrumsButKick | laneBit(Lane::Kick) | kAllFxLanes},
      .bars = 4,
      .weight = 1,
      .throwTarget = kMelodicaOnly},
@@ -348,7 +355,7 @@ constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBi
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 4,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 5,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swing = 10},
     .phraseBars = 8,
     .parts = kParts,

@@ -203,11 +203,20 @@ otherwise.
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
   about 2 KB of image.
-- Drop-outs (spec §8.8, `Generator::dropOutRules()`) cut nothing: they only stop note-ons through `silenced()`, so
-  sounding notes ring and a Sustain's notes end on its own bar line. A dropped Sustain needs no re-strike rule: its
-  notes ended a bar or more before the drop-out's end, so `extend()` finds none and the voicing strikes again there.
-  The draw reads `Arc::ahead()` with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section
-  start known when it is drawn; one a later press moves is cut on the line instead.
+- Drop-outs (spec §8.8, `Generator::dropOutRules()`) cut no pitched or drum notes: they only stop note-ons through
+  `silenced()`, so sounding notes ring and a Sustain's notes end on its own bar line. An FX lane listed in `mask.lanes`
+  is the one exception: on `n == dropOutFrom_`, `dropOutRules()` calls `SoundingNotes::cutAt()` on any sounding FX note
+  in `step.dropOut` (Dub's Drop Siren sounding into bar 1), so FX drops out with the rest and `sirenReleases()` fires
+  the Siren's release Throw on that line. A dropped Sustain needs no re-strike rule: its notes ended a bar or more
+  before the drop-out's end, so `extend()` finds none and the voicing strikes again there. The draw reads `Arc::ahead()`
+  with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section start known when it is drawn;
+  one a later press moves is cut on the line instead.
+- Alternate lanes (`LaneSpec::alternateLane` / `alternateChance`, spec §5.7, Dub's Rim → Snare) run in
+  `Generator::decideKit()` after `silenced()` and `step.rest`, before Replace pairs, in Groove bars only, keyed on
+  `Purpose::AlternateLane` and `heldStep() / kStepsPerBar` (so Freeze replays its phrase). Skipped whenever a fill or
+  Build roll touches either lane, either lane is gated out or silenced, or `dropOut_` is waiting to throw the primary
+  lane. `alternateLanesValid()` (in `genreValid()`) requires the alternate lane to be a pool-less non-FX lane of the
+  same Drums part. `Generator::heldStep()` is `GEN_STEP_CODE` so LTO keeps it in `.text.generative_step`.
 - Octave shift (§7.3, #397): `Generator::partRegister()` is the one Register a flavour reads, the genre's
   `registerOrDefault()` moved by `Recipe::octave`. A new flavour that reads `spec.registerOrDefault()` itself ignores
   the shift, and `octave_spec` fails. A shift that lands moves the part's held voicing (`PartState::voicing`) with it

@@ -111,6 +111,20 @@ GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
 	}
 	if (dropOut_ >= 0 && n >= dropOutFrom_ && n < dropOutTo_) {
 		step.dropOut = entries[dropOut_].mask;
+		if (n == dropOutFrom_ && step.dropOut.lanes != 0) {
+			// A held FX note (such as a Drop's 2-bar Siren) running into a drop-out that masks its lane ends on the
+			// drop-out's first bar line, so the FX drops out with the rest and its release (Siren Throw) plays there.
+			for (int32_t p = 0; p < partCount(*genre_); p++) {
+				if (genre_->parts[p].role != Role::FX) {
+					continue;
+				}
+				sounding_.forEach(p, [&](SoundingNote& note) {
+					if (step.dropOut.has(p, note.lane) && note.offTick > step.tick) {
+						SoundingNotes::cutAt(note, step.tick);
+					}
+				});
+			}
+		}
 		return;
 	}
 

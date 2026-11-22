@@ -109,12 +109,13 @@ Interplay rules (genre slot 6) shape a part's rhythm against another part. Every
 - Gates are separate from step-importance thinning inside a lane ([§8.1](08-rhythm-and-expression.md#81-onsets-and-density)).
 - A part sounds only when the Arc, its gate and the player all allow it ([§13.4](13-perform.md#134-live-actions)).
 
-### 5.7 Replace pairs
+### 5.7 Replace pairs and alternate lanes
 
 - Lanes of one part play independently, apart from **Replace pairs**: one-way rules "A replaces B". When both land on the same step, B's hit is dropped before any voice starts.
 - Replace pairs are applied in the Generator, so every driver agrees.
 - Genre data holds the list. The Generator-wide default is **Open hat replaces Closed hat**, and every v1 genre uses the default.
 - The firmware's one CHOKE group per Kit still cuts the hat tails ([§10.6](10-sounds.md#106-load-time-settings)). It can't express a same-step rule, which is why Replace pairs exist.
+- **Alternate lane.** A Drums lane with a pool may name an `alternateLane` in the same Kit (a different non-FX lane with no pattern pool of its own, checked by `alternateLanesValid()` in `genreValid()`) and a per-mille `alternateChance` (Dub's Rim → Snare at 200 per-mille). On each Groove bar, a keyed draw (`Purpose::AlternateLane`, keyed on the part, primary lane, take and held bar so Freeze replays its phrase and stepping back to a take replays it) hands the bar's hits to the alternate lane, which plays them with its own `Expression` and gate. The primary lane stays in charge outside Groove (Intro, Break, Build, Outro), while a Swap, Roll or Build roll touches either lane, while either lane is gated out or silenced, and on the bar before a drop-out whose `throwTarget` is the primary lane. Interplay rules still read the primary lane's normal plan.
 
 ### 5.8 Voice modes
 

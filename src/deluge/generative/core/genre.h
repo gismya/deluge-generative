@@ -238,6 +238,10 @@ struct LaneSpec {
 	DelaySetup delay;
 	/// A Siren lane's held note, in bars (spec §9.5, tuning): 1 up to the phrase. 0 on every other lane.
 	uint8_t heldBars = 0;
+	/// An optional alternate lane in the same Drums part that takes this lane's hits for whole Groove bars, drawn per
+	/// bar with per-mille chance `alternateChance` (spec §5.7; Dub's Rim -> Snare). Lane::None: never swaps.
+	Lane alternateLane = Lane::None;
+	int16_t alternateChance = 0;
 };
 
 /// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
@@ -750,14 +754,15 @@ constexpr int16_t kSameAsFillChance = -1;
 
 // ---- Drop-outs (slot 6, spec §8.8) ----
 
-/// One of a genre's drop-out entries: whole parts or Drums lanes falling silent for a few bars in a Groove.
+/// One of a genre's drop-out entries: whole parts, Drums lanes or FX lanes falling silent for a few bars in a Groove.
 struct DropOutEntry {
-	/// Whole Bass, Chords, Pad or Lead parts, and Drums lanes. Never an FX lane: section rules own them.
+	/// Whole Bass, Chords, Pad or Lead parts, and Drums or FX lanes listed in the roster.
 	PartsAndLanes mask;
 	/// Its length, 1, 2, 4 or 8 bars, from a bar line.
 	uint8_t bars = 1;
 	uint8_t weight = 1;
-	/// The part or lane in the mask whose last hits before it spike Space, held while it lasts (spec §11.4), or none.
+	/// The pitched part or Drums lane in the mask whose last hits before it spike Space, held while it lasts (spec
+	/// §11.4), or none. Never an FX lane.
 	PartsAndLanes throwTarget;
 };
 
@@ -1571,11 +1576,39 @@ constexpr bool registersShiftValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether every lane's alternate lane (spec §5.7) is valid: chance in 0–1000, 0 when no alternate lane is set;
+/// when set, on a Drums part, naming a different non-FX lane of the same part that has no pattern pool of its own,
+/// from a lane that has one.
+constexpr bool alternateLanesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& lane : part.lanes) {
+			if (lane.alternateChance < 0 || lane.alternateChance > 1000) {
+				return false;
+			}
+			if (lane.alternateLane == Lane::None) {
+				if (lane.alternateChance != 0) {
+					return false;
+				}
+				continue;
+			}
+			if (part.role != Role::Drums || lane.pool.empty() || lane.alternateLane == lane.lane
+			    || isFxLane(lane.alternateLane)) {
+				return false;
+			}
+			const int32_t alt = laneIndexOf(part, lane.alternateLane);
+			if (alt < 0 || !part.lanes[alt].pool.empty()) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 /// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
 /// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
-/// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
-/// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
-/// per-mille.
+/// and Drums or FX lanes listed in the roster (no whole Kit), its throw target one pitched part or Drums lane of the
+/// mask or none (never an FX lane), and never every pitched part and every Drums lane with a pool, which would be a
+/// Gap; a gap of at least a bar, and a chance a per-mille.
 constexpr bool dropOutsValid(const Genre& genre) {
 	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
 		return false;
@@ -1593,6 +1626,7 @@ constexpr bool dropOutsValid(const Genre& genre) {
 		bool leavesSome = false;
 		uint8_t pitched = 0;
 		uint16_t drumLanes = 0;
+		uint16_t validLanes = 0;
 		for (size_t p = 0; p < genre.parts.size(); p++) {
 			const PartSpec& part = genre.parts[p];
 			const bool inMask = (mask.parts & partBit(static_cast<int32_t>(p))) != 0;
@@ -1601,15 +1635,16 @@ constexpr bool dropOutsValid(const Genre& genre) {
 				leavesSome = leavesSome || !inMask;
 				continue;
 			}
-			if (part.role != Role::Drums) {
-				continue; // FX lanes are the section rules' own
-			}
 			for (const LaneSpec& lane : part.lanes) {
-				drumLanes |= laneBit(lane.lane);
-				leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+				validLanes |= laneBit(lane.lane);
+				if (part.role == Role::Drums) {
+					drumLanes |= laneBit(lane.lane);
+					leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+				}
 			}
 		}
-		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~drumLanes) != 0 || !leavesSome) {
+		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~validLanes) != 0 || (target.lanes & ~drumLanes) != 0
+		    || !leavesSome) {
 			return false;
 		}
 	}
