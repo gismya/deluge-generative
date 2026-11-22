@@ -233,8 +233,9 @@ bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyStream& dra
 	return true;
 }
 
-/// rollLane(), then for an FX lane left with no sample, one of its presets by weight (spec §10.5): a lane whose
-/// sound is a pack preset (Impact's boom and wash) picks it per piece, as a part picks its preset. With `avoid` (a
+/// rollLane(), then for any FX lane left with no sample, one of its presets by weight (spec §10.5): the Impact's
+/// boom and wash, the Siren's GEN Siren, and the Fall or Riser on a card without their folders, picked per piece as a
+/// part picks its preset. With `avoid` (a
 /// re-roll), another preset when the lane lists one.
 bool rollLaneOrPreset(const LaneSounds& sounds, FolderLister& lister, EntropyStream& draws, const char* preferredTag,
                       const char* avoid, SoundPath& out, int32_t& rolledTag) {

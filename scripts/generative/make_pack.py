@@ -648,7 +648,8 @@ PRESETS = {
     ),
     # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo (feedback 26:
     # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
-    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak).
+    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
+    # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
