@@ -44,6 +44,7 @@ struct TransitionSink final : perform::NoteSink {
 	int32_t startAt = -1;     ///< The start step's tick on the timeline.
 	std::vector<std::pair<int32_t, int32_t>> tempos; ///< {driver clock on the timeline, tempo}
 	std::vector<std::pair<int32_t, int32_t>> swings;
+	std::function<void(SteeringLog&, int32_t, uint8_t, uint8_t)> onLogSoundPaths;
 
 	void attach(const perform::PerformDriver& playing, const Hook& /*hook*/) { driver = &playing; }
 	/// As the firmware's: a Sound event swaps the part's waiting sound in, after its note-offs on the line.
@@ -51,6 +52,11 @@ struct TransitionSink final : perform::NoteSink {
 		played.push_back({event, starts > 0, false, event.tick + base});
 		if (event.kind == EventKind::Sound && sounds != nullptr) {
 			sounds->swap(event);
+		}
+	}
+	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override {
+		if (onLogSoundPaths) {
+			onLogSoundPaths(log, step, part, token);
 		}
 	}
 	void playOutgoing(const Event& event) override {

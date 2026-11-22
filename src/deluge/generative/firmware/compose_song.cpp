@@ -21,6 +21,7 @@
 #include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/runner/runner.h"
+#include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
 #include "model/clip/clip_instance.h"
 #include "model/clip/instrument_clip.h"
@@ -439,6 +440,7 @@ void ComposeSong::newTrack(uint8_t part, uint8_t /*token*/, int32_t tick) {
 	}
 	settingPathCount_ = keptPaths;
 	newTracks_++;
+	TEST_EVENT("gen_capture_track part=%u name=%s", static_cast<unsigned>(part), output.output->name.get());
 }
 
 void ComposeSong::tempo(const compose::TempoNode& node) {

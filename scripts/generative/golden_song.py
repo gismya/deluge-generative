@@ -287,3 +287,61 @@ def compare(golden_text, song_xml, recipe_xml):
     song = dump(song_notes(song_xml, golden.parts, sounds), cut, golden.parts)
     expected = dump(golden.notes, cut, golden.parts)
     return problems, song, expected
+
+
+CLIP_INSTANCE_BYTES = 12  # pos 4, length 4, clipCode 4
+
+
+def capture_song_summary(song_xml):
+    """Validates a Capture song's XML and returns (tracks, clip_instances, notes).
+
+    Checks that the file is a <song> with <instruments> and <sessionClips>, every instrument has a unique
+    (tag, presetName, presetFolder) so clips match their Outputs on reload, at least one instrument has valid
+    clipInstances, and every noteRow's noteDataWithSplitProb decodes cleanly via read_note_data() with at least one
+    note in all. Raises GoldenError if not."""
+    root = ET.fromstring(song_xml)
+    instruments = root.find("instruments")
+    clips = root.find("sessionClips")
+    if root.tag != "song" or instruments is None or clips is None:
+        raise GoldenError("not a song: no <song> with <instruments> and <sessionClips>")
+    seen = set()
+    tracks = 0
+    instances = 0
+    for inst in instruments:
+        tracks += 1
+        key = (
+            inst.tag,
+            (inst.get("presetName") or "").lower(),
+            (inst.get("presetFolder") or "").lower(),
+        )
+        if key in seen:
+            raise GoldenError(
+                f"duplicate instrument {inst.tag} {inst.get('presetName')!r} in {inst.get('presetFolder')!r}"
+            )
+        seen.add(key)
+        raw = inst.get("clipInstances")
+        if raw is None:
+            continue
+        if not raw.startswith("0x"):
+            raise GoldenError(f"clipInstances without 0x: {raw[:20]}")
+        data = bytes.fromhex(raw[2:])
+        if len(data) % CLIP_INSTANCE_BYTES:
+            raise GoldenError(
+                f"clipInstances of {len(data)} bytes, not whole {CLIP_INSTANCE_BYTES}-byte entries"
+            )
+        instances += len(data) // CLIP_INSTANCE_BYTES
+    if instances == 0:
+        raise GoldenError("Capture song has no clipInstances")
+    notes = 0
+    for clip in clips:
+        for row in clip.findall("noteRows/noteRow"):
+            if row.get("noteData") or row.get("noteDataWithLift"):
+                raise GoldenError(
+                    "Capture clip has notes in an older format than noteDataWithSplitProb"
+                )
+            data = row.get("noteDataWithSplitProb")
+            if data is not None:
+                notes += len(read_note_data(data))
+    if notes == 0:
+        raise GoldenError("Capture song has no notes")
+    return tracks, instances, notes

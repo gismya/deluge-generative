@@ -249,5 +249,59 @@ class Compare(unittest.TestCase):
         self.assertTrue(problems[0].startswith("seed='2'"))
 
 
+class CaptureSongSummary(unittest.TestCase):
+    def captured(self, drums=(), acid=(), instances=True, dup_kit=False):
+        inst = ' clipInstances="0x000000000000180000000000"' if instances else ""
+        extra_kit = (
+            f'<kit presetName="DRUMS" presetFolder="KITS"{inst}></kit>'
+            if dup_kit
+            else ""
+        )
+        rows = lambda pairs, attr: "".join(
+            f'<noteRow {attr}="{k}" noteDataWithSplitProb="{note_data(*v)}" />'
+            for k, v in pairs
+        )
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<song firmwareVersion="c1.3.0">
+<instruments>
+<kit presetName="DRUMS" presetFolder="KITS"{inst}><soundSources><sound name="KICK" /></soundSources></kit>
+{extra_kit}
+<sound presetName="005 Sweet Mono Bass" presetFolder="SYNTHS"{inst} />
+</instruments>
+<sessionClips>
+<instrumentClip instrumentPresetName="DRUMS" length="6144"><noteRows>{rows(drums, "drumIndex")}</noteRows></instrumentClip>
+<instrumentClip instrumentPresetName="005 Sweet Mono Bass" length="6144"><noteRows>{rows(acid, "y")}</noteRows></instrumentClip>
+</sessionClips>
+</song>
+"""
+
+    def test_counts_tracks_instances_and_notes_in_a_captured_song(self):
+        xml = self.captured(
+            drums=[(0, [(0, 6, 88), (24, 6, 90)])], acid=[(31, [(96, 12, 100)])]
+        )
+        self.assertEqual(g.capture_song_summary(xml), (2, 2, 3))
+
+    def test_refuses_a_song_with_no_notes_or_no_instances(self):
+        with self.assertRaisesRegex(g.GoldenError, "no notes"):
+            g.capture_song_summary(self.captured())
+        with self.assertRaisesRegex(g.GoldenError, "no clipInstances"):
+            g.capture_song_summary(
+                self.captured(drums=[(0, [(0, 6, 88)])], instances=False)
+            )
+
+    def test_refuses_duplicate_instrument_names(self):
+        with self.assertRaisesRegex(g.GoldenError, "duplicate"):
+            g.capture_song_summary(
+                self.captured(drums=[(0, [(0, 6, 88)])], dup_kit=True)
+            )
+
+    def test_refuses_corrupt_note_data(self):
+        xml = self.captured(drums=[(0, [(0, 6, 88)])]).replace(
+            "4014000000", "4013000000"
+        )
+        with self.assertRaisesRegex(g.GoldenError, "not Compose's"):
+            g.capture_song_summary(xml)
+
+
 if __name__ == "__main__":
     unittest.main()

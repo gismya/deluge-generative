@@ -82,9 +82,44 @@ void deleteUnlinked(Song* song, Instrument* instrument) {
 	song->deleteOutput(instrument);
 }
 
+/// Gives `instrument` a name unique among `song`'s Outputs of its type and folder (spec §9.7, §17.6):
+/// Song::readFromFile() matches each clip to its Output by (type, name, dirPath), so two Kits named "DRUMS" (a lane
+/// swap or re-roll in Capture) or two Synths from the same preset would both claim the first Output and drop the
+/// second's arranger clip instance on reload.
+Error ensureUniqueInstrumentName(Song* song, Instrument* instrument) {
+	if (song->getInstrumentFromPresetSlot(instrument->type, 0, 0, instrument->name.get(), instrument->dirPath.get(),
+	                                      true)
+	    == nullptr) {
+		return Error::NONE;
+	}
+	String base;
+	base.set(&instrument->name);
+	for (int32_t n = 2;; n++) {
+		String candidate;
+		candidate.set(&base);
+		Error error = candidate.concatenate(" ");
+		if (error == Error::NONE) {
+			error = candidate.concatenateInt(n);
+		}
+		if (error != Error::NONE) {
+			return error;
+		}
+		if (song->getInstrumentFromPresetSlot(instrument->type, 0, 0, candidate.get(), instrument->dirPath.get(), true)
+		    == nullptr) {
+			instrument->name.set(&candidate);
+			return Error::NONE;
+		}
+	}
+}
+
 /// Gives `instrument` its empty, always-active, looping 1-bar session clip and links both into `song` (spec §12.8).
 /// On failure the instrument is deleted.
 Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
+	Error nameError = ensureUniqueInstrumentName(song, instrument);
+	if (nameError != Error::NONE) {
+		deleteUnlinked(song, instrument);
+		return nameError;
+	}
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(InstrumentClip));
 	if (memory == nullptr) {
 		deleteUnlinked(song, instrument);
