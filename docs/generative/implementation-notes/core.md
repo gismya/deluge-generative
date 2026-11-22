@@ -109,11 +109,12 @@ otherwise.
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
   `core/palette.h`; `pitchClass()` in `core/types.h` (specs had their own copies: a helper moved into a header can
   clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
-  rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()` with its lane test (the
-  dim's is `!silenced()`, the plan's `Keeps::lets()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
-  `outroEndsAfter()` (with `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not
-  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `cutAndGapUnderBuild()` in
-  `genreValid()` keeps each shorter than a phrase and than the shortest Build (Dub's is 1 bar).
+  rules: `effectiveOn()`, `Gates::crossBar()`, `DropOutState::step()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()`
+  with its lane test (the dim's is `!silenced()`, the plan's `Keeps::lets() && !dropOut.has()`; it adds `rollsIn()` to
+  `maySound()`), `rollStageOn()`, and `outroEndsAfter()` (with `ended()`). A change to how a gate, a drop-out, a mute,
+  the roll or the Outro's end works goes there, not into a copy. The plan leaves out the cut and the Gap, which the dim
+  counts (spec §13.5): `cutAndGapUnderBuild()` in `genreValid()` keeps each shorter than a phrase and than the shortest
+  Build (Dub's is 1 bar).
 - Trap: a Sustain holds its voicing over bar and phrase lines with no new note-on, so a history that counts note-ons
   shows a phrase a held Drone or Pad plays through as unheard. The Perform driver's `PhraseHistory` hears a part in
   every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (`Event::noteKey()`, the

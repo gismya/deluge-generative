@@ -65,7 +65,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(4);
+		expect(psyGenre.version).to_equal(5);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -90,6 +90,10 @@ describe psytrance("Psytrance", $ {
 		expect(psyGenre.phraseBars).to_equal(parent->phraseBars);
 		expect(psyGenre.fillChance).to_equal(parent->fillChance);
 		expect(psyGenre.sectionEndChance).to_equal(parent->sectionEndChance);
+		expect(psyGenre.dropOuts.data() == parent->dropOuts.data()).to_be_true();
+		expect(psyGenre.dropOutChance).to_equal(parent->dropOutChance);
+		expect(psyGenre.dropOutGapBars).to_equal(parent->dropOutGapBars);
+		expect(psyGenre.dropOutGridBars).to_equal(parent->dropOutGridBars);
 		expect(psyGenre.repickChance).to_equal(parent->repickChance);
 		expect(psyGenre.densityJitter).to_equal(parent->densityJitter);
 		expect(psyGenre.arc.buildBars.data() == parent->arc.buildBars.data()).to_be_true();
@@ -492,8 +496,15 @@ describe psytrance("Psytrance", $ {
 					onDrops += dropPhrase[step] ? 1 : 0;
 					leadBars.insert(step / kStepsPerBar);
 				}
-				// The Lead plays every Groove bar of each Drop's first two phrases (its lift decays over four), and
-				// none of the third: it leaves on the phrase line (round 2, S2).
+				// The Lead plays every non-rested Groove bar of each Drop's first two phrases (its lift decays over
+				// four), and none of the third: it leaves on the phrase line (round 2, S2). A kick-and-bass-only rest
+				// (#457) can silence Lead, Arp and Drone together for 8 bars inside those two phrases.
+				std::set<int32_t> arpBars;
+				for (const Event& e : walked.noteOns) {
+					if (e.part == kArpPart) {
+						arpBars.insert(std::min<int32_t>(stepAt(e), steps - 1) / kStepsPerBar);
+					}
+				}
 				for (int32_t end : buildEnds(walked)) {
 					if (end + 1 + 3 * kPhraseSteps > steps) {
 						continue;
@@ -504,7 +515,12 @@ describe psytrance("Psytrance", $ {
 						if (walked.steps[bar * kStepsPerBar].section != SectionKind::Groove) {
 							break;
 						}
-						expect(leadBars.count(bar)).to_equal(bar < dropBar + 32 ? size_t{1} : size_t{0});
+						if (bar < dropBar + 32) {
+							expect(leadBars.count(bar) == 1 || arpBars.count(bar) == 0).to_be_true();
+						}
+						else {
+							expect(leadBars.count(bar)).to_equal(size_t{0});
+						}
 						leaves += bar == dropBar + 32 ? 1 : 0;
 					}
 				}
@@ -649,6 +665,147 @@ describe psytrance("Psytrance", $ {
 			for (SectionKind kind : {SectionKind::Intro, SectionKind::Groove, SectionKind::Break, SectionKind::Build}) {
 				expect(seen.count(kind)).to_equal(1U);
 			}
+		});
+	});
+
+	context("its Groove rests (spec §4.5, §8.8, #457)", _ {
+		it("defines 8- and 16-bar Arp rests and 8-bar kick-and-bass-only rests on half-phrase lines, with no Throw", _ {
+			expect(psyGenre.dropOuts.size()).to_equal(size_t{3});
+			expect(psyGenre.dropOutChance).to_equal(300);
+			expect(psyGenre.dropOutGapBars).to_equal(8);
+			expect(psyGenre.dropOutGridBars).to_equal(8);
+			expect(dropOutsValid(psyGenre)).to_be_true();
+			const PartsAndLanes arpOnly{.parts = partBit(kArpPart)};
+			const PartsAndLanes allButKickAndBass{
+			    .parts = static_cast<uint8_t>(partBit(kArpPart) | partBit(kLeadPart) | partBit(kDronePart)),
+			    .lanes = static_cast<uint16_t>(laneBit(Lane::Clap) | laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat)
+			                                   | laneBit(Lane::Ride) | laneBit(Lane::Perc1) | laneBit(Lane::Perc2))};
+			expect(psyGenre.dropOuts[0].mask == arpOnly).to_be_true();
+			expect(psyGenre.dropOuts[0].bars).to_equal(8);
+			expect(psyGenre.dropOuts[0].weight).to_equal(3);
+			expect(psyGenre.dropOuts[1].mask == allButKickAndBass).to_be_true();
+			expect(psyGenre.dropOuts[1].bars).to_equal(8);
+			expect(psyGenre.dropOuts[1].weight).to_equal(2);
+			expect(psyGenre.dropOuts[2].mask == arpOnly).to_be_true();
+			expect(psyGenre.dropOuts[2].bars).to_equal(16);
+			expect(psyGenre.dropOuts[2].weight).to_equal(1);
+			for (const DropOutEntry& entry : psyGenre.dropOuts) {
+				expect(entry.throwTarget.empty()).to_be_true();
+			}
+		});
+
+		it("lands 8- and 16-bar rests on half-phrase lines, plays kick-and-bass-only rests, dims MUTE, and matches the Arc "
+		   "plan",
+		   _ {
+			int32_t arp8 = 0;
+			int32_t arp16 = 0;
+			int32_t kickBassOnly = 0;
+			int32_t fullPhrasePlannedOff = 0;
+			int32_t seedsWithKickBassOnly = 0;
+			constexpr uint8_t kNotFx = static_cast<uint8_t>((1U << kFxPart) - 1);
+			for (uint32_t seed = 1; seed <= 40; seed++) {
+				Recipe recipe = newRecipe(psyGenre, seed);
+				recipe.scale = Scale::Minor;
+				StepwisePiece<> piece({.recipe = recipe, .seed = seed, .skipIntro = true});
+				ArcPlan plan;
+				piece.generator.planArc(plan);
+				constexpr int32_t kPhrases = ArcPlan::kMaxPhrases;
+				constexpr int32_t kTotalBars = kPhrases * 16;
+				bool arpSilent[kTotalBars] = {};
+				bool droneSilent[kTotalBars] = {};
+				bool isGroove[kTotalBars] = {};
+				int32_t kbThisSeed = 0;
+				for (int32_t bar = 0; bar < kTotalBars; bar++) {
+					piece.decideBefore(bar * kStepsPerBar + 1);
+					const Generator& g = piece.generator;
+					isGroove[bar] = g.arc().section() == SectionKind::Groove;
+					arpSilent[bar] = g.partSilenced(kArpPart);
+					droneSilent[bar] = g.partSilenced(kDronePart);
+					if (isGroove[bar] && arpSilent[bar] && droneSilent[bar]) {
+						// Kick-and-bass-only rest: Drums (Kick still plays) and Bass stay un-dimmed; Arp, Drone and
+						// Lead dim.
+						expect(g.partSilenced(kDrumsPart)).to_be_false();
+						expect(g.partSilenced(kBassPart)).to_be_false();
+						expect(g.partSilenced(kLeadPart)).to_be_true();
+					}
+					// Check the Arc plan against PhraseHistory once each phrase finishes (before the 16-phrase ring
+					// wraps on phrase 16).
+					if (bar % 16 == 15) {
+						const int32_t phrase = bar / 16;
+						piece.decideBefore((phrase + 1) * kPhraseSteps + 1);
+						ArcPhrase heard;
+						expect(piece.driver.history().at(phrase, heard)).to_be_true();
+						const ArcPhrase* planned = plan.at(phrase);
+						expect(planned != nullptr).to_be_true();
+						expect(planned->kind == heard.kind).to_be_true();
+						expect(planned->drop).to_equal(heard.drop);
+						expect(planned->energy).to_equal(heard.energy);
+						expect(planned->sounds & kNotFx).to_equal(heard.sounds & kNotFx);
+						if (planned->kind == SectionKind::Groove && (planned->sounds & partBit(kArpPart)) == 0) {
+							fullPhrasePlannedOff++;
+						}
+					}
+				}
+				// Every Groove rest span starts on a half-phrase line (bar % 8 == 0) and lasts 8 or 16 bars.
+				for (int32_t bar = 0; bar < kTotalBars;) {
+					if (!isGroove[bar] || !arpSilent[bar]) {
+						bar++;
+						continue;
+					}
+					const int32_t start = bar;
+					const bool kb = droneSilent[bar];
+					while (bar < kTotalBars && isGroove[bar] && arpSilent[bar] && droneSilent[bar] == kb) {
+						bar++;
+					}
+					const int32_t len = bar - start;
+					expect(start % 8).to_equal(0);
+					if (bar < kTotalBars) {
+						expect(len == 8 || len == 16).to_be_true();
+					}
+					if (kb) {
+						expect(len).to_equal(8);
+						kickBassOnly++;
+						kbThisSeed++;
+						// Verify notes: no Arp, Drone, Lead, Clap, hats, Ride or Percs inside the span; Kick and Bass
+						// still play.
+						const int32_t fromTick = stepTick(start * kStepsPerBar);
+						const int32_t toTick = stepTick(bar * kStepsPerBar);
+						int32_t kicks = 0;
+						int32_t basses = 0;
+						for (const Event& e : piece.sink.events) {
+							if (e.kind != EventKind::NoteOn || e.tick < fromTick || e.tick >= toTick) {
+								continue;
+							}
+							if (e.part == kDrumsPart) {
+								expect(e.lane == Lane::Kick || e.lane == Lane::Snare || e.lane == Lane::Crash)
+								    .to_be_true();
+								kicks += e.lane == Lane::Kick ? 1 : 0;
+							}
+							else if (e.part == kBassPart) {
+								basses++;
+							}
+							else {
+								expect(e.part == kFxPart).to_be_true();
+							}
+						}
+						expect(kicks).to_be_greater_than(20);
+						expect(basses).to_be_greater_than(20);
+					}
+					else if (len == 8) {
+						arp8++;
+					}
+					else if (len == 16) {
+						expect(start % 16).to_equal(0);
+						arp16++;
+					}
+				}
+				seedsWithKickBassOnly += kbThisSeed > 0 ? 1 : 0;
+			}
+			expect(arp8).to_be_greater_than(10);
+			expect(arp16).to_be_greater_than(2);
+			expect(kickBassOnly).to_be_greater_than(10);
+			expect(seedsWithKickBassOnly).to_be_greater_than(12);
+			expect(fullPhrasePlannedOff).to_be_greater_than(2);
 		});
 	});
 

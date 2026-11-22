@@ -292,6 +292,19 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Roll, .mask = kSnare, .beats = 2, .weight = 1},
 };
 
+/// Groove rests (spec §4.5, §8.8; round 2 S4, #457): the Arp rests for 8 or 16 bars, or everything but Kick and Bass
+/// rests for 8 bars, drawn on the bar before a half-phrase line (dropOutGridBars = 8). No Throw.
+constexpr PartsAndLanes kArpOnly{.parts = partBit(kArpPart)};
+constexpr PartsAndLanes kAllButKickAndBass{.parts = partBit(kArpPart) | partBit(kLeadPart) | partBit(kDronePart),
+                                           .lanes = laneBit(Lane::Clap) | laneBit(Lane::ClosedHat)
+                                                    | laneBit(Lane::OpenHat) | laneBit(Lane::Ride)
+                                                    | laneBit(Lane::Perc1) | laneBit(Lane::Perc2)};
+constexpr DropOutEntry kDropOuts[] = {
+    {.mask = kArpOnly, .bars = 8, .weight = 3},
+    {.mask = kAllButKickAndBass, .bars = 8, .weight = 2},
+    {.mask = kArpOnly, .bars = 16, .weight = 1},
+};
+
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor};
 
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 2}, {32, 1}};
@@ -312,6 +325,10 @@ constexpr Genre kPsytranceParent{
     .heldFill = 0,
     .fillChance = 600,
     .sectionEndChance = 1000,
+    .dropOuts = kDropOuts,
+    .dropOutChance = 300,
+    .dropOutGapBars = 8,
+    .dropOutGridBars = 8,
     // An empty slot: the home chord throughout, under the Drone's pedal (spec §7.4).
     .harmony = {.extensionFloor = 0, .extensionCeiling = 1},
     .palette = &psytrancePalette,
@@ -358,7 +375,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 4; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 5; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),

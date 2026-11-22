@@ -85,64 +85,77 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 
 // ---- Drop-outs (spec §8.8) ----
 
-GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
-	const std::span<const DropOutEntry> entries = genre_->dropOuts;
+GEN_STEP_CODE bool DropOutState::stepOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
+                                            int32_t motion, PartsAndLanes& outMask, DrawKey& outKey) {
+	const std::span<const DropOutEntry> entries = genre.dropOuts;
 	if (entries.empty()) {
-		return;
+		return false;
 	}
-	const int32_t n = step.index;
+	const int32_t n = stepIndex;
 	// Any Section line ends a drop-out on it: one playing ends there, and one drawn to start there or after doesn't
 	// play. A part already spiked for it comes home on its next hit, as for any plan that changes.
-	if (dropOut_ >= 0 && n < dropOutTo_ && arc_.sectionStartsHere()) {
-		if (n <= dropOutFrom_) {
-			dropOut_ = -1;
+	if (entry >= 0 && n < to() && arc.sectionStartsHere()) {
+		if (n <= from) {
+			entry = -1;
 		}
 		else {
 #ifdef GENERATOR_TEST_SEAMS
 			// A Groove starts only on a phrase line, which no drop-out runs past, so no Groove's Reset ever ends one
 			// early: a Throw it holds always falls (updateThrow()), never snaps home at a downbeat.
-			assert(arc_.section() != SectionKind::Groove);
+			assert(arc.section() != SectionKind::Groove);
 #endif
-			dropOutTo_ = n;
+			length = static_cast<int16_t>(n - from);
 		}
 	}
-	if (dropOut_ >= 0 && n == dropOutTo_) {
-		dropOutAfter_ = n + genre_->dropOutGapBars * kStepsPerBar;
+	if (entry >= 0 && n == to()) {
+		after = n + genre.dropOutGapBars * kStepsPerBar;
 	}
-	if (dropOut_ >= 0 && n >= dropOutFrom_ && n < dropOutTo_) {
-		step.dropOut = entries[dropOut_].mask;
-		return;
+	if (entry >= 0 && n >= from && n < to()) {
+		outMask = entries[entry].mask;
+		return false;
 	}
 
-	// Drawn a bar ahead, on a Groove's bar line with none waiting and the gap passed, so the bar in between can
-	// throw the target's last hit. It ends on or before the phrase line after its start and the next Section start
-	// known now (a Build that takes the phrase's end, a waiting force, End or transition). Keyed on the Groove, the
-	// phrase and the bar, never on a take.
-	const bool waiting = dropOut_ >= 0 && n < dropOutFrom_;
-	const int32_t from = n + kStepsPerBar;
-	if (waiting || arc_.section() != SectionKind::Groove || arc_.stepInBar() != 0 || from < dropOutAfter_) {
-		return;
+	// Drawn a bar ahead, on a Groove's bar line before a grid line (`dropOutGridBars`) with none waiting and the gap
+	// passed, so the bar in between can throw the target's last hit. It ends on or before the phrase line after its
+	// start and the next Section start known now (a Build that takes the phrase's end, a waiting force, End or
+	// transition). Keyed on the Groove, the phrase and the bar, never on a take.
+	const bool waiting = entry >= 0 && n < from;
+	const int32_t nextFrom = n + kStepsPerBar;
+	if (waiting || arc.section() != SectionKind::Groove || arc.stepInBar() != 0 || nextFrom < after) {
+		return false;
+	}
+	if (((arc.barInPhrase() + 1) & (genre.dropOutGridBars - 1)) != 0) {
+		return false;
 	}
 	// Whether one starts first: the chance is keyed, so drawing it before the room changes nothing but the work.
-	const DrawKey key = onPhrase(partKey(seed_, kArcPart, Lane::None, 0, Purpose::DropOut), arc_.occurrence(),
-	                             static_cast<uint16_t>(arc_.phraseInSection()),
-	                             fieldWord(static_cast<uint32_t>(arc_.barInPhrase()), kDropOutWhether));
-	if (!drawChance(key, scaleChance(genre_->dropOutChance, curves::dropOut, step.motion))) {
-		return;
-	}
-	const int32_t phraseSteps = genre_->phraseSteps();
-	int32_t room = phraseSteps - (arc_.stepInPhrase() + kStepsPerBar) % phraseSteps;
-	const Arc::Ahead ahead = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove());
+	outKey = onPhrase(partKey(seed, kArcPart, Lane::None, 0, Purpose::DropOut), arc.occurrence(),
+	                  static_cast<uint16_t>(arc.phraseInSection()),
+	                  fieldWord(static_cast<uint32_t>(arc.barInPhrase()), kDropOutWhether));
+	return drawChance(outKey, scaleChance(genre.dropOutChance, curves::dropOut, motion));
+}
+
+GEN_STEP_CODE void DropOutState::pick(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion,
+                                      const Arc::Move& waiting, const DrawKey& key) {
+	const std::span<const DropOutEntry> entries = genre.dropOuts;
+	const int32_t phraseSteps = genre.phraseSteps();
+	int32_t room = phraseSteps - (arc.stepInPhrase() + kStepsPerBar) % phraseSteps;
+	const Arc::Ahead ahead = arc.ahead(motion, waiting);
 	if (ahead.start != Arc::kNotAhead) {
 		room = std::min(room, ahead.start - kStepsPerBar);
 	}
-	const int32_t entry = drawWeightedIf(withField(key, kDropOutWhich), entries,
-	                                     [&](const DropOutEntry& e) { return e.bars * kStepsPerBar <= room; });
-	if (entry >= 0) {
-		dropOut_ = static_cast<int8_t>(entry);
-		dropOutFrom_ = from;
-		dropOutTo_ = from + entries[entry].bars * kStepsPerBar;
+	const int32_t picked = drawWeightedIf(withField(key, kDropOutWhich), entries,
+	                                      [&](const DropOutEntry& e) { return e.bars * kStepsPerBar <= room; });
+	if (picked >= 0) {
+		const int32_t nextFrom = stepIndex + kStepsPerBar;
+		entry = static_cast<int8_t>(picked);
+		from = nextFrom;
+		length = static_cast<int16_t>(entries[picked].bars * kStepsPerBar);
 	}
+}
+
+GEN_STEP_CODE void Generator::dropOutRules(Step& step) {
+	step.dropOut =
+	    dropOut_.step(*genre_, seed_, arc_, step.index, step.motion, [this] GEN_STEP_CODE { return waitingMove(); });
 }
 
 // ---- Fills (spec §8.7) ----
