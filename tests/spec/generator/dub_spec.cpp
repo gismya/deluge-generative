@@ -636,7 +636,7 @@ describe dub("Dub", $ {
 			}
 		});
 
-		it("cuts a Drop's 2-bar Siren on bar 1 and dims FX when an FX-masking drop-out starts there (#460 Q-THROW C)", _ {
+		it("cuts a Drop's 2-bar Siren on bar 1 when an FX-masking drop-out starts there (#460 Q-THROW C)", _ {
 			// Isolate Dub's "everything but the bass" entry at chance 1000 so bar 1 of the Drop always triggers it.
 			const DropOutEntry* allButBass = nullptr;
 			for (const DropOutEntry& entry : dubGenre.dropOuts) {

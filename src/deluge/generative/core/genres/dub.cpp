@@ -156,7 +156,7 @@ constexpr LaneSpec kDrumLanes[] = {
         .expression = {.spread = 8},
         .delay = kRimEcho, // the Rim and drum drop-outs' throw target
         .alternateLane = Lane::Snare,
-        .alternateChance = 200, // ~1 in 5 Groove bars on Snare; Rim stays the norm (#460 Q-RIM B)
+        .alternateChance = 200, // ~1 in 5 Groove bars on Snare (tuning); Rim stays the norm (#460 Q-RIM B)
     },
     {
         .lane = Lane::ClosedHat,

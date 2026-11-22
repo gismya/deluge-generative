@@ -616,7 +616,7 @@ private:
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
 	/// Whether a Siren note that sounded on the last decided step has ended by `step`, however it ended: its length,
-	/// a Section line, its gate or a new sound. Updates sirenSounding_.
+	/// a Section line, its gate, a new sound or a drop-out masking it. Updates sirenSounding_.
 	[[nodiscard]] bool sirenReleases(const Step& step);
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
 	[[nodiscard]] int32_t closeWashLevel(int32_t step) const;
