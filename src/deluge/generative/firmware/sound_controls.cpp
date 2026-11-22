@@ -692,9 +692,10 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
-				// whatever the preset's delay), from Space's offset without the Throw's spike, which the event's holds
-				// until level 0; over=1 if the Throw's lift puts it above both the cap and home, which it never may. At
-				// level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
+				// whatever the preset's delay), from Space's offset as of the last event with no Throw level (so Wash
+				// or drift moving during the hold aren't in it), since the event's holds the spike until level 0;
+				// over=1 if the Throw's lift puts it above both the cap and home, which it never may. At level 0 the
+				// Throw has ended, and Space's own value may be above 23 (spec §11.4).
 				const int32_t rest = perform::targetValue(bound.range, bound.home, set.restSpace);
 				const bool over =
 				    event.throwDelay() > 0 && value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
