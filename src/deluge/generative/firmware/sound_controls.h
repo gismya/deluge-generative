@@ -103,7 +103,8 @@ public:
 		int32_t home = 0;
 	};
 	/// F3: the player set the param `stack` addresses to `value`. If a control moves it in the piece playing, its home
-	/// moves by the amount turned: home = value − the control's current offset (spec §11.6).
+	/// moves by the amount turned: home = value − the control's current offset (spec §11.6). A delay setup's feedback
+	/// while a delay Throw plays takes Space's share from Space's offset without the Throw (spec §11.4).
 	std::optional<HomeEdit> playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
 	/// A CLIP fader tap (spec §13.5): sets the home of the param `stack` addresses, which then plays home plus its
 	/// control's current offset, written as a player edit so F3 logs it. Stopped, or for a param no control moves in
@@ -192,6 +193,9 @@ private:
 		/// feedback is then among Space's params even with a home of 0, and a Throw lifts it.
 		uint8_t throwDepth = 0;
 		uint8_t throwDelay = 0; ///< The delay Throw's level as last applied, percent (Event::throwDelay()).
+		/// Space's offset as last applied with no delay Throw playing (level 0): the offset without the Throw's spike,
+		/// which a player edit to the delay feedback during a Throw takes Space's share from (spec §11.4).
+		int8_t restSpace = 0;
 	};
 
 	/// A set with a delay setup: binds its delay feedback among Space's params if Space's own targets didn't, with a

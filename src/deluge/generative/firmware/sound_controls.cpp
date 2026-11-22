@@ -245,6 +245,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 		Lane lane;
 		int8_t offset[kNumSoundControls];
 		uint8_t throwDelay;
+		int8_t restSpace;
 	};
 	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
@@ -259,6 +260,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
 				old[oldCount].throwDelay = set.throwDelay;
+				old[oldCount].restSpace = set.restSpace;
 				oldCount++;
 			}
 			continue;
@@ -289,6 +291,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 					      0);
 				}
 			}
+			sets_[i].restSpace = old[o].restSpace; // after apply(), which sets it only at level 0
 		}
 	}
 	TEST_EVENT("gen_controls rebind part=%ld sets=%ld params=%ld", static_cast<long>(part),
@@ -679,6 +682,9 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #endif
 		if (space) {
 			set.throwDelay = event.throwDelay();
+			if (set.throwDelay == 0) {
+				set.restSpace = event.offset;
+			}
 		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
@@ -686,9 +692,10 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
-				// whatever the preset's delay); over=1 if the Throw's lift puts it above both the cap and home, which
-				// it never may. At level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
-				const int32_t rest = perform::targetValue(bound.range, bound.home, event.offset);
+				// whatever the preset's delay), from Space's offset without the Throw's spike, which the event's holds
+				// until level 0; over=1 if the Throw's lift puts it above both the cap and home, which it never may. At
+				// level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
+				const int32_t rest = perform::targetValue(bound.range, bound.home, set.restSpace);
 				const bool over =
 				    event.throwDelay() > 0 && value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
 				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld rest=%ld over=%d",
@@ -750,7 +757,9 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 	}
 	if (!settingHome_) {
 		// The edit stopped any ramp, so the param stays where it was turned until the control's next change.
-		bound.home = perform::homeFor(bound.range, value, set.offset[c]);
+		bound.home = set.throwDepth > 0 && bound.range.target == Target::DelayFeedback
+		                 ? perform::throwDelayHomeFor(bound.range, value, set.offset[c], set.restSpace, set.throwDelay)
+		                 : perform::homeFor(bound.range, value, set.offset[c]);
 	}
 	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set.part),
 	           set.lane == Lane::None ? -1 : static_cast<int>(set.lane), UpperName(static_cast<SoundControl>(c)).text);
