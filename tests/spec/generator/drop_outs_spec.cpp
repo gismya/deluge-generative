@@ -133,6 +133,8 @@ struct Shape {
 	std::span<const DropOutEntry> dropOuts;
 	int16_t chance = 1000;
 	uint8_t gapBars = 1;
+	uint8_t gridBars = 1;
+	uint8_t phraseBars = 8;
 	std::span<const FillEntry> fills = {};
 	int16_t fillChance = 0;
 	std::span<const WeightedBars> build = kBuild8;
@@ -140,6 +142,7 @@ struct Shape {
 	Range groove{2, 2};
 	std::span<const PartSpec> parts = kParts;
 	PartsAndLanes breakKeeps = kEverything;
+	PartsAndLanes buildKeeps = kEverything;
 };
 
 /// An Intro of a phrase, a Groove of `shape.groove` phrases at Motion 25, a Break and a Build. Flat macros, no macro
@@ -149,12 +152,14 @@ constexpr Genre dropGenre(const Shape& shape) {
 	    .name = "drop-outs",
 	    .facts = {.scales = kScales},
 	    .soundWeight = {},
+	    .phraseBars = shape.phraseBars,
 	    .parts = shape.parts,
 	    .fills = shape.fills,
 	    .fillChance = shape.fillChance,
 	    .dropOuts = shape.dropOuts,
 	    .dropOutChance = shape.chance,
 	    .dropOutGapBars = shape.gapBars,
+	    .dropOutGridBars = shape.gridBars,
 	    .palette = &genres::technoPalette,
 	    .arc =
 	        {
@@ -167,6 +172,7 @@ constexpr Genre dropGenre(const Shape& shape) {
 	            .dropLiftDensity = 0,
 	            .offsets = {},
 	            .breakKeeps = shape.breakKeeps,
+	            .buildKeeps = shape.buildKeeps,
 	            .buildCut = {},
 	            .gap = GapLength::None,
 	            .accentLane = Lane::Crash,
@@ -682,10 +688,42 @@ describe drop_outs("Drop-outs", $ {
 		}
 	});
 
-	it("leave the Arc plan as it is without them", _ {
-		static constexpr Genre kWith = dropGenre({.dropOuts = kMixed});
+	it("land on dropOutGridBars lines when set (e.g. 8- and 16-bar rests on half-phrase lines in a 16-bar phrase)", _ {
+		static constexpr DropOutEntry kLongRests[] = {
+		    {.mask = kBass, .bars = 8, .weight = 2},
+		    {.mask = kBass, .bars = 16, .weight = 1},
+		};
+		static constexpr WeightedBars kBuild16[] = {{16, 1}};
+		static constexpr Genre kGenre = dropGenre({.dropOuts = kLongRests,
+		                                           .chance = 400,
+		                                           .gapBars = 8,
+		                                           .gridBars = 8,
+		                                           .phraseBars = 16,
+		                                           .build = kBuild16,
+		                                           .groove = {4, 4}});
+		int32_t eights = 0;
+		int32_t sixteens = 0;
+		for (uint32_t seed = 1; seed <= 30; seed++) {
+			const Walk walk = walkPiece(startOf(kGenre, seed), 8 * 16 * kStepsPerBar, kBassPart);
+			for (const Span& span : walk.spans) {
+				expect(span.from % (8 * kStepsPerBar)).to_equal(0);
+				const int32_t bars = (span.to - span.from) / kStepsPerBar;
+				expect(bars == 8 || bars == 16).to_be_true();
+				// Never crosses a phrase line: a 16-bar rest starts on a phrase line.
+				expect(walk.stepInPhrase[span.from] + (span.to - span.from)).to_be_less_than(16 * kStepsPerBar + 1);
+				eights += bars == 8 ? 1 : 0;
+				sixteens += bars == 16 ? 1 : 0;
+			}
+		}
+		expect(eights).to_be_greater_than(5);
+		expect(sixteens).to_be_greater_than(2);
+	});
+
+	it("show in the Arc plan: full-phrase rests clear the part, partial ones keep it, and the plan agrees with notes", _ {
+		// Short drop-outs (1–4 bars in an 8-bar phrase) still leave the part sounding in every planned phrase ahead.
+		static constexpr Genre kShort = dropGenre({.dropOuts = kMixed});
 		static constexpr Genre kWithout = dropGenre({.dropOuts = {}});
-		StepwisePiece<> with{startOf(kWith)};
+		StepwisePiece<> with{startOf(kShort)};
 		StepwisePiece<> without{startOf(kWithout)};
 		for (int32_t step : {1, 20, 40, 100, 200}) {
 			with.decideBefore(step);
@@ -695,11 +733,59 @@ describe drop_outs("Drop-outs", $ {
 			with.generator.planArc(a);
 			without.generator.planArc(b);
 			expect(a.count).to_equal(b.count);
-			for (int32_t i = 0; i < a.count; i++) {
+			for (int32_t i = 1; i < a.count; i++) {
 				expect(a.phrase[i].sounds).to_equal(b.phrase[i].sounds);
 				expect(a.phrase[i].kind == b.phrase[i].kind).to_be_true();
 			}
 		}
+		// Full-phrase rests (8 bars in an 8-bar phrase) clear the resting part in the Arc plan and match PhraseHistory.
+		// Uses kLineParts (1-step Bass gate): kParts's 6-step Bass rings 2 steps over the phrase line on purpose.
+		static constexpr DropOutEntry kFullPhrase[] = {{.mask = kBass, .bars = 8}};
+		static constexpr Genre kFull = dropGenre({.dropOuts = kFullPhrase,
+		                                          .chance = 1000,
+		                                          .gapBars = 8,
+		                                          .gridBars = 8,
+		                                          .groove = {4, 4},
+		                                          .parts = kLineParts});
+		StepwisePiece<> full{startOf(kFull)};
+		ArcPlan plan;
+		full.generator.planArc(plan);
+		// Drawn on bar 7 of phrase 0 for phrase 1 (bars 8–15), then gap 8 skips phrase 2, then drawn on bar 23 for
+		// phrase 3.
+		expect((plan.at(0)->sounds & partBit(kBassPart)) != 0).to_be_true();
+		expect((plan.at(1)->sounds & partBit(kBassPart)) == 0).to_be_true();
+		expect((plan.at(2)->sounds & partBit(kBassPart)) != 0).to_be_true();
+		expect((plan.at(3)->sounds & partBit(kBassPart)) == 0).to_be_true();
+		for (int32_t phrase = 0; phrase < 4; phrase++) {
+			full.decideBefore((phrase + 1) * kPhraseSteps + 1);
+			ArcPhrase heard;
+			expect(full.driver.history().at(phrase, heard)).to_be_true();
+			expect(heard.sounds & (partBit(kDrumsPart) | partBit(kBassPart) | partBit(kLinePart)))
+			    .to_equal(plan.at(phrase)->sounds & (partBit(kDrumsPart) | partBit(kBassPart) | partBit(kLinePart)));
+		}
+		// A half-phrase drop-out followed by a half-phrase Build that leaves the part out silences it for the whole
+		// phrase: the Arc plan clears it too. With gridBars = 8, phrase 0 draws on bar 7 for bars 8–11 (only the 4-bar
+		// entry fits before the 4-bar Build at bar 12), so Bass is dropped on bars 8–11 and kept out of the Build on
+		// bars 12–15.
+		static constexpr DropOutEntry kHalf[] = {{.mask = kBass, .bars = 4}};
+		static constexpr Genre kComboGrid = dropGenre({.dropOuts = kHalf,
+		                                               .chance = 1000,
+		                                               .gapBars = 1,
+		                                               .gridBars = 8,
+		                                               .build = kBuild4,
+		                                               .grooveToBuild = 1000,
+		                                               .groove = {2, 2},
+		                                               .parts = kLineParts,
+		                                               .buildKeeps = kEverything.without(kBass)});
+		StepwisePiece<> comboGrid{startOf(kComboGrid)};
+		ArcPlan comboPlan;
+		comboGrid.generator.planArc(comboPlan);
+		expect(comboPlan.at(1)->kind == SectionKind::Build).to_be_true();
+		expect((comboPlan.at(1)->sounds & partBit(kBassPart)) == 0).to_be_true();
+		comboGrid.decideBefore(2 * kPhraseSteps + 1);
+		ArcPhrase heardCombo;
+		expect(comboGrid.driver.history().at(1, heardCombo)).to_be_true();
+		expect((heardCombo.sounds & partBit(kBassPart)) == 0).to_be_true();
 	});
 
 	it("don't move with a take or a freeze, and drop a frozen part too", _ {

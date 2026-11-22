@@ -568,12 +568,14 @@ void ArcPlanner::begin(const Generator& piece) {
 	const Command* force = piece.waitingForce();
 	forceLands_ = force != nullptr ? piece.landsAt(*force) : -1;
 
-	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
+	// A copy of the counters the plan moves on: the Arc, the gates, drop-outs, mutes and solos. Nothing else of the
+	// piece.
 	arc_ = piece.arc_;
 	mutes_ = piece.mutes_;
 	for (int32_t p = 0; p < parts; p++) {
 		gates_[p] = piece.parts_[p].gates;
 	}
+	dropOut_ = piece.dropOut_;
 	std::fill_n(energySum_, ArcPlan::kMaxPhrases, 0);
 	std::fill_n(steps_, ArcPlan::kMaxPhrases, 0);
 
@@ -608,6 +610,24 @@ void ArcPlanner::addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t 
 	steps_[phrase]++;
 }
 
+Arc::Move ArcPlanner::waitingMove(int32_t step) const {
+	Arc::Move first;
+	for (int32_t i = 0; i < waiting_; i++) {
+		if (landings_[i].step <= step) {
+			continue; // already landed
+		}
+		Arc::Move move;
+		if (!sectionMoveOf(landings_[i].command, move)) {
+			continue;
+		}
+		move.at = landings_[i].step - step;
+		if (move.at < first.at || (move.at == first.at && !first.stops)) {
+			first = move;
+		}
+	}
+	return first;
+}
+
 bool ArcPlanner::advance(int32_t maxSteps) {
 	if (!planning_) {
 		return true;
@@ -615,13 +635,13 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 	const Genre& genre = *genre_;
 	const int32_t phraseSteps = genre.phraseSteps();
 	const int32_t parts = partCount(genre);
-	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase or a whole Build
-	// (cutAndGapUnderBuild()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
-	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
-	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
-	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
+	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut and the Gap never cover a whole phrase or a
+	// whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole phrase (or the
+	// Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The dim counts
+	// all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
+	const auto lets = [&](int32_t p, const Keeps& keeps, const PartsAndLanes& dropOut, RollStage roll) {
 		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
-		               [&](Lane lane) { return keeps.lets(p, lane); });
+		               [&](Lane lane) { return keeps.lets(p, lane) && !dropOut.has(p, lane); });
 	};
 	for (; maxSteps > 0 && step_ / phraseSteps - plan_.first < ArcPlan::kMaxPhrases; step_++, maxSteps--) {
 		const int32_t step = step_;
@@ -660,10 +680,12 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 			}
 		}
 		const Keeps keeps = genre.arc.keepsIn(arc_.section());
+		const PartsAndLanes dropOut =
+		    dropOut_.step(genre, seed_, arc_, step, centre_[Macro::Motion], [&] { return waitingMove(step); });
 		const RollStage roll = rollStageOn(genre.arc, arc_, centre_[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, roll) && mutes_.audible(p) ? partBit(p) : 0;
+			sounds |= lets(p, keeps, dropOut, roll) && mutes_.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc_, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as

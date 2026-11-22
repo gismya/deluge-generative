@@ -457,8 +457,8 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			    || buildRollsOn(step, lane.alternateLane)) {
 				continue;
 			}
-			if (dropOut_ >= 0 && step.index < dropOutFrom_
-			    && genre_->dropOuts[dropOut_].throwTarget.has(partIndex, lane.lane)) {
+			if (dropOut_.entry >= 0 && step.index < dropOut_.from
+			    && genre_->dropOuts[dropOut_.entry].throwTarget.has(partIndex, lane.lane)) {
 				continue;
 			}
 			DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), lane.lane, takes_.take[partIndex],

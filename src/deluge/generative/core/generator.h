@@ -167,6 +167,37 @@ struct Gates {
 	void crossBar(const PartSpec& spec, int32_t density);
 };
 
+/// Drop-out state (spec §8.8): the drop-out last drawn (entry index, or -1), when it plays ([from, to())), and when
+/// the next may start (after). Generator::dropOutRules() advances the playing state, and ArcPlanner steps a copy so
+/// the Arc plan agrees with the notes. Packed into 12 B (`length` is at most 16 bars = 256 steps).
+struct DropOutState {
+	int32_t from = 0;
+	int32_t after = 0;
+	int16_t length = 0;
+	int8_t entry = -1;
+
+	[[nodiscard]] constexpr int32_t to() const { return from + length; }
+
+	/// Advances to `stepIndex` on `arc` at `motion` and returns the drop-out mask active on this step (empty when none
+	/// plays). `waiting()` is called only when a draw succeeds and needs the next Section start ahead.
+	template <typename Waiting>
+	GEN_STEP_CODE PartsAndLanes step(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
+	                                 int32_t motion, Waiting waiting) {
+		PartsAndLanes mask;
+		DrawKey key;
+		if (stepOrDraw(genre, seed, arc, stepIndex, motion, mask, key)) {
+			pick(genre, arc, stepIndex, motion, waiting(), key);
+		}
+		return mask;
+	}
+
+private:
+	bool stepOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t motion,
+	                PartsAndLanes& outMask, DrawKey& outKey);
+	void pick(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting,
+	          const DrawKey& key);
+};
+
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
 template <typename Test>
 constexpr bool anyLane(const PartSpec& spec, Test test) {
@@ -931,11 +962,11 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
+	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
+	uint8_t silent_ = 0;
 	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
 	PunchIns punch_;
-	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
-	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
-	uint8_t silent_ = 0;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
 	uint8_t landedSound_[kMaxParts] = {};
 	/// Fills (spec §8.7). Each an entry of the genre's fills, or -1: the phrase's automatic fill, drawn on its first
@@ -944,20 +975,17 @@ private:
 	int8_t heldFill_ = -1;
 	/// Steps the held fill has played since FILL went down, up to a beat: a held Roll's first beat (spec §8.7).
 	uint8_t heldSteps_ = 0;
-	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
-	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
-	int8_t dropOut_ = -1;
 	/// A Siren note sounded on the last decided step: one that has ended since is its release (spec §9.5, §11.4).
 	bool sirenSounding_ = false;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
+	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
+	uint8_t cutParts_ = 0;
 	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
 	/// half against, as counted at its first step this bar (the second half: the last bar's until step 8 is counted).
 	/// Step state derived from the targets' plans, so takes and freeze replay it as they do the draws it reads.
 	PartsAndLanes busyHalves_[2];
-	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
-	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
-	uint8_t cutParts_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind closeWashBy_ = SectionKind::Break; ///< See closeWashFrom_.
@@ -989,11 +1017,8 @@ private:
 	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
 	/// moment switches them.
 	int32_t closeWashFrom_ = kNever;
-	/// The drop-out's steps (spec §8.8): it plays from dropOutFrom_ up to dropOutTo_, and the next may start from
-	/// dropOutAfter_, its gap after the last that played.
-	int32_t dropOutFrom_ = 0;
-	int32_t dropOutTo_ = 0;
-	int32_t dropOutAfter_ = 0;
+	/// The drop-out state (spec §8.8): plays on [from, to), next may start from after. Performance state, lost on stop.
+	DropOutState dropOut_;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
@@ -1031,6 +1056,8 @@ public:
 private:
 	/// One step of the plan, into phrase `phrase` (counted from plan_.first).
 	void addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy);
+	/// The earliest waiting Arc move after `step`, as Generator::waitingMove() computes it.
+	[[nodiscard]] Arc::Move waitingMove(int32_t step) const;
 
 	struct Landing {
 		Command command;
@@ -1052,6 +1079,7 @@ private:
 	Arc arc_;
 	MuteSolo mutes_;
 	Gates gates_[kMaxParts] = {};
+	DropOutState dropOut_;
 	int32_t energySum_[ArcPlan::kMaxPhrases] = {};
 	int32_t steps_[ArcPlan::kMaxPhrases] = {};
 	ArcPlan plan_;

@@ -203,14 +203,18 @@ otherwise.
   `perform/oled_page.cpp`) is plain ASCII built without l10n, which the harness doesn't have. It is built with
   `perform::Text` (`perform/text.h`), not printf; its adds are out of line, since inlined at every use they cost
   about 2 KB of image.
-- Drop-outs (spec §8.8, `Generator::dropOutRules()`) cut no pitched or drum notes: they only stop note-ons through
-  `silenced()`, so sounding notes ring and a Sustain's notes end on its own bar line. An FX lane listed in `mask.lanes`
-  is the one exception: on `n == dropOutFrom_`, `dropOutRules()` calls `SoundingNotes::cutAt()` on any sounding FX note
-  in `step.dropOut` (Dub's Drop Siren sounding into bar 1), so FX drops out with the rest and `sirenReleases()` fires
-  the Siren's release Throw on that line. A dropped Sustain needs no re-strike rule: its notes ended a bar or more
-  before the drop-out's end, so `extend()` finds none and the voicing strikes again there. The draw reads `Arc::ahead()`
-  with `waitingMove()`, as the chord walk does, so a drop-out never runs past a Section start known when it is drawn;
-  one a later press moves is cut on the line instead.
+- Drop-outs (spec §8.8, `DropOutState::step()` called by `Generator::dropOutRules()` and `ArcPlanner::advance()`) cut
+  no pitched or drum notes: they only stop note-ons through `silenced()`, so sounding notes ring and a Sustain's notes
+  end on its own bar line. An FX lane listed in `mask.lanes` is the one exception: on `step.index == dropOut_.from`,
+  `Generator::dropOutRules()` calls `SoundingNotes::cutAt()` on any sounding FX note in `step.dropOut` (Dub's Drop
+  Siren sounding into bar 1), so FX drops out with the rest and `sirenReleases()` fires the Siren's release Throw on
+  that line. A dropped Sustain needs no re-strike rule: its notes ended a bar or more before the drop-out's end, so
+  `extend()` finds none and the voicing strikes again there. The draw reads `Arc::ahead()` with `waitingMove()`, as the
+  chord walk does, so a drop-out never runs past a Section start known when it is drawn; one a later press moves is cut
+  on the line instead. `Genre::dropOutGridBars` (a power of two dividing `phraseBars`, default 1) gates draws to bar
+  lines before a grid line (`((barInPhrase + 1) & (grid - 1)) == 0`, no division on Cortex-A9). Because `ArcPlanner`
+  steps its own `DropOutState` copy, full-phrase rests (Ambient's 8-bar, Psytrance's 16-bar) and rests paired with a
+  short Build clear the part on the SONG page and agree with `PhraseHistory`.
 - Alternate lanes (`LaneSpec::alternateLane` / `alternateChance`, spec §5.7, Dub's Rim → Snare) run in
   `Generator::decideKit()` after `silenced()` and `step.rest`, before Replace pairs, in Groove bars only, keyed on
   `Purpose::AlternateLane` and `heldStep() / kStepsPerBar` (so Freeze replays its phrase). Skipped whenever a fill or

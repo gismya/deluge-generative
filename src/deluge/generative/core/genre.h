@@ -915,6 +915,10 @@ struct Genre {
 	int16_t dropOutChance = 0;
 	/// Bars after a drop-out ends before the next may start, at least 1.
 	uint8_t dropOutGapBars = 1;
+	/// Bar grid drop-outs start on within a phrase (spec §8.8): a power of two dividing `phraseBars`, default 1 (any
+	/// bar line). Drawn a bar ahead, so only on bar lines where `(barInPhrase + 1) % dropOutGridBars == 0` (8 in a
+	/// 16-bar phrase draws on bars 7 and 15, landing on half-phrase and phrase lines).
+	uint8_t dropOutGridBars = 1;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)
@@ -1604,19 +1608,21 @@ constexpr bool alternateLanesValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
-/// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
-/// and Drums or FX lanes listed in the roster (no whole Kit), its throw target one pitched part or Drums lane of the
-/// mask or none (never an FX lane), and never every pitched part and every Drums lane with a pool, which would be a
-/// Gap; a gap of at least a bar, and a chance a per-mille.
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4, 8 or 16 bars long and no longer than the
+/// phrase, so it never outlasts the phrase it starts in; its mask some whole pitched parts and Drums or FX lanes listed
+/// in the roster (no whole Kit), its throw target one pitched part or Drums lane of the mask or none (never an FX
+/// lane), and never every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar,
+/// a bar grid that is a power of two dividing the phrase, and a chance a per-mille.
 constexpr bool dropOutsValid(const Genre& genre) {
-	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
+	if (genre.dropOutGapBars < 1 || genre.dropOutGridBars < 1 || genre.dropOutGridBars > genre.phraseBars
+	    || !std::has_single_bit(static_cast<unsigned>(genre.dropOutGridBars))
+	    || genre.phraseBars % genre.dropOutGridBars != 0 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
 		return false;
 	}
 	for (const DropOutEntry& entry : genre.dropOuts) {
 		const PartsAndLanes mask = entry.mask;
 		const PartsAndLanes target = entry.throwTarget;
-		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4 && entry.bars != 8) || entry.bars > genre.phraseBars
+		if (entry.bars > 16 || !std::has_single_bit(static_cast<unsigned>(entry.bars)) || entry.bars > genre.phraseBars
 		    || mask.empty()) {
 			return false;
 		}
