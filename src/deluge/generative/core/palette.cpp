@@ -233,6 +233,23 @@ bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyStream& dra
 	return true;
 }
 
+/// rollLane(), then for an FX lane left with no sample, one of its presets by weight (spec §10.5): a lane whose
+/// sound is a pack preset (Impact's boom and wash) picks it per piece, as a part picks its preset. With `avoid` (a
+/// re-roll), another preset when the lane lists one.
+bool rollLaneOrPreset(const LaneSounds& sounds, FolderLister& lister, EntropyStream& draws, const char* preferredTag,
+                      const char* avoid, SoundPath& out, int32_t& rolledTag) {
+	if (!rollLane(sounds, lister, draws, preferredTag, avoid, out, rolledTag)) {
+		return false;
+	}
+	if (out.empty() && isFxLane(sounds.lane) && !sounds.synths.empty()) {
+		const int32_t entry = rollEntry(sounds.synths, draws, avoid);
+		if (entry >= 0) {
+			out.set(sounds.synths[entry].path);
+		}
+	}
+	return true;
+}
+
 /// How many files the fallback chain collects per scan of a lane's folders, so a lane with many missing files
 /// rescans once per batch rather than once per file.
 constexpr int32_t kFallbackBatch = 4;
@@ -527,7 +544,7 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 		}
 		int32_t tag = 0;
 		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
-		if (!rollLane(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
+		if (!rollLaneOrPreset(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
 			return false;
 		}
 		if (lane.lane == Lane::ClosedHat && tag >= 0) {
@@ -590,7 +607,7 @@ bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundP
 	EntropyStream draws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane));
 	const SoundPath old = sounds.lane[index];
 	int32_t tag = 0;
-	return rollLane(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
+	return rollLaneOrPreset(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
 }
 
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,

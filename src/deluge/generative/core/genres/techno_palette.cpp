@@ -111,10 +111,10 @@ constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}}
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
-constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Kick", "SAMPLES/Artists/Chaz"};
-constexpr TagWeight kImpactTags[] = {
-    {"Deep Sky Kick descending", 2}, {"Cassette808_BD03", 1}, {"808 Kick sustained", 1}};
-constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
+/// Impact: a pack preset per piece, the factory 808 boom or the synth wash (owner, #472 impact round 2). It lists no
+/// folder, and its default SAMPLES/FX/Impact holds no files, so the lane rolls one of its presets (spec §10.5).
+constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"},
+                                          {"SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML"}};
 
 constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Kick, .tags = kKickTags},
@@ -130,7 +130,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Perc2, .folders = kPerc2Folders},
     {.lane = Lane::Riser, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
-    {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
+    {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
 // ---- Melodic techno (#226) ----

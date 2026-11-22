@@ -114,11 +114,9 @@ constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}}
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
-/// The draft's booms for hard Drops.
-/// Not the draft's Braams: a tonal sample in C, and the Impact lane doesn't follow the key.
-constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Kick", "SAMPLES/Artists/JS-Clipping"};
-constexpr TagWeight kImpactTags[] = {{"Deep Sky Kick descending", 2}, {"CinderBlock", 1}};
-constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
+/// Impact: the pack's factory 808 boom (owner, #472 impact round 2). Not the draft's Braams: a tonal sample in C, and
+/// the Impact lane doesn't follow the key. It lists no folder, so the lane loads its preset (spec §10.5).
+constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"}};
 
 constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Kick, .folders = kKickFolders, .tags = kKickTags},
@@ -132,7 +130,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Perc2, .folders = kPerc2Folders, .tags = kPerc2Tags},
     {.lane = Lane::Riser, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
-    {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
+    {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
 } // namespace

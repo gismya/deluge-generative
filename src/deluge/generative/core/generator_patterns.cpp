@@ -296,11 +296,12 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 		PartState& part = parts_[p];
 		part.gates.crossBar(genre_->parts[p], biasedOn(p, Macro::Density, step.density)); // its own (spec §3.3)
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
-		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway, and the Fall never enters
-		// late (spec §9.5). An opening gate lets what it held back enter late, after the parts (lateEntries).
+		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway, and the Fall and the
+		// Impact never enter late (spec §9.5). An opening gate lets what it held back enter late, after the parts
+		// (lateEntries).
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (!gateOpen(p, note.lane) && note.offTick > step.tick) {
-				if (note.lane != Lane::Fall) {
+				if (entersLate(note.lane)) {
 					held_.hold(p, note);
 				}
 				SoundingNotes::cutAt(note, step.tick);
@@ -555,9 +556,9 @@ GEN_STEP_CODE int32_t Generator::express(int32_t partIndex, const Expression& ex
 	Note note{decided.lane, decided.pitch,         static_cast<int16_t>(base), velocity(base, step.energy),
 	          start,        start + decided.length};
 	if (!gateOpen(partIndex, decided.lane)) {
-		// Gated out: held back plain, for late entry (spec §5.6). The Fall plays only on a Break's first step and
-		// never enters late (spec §9.5).
-		if (decided.lane != Lane::Fall) {
+		// Gated out: held back plain, for late entry (spec §5.6). The Fall plays only on a Break's first step and the
+		// Impact only on a Drop's, and neither enters late (spec §9.5).
+		if (entersLate(decided.lane)) {
 			held_.hold(partIndex, {.onTick = note.onTick,
 			                       .offTick = note.offTick,
 			                       .baseVelocity = note.baseVelocity,

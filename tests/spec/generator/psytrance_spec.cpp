@@ -65,7 +65,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(5);
+		expect(psyGenre.version).to_equal(6);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -880,6 +880,8 @@ describe psytrance("Psytrance", $ {
 					expect(picks[lane.lane].empty()).to_be_false();
 				}
 			}
+			// The Impact: the owner's boom alone (#472).
+			expect(picks[Lane::Impact] == std::set<std::string>{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"}).to_be_true();
 			for (Lane lane : {Lane::Kick, Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
 				bool psy = false;
 				for (const std::string& path : withKits[lane]) {

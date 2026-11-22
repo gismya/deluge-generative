@@ -335,6 +335,103 @@ describe section_rules("Section rules", $ {
 		expect(genresChecked >= 5).to_be_true(); // Techno's subgenres, House, Psytrance, Dub and Ambient
 	});
 
+	it("hold the Impact from a Drop's first step to the phrase's end or the next Section line in every genre (#472)", _ {
+		// An Impact sample of 2 s or more loads in CUT mode (spec §10.4), and a preset's tail ends at its note-off, so
+		// the gate's short note would cut it.
+		int32_t genresChecked = 0;
+		for (const Genre* genre : allGenres()) {
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				if (genre->parts[p].role == Role::FX && laneIndexOf(genre->parts[p], Lane::Impact) >= 0) {
+					fxPart = p;
+				}
+			}
+			if (fxPart < 0) {
+				continue;
+			}
+			Run run;
+			run.recipe = newRecipe(*genre, 0);
+			run.recipe.macros.set(Macro::Density, macroPoints(100)); // every Impact gate open
+			Result result = play(run, 256);
+			const int32_t buildTick = sectionStart(result, SectionKind::Build);
+			const int32_t dropTick = buildTick >= 0 ? sectionStart(result, SectionKind::Groove, buildTick + 1) : -1;
+			int32_t nextLine = -1;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				if (dropTick >= 0 && e.tick > dropTick && nextLine < 0) {
+					nextLine = e.tick;
+				}
+			}
+			expect(dropTick >= 0).to_be_true();
+			const int32_t phraseEnd = dropTick + genre->phraseSteps() * kTicksPerStep;
+			const int32_t end = nextLine >= 0 && nextLine < phraseEnd ? nextLine : phraseEnd;
+			std::vector<Held> impacts;
+			for (const Event& e : result.events) {
+				if (e.part != fxPart || e.lane != Lane::Impact) {
+					continue;
+				}
+				if (e.kind == EventKind::NoteOn && e.tick == dropTick) {
+					impacts.push_back({e.tick, INT32_MAX, e.pitch});
+				}
+				else if (e.kind == EventKind::NoteOff && !impacts.empty() && impacts.back().off == INT32_MAX) {
+					impacts.back().off = e.tick;
+				}
+			}
+			if (impacts.size() != 1 || impacts[0].off != end) {
+				std::printf("%s: Drop %d, end %d, %zu Impacts, first off %d\n", genre->name, dropTick, end,
+				            impacts.size(), impacts.empty() ? -1 : impacts[0].off);
+			}
+			expect(impacts.size()).to_equal(size_t{1});
+			if (!impacts.empty()) {
+				expect(impacts[0].off).to_equal(end);
+			}
+			genresChecked++;
+		}
+		expect(genresChecked >= 5).to_be_true(); // Techno's subgenres, House, Psytrance and Dub
+	});
+
+	it("never bring an Impact in late, even when its gate opens after the Drop's first step (#472)", _ {
+		static constexpr LaneSpec kGatedImpact[] = {
+		    {.lane = Lane::Riser},
+		    {.lane = Lane::Fall},
+		    {.lane = Lane::Impact, .densityGate = macroPoints(40)},
+		};
+		static constexpr PartSpec kGatedParts[] = {kParts[0], kParts[1], {.role = Role::FX, .lanes = kGatedImpact}};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<8>::genre();
+			genre.parts = kGatedParts;
+			return genre;
+		}();
+		// Shut on the Drop's first step, open from its next bar: no Impact in the Drop's phrase.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.steer = steerAt({{kDrop8 + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(run, 6 * 8);
+			expect(ons(result, kFxPart, Lane::Impact, kDrop8, kDrop8 + kPhraseSteps).empty()).to_be_true();
+		}
+		// Open on the Drop's first step, shut on bar 1, open again on bar 2: cut on bar 1, never struck again.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.recipe.macros.set(Macro::Density, kMacroFull);
+			run.steer = steerAt({
+			    {kDrop8 + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), 0}},
+			    {kDrop8 + kStepsPerBar + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}},
+			});
+			Result result = play(run, 6 * 8);
+			auto impacts = ons(result, kFxPart, Lane::Impact, kDrop8, kDrop8 + kPhraseSteps);
+			expect(impacts.size()).to_equal(size_t{1});
+			int32_t off = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Impact && e.tick >= stepTick(kDrop8)) {
+					off = e.tick;
+					break;
+				}
+			}
+			expect(off).to_equal(stepTick(kDrop8 + kStepsPerBar));
+		}
+	});
+
 	it("gate FX lanes by Density like any lane", _ {
 		static constexpr LaneSpec kGatedFx[] = {{.lane = Lane::Riser, .densityGate = macroPoints(40)},
 		                                        {.lane = Lane::Fall},

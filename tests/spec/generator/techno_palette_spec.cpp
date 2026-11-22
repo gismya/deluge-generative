@@ -31,15 +31,22 @@ describe techno_palette("Acid techno's palette", $ {
 		expect(harness::partPresetsMissing(techno, card).empty()).to_be_true();
 	});
 
-	it("gives every lane Techno plays at least 3 files after tag filtering, its kit aside", _ {
-		FakeCard card = harness::factoryCardWithPack();
-		auto picks = harness::lanePicks(techno, card, 800, {}, false);
-		for (const PartSpec& part : techno.parts) {
-			for (const LaneSpec& lane : part.lanes) {
-				expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});
-			}
-		}
-	});
+	it("gives every lane Techno plays at least 3 files after tag filtering, its kit aside, and the Impact its 2 presets",
+	   _ {
+		   FakeCard card = harness::factoryCardWithPack();
+		   auto picks = harness::lanePicks(techno, card, 800, {}, false);
+		   for (const PartSpec& part : techno.parts) {
+			   for (const LaneSpec& lane : part.lanes) {
+				   if (lane.lane != Lane::Impact) {
+					   expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});
+				   }
+			   }
+		   }
+		   // The owner's picks (#472): the boom or the wash, a piece each (spec §10.5).
+		   expect(picks[Lane::Impact].size()).to_equal(size_t{2});
+		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML")).to_be_true();
+		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML")).to_be_true();
+	   });
 
 	it("plays an FX part whose Riser picks only pack risers", _ {
 		bool hasFx = false;

@@ -1,10 +1,10 @@
 # techno-melodic's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre techno-melodic version 4
+genre techno-melodic version 5
 recipe entropy 0: G minor, 122.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 BASS, 2 PAD, 3 ARP, 4 FX
-fingerprint a96587efb428f744, 1775191 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
+fingerprint f880dabb31eadb06, 1775191 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
 
       0  1.1.1     SECTION  GROOVE 1
       0  1.1.1     KEY      G minor

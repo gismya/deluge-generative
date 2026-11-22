@@ -56,6 +56,14 @@ constexpr PartSpec kMixedParts[] = {
 constexpr Palette kMixedPalette{.parts = kPartSounds, .roles = kRoleSounds, .lanes = kDrumSounds};
 constexpr Genre kMixedGenre{.name = "mixed", .parts = kMixedParts, .palette = &kMixedPalette};
 
+/// An FX part whose Impact lists two presets and no folders, so its default folder SAMPLES/FX/Impact holds its samples.
+constexpr PaletteEntry kImpactPresets[] = {{"SYNTHS/FX/Boom.XML", 3}, {"SYNTHS/FX/Wash.XML", 1}};
+constexpr LaneSounds kFxSounds[] = {{.lane = Lane::Impact, .synths = kImpactPresets}};
+constexpr Palette kFxPalette{.lanes = kFxSounds};
+constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Impact}};
+constexpr PartSpec kFxParts[] = {{.role = Role::FX, .name = "FX", .lanes = kFxLanes}};
+constexpr Genre kFxGenre{.name = "fx", .parts = kFxParts, .palette = &kFxPalette};
+
 FakeCard drumCard() {
 	FakeCard card;
 	card.add("SAMPLES/DRUMS/Kick", {"909 Kick.wav", "909 KICK dry.wav", "909 Kick distorted.txt", "808 Kick.wav",
@@ -141,6 +149,35 @@ describe sound_picks("Rolling sound picks", $ {
 		card.folders.erase("samples/drums/rim");
 		card.add("SAMPLES/DRUMS/Rim", {"808 Rim long.wav"});
 		expect(rolled(kDrumGenre, 0, card).sounds.lane[static_cast<int32_t>(Lane::Rim)].empty()).to_be_true();
+	});
+
+	it("rolls an FX lane's preset by weight when no sample matches, and keeps a sample when one does (spec §10.5)", _ {
+		const auto impact = static_cast<int32_t>(Lane::Impact);
+		FakeCard card;
+		card.add("SYNTHS/FX", {"Boom.XML", "Wash.XML"});
+		std::map<std::string, int> picks;
+		for (uint32_t entropy = 0; entropy < 400; entropy++) {
+			picks[rolled(kFxGenre, entropy, card).sounds.lane[impact].c_str()]++;
+		}
+		expect(picks.size()).to_equal(size_t{2});
+		expect(picks["SYNTHS/FX/Boom.XML"]).to_be_between(260, 340); // weight 3 of 4
+		card.add("SAMPLES/FX/Impact", {"Hit.wav"});
+		for (uint32_t entropy = 0; entropy < 50; entropy++) {
+			expect(std::string(rolled(kFxGenre, entropy, card).sounds.lane[impact].c_str()))
+			    .to_equal(std::string("SAMPLES/FX/Impact/Hit.wav"));
+		}
+	});
+
+	it("re-rolls an FX lane's preset pick away from the one it has", _ {
+		const auto impact = static_cast<int32_t>(Lane::Impact);
+		FakeCard card;
+		for (uint32_t entropy = 0; entropy < 50; entropy++) {
+			SoundPicks sounds = rolled(kFxGenre, entropy, card).sounds;
+			const std::string before = sounds.lane[impact].c_str();
+			expect(rollLaneSound(kFxGenre, kFxPalette, Lane::Impact, sounds, entropy + 1000, card)).to_be_true();
+			expect(std::string(sounds.lane[impact].c_str())).not_().to_equal(before);
+			expect(sounds.lane[impact].empty()).to_be_false();
+		}
 	});
 
 	it("rolls the Open hat from the Closed hat's tag when it can, else from its own weights", _ {
