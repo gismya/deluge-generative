@@ -167,3 +167,10 @@ otherwise.
   time (no icount), so they take slots too; only `gen_emu.py smoke` and `capture` don't. Waiting by hand for a
   `pgrep -x qemu-system-arm` count is no longer needed: the run waits and prints `waited N s for a real-time emulator
   slot`, which check_all's row shows.
+- An injected press is handled wherever the firmware next reads buttons, also inside another task's card wait
+  (`routineForSD()`), and Perform's card presses (SAVE, LOAD, the browsers' SELECT) refuse a press made there with
+  BUSY. In Perform the card log writes on its own: the next piece's spare file 2 s after entry or a piece's opening,
+  the piece's opening, and a flush every 10 s while it plays, so under host load a press can land in one (#485:
+  `perform_recipe_save.txt`, `_load`, `_no_free_name`). Waiting for a quiet moment doesn't cover a section longer
+  than the 10 s flush: a script whose card presses must not be refused, and that doesn't test the log, holds
+  `card_log_off` before Perform's entry (the log takes every byte and touches no card).
