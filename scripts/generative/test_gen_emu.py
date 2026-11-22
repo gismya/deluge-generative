@@ -1316,5 +1316,134 @@ class GoldenScript(unittest.TestCase):
         self.assertIn(f"\nload song {gen_emu.GOLDEN_SONG}\n", text)
 
 
+class SmokeCapture(unittest.TestCase):
+    def test_new_song_files_returns_only_songs_added_on_the_clone(self):
+        class FakeFat:
+            def __init__(self, image):
+                self.image = image
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def exists(self, path):
+                return path == gen_emu.SONG_FOLDER
+
+            def listdir(self, path):
+                if self.image == "master.img":
+                    return ["SONG001.XML"]
+                return ["SONG001.XML", "GEN ACID TECHNO 1A2B3C4 LIVE.XML"]
+
+        with mock.patch.object(gen_emu.fat_image, "FatImage", FakeFat):
+            self.assertEqual(
+                gen_emu.new_song_files("clone.img", "master.img"),
+                ["GEN ACID TECHNO 1A2B3C4 LIVE.XML"],
+            )
+
+    def test_clone_card_refuses_to_overwrite_the_master(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            master = os.path.join(tmp, "master.img")
+            touch(master, b"card")
+            with self.assertRaises(ValueError):
+                gen_emu.clone_card(master, master)
+
+    def test_smoke_leaves_with_capture_reloads_and_checks_the_saved_song(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            master = os.path.join(tmp, "master.img")
+            touch(master, b"master")
+            out = os.path.join(tmp, "out")
+            args = gen_emu.parser().parse_args(
+                ["smoke", "--no-leak", "--card", master, "--out", out, "--bars", "1"]
+            )
+            taps = []
+            emu = mock.Mock()
+            emu.led.side_effect = lambda name: (
+                name == "PLAY" and ("PLAY_RELOAD" in taps)
+            )
+            emu.card_quiet.return_value = True
+            emu.dump_size.return_value = 0
+            emu.audio.return_value = pcm(2.0)
+
+            def tap(name, **kw):
+                if name == "PLAY" and "LOAD" in taps:
+                    taps.append("PLAY_RELOAD")
+                else:
+                    taps.append(name)
+
+            emu.tap.side_effect = tap
+
+            def fake_boot(a, elf, o, tag, *, card=None, snapshot=True):
+                self.boot_card = card
+                self.boot_snapshot = snapshot
+                touch(card, b"cloned")
+                return emu
+
+            song_xml = (
+                b'<?xml version="1.0" encoding="UTF-8"?>'
+                b"<song><instruments>"
+                b'<kit presetName="DRUMS" presetFolder="KITS" clipInstances="0x000000000000060000000000" />'
+                b"</instruments><sessionClips>"
+                b'<instrumentClip instrumentPresetName="DRUMS" length="1536"><noteRows>'
+                b'<noteRow drumIndex="0" noteDataWithSplitProb="0x0000000000000006584014000000" />'
+                b"</noteRows></instrumentClip></sessionClips></song>"
+            )
+
+            class FakeFat:
+                def __init__(self, path):
+                    self.path = path
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+                def exists(self, folder):
+                    return folder == gen_emu.SONG_FOLDER
+
+                def listdir(self, folder):
+                    return (
+                        ["GEN ACID TECHNO 1A2B3C4 LIVE.XML"]
+                        if self.path == self.outer.boot_card
+                        else []
+                    )
+
+                def read_file(self, path):
+                    return song_xml
+
+            FakeFat.outer = self
+
+            with (
+                mock.patch.object(gen_emu, "warn_pin", return_value={}),
+                mock.patch.object(gen_emu, "boot", side_effect=fake_boot),
+                mock.patch.object(gen_emu, "enter_perform", return_value=True),
+                mock.patch.object(gen_emu, "check_perform_plays"),
+                mock.patch.object(gen_emu.fat_image, "FatImage", FakeFat),
+                mock.patch.object(gen_emu, "log"),
+            ):
+                code = gen_emu.smoke(args)
+
+            self.assertEqual(code, 0)
+            self.assertFalse(self.boot_snapshot)
+            self.assertEqual(self.boot_card, os.path.join(out, "smoke.img"))
+            self.assertFalse(os.path.exists(self.boot_card))
+            # Leave with LAST (no encoder turn), then LOAD twice to reload the saved song, then PLAY to check it sounds
+            emu.s.encoder.assert_not_called()
+            self.assertEqual(
+                taps,
+                [
+                    "PLAY",
+                    "BACK",
+                    "SELECT_ENC",
+                    "LOAD",
+                    "LOAD",
+                    "PLAY_RELOAD",
+                    "PLAY_RELOAD",
+                ],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
+#include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/global_effectable/global_effectable.h"
 #include "model/model_stack.h"
@@ -327,12 +328,20 @@ void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token, 
 		return;
 	}
 	if (!picks.part[part].empty()) {
-		log.appendSoundPath(step, part, token, pickSlot(part), picks.part[part].c_str());
+		const int32_t slot = pickSlot(part);
+		if (log.appendSoundPath(step, part, token, slot, picks.part[part].c_str())) {
+			TEST_EVENT("gen_log_sound part=%u slot=%ld %s", static_cast<unsigned>(part), static_cast<long>(slot),
+			           picks.part[part].c_str());
+		}
 	}
 	for (const LaneSpec& lane : genre.parts[part].lanes) {
 		const SoundPath& path = picks.lane[static_cast<int32_t>(lane.lane)];
 		if (!path.empty()) {
-			log.appendSoundPath(step, part, token, pickSlot(lane.lane), path.c_str());
+			const int32_t slot = pickSlot(lane.lane);
+			if (log.appendSoundPath(step, part, token, slot, path.c_str())) {
+				TEST_EVENT("gen_log_sound part=%u slot=%ld %s", static_cast<unsigned>(part), static_cast<long>(slot),
+				           path.c_str());
+			}
 		}
 	}
 }

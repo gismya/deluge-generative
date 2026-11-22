@@ -865,7 +865,14 @@ void loadSong(const char* path) {
 	songLoading = false;
 	const char* name = currentSong->name.get();
 	if (strlen(name) == stemLength && strncasecmp(name, file, stemLength) == 0) {
-		event("song_loaded path=%s ms=%d", path, static_cast<int>((getSystemTime() - start) * 1000));
+		long outputs = 0;
+		long instances = 0;
+		for (Output* out = currentSong->firstOutput; out != nullptr; out = out->next) {
+			outputs++;
+			instances += out->clipInstances.getNumElements();
+		}
+		event("song_loaded path=%s ms=%d outputs=%ld instances=%ld", path,
+		      static_cast<int>((getSystemTime() - start) * 1000), outputs, instances);
 	}
 	else {
 		event("song_load_failed path=%s why=load", path);

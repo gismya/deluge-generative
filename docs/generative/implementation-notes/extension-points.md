@@ -41,9 +41,10 @@ otherwise.
 - **The steering log's lifetime (#146):** `PerformAdapter::freeBlocks()` frees the log's buffer with the Generator
   blocks at the teardown. Capture's builds run after it, so #146 keeps the buffer (and `log_`) past the teardown
   until the last build. Marks (#144): `SteeringLog::mark()` marks the newest piece, `full()` refuses a new mark.
-- **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
-  mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
-  re-roll's new Output, can share a preset name and folder with one still playing or retiring.
+- **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` is the Capture mark.
+  `perform_song.cpp`'s `link()` gives every linked Output a name unique in its song (`ensureUniqueInstrumentName()`,
+  `DRUMS`, `DRUMS 2`, …), so two Kits or two Synths from the same preset never collide in `InstrumentClip::claimOutput()`
+  on reload.
 - **Long sample Risers:** a Riser longer than its Build starts with it (`riserStart()` returns the note's own tick), so
   its end overshoots the Drop and the Drop's note-off cuts it. M2 doesn't build a start offset (a Compose note can't
   start a sample partway, and the offset would differ per Build length and tempo): each genre's Riser lane lists only

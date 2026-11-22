@@ -84,7 +84,8 @@ std::vector<Note> notesOf(const TransitionSink& sink, bool incoming) {
 	return pairNotes(events);
 }
 
-constexpr uint8_t kAcid = 1; ///< Techno Acid's ACID: a synth part.
+constexpr uint8_t kDrums = 0; ///< Techno Acid's DRUMS: a Kit part.
+constexpr uint8_t kAcid = 1;  ///< Techno Acid's ACID: a synth part.
 
 std::vector<LogRecord> recordsOf(const SteeringLog::Piece& piece) {
 	std::vector<LogRecord> out;
@@ -556,6 +557,78 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			expect(w.picks.size()).to_equal(2U);
 			expect(w.picks.size() == 2U && w.picks[0].path == "SYNTHS/ACID 4.XML" && w.picks[0].token == 4).to_be_true();
 			expect(w.tracks == std::vector<RecordingWriter::Track>{{kAcid, 4, stepTick(phrase)}}).to_be_true();
+		});
+
+		it("starts a new Kit track at a hand-chosen lane swap, logging every lane's path and cutting the Kit's lanes there (#300)", _ {
+			Recipe playing = acidRecipe();
+			playing.macros.set(Macro::Motion, kMacroFull); // Kit lanes move, checking cutPart() leaves no late nodes
+			TransitionPiece t(playing, playing);
+			Log log;
+			t.driver.setLog(&log.log);
+			const int32_t phrase = t.phraseSteps();
+
+			// Entry picks for every DRUMS lane, then a hand-chosen sample for Kick alone (spec §10.1, §17.6).
+			SoundPicks entryPicks;
+			for (const LaneSpec& lane : playing.genre->parts[kDrums].lanes) {
+				entryPicks.lane[static_cast<int32_t>(lane.lane)].set(
+				    "SAMPLES/DRUMS", ("ENTRY_" + std::to_string(static_cast<int32_t>(lane.lane)) + ".wav").c_str());
+			}
+			SoundPicks waitingPicks = entryPicks;
+			SoundChoice choice;
+			choice.path.set("SAMPLES/MINE/ChosenKick.wav");
+			choice.lane = Lane::Kick;
+			expect(chooseSound(*playing.genre, kDrums, choice, waitingPicks)).to_be_true();
+
+			// Mirrors firmware OutputSink::logSoundPaths() -> firmware::logSoundPaths(): every lane of the Kit logs.
+			t.sink.onLogSoundPaths = [&](SteeringLog& target, int32_t step, uint8_t part, uint8_t token) {
+				for (const LaneSpec& lane : playing.genre->parts[part].lanes) {
+					const SoundPath& path = waitingPicks.lane[static_cast<int32_t>(lane.lane)];
+					if (!path.empty()) {
+						target.appendSoundPath(step, part, token, pickSlot(lane.lane), path.c_str());
+					}
+				}
+			};
+
+			t.decideBefore(4);
+			expect(t.sounds.choose(kDrums, choice) == perform::SoundPress::Preloading).to_be_true();
+			t.sounds.endPreload();
+			t.runToStepLine(phrase + 4);
+			// A second lane swap on DRUMS dropped by a transition confirm keeps the track from the first swap.
+			SoundChoice droppedChoice;
+			droppedChoice.path.set("SAMPLES/MINE/DroppedKick.wav");
+			droppedChoice.lane = Lane::Kick;
+			expect(chooseSound(*playing.genre, kDrums, droppedChoice, waitingPicks)).to_be_true();
+			expect(t.sounds.choose(kDrums, droppedChoice) == perform::SoundPress::Preloading).to_be_true();
+			t.sounds.endPreload();
+			t.runToStepLine(2 * phrase, -1);
+			t.lifecycle.request(TransitionStyle::BuildIntoDrop);
+			t.runToStepLine(2 * phrase, kTicksPerStep);
+			t.stop();
+
+			const PieceImage img = image(log.log, 0);
+			const SteeringLog::Piece piece = img.piece();
+			auto replayed = replay(piece);
+			expect(replayed->done).to_be_true();
+			expect(replayed->unpaired).to_equal(0U);
+			const RecordingWriter& w = replayed->writer;
+			const uint8_t firstToken = t.sounds.preloads[0].token;
+			expect(w.tracks == std::vector<RecordingWriter::Track>{{kDrums, firstToken, stepTick(phrase)}}).to_be_true();
+			expect(w.lateNodes).to_equal(0);
+			// The chosen Kick path and every other DRUMS lane's unchanged entry path were logged and delivered to Capture.
+			const auto hasPick = [&](Lane lane, const std::string& path) {
+				const int32_t slot = pickSlot(lane);
+				return std::any_of(w.picks.begin(), w.picks.end(), [&](const RecordingWriter::Pick& p) {
+					return p.part == kDrums && p.token == firstToken && p.slot == slot && p.path == path;
+				});
+			};
+			expect(hasPick(Lane::Kick, "SAMPLES/MINE/ChosenKick.wav")).to_be_true();
+			for (const LaneSpec& lane : playing.genre->parts[kDrums].lanes) {
+				if (lane.lane != Lane::Kick) {
+					expect(hasPick(lane.lane, entryPicks.lane[static_cast<int32_t>(lane.lane)].c_str())).to_be_true();
+				}
+			}
+			const int32_t cut = agreedTick(piece);
+			expect(notesBefore(w.notes, cut) == notesBefore(notesOf(t.sink, false), cut)).to_be_true();
 		});
 
 		it("ends a part's lanes where its clip is cut or its new track starts: no node for the part comes late", _ {

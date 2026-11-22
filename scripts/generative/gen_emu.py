@@ -7,13 +7,15 @@
     python3 scripts/generative/gen_emu.py capture --genre techno-dub --seconds 120 --mute 3 --ab --no-play
     python3 scripts/generative/gen_emu.py check WAV... --genre techno-dub --seconds 120 --mute 3
 
-smoke    boots a local `./dbt build release` (build/Release/deluge.elf), retrying a blank boot, enters Perform through
-         SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default genre -> DISCARD SONG? -> OK, presses PLAY and
-         plays at least N bars (2 s a bar, so N bars at any tempo from 120 BPM). It fails on silence (any half second
-         of digital silence in the firmware's rendered audio) or a freeze (the OLED, which shows the beat, not
-         changing for a second), and checks that PLAY stops and that holding BACK, then NOTHING, leaves. Functional
-         only: no audio hashes. Then runs the leak check below (skip it with --no-leak) and reports both: one
-         failing doesn't hide the other.
+smoke    boots a local `./dbt build release` (build/Release/deluge.elf) on a per-run clone of the card image, retrying a
+         blank boot, enters Perform through SHIFT+SONG -> GENERATIVE -> PERFORM FROM -> GENRE -> TECHNO -> the default
+         genre -> DISCARD SONG? -> OK, presses PLAY and plays at least N bars (2 s a bar, so N bars at any tempo from
+         120 BPM). It fails on silence (any half second of digital silence in the firmware's rendered audio) or a freeze
+         (the OLED, which shows the beat, not changing for a second), checks that PLAY stops, and leaves with Capture
+         (BACK held -> LEAVE, KEEP: LAST). It then reloads the saved Capture song through LOAD, checks it plays and
+         sounds, and reads the new song file off the card clone (golden_song.capture_song_summary()) to confirm it has
+         valid clipInstances and notes. Functional only: no audio hashes. Then runs the leak check below (skip it with
+         --no-leak) and reports both: one failing doesn't hide the other.
 
 leak     the memory check (spec §13.8: memory after leaving matches memory before entry). Builds the test-port
          firmware (build-testport/, Release with -DENABLE_SYSEX_TEST=ON; build/ keeps the default options), boots it
@@ -927,7 +929,11 @@ def build_capture(args):
 class Emu:
     """One delugemu run under icount. The VM moves only in run_to(); every input lands at a fixed virtual time."""
 
-    def __init__(self, args, elf, out, name):
+    def __init__(self, args, elf, out, name, *, card=None, snapshot=True):
+        if not snapshot and card is None:
+            raise ValueError(
+                "snapshot=False needs a card clone: it would write to the master card image"
+            )
         sys.path.insert(0, os.path.join(args.delugemu, "pylib"))
         from delugemu import DelugeSession
         from delugemu._controls import CONTROLS
@@ -937,14 +943,17 @@ class Emu:
         if os.path.exists(self.dump):
             os.unlink(self.dump)
         self.t = 0
+        extra = ("-icount", "shift=2,sleep=off", "-S") + (
+            ("-snapshot",) if snapshot else ()
+        )
         self.s = DelugeSession.launch(
             firmware=os.path.abspath(elf),
-            sd=os.path.abspath(args.card),
+            sd=os.path.abspath(card or args.card),
             repo_root=args.delugemu,
             env={"DELUGEMU_QEMU_BIN": args.qemu, "DELUGEMU_SSIF_DUMP": self.dump},
             sock=qmp_socket(name),
             run_log=os.path.join(out, name + ".log"),
-            extra_qemu=("-icount", "shift=2,sleep=off", "-S", "-snapshot"),
+            extra_qemu=extra,
         )
 
     def close(self):
@@ -1015,10 +1024,26 @@ class Emu:
             return fh.read(int(seconds * RATE) * FRAME)
 
 
-def boot(args, elf, out, tag):
+def clone_card(master, dst):
+    """Clones `master` to `dst` (APFS copy-on-write on macOS). Refuses to write over `master`."""
+    if os.path.realpath(master) == os.path.realpath(dst):
+        raise ValueError("refusing to run on the master card image")
+    if os.path.exists(dst):
+        os.remove(dst)
+    subprocess.run(["cp", "-c", master, dst], check=True)
+
+
+def boot(args, elf, out, tag, *, card=None, snapshot=True):
     """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times."""
     for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
-        emu = Emu(args, elf, out, boot_name(tag, attempt))
+        if card is not None and not snapshot:
+            clone_card(args.card, card)
+        if card is not None or not snapshot:
+            emu = Emu(
+                args, elf, out, boot_name(tag, attempt), card=card, snapshot=snapshot
+            )
+        else:
+            emu = Emu(args, elf, out, boot_name(tag, attempt))
         try:
             booted = emu.booted()
         except BaseException:
@@ -1173,6 +1198,9 @@ def leak(args):
     return 1 if failures else 0
 
 
+SMOKE_RELOAD_SECONDS = 2.0
+
+
 def smoke(args):
     installed = warn_pin(args)
     os.makedirs(args.out, exist_ok=True)
@@ -1185,24 +1213,70 @@ def smoke(args):
         total += 1
         log("{} {}".format("PASS" if ok else "FAIL", name))
 
-    emu = boot(args, args.elf, args.out, "smoke")
+    card = os.path.join(args.out, "smoke.img")
     try:
-        check("boots", True)
-        check("Perform's song builds", enter_perform(emu))
-        check_perform_plays(emu, seconds, check)
-        emu.tap("PLAY")
-        check("PLAY stops", not emu.led("PLAY"))
-        emu.tap("BACK", hold_ms=700)  # held: the leave menu (spec §13.8)
-        # One unmarked piece played: LEAVE, KEEP: LAST, NOTHING, CANCEL. One detent on to NOTHING (no Capture). Not
-        # past the end and back: in delugemu a turn back after the menu's end was lost.
-        emu.s.encoder(3, 1)
-        emu.wait(200)
-        emu.tap("SELECT_ENC")  # NOTHING: no Capture
-        emu.card_quiet()
-        check("BACK held, then LEAVE, leaves Perform", not emu.led("BACK"))
-        emu.s.screenshot(os.path.join(args.out, "smoke-end.png"))
+        emu = boot(args, args.elf, args.out, "smoke", card=card, snapshot=False)
+        try:
+            check("boots", True)
+            check("Perform's song builds", enter_perform(emu))
+            check_perform_plays(emu, seconds, check)
+            emu.tap("PLAY")
+            check("PLAY stops", not emu.led("PLAY"))
+            emu.tap("BACK", hold_ms=700)  # held: the leave menu (spec §13.8)
+            # One unmarked piece played: LEAVE, KEEP: LAST (selected first), NOTHING, CANCEL.
+            emu.tap("SELECT_ENC")  # LAST: leave and Capture the played piece
+            captured = emu.card_quiet(quiet_ms=2000, limit_s=60)
+            check(
+                "BACK held, then LAST, leaves Perform and Captures",
+                captured and not emu.led("BACK") and not emu.led("CLIP_VIEW"),
+            )
+            # Reload the saved Capture song through stock LOAD (opens on currentSong->name).
+            emu.tap("LOAD")
+            emu.wait(1000)
+            emu.card_quiet(limit_s=30)
+            emu.tap("LOAD")
+            reloaded = emu.card_quiet(limit_s=60)
+            reload_start = emu.dump_size()
+            emu.tap("PLAY", settle_ms=150)
+            check("reloaded Capture song plays", reloaded and emu.led("PLAY"))
+            emu.wait(int(SMOKE_RELOAD_SECONDS * 1000))
+            reload_pcm = emu.audio(reload_start, SMOKE_RELOAD_SECONDS)
+            reload_silences = audio_failures(reload_pcm, SMOKE_RELOAD_SECONDS)
+            for failure in reload_silences:
+                check("reloaded Capture song: " + failure, False)
+            check("reloaded Capture song sounds", not reload_silences)
+            emu.tap("PLAY")
+            emu.s.screenshot(os.path.join(args.out, "smoke-end.png"))
+        finally:
+            emu.close()
+        songs = new_song_files(card, args.card)
+        check(
+            f"Capture wrote one song file ({', '.join(songs) or 'none'})",
+            len(songs) == 1,
+        )
+        if len(songs) == 1:
+            try:
+                with fat_image.FatImage(card) as fat:
+                    song_xml = fat.read_file(f"{SONG_FOLDER}/{songs[0]}").decode()
+                tracks, instances, notes = golden_song.capture_song_summary(song_xml)
+                check(
+                    f"Capture song {songs[0]} holds notes ({tracks} tracks, {instances} instances, {notes} notes)",
+                    True,
+                )
+            except (
+                OSError,
+                ValueError,
+                golden_song.GoldenError,
+                ET.ParseError,
+            ) as exc:
+                check(f"Capture song {songs[0]} holds notes ({exc})", False)
     finally:
-        emu.close()
+        if (
+            not getattr(args, "keep_card", False)
+            and os.path.exists(card)
+            and os.path.realpath(card) != os.path.realpath(args.card)
+        ):
+            os.remove(card)
     log(f"{total} checks, {failed} failed; logs in {args.out}")
     leak_failed = 0 if args.no_leak else leak(args)
     log(
@@ -1224,6 +1298,7 @@ def smoke(args):
 
 GOLDEN_SCRIPT = os.path.join(HERE, "golden_compose.txt")
 GOLDEN_SONG = "SONGS/GOLDEN.XML"  # golden_compose.txt's "save song GOLDEN"
+SONG_FOLDER = "SONGS"
 RECIPE_FOLDER = "RECIPES"
 DIFF_LINES = 40  # of a failing diff, on the console; the whole dumps are in --out
 
@@ -1236,16 +1311,24 @@ def golden_genre(script_text):
     return picks[-1]
 
 
-def new_recipe_files(card, master):
-    """The Recipe files on the card clone that the master card hasn't: what the script saved."""
+def new_card_files(card, master, folder):
+    """Files in `folder` on the card clone `card` that `master` doesn't have: what the run saved."""
 
     def names(image):
         with fat_image.FatImage(image) as fat:
-            return (
-                set(fat.listdir(RECIPE_FOLDER)) if fat.exists(RECIPE_FOLDER) else set()
-            )
+            return set(fat.listdir(folder)) if fat.exists(folder) else set()
 
     return sorted(names(card) - names(master))
+
+
+def new_recipe_files(card, master):
+    """The Recipe files on the card clone that the master card hasn't: what the script saved."""
+    return new_card_files(card, master, RECIPE_FOLDER)
+
+
+def new_song_files(card, master):
+    """The song files on the card clone that the master card hasn't: what Capture saved."""
+    return new_card_files(card, master, SONG_FOLDER)
 
 
 def golden(args):
@@ -1584,6 +1667,11 @@ def parser():
         help="record the installed delugemu once the checks pass",
     )
     s.add_argument("--no-leak", action="store_true", help="skip the leak check")
+    s.add_argument(
+        "--keep-card",
+        action="store_true",
+        help="leave the card clone in --out after the run",
+    )
     add_leak_args(s)
     lk = sub.add_parser(
         "leak", parents=[common], help="the memory check over enter/leave cycles"

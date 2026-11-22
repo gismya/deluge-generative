@@ -141,6 +141,7 @@ BUILDERS = {
     "gen_browser_preview": (),  # the previewed path
     "gen_preset_preview": (),  # built|cancelled|failed, the lane's name or -: literals beside it
     "gen_log": (),  # at=stop or at=phrase, literals beside it
+    "gen_log_sound": (),  # the logged sound pick path
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
     "gen_performance_pad": (),  # down or up
     "gen_punch": (
@@ -224,6 +225,7 @@ BUILDERS = {
         "src/deluge/generative/perform/capture.*",
         "src/deluge/generative/firmware/song_file.*",
     ),  # captureSongName(), or its clash variation
+    "gen_capture_track": (),  # the new track's unique Output name
     "gen_record_led": (
         "src/deluge/generative/perform/capture.*",
     ),  # the RecordLed's name

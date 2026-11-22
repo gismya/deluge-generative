@@ -1,0 +1,168 @@
+# Hand-chosen Kit lane swaps in the steering log and Capture (#300 part 2, spec §10.1, §17.2, §17.6) over the sysex
+# test port:
+# 1. While playing, choosing a sample for DRUMS' KICK lane logs the new Kit picks (KICK's slot and chosen path) as the
+#    swap lands on the phrase line. Capture builds the piece's initial DRUMS Kit from the entry picks, then starts a new
+#    Kit track (DRUMS 2, unique name so clip matching holds on reload) with the hand-chosen KICK sample. The saved song
+#    loads back with every Output's clipInstance intact and plays.
+# 2. While stopped, choosing a sample for DRUMS' KICK swaps it into the Current Recipe before the piece opens, so the
+#    piece's header records it and Capture builds the piece's DRUMS Kit with that sample from step 0 (tracks=0).
+#
+# Writes SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML and LIVE B.XML (a hardware run deletes them after). Those names
+# must be absent before it runs: perform_capture_leave.txt and perform_settings_log.txt write the same ones, so in one
+# hardware session a leftover from either shifts the names to LIVE B, LIVE C (#476); run it in its own session. Runs on a Deluge
+# (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip
+# a synth or kit clip.
+#
+# gen_log_sound part= slot= <path>: SteeringLog::appendSoundPath() recorded the pick (slot 6 = Lane::Kick).
+# gen_capture_track part= name=: ComposeSong::newTrack() started a new track with its unique Output name.
+# writes: SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.* src/deluge/gui/menu_item/generative/perform_lanes.*
+# covers: src/deluge/generative/perform/sound_browser.* src/deluge/gui/ui/browser/sample_browser.*
+# covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/core/palette.*
+# covers: src/deluge/generative/core/recipe.h src/deluge/generative/core/steering_log.*
+# covers: src/deluge/generative/firmware/log_header.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/capture_job.* src/deluge/generative/firmware/compose_song.*
+# covers: src/deluge/generative/firmware/capture_files.* src/deluge/generative/firmware/song_file.*
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/perform/capture.*
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/compose/compose_driver.*
+# covers: src/deluge/generative/compose/clip_builder.* src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/gui/ui/generative_modal.* src/deluge/gui/views/perform_view.*
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/gui/views/perform_view_internal.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/lane_names.h
+# covers: src/deluge/generative/core/palette_file.* src/deluge/generative/core/types.h
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/gui/l10n/strings.h
+# covers: src/deluge/io/midi/test_port.*
+start_state
+hold entropy
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event /gen_sound DRUMS KICK \w+ mode=\d+ prio=\d+ (?P<kick>SAMPLES\/.+)$/ since=mark within=10
+keep events /^gen_sound DRUMS (?!KICK )/
+
+# ---- Lock DRUMS (part 0) and start playback ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+
+# ---- Playing lane swap on DRUMS KICK: logged with slot 6 and chosen path, swaps at the phrase line ----
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+encoder 3 1
+expect event /gen_browser at=(?P<chosen>SAMPLES\/.+\.(wav|WAV|aif|aiff))$/ within=5
+mark now
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser chose part=0 path=(?P=chosen) lane=kick$/ within=5
+expect event gen_sound_preload done part=0 source=chosen within=30
+expect event /gen_log_sound part=0 slot=6 (?P=chosen)$/ within=40 since=mark
+expect event gen_sound_swap part=0 line=1 within=40
+wait 2000
+
+# ---- Leave keeping LAST: Capture builds DRUMS with entry kick, then new Kit track DRUMS 2 with chosen kick ----
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event gen_capture_begin keep=3 within=10 since=mark
+expect event /gen_sound DRUMS KICK pick mode=\d+ prio=\d+ (?P=kick)$/ within=60 since=mark
+expect event /gen_sound DRUMS KICK pick mode=\d+ prio=\d+ (?P=chosen)$/ within=120
+mark
+expect events kept within=20
+expect event gen_capture_track part=0 name=DRUMS 2 within=10
+expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=\d+ cuts=0 tracks=1 dropped=0 / within=120 since=mark
+expect event /^gen_capture_song n=1 of=1 error=0 name=GEN ACID TECHNO 3E9D8DZ LIVE$/ within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 .* name=GEN ACID TECHNO 3E9D8DZ LIVE$/ within=60 since=mark
+expect root_ui=arranger within=10
+expect playing=false
+
+# ---- Reload the saved song: every track (DRUMS and DRUMS 2 included) keeps its clipInstance, and plays ----
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML
+expect event /^song_loaded path=SONGS\/GEN ACID TECHNO 3E9D8DZ LIVE\.XML ms=\d+ outputs=(?P<outs>[4-9]\d*) instances=(?P=outs)$/ within=60
+expect root_ui=arranger within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 1500
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5
+
+# ---- Stopped lane swap on DRUMS KICK: header records chosen kick, Capture builds it directly (tracks=0) ----
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button KIT down
+wait 50
+button KIT up
+expect event gen_menu LANES within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_browser open part=0 lane=kick within=10
+encoder 3 1
+expect event /gen_browser at=(?P<chosen2>SAMPLES\/.+\.(wav|WAV|aif|aiff))$/ within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser chose part=0 path=(?P=chosen2) lane=kick$/ within=5
+expect event gen_sound_swap part=0 stopped within=30
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+wait 2000
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event gen_capture_begin keep=3 within=10 since=mark
+expect event /gen_sound DRUMS KICK pick mode=\d+ prio=\d+ (?P=chosen2)$/ within=60 since=mark
+expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=\d+ cuts=0 tracks=0 dropped=0 / within=120 since=mark
+expect event /^gen_capture_song n=1 of=1 error=0 name=GEN ACID TECHNO 3E9D8DZ LIVE B$/ within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 .* name=GEN ACID TECHNO 3E9D8DZ LIVE B$/ within=60 since=mark
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE B.XML
+# Only ~1 bar of Acid techno's Intro played (DRUMS and DRONE sound; ACID and FX stay silent and get no track, §15.3).
+expect event /^song_loaded path=SONGS\/GEN ACID TECHNO 3E9D8DZ LIVE B\.XML ms=\d+ outputs=(?P<outs2>[2-9]\d*) instances=(?P=outs2)$/ within=60
+expect root_ui=arranger within=10
