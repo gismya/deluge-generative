@@ -111,6 +111,9 @@ struct DrumMachine {
 struct MachineWeight {
 	const DrumMachine* machine = nullptr;
 	uint8_t weight = 1;
+	/// Whether the genre's idiomatic swaps apply when this machine is rolled (spec §10.2). False: this machine always
+	/// plays pure, with no swaps (Dub's CR78).
+	bool swaps = true;
 };
 
 /// An idiomatic swap: one Drums lane plays `tag` (a tag or an exact path) instead of the kit's machine.

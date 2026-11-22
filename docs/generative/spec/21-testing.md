@@ -70,6 +70,11 @@ These rules are in `AGENTS.md`:
 
 A hardware session runs `test_port_smoke.txt` plus the scripts `covers.py --hardware` picks for the change; the whole hardware set (`covers.py --hardware --full`) runs on a milestone's final run.
 
+`deluge_probe.py session` guards the shared Deluge and its card (#464, #465):
+
+- With `--no-load` it refuses (exit 1) unless `loaded.json` records a load of the calling checkout's `git rev-parse HEAD` (a load of `<sha>-dirty` counts as `<sha>`), checked before it takes the lock and again once it holds it; a missing `loaded.json` refuses too. `--force-build-mismatch` runs anyway, with a warning naming both SHAs. delugemu (`--udp`) isn't checked.
+- It lists `SONGS/` and `RECIPES/` on the card before the first script and after the last, and prints each new entry's path. A new entry no script in the session declares fails the session (exit 1). A script declares what it may leave with `# writes: GLOB` lines, one glob each, from the card's root, matched without regard to case (`# writes: SONGS/GEN ACID TECHNO *`); an included file's lines count. It sees only new names in those two folders: a file overwritten in place, or one written elsewhere, passes unseen.
+
 ### 21.5 Genre tuning loop
 
 1. **Harness rough render**: rhythm, harmony and interplay in stand-in sounds, with no firmware build.

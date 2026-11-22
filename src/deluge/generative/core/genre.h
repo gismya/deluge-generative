@@ -322,6 +322,9 @@ struct LoopSpec {
 	/// The scale steps from the chord root a step may draw.
 	std::span<const LineWeight> degrees;
 	LineDraws draws;
+	/// When set, an anchor step always plays the chord root in the line's own octave (spec §5.2; Dub's Bass).
+	/// Loop only (loopNotesValid()).
+	bool rootOnAnchors = false;
 	ByComplexity slide = 150;
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
@@ -1362,6 +1365,9 @@ constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 constexpr bool loopNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Loop) {
+			if (part.loop.rootOnAnchors) {
+				return false;
+			}
 			continue;
 		}
 		if (part.loop.gateTicks > kTicksPerStep && !detail::longLoopNotesFit(part)) {

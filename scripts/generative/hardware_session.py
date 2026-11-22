@@ -12,16 +12,22 @@ In order:
    The lock is always released by moving it into released/, never deleted, also on errors and Ctrl-C.
 3. Unless --no-load: checks the build has both ENABLE_SYSEX_TEST and ENABLE_SYSEX_LOAD, prints a one-line note when the
    running build was RAM-loaded (loads over one have hung; loading anyway only risks a power cycle), then
-   `./dbt loadfw BUILD`.
+   `./dbt loadfw BUILD`. With --no-load (and no --udp), refuses (exit 1) unless loaded.json records a load of this
+   checkout's HEAD (a `<sha>-dirty` load counts), before taking the lock and again once it holds it: someone else's
+   build fails scripts for no reason of yours. --force-build-mismatch warns and runs anyway.
 4. Waits for the test port (`ready`), after a load on a fresh boot: younger than the build that ran before (or, if
    none answered before the load, young). No answer: writes the hung marker, exits 2. The old build answering near
    the end of the wait (STILL_ANSWERS_SECONDS), with no fresh one, means the load didn't take: that exits 1, with no
    marker. Silence for the rest of the wait is a hang (exit 2), whatever answered before it.
-5. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
+5. Lists SONGS/ and RECIPES/ on the card (the file API, deluge_files.py). No reply or an error fails the session
+   (exit 1, no hung marker: a card still busy with a song load or save can miss the listing's reply).
+6. Runs every script on that one load, printing "SCRIPT: N expects, M failed" and a summary. With --events PATTERN,
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
    `--events .` for all), counted from after its first start_state (a script should have only one, counting its
    include files). A script that gets no reply from the test port writes the hung marker and stops the run (exit 2).
    Any failure exits 1.
+7. Lists SONGS/ and RECIPES/ again and prints each new file's path. One that no script's "# writes: GLOB" line
+   (deluge_probe.script_writes()) declares is a failure: delete it.
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
 loaded.json (the last load this script saw) and released/.
@@ -376,6 +382,23 @@ class Hardware:
             json.dump(record, fh, indent=2)
 
 
+def build_mismatch(record, head, where):
+    """Why a --no-load session mustn't run on the build `record` (loaded.json at `where`) says is loaded, given the
+    checkout's full HEAD `head`, or None when it is HEAD's build. A recorded `<sha>-dirty` counts as `<sha>`."""
+    if not record or not record.get("sha"):
+        return (
+            f"no record of the build on the Deluge ({where} is missing or unreadable)"
+        )
+    loaded = record["sha"]
+    sha = loaded.removesuffix("-dirty")
+    if len(sha) >= 7 and head.startswith(sha):
+        return None
+    return (
+        f"the Deluge runs {loaded} ({record.get('build')}, loaded {record.get('when', 'at an unknown time')}),"
+        f" not this checkout's HEAD {head[:9]}"
+    )
+
+
 def ownerless_stale(stat, now=None):
     """Whether a lock directory (lock/ with no owner file, or lock.take) with this os.stat() was left by a session
     that died holding it: one that lives writes its owner file, or finishes with lock.take, well within
@@ -613,6 +636,38 @@ class Session:
     def load(self):
         return loadfw(self.build, self.out)
 
+    def checkout_sha(self):
+        """The calling checkout's full HEAD."""
+        return git("rev-parse", "HEAD") or "unknown"
+
+    def card_files(self, port):
+        """The entries of SONGS/ and RECIPES/ on the card, as "SONGS/NAME" ("SONGS/NAME/" for a folder), over the
+        test port's link. A missing folder has none. Raises deluge_files.CardError, or TimeoutError for no reply
+        (neither is a hang: the card can be busy with a song load or save the last script left running)."""
+        import deluge_files
+
+        card = deluge_files.Card(
+            port.link,
+            timeout=10.0,
+            blocks=deluge_files.DIN_BLOCKS
+            if self.args.udp
+            else deluge_files.USB_BLOCKS,
+        )
+        missing = {deluge_files.FRESULT.index(n) for n in ("FR_NO_PATH", "FR_NO_FILE")}
+        files = set()
+        for folder in self.dp.CARD_WATCHED:
+            try:
+                entries = card.ls("/" + folder)
+            except deluge_files.CardError as exc:
+                if exc.code in missing:
+                    continue
+                raise
+            files |= {f"{folder}/{e.name}" + ("/" if e.is_dir else "") for e in entries}
+        return files
+
+    def script_writes(self, script):
+        return self.dp.script_writes(script)
+
     def build_firmware(self):
         """Builds `--build hardware`. Returns the exit code."""
         return build_hardware(self.out)
@@ -697,6 +752,28 @@ class Session:
         )
         return EXIT_HUNG
 
+    def refuse_if_mismatched(self, warn):
+        """With --no-load on the Deluge: exit 1 if loaded.json's build isn't this checkout's HEAD, or None to go on.
+        With --force-build-mismatch, says so (when `warn`) and goes on."""
+        if self.build or self.args.udp:
+            return None
+        problem = build_mismatch(
+            self.hw.read_loaded(), self.checkout_sha(), self.hw.loaded
+        )
+        if problem is None:
+            return None
+        if self.args.force_build_mismatch:
+            if warn:
+                self.out(
+                    f"session: warning: {problem}; running anyway (--force-build-mismatch)"
+                )
+            return None
+        self.out(f"session: {problem}")
+        self.out(
+            "session: load this checkout's build (--build hardware), or pass --force-build-mismatch to run on it anyway"
+        )
+        return EXIT_FAILED
+
     def refuse_if_hung(self):
         text = self.hw.hung_text()
         if text is None:
@@ -717,7 +794,7 @@ class Session:
         return EXIT_REFUSED
 
     def run(self):
-        refused = self.refuse_if_hung()
+        refused = self.refuse_if_hung() or self.refuse_if_mismatched(warn=False)
         if refused:
             return refused
         # Built before the lock, so other agents don't wait on a compile.
@@ -741,7 +818,8 @@ class Session:
             self.out("session: lock released")
 
     def _run_locked(self, sha):
-        refused = self.refuse_if_hung()  # it may have appeared while we waited
+        # Either may have changed while we waited: a hang, or someone else's load.
+        refused = self.refuse_if_hung() or self.refuse_if_mismatched(warn=True)
         if refused:
             return refused
         before = None
@@ -791,6 +869,11 @@ class Session:
             )
         results = []
         try:
+            try:
+                before = self.card_files(port)
+            except (TimeoutError, self.card_error()) as exc:
+                self.out(f"session: can't list SONGS/ and RECIPES/: {exc}")
+                return EXIT_FAILED
             for script in self.scripts:
                 name = os.path.basename(script)
                 self.out(f"session: {name}")
@@ -803,9 +886,45 @@ class Session:
                         self.summary(results)
                         return self.hung(f"{stop.error} during {name}")
                 self.out("session: " + self.dp.result_line(*results[-1]))
+            try:
+                after = self.card_files(port)
+            except (TimeoutError, self.card_error()) as exc:
+                self.out(
+                    f"session: can't list SONGS/ and RECIPES/ after the scripts: {exc}"
+                )
+                self.summary(results)
+                return EXIT_FAILED
         finally:
             port.link.close()
-        return self.summary(results)
+        code = self.summary(results)
+        return self.check_new_files(before, after) or code
+
+    @staticmethod
+    def card_error():
+        import deluge_files
+
+        return deluge_files.CardError
+
+    def check_new_files(self, before, after):
+        """Prints each file new in SONGS/ and RECIPES/; exit 1 if a script's "# writes:" lines don't declare one."""
+        globs = []
+        for script in self.scripts:
+            try:
+                globs += self.script_writes(script)
+            except (ValueError, OSError):
+                continue  # the script itself failed to read; its own result already says so
+        declared, undeclared = self.dp.new_card_files(before, after, globs)
+        for path in declared:
+            self.out(f"session: new on the card, declared: /{path}")
+        for path in undeclared:
+            self.out(f"session: FAIL new on the card, undeclared: /{path}")
+        if not undeclared:
+            return None
+        self.out(
+            f"session: {len(undeclared)} new files on the card no script declares (# writes: GLOB): delete the stray ones"
+            " with deluge_files.py rm, or declare them"
+        )
+        return EXIT_FAILED
 
     def summary(self, results):
         self.out("session: summary")
@@ -854,6 +973,9 @@ def main(probe, args, out=print):
         out(
             "session: say which build to load (--build release), or --no-load to use the running one"
         )
+        return EXIT_FAILED
+    if args.force_build_mismatch and not args.no_load:
+        out("session: --force-build-mismatch goes with --no-load")
         return EXIT_FAILED
     if args.udp and not args.no_load:
         out("session: --udp (delugemu) needs --no-load")

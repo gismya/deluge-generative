@@ -3,6 +3,7 @@
 # do, so it needs more room than a load on an empty Deluge. gen_compose gives the size estimate (est_kb) against the
 # general heaps the build took (used_kb), and gen_mem the regions before and after. Run with
 # --events 'gen_compose|gen_mem|song_' for the figures. Each save writes SONGS/H19 *.XML on the card.
+# writes: SONGS/H19 *
 # covers: src/deluge/generative/firmware/compose_job.cpp
 # covers: src/deluge/generative/firmware/compose_song.cpp
 # covers: src/deluge/generative/compose/song_size.cpp

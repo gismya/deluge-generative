@@ -38,10 +38,11 @@ constexpr PaletteEntry kBass[] = {
     {"SYNTHS/002 Basic Square Bass.XML", 1},
     {"SYNTHS/169 Double Bass.XML", 1},
 };
-/// The skank: percussive organ first, then a short stab feeding its own delay, the organs and a piano.
+/// The skank: percussive organ first, then piano and organ (082 Short Sharp Delay and 026 PW Organ dropped, round 2
+/// I4).
 constexpr PaletteEntry kSkank[] = {
-    {"SYNTHS/077 FM Perc-Organ.XML", 3}, {"SYNTHS/082 Short Sharp Delay.XML", 2},
-    {"SYNTHS/026 PW Organ.XML", 2},      {"SYNTHS/073 Piano.XML", 1},
+    {"SYNTHS/077 FM Perc-Organ.XML", 3},
+    {"SYNTHS/073 Piano.XML", 1},
     {"SYNTHS/076 Organ.XML", 1},
 };
 /// The melodica: the pack's reed first, then the nearest factory reeds, the dub horn and the panpipes.
@@ -88,8 +89,8 @@ constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"808 Conga", 1}, {"CR78 Conga
 
 // ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
 
-/// Each piece plays the 808 or, less often, the CR78, on every lane they have a file for. Not the Linndrum (owner).
-constexpr MachineWeight kMachines[] = {{&machines::k808, 2}, {&machines::kCR78, 1}};
+/// Each piece plays the 808 (with swaps) or, less often, a pure CR78 (no swaps, round 2 I7). Not the Linndrum (owner).
+constexpr MachineWeight kMachines[] = {{&machines::k808, 2}, {&machines::kCR78, 1, false}};
 /// The Simmons tom for fills, a snare with its own room, and the RX-5's bongos for roots hand drums.
 constexpr KitSwap kSwaps[] = {
     {Lane::Tom, "SDS5 Tom medium"}, {Lane::Snare, "DDD1 Snare wet"}, {Lane::Perc2, "RX-5 Bongo low"}};

@@ -648,6 +648,35 @@ describe loop_lines("Loop lines", $ {
 			}
 		}
 	});
+
+	it("pins anchor steps to the chord root in the line's own octave when rootOnAnchors is set (spec §5.2)", _ {
+		static constexpr LoopSpec kAnchored{.degrees = kSeven,
+		                                    .draws = {.octaveUp = 500, .octaveDown = 0, .accent = 0},
+		                                    .rootOnAnchors = true,
+		                                    .slide = 0,
+		                                    .mutation = 333};
+		static constexpr PartSpec kAnchoredParts[] = {
+		    {.role = Role::Bass, .flavour = Flavour::Loop, .pool = kBusy, .reg = kWide, .loop = kAnchored},
+		};
+		static constexpr Genre kAnchoredGenre = streamGenre(kAnchoredParts);
+		constexpr int32_t kBars = 12;
+		int32_t nonRootNonAnchors = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			auto bars = barsOf(play(runOf(kAnchoredGenre, seed, 50), kBars), kBars);
+			for (int32_t bar = 0; bar < kBars; bar++) {
+				for (int32_t step = 0; step < kStepsPerBar; step++) {
+					if (kBusy[0].importance[step] == kAnchor) {
+						// Key root C (0) in kWide (anchor 48): root in the line's own octave is 48.
+						expect(bars[bar][step]).to_equal(48);
+					}
+					else if (bars[bar][step] != kNone && bars[bar][step] != 48) {
+						nonRootNonAnchors++;
+					}
+				}
+			}
+		}
+		expect(nonRootNonAnchors).to_be_greater_than(50);
+	});
 });
 // clang-format on
 

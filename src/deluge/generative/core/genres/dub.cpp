@@ -15,9 +15,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 // Dub (#131, spec §4.5): roots dub, a genre of its own with no parent, not to be confused with Dub techno. One-drop
-// drums (the kick and a cross-stick Rim on beat 3), an offbeat organ skank, a bass that carries the tune, a melodica,
-// and drop-outs with delay Throws as the main motion, over a slow minor Chord graph. A Siren wails on Drops. Every
-// value is starting data, tuned by ear in #133 (spec §21.5).
+// drums (the kick and a cross-stick Rim on beats 2 and 4), an offbeat organ skank on every &, a bass that carries the
+// tune in bursts anchored on the chord root, a melodica that breathes across 2-bar phrases, and drop-outs with delay
+// Throws as the main motion, over a 4-bar Minor or Dorian chord loop. A Siren wails on Drops. Retuned in #133 round 2.
 
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
@@ -31,100 +31,109 @@ namespace {
 // Levels 'g' ghost, 'a' accent, else normal. Then the Complexity tier and, if not 1, the pick weight.
 
 // clang-format off
-/// The one drop: the kick on beat 3 alone, with the Rim (spec §4.5). A pickup on the & of 4 as Complexity rises.
+/// The one drop: the kick on beats 2 and 4, with the Rim (spec §4.5, round 2 S1). A pickup on the a of 4 as Complexity rises.
 constexpr Pattern kKick[] = {
-    {"........X.......", "................", 0, 2},
-    {"........X.....7.", "................", 1},
+    {"....X.......X...", "................", 0, 2},
+    {"....X.......X..7", "................", 1},
 };
 
-/// The cross-stick on beat 3, anchored, at every tier: the Rim holds the backbeat and the Snare never does in its
-/// step tables (it has none), so exactly one of them is on beat 3 at each tier. A stroke on the & of 4 on every line, at
-/// importance 8 so it plays from about Density 10: the drum drop-out's Throw spikes on the Rim's hits in the beat
-/// before it, and with none there it wouldn't throw.
-/// Ghosted strokes off the beat (the & of 1, then the & of 3) as Complexity rises.
+/// The cross-stick on beats 2 and 4, anchored, at every tier: the Rim holds the backbeat and the Snare never does in
+/// its step tables (it has none), so exactly one of them is on the drop at each tier. Beat 4 falls in the last beat so
+/// the drum and Rim drop-outs' Throws always have a hit to spike on.
+/// Ghosted pickups off the beat as Complexity rises.
 constexpr Pattern kRim[] = {
-    {"........X.....8.", "................", 0},
-    {"..5.....X.....8.", "..g.............", 1},
-    {"..5.....X.6...8.", "..g.......g.....", 2},
+    {"....X.......X...", "................", 0},
+    {"....X.......X.7.", "................", 1},
+    {".5..X.....5.X.7.", ".g........g.....", 2},
 };
 
-/// 8ths, the & leaned late (kHatLean) so they swing; a ghosted 16th now and then as Complexity rises.
+/// 8ths and 16ths with the off-beat &s ranked first (9, accented) so low Density keeps them (round 2 S1, S9).
 constexpr Pattern kClosedHat[] = {
-    {"8.8.8.8.8.8.8.8.", "................", 0, 2},
-    {"8.8.8.858.8.8.8.", ".......g........", 1},
-    {"8.858.8.8.858.86", "...g.......g...g", 2},
+    {"8.9.8.9.8.9.8.9.", "..a...a...a...a.", 0, 2},
+    {"8.968.968.968.96", "..ag..ag..ag..ag", 1, 2},
+    {"8696869686968696", ".gag.gag.gag.gag", 1},
+    {"8.968796869.8796", "..ag.gag.ga..gag", 2},
 };
 
 /// An open hat on the & of 4 now and then: it replaces the closed hat there (spec §5.7).
 constexpr Pattern kOpenHat[] = {
-    {"..............6.", "................", 0},
+    {"................", "................", 0, 2},
+    {"..............7.", "................", 0},
+    {"..............7.", "................", 1},
     {"......6.......7.", "................", 1},
 };
 
-/// The shaker on the &s, behind its gate.
+/// The shaker on the 8ths (off-beat &s at 7 at tier 1 for the off-beat authoring rule, spec §8.1), behind its gate.
 constexpr Pattern kShaker[] = {
-    {"..6...6...6...6.", "................", 0},
-    {".46.4.6.4.6.4.67", ".g..g...g...g...", 1},
+    {"6.6.6.6.6.6.6.6.", "................", 0},
+    {"6.766.766.766.76", "...g...g...g...g", 1},
 };
 
-/// Bongos and congas off the beat, behind their gate.
+/// Bongos and congas in a heartbeat pattern, behind their gate (round 2 S1, S8).
 constexpr Pattern kHandDrums[] = {
-    {"...6......6.....", "................", 0},
-    {"...6..5...6..7..", "......g.........", 1},
+    {"6.6.....6.6.....", "................", 0},
+    {"6.6..5..6.6...7.", ".....g..........", 1},
 };
 
-// Fill patterns: only a Swap plays them. The Snare's holds the backbeat (the Rim and Snare Swap moves it there); the
-// Rim's is empty, so the Rim falls silent under that Swap. The toms run over the last beats.
+// Fill patterns: only a Swap plays them. The Snare's holds beats 2 and 4 (the Rim and Snare Swap moves the backbeat
+// there); the Rim's is empty, so the Rim falls silent under that Swap. The toms run over the last beats.
 constexpr Pattern kSnareFill[] = {
-    {"........X.......", "................", 0},
-    {"........X.....7.", "................", 1},
+    {"....X.......X...", "................", 0},
+    {"....X.......X.7.", "................", 1},
 };
 constexpr Pattern kRimFill[] = {
     {"................", "................", 0},
 };
 constexpr Pattern kTomFill[] = {
-    {"...........8.8X.", "................", 0},
-    {"..........7.X8XX", "..........g.....", 1},
+    {"..........8.8.X.", "................", 0},
+    {"........7.8.88XX", "........g.......", 1},
 };
 
-/// The bass line: two bars, anchored on each bar's 1, notes at least an 8th apart so each rings to the next
-/// (gateTicks), beat 3 left to the drop on the tier-0 lines but one.
+/// The bass line: two bars, anchored on each bar's 1 (always the chord root via rootOnAnchors), lines in bursts
+/// leaving holes of 2 to 4 beats (round 2 S6; QM1 ghosts kept on the second tier-2 line's steps 21 and 25).
 constexpr Pattern kBassLine[] = {
-    {"X..8..8.....8...X.....8...8.8...", "................................", 0, 2},
-    {"X.....8...8.8...X..8..8.....8.8.", "................................", 0, 2},
-    {"X.......8...8...X..8..8.....8...", "................................", 0},
-    {"X..8..8.7...8.8.X..8..8...8.8.7.", "........g.....................g.", 1},
-    {"X..8..8...8.7.8.X.....8.8.7.8...", "............g.............g.....", 1},
+    {"X.....8.8.......X.....8.8.......", "................................", 0, 2},
+    {"X.8.8...........X.8.8.....8.....", "................................", 0, 2},
+    {"X.......8.8.....X.......8.8.8...", "................................", 0},
+    {"X...8.8.........X...8.8.....8.8.", "................................", 0},
+    {"X.....8.8.......X.....8.8.......", "................................", 1},
+    {"X.8.8...........X.8.8.....8.....", "................................", 1},
+    {"X.8...8.8.......X.8...8.8.....7.", "..............................g.", 1, 2},
+    {"X.....8.8.8.....X..8..8.8.......", "................................", 1, 2},
+    {"X.8.8...8.......X.8.8...8.8.....", "................................", 1},
+    {"X..8..8.....8...X..8..8...8.8...", "................................", 1},
+    {"X.....8.8...8.8.X.....8.8.......", "................................", 1},
+    {"X.8.8.8...8.8...X.8.8.8.8...8.7.", "..............................g.", 2},
     {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g............g...g......", 2},
 };
 
-/// The skank: the backbeats of the half-time feel, beats 2 and 4, anchored so a dip keeps it; its "chk-a" double on
-/// the & after each as Complexity rises.
+/// The skank: every &, anchored so a dip keeps it and the last & spikes its drop-out's Throw; its "chk-a" double on
+/// the a after each as Complexity rises (round 2 S1).
 constexpr Pattern kSkank[] = {
-    {"....X.......X...", "................", 0, 2},
-    {"....X.......X.6.", "................", 0},
-    {"....X.7.....X.7.", "................", 1},
-    {"..5.X.7...5.X.7.", "..g.......g.....", 2},
+    {"..X...X...X...X.", "................", 0, 2},
+    {"..X...X...X...X6", "................", 0},
+    {"..X...X...X...X.", "................", 1, 2},
+    {"..X6..X...X6..X.", "................", 1, 2},
+    {"..X6..X6..X6..X6", "................", 1},
+    {"..X6.5X6..X6.5X6", ".....g.......g..", 2},
 };
 
-/// The melodica's phrases, one and two bars from an anchored 1: few long notes, on the steps every tier-0 and tier-1
-/// Bass line leaves free but the 1, so the melodica answers the bass instead of doubling it; a 2-bar line's second bar
-/// few notes, ending on the last beat.
-/// Every line has an onset in each bar's last beat, at importance 8: the drop-out's Throw spikes on the melodica's
-/// notes there.
+/// The melodica's phrases: two bars, unanchored, bar 2 mostly empty so it breathes (round 2 S4). Every line has an
+/// onset in bar 1's last beat at importance 8 so drop-outs starting after bar 1 throw it into its echo.
 constexpr Pattern kMelodicaPhrases[] = {
-    {"X........7...8..", "................", 0, 2},
-    {"X......7.....8.." "....8........8..", "................................", 0},
-    {"X...7....7...8..", "................", 1},
-    {"X....7...7...8.." "....8....7...8..", "................................", 1},
-    {"X......7...7.8.." ".......7.....8..", "...........g....................", 1},
+    {"8........7...8.." "................", "................................", 0, 2},
+    {"8......7.....8.." "8...............", "................................", 0},
+    {"8...7....7...8.." "................", "................................", 1, 2},
+    {"8....7...7...8.." "....8...........", "................................", 1},
+    {".......7...7.8.." "8...............", "...........g....................", 1},
+    {"8......7.....8.." "....8........8..", "................................", 1},
 };
 // clang-format on
 
 /// A lazy snare: late on every 16th (spec §4.5).
 constexpr Expression kLazySnare{.lean = {2, 2, 2, 2}, .spread = 8};
-/// The hats' & sits late, so the 8ths swing over the song swing's 16ths (spec §8.5).
-constexpr int8_t kHatLean = 6;
+/// No extra hat lean: the song swing (+10) swings the 16ths directly (round 2 S1).
+constexpr int8_t kHatLean = 0;
 
 /// The drop-out and Throw echoes: a dotted 8th with the analog delay (spec §10.6, tuning).
 constexpr DelaySetup kWideEcho{
@@ -133,8 +142,8 @@ constexpr DelaySetup kRimEcho{.on = true, .note = DelayNote::Eighth, .feel = Del
 
 constexpr int16_t kPercGate = macroPoints(35);
 
-/// In the fixed lane order (spec §5.4). The Snare plays only Swaps and the Build roll; the Crash only the Phrase
-/// accent; the Tom only the Swap.
+/// In the fixed lane order (spec §5.4). The Snare plays only Swaps, the Roll fill and the Build roll; the Crash only
+/// the Phrase accent; the Tom only the Swap.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 1}, .expression = {.spread = 4}},
     {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}, .expression = kLazySnare},
@@ -144,7 +153,7 @@ constexpr LaneSpec kDrumLanes[] = {
         .fillPool = kRimFill,
         .band = {0, 2},
         .expression = {.spread = 8},
-        .delay = kRimEcho, // the second drop-out entry's throw target
+        .delay = kRimEcho, // the Rim and drum drop-outs' throw target
     },
     {
         .lane = Lane::ClosedHat,
@@ -162,7 +171,11 @@ constexpr LaneSpec kDrumLanes[] = {
         .densityGate = kPercGate,
         .expression = {.lean = {0, 0, kHatLean, 0}, .spread = 10},
     },
-    {.lane = Lane::Perc2, .pool = kHandDrums, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 10}},
+    {.lane = Lane::Perc2,
+     .pool = kHandDrums,
+     .band = {0, 1},
+     .densityGate = macroPoints(28),
+     .expression = {.spread = 10}},
 };
 
 /// FX lanes have no pools: only section rules play them (spec §5.4). The Siren holds one note for 2 bars on a Break's
@@ -186,16 +199,18 @@ constexpr GestureSpec kDrumGestures = [] {
 
 /// Scale steps from the chord root, snapped to the Pentatonic set: mostly the root and the 5th, the 3rd, then the rest.
 constexpr LineWeight kBassDegrees[] = {{0, 5}, {2, 2}, {4, 3}, {1, 1}, {3, 1}, {5, 1}, {6, 1}};
-constexpr Answer kBassAnswers[] = {{AnswerKind::Octave, 2}, {AnswerKind::Fifth}, {AnswerKind::Rotate}};
+constexpr Answer kBassAnswers[] = {{AnswerKind::Octave}};
 
-/// A line that leaps, an octave up now and then, never sliding; each note held to the next onset's 8th.
+/// A line that leaps, an octave up now and then, anchored on the chord root, mutating slowly, never sliding; each note
+/// held to the next onset's 8th (round 2 S2, S2b).
 constexpr LoopSpec kBassLoop{
     .degrees = kBassDegrees,
     .draws = {.leap = {3, 6}, .octaveUp = {40, 150}, .octaveDown = 0, .accent = 120},
+    .rootOnAnchors = true,
     .slide = 0,
-    .mutation = 80,
+    .mutation = 15,
     .answers = kBassAnswers,
-    .answerBars = 4,
+    .answerBars = 8,
     .gateTicks = 40,
 };
 
@@ -234,7 +249,7 @@ constexpr PartSpec kParts[] = {
         // 80 % of the preset's volume knob (tuning): at the preset's level the skank sat about 3 dB under the rest of
         // the mix, over the bass (delugemu A/B capture, seed 1, a card with the pack).
         .volume = 80,
-        .delay = kWideEcho, // the first drop-out entry's throw target
+        .delay = kWideEcho, // the Skank and tops drop-outs' throw target
     },
     {
         .role = Role::Lead,
@@ -244,14 +259,13 @@ constexpr PartSpec kParts[] = {
         .band = {0, 1},
         .motif = {.positions = kMelodicaPositions,
                   .draws = {.leap = {2, 3}, .octaveUp = {0, 100}, .accent = 150},
-                  .reroll = 100,
+                  .reroll = 50,
                   .gateTicks = 168},
         .expression = {.spread = 8},
         .gestures = kGestures,
-        // 70 % of the preset's volume knob (tuning): at the preset's level the melodica sat about 1 dB over the rest
-        // of the mix (delugemu A/B capture, seed 1, a card with the pack).
-        .volume = 70,
-        .delay = kWideEcho, // the third drop-out entry's throw target
+        // 80 % of the preset's volume knob (tuning, round 2 I1: 70 too quiet, 100 too loud).
+        .volume = 80,
+        .delay = kWideEcho, // the Melodica drop-outs' throw target
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
@@ -264,21 +278,37 @@ constexpr uint16_t kDrumsButKick = laneBit(Lane::Snare) | laneBit(Lane::Rim) | l
                                    | laneBit(Lane::OpenHat) | laneBit(Lane::Crash) | laneBit(Lane::Tom)
                                    | laneBit(Lane::Perc1) | laneBit(Lane::Perc2);
 
-/// A Swap on Snare and Tom, the held-fill entry: the snare's backbeat under a tom run. A Swap on Rim and Snare moves
-/// the backbeat from the Rim to the Snare for the phrase's last bar (spec §8.7).
+/// A Swap on Snare and Tom (held fill), a Swap on Rim and Snare moving the backbeat for the phrase's last bar, and a
+/// rare 1-beat Snare Roll into the 1 (weight 1/9, down from round 2 s7-roll's 1/2; owner: "rare, but nice at times").
 constexpr FillEntry kFills[] = {
-    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 1},
-    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Rim) | laneBit(Lane::Snare)}, .beats = 4, .weight = 1},
+    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Snare) | laneBit(Lane::Tom)}, .beats = 2, .weight = 4},
+    {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Rim) | laneBit(Lane::Snare)}, .beats = 4, .weight = 4},
+    {.kind = FillKind::Roll, .mask = {.lanes = laneBit(Lane::Snare)}, .beats = 1, .weight = 1},
 };
 
-/// The skank for 2 bars, thrown; every Drums lane but the Kick for 1 bar, the Rim thrown; everything but the Bass for
-/// 4 bars, the Melodica thrown (spec §4.5, §8.8). Each target has its echo.
+/// Drop-outs and spot echoes (spec §4.5, §8.8; round 2 S3, S3b): skank, melodica, drum-and-bass (tops out), drums but
+/// kick, hats and percussion, bass out, 1-bar spot echoes on Rim and Skank, and everything but the bass. Each thrown
+/// target has its dotted-8th echo.
 constexpr PartsAndLanes kSkankOnly{.parts = partBit(kSkankPart)};
 constexpr PartsAndLanes kRimOnly{.lanes = laneBit(Lane::Rim)};
 constexpr PartsAndLanes kMelodicaOnly{.parts = partBit(kMelodicaPart)};
+constexpr PartsAndLanes kTops{.parts = partBit(kSkankPart) | partBit(kMelodicaPart)};
+constexpr uint16_t kHatsAndPerc =
+    laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat) | laneBit(Lane::Perc1) | laneBit(Lane::Perc2);
 constexpr DropOutEntry kDropOuts[] = {
-    {.mask = kSkankOnly, .bars = 2, .weight = 1, .throwTarget = kSkankOnly},
+    {.mask = kSkankOnly, .bars = 2, .weight = 2, .throwTarget = kSkankOnly},
+    {.mask = kSkankOnly, .bars = 4, .weight = 1, .throwTarget = kSkankOnly},
+    {.mask = kMelodicaOnly, .bars = 4, .weight = 3, .throwTarget = kMelodicaOnly},
+    // Drum and bass: the skank and the melodica out, the skank thrown.
+    {.mask = kTops, .bars = 4, .weight = 3, .throwTarget = kSkankOnly},
     {.mask = {.lanes = kDrumsButKick}, .bars = 1, .weight = 1, .throwTarget = kRimOnly},
+    // The drop alone under the band: hats and percussion out.
+    {.mask = {.lanes = kHatsAndPerc}, .bars = 2, .weight = 1},
+    // The bass out, to come back on a 1.
+    {.mask = {.parts = partBit(kBassPart)}, .bars = 2, .weight = 1},
+    // Spot echoes: one part or lane out for a bar, its last hit ringing through it.
+    {.mask = kRimOnly, .bars = 1, .weight = 1, .throwTarget = kRimOnly},
+    {.mask = kSkankOnly, .bars = 1, .weight = 1, .throwTarget = kSkankOnly},
     {.mask = {.parts = partBit(kSkankPart) | partBit(kMelodicaPart), .lanes = kDrumsButKick | laneBit(Lane::Kick)},
      .bars = 4,
      .weight = 1,
@@ -286,22 +316,25 @@ constexpr DropOutEntry kDropOuts[] = {
 };
 
 /// Home i, with the brief's moves one way each: i–iv, i–♭VII and iv–v. The home pull brings ♭VII and v back to i, a
-/// repeat holds a chord on, and Minor's colour moves add the rest (spec §7.4). Weights in the colour moves' units.
+/// repeat holds a chord on, and Dorian's colour move strengthens i–IV (spec §7.4). Weights in the colour moves' units.
 constexpr ChordMove kDubMoves[] = {
-    {kI, kIV, 30},  // i–iv
+    {kI, kIV, 30},  // i–iv (i–IV in Dorian)
     {kI, kVII, 30}, // i–♭VII
     {kIV, kV, 20},  // iv–v
 };
 
-/// 2 bars a chord, repeats at 20, no cadence target (spec §4.5).
+/// One 4-bar chord loop for the whole piece, 1 bar a chord, repeat 20, no cadence target (spec §4.5, §7.4; round 2
+/// S2/S2b).
 constexpr ChordGraph kDubGraph{
     .homePull = 20,
     .moves = kDubMoves,
     .repeatWeight = 20,
-    .barsPerChord = 2,
+    .barsPerChord = 1,
+    .loopChance = 0,
+    .halfLoopChance = 1000,
 };
 
-constexpr Scale kScales[] = {Scale::Minor};
+constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian};
 
 /// The Generator-wide pair, and the Crash replacing the closed hat (spec §5.7).
 constexpr ReplacePair kReplacePairs[] = {{Lane::OpenHat, Lane::ClosedHat}, {Lane::Crash, Lane::ClosedHat}};
@@ -315,7 +348,7 @@ constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBi
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 3,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 4,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swing = 10},
     .phraseBars = 8,
     .parts = kParts,
@@ -324,9 +357,9 @@ constexpr Genre kDub{
     .replacePairs = kReplacePairs,
     .fills = kFills,
     .heldFill = 0,
-    .fillChance = 250,
+    .fillChance = 500,
     .dropOuts = kDropOuts,
-    .dropOutChance = 120,
+    .dropOutChance = 250,
     .dropOutGapBars = 2,
     .harmony = {.graph = &kDubGraph, .extensionFloor = 0, .extensionCeiling = 1},
     .palette = &dubPalette,
@@ -353,7 +386,7 @@ constexpr Genre kDub{
             // No cut and no Gap: each would cover the whole 1-bar Build (cutAndGapUnderBuild()).
             .buildCutBars = 0,
             .gap = GapLength::None,
-            .roll = {.lane = Lane::Snare, .top = RollStage::Sixteenth},
+            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
             .accentLane = Lane::Crash,
             .accentChance = 50, // a Crash on Drops, after a fill that ends a phrase, and at 50 per-mille
         },
