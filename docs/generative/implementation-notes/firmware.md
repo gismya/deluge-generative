@@ -136,8 +136,22 @@ otherwise.
 - `cardLog` lives in `.sdram_bss` (its three `FIL`s are 1.7 KB): zeroed at boot, never constant-initialised, so every
   member must read right as zero until `enter()` resets it (`taskAdded_`, not a `-1` task id).
 - A piece's file is its image: `PieceInfo` (the genre as its index in `allGenres()` and its version, the pointer
-  can't be stored), header records, records. The task rewrites the info at each flush with `bytes` = what reached
-  the card, always a step's end, which `readImage()` trusts after a power-off; past it the last step may be torn.
+  can't be stored; `kFormat = 2` since #448 part 3 added `kSettingPathTag = 0x85` and `kSettingsTag = 0x92`), header
+  records, records. The task rewrites the info at each flush with `bytes` = what reached the card, always a step's end,
+  which `readImage()` trusts after a power-off; past it the last step may be torn. `CardLog::enter()` holds back
+  `kAdoptReserve` (4) slots when adopting marked files so a full folder still leaves room to log the new set.
+- Non-param sound-editor settings (`core/output_settings.h`, `firmware/settings_tracker.*`): `SettingsTracker` lives in
+  `.sdram_bss` and polls at most 2 slots per frame in `PerformView::graphicsRoutine()` (the SoundEditor target or
+  focused Output, plus 1 round-robin slot) so frame time stays a few microseconds, with full sweeps at piece start/stop
+  and before `logHeader()`. `OutputSetting` orders `SynthMode` and `Osc0Type`/`Osc1Type` first so applying a `0x92`
+  block in ascending ID order never lets `setSynthMode()`/`setOscType()` clobber filter modes or sample flags;
+  `setOscTypeSafe()` saves/restores `soundEditor.currentMultiRangeIndex`/`currentMultiRange` so Capture and AS IT BEGAN
+  never clobber SoundEditor state. While `AudioEngine::reverbSidechainVolume < 0` (AUTO mode),
+  `AudioEngine::updateReverbSidechain()` continuously overwrites `reverbSidechain.{attack,release,syncLevel}` from
+  whichever playing sound sends the most reverb, so `SettingsTracker` reads `song->reverbSidechain*` in AUTO mode and
+  only tracks `AudioEngine::reverbSidechain.*` once `reverbSidechainVolume >= 0`. In `RestartBegan`, `BeganJob` applies
+  header settings (including sample/wavetable paths) onto rebuilt parts in task context so `restore()` never does card
+  I/O in the tick.
 
 - The preset preview (#443, `preset_preview.*`, the portable `perform/preset_preview.h`) builds with
   `buildPartOutput()` in a live job, as `SoundJob` does, but the Output goes into no roster: it sits linked in the song

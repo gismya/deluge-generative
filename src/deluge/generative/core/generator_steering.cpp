@@ -205,6 +205,7 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 	case CommandKind::SetHome:
 		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
 	case CommandKind::SetParam:                     // the driver set the param: logged, nothing to apply
+	case CommandKind::SetSetting:                   // the driver set a non-param setting: logged, nothing to apply
 		return command.target < partCount(*genre_) || command.target == kSongParams;
 	case CommandKind::TransitionTempo: // the driver's own glide: the Recipe's tempo stays the playing one's
 		return true;

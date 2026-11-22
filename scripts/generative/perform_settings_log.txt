@@ -1,0 +1,163 @@
+# The settings log (#448 part 3, spec §17.2, §17.6) over the sysex test port: non-param sound-editor settings
+# (oscillator type, filter mode, polyphony, song filter mode) are tracked in bounded per-frame work by SettingsTracker,
+# written into the piece's header as sparse kSettingsTag (0x92) blocks when edited before step 0, logged mid-piece as
+# SetSetting records, and applied by Capture (starting a new track for mid-piece part edits). The captured song saves
+# and loads back cleanly. Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py).
+# Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Events: gen_setting target=<part|255> lane=<lane|-1> id=<OutputSetting> val=<v>.
+# Acid techno: ACID is part 1 (pad 9 6 locks focus). Shortcut pads: (8, 5) LPF MODE (id=3), (7, 1) POLYPHONY (id=19),
+# (2, 2) OSC 1 TYPE (id=1). Writes SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML (deleted after a hardware run).
+# writes: SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*
+# covers: src/deluge/generative/core/output_settings.h src/deluge/generative/core/steering.h
+# covers: src/deluge/generative/core/steering_log.* src/deluge/generative/core/generator_steering.cpp
+# covers: src/deluge/generative/firmware/settings_tracker.* src/deluge/generative/firmware/log_header.*
+# covers: src/deluge/generative/firmware/compose_song.* src/deluge/generative/firmware/capture_job.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/restart_began.cpp
+# covers: src/deluge/generative/firmware/capture_files.* src/deluge/generative/compose/compose_driver.*
+# covers: src/deluge/generative/compose/clip_builder.h src/deluge/generative/perform/perform_driver.*
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view_clip.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/context_menu/generative.* src/deluge/gui/ui/generative_modal.*
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/firmware/song_file.*
+# covers: src/deluge/generative/firmware/adapter_timing.* src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/perform/capture.* src/deluge/io/midi/test_port.*
+start_state
+hold entropy
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped edit on ACID (part 1): LPF MODE goes into the header's 0x92 settings block ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+mark now
+button SHIFT down
+wait 50
+pad 8 5 down
+wait 50
+pad 8 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0 since=mark
+expect ui=sound_editor
+encoder 3 1
+expect event /^gen_setting target=1 lane=-1 id=3 val=\d+$/ within=5 since=mark
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+
+# ---- Start playback: piece opens with header containing the 0x92 settings block ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 header=[0-9]+ used=[0-9]+ full=0 us=[0-9]+$/ within=10
+wait 1500
+
+# ---- Mid-piece edit on ACID: POLYPHONY and OSC 1 TYPE log SetSetting and start new tracks in Capture ----
+mark now
+button SHIFT down
+wait 50
+pad 7 1 down
+wait 50
+pad 7 1 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0 since=mark
+expect ui=sound_editor
+encoder 3 -1
+expect event /^gen_setting target=1 lane=-1 id=19 val=\d+$/ within=5 since=mark
+wait 500
+mark now
+button SHIFT down
+wait 50
+pad 2 2 down
+wait 50
+pad 2 2 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1 kit=0 since=mark
+encoder 3 1
+expect event /^gen_setting target=1 lane=-1 id=1 val=\d+$/ within=5 since=mark
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+wait 1000
+
+# ---- Unlock focus (double-tap) and edit Song LPF MODE mid-piece (target=255) ----
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=-1 locked=-1
+mark now
+button SHIFT down
+wait 50
+pad 8 5 down
+wait 50
+pad 8 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=-1 kit=0 since=mark
+expect ui=sound_editor
+encoder 3 1
+expect event /^gen_setting target=255 lane=-1 id=3 val=\d+$/ within=5 since=mark
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+wait 1500
+
+# ---- Mark piece and stop ----
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_log at=stop pieces=1 used=[0-9]+ piece=[0-9]+ header=[0-9]+ records=[1-9]\d* end=[0-9]+ cut=-1 full=0$/
+
+# ---- Leave keeping MARKED: Capture replays SetSetting, starts new tracks, saves song, and loads it back ----
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event gen_capture_begin keep=2 within=10 since=mark
+expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=[1-9]\d* cuts=0 tracks=[1-9]\d* dropped=0 / within=120 since=mark
+expect event /^gen_capture_song n=1 of=1 error=0 name=GEN .+ LIVE$/ within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 .* name=GEN .+ LIVE$/ within=60 since=mark
+expect ui=arranger within=10
+expect root_ui=arranger within=10
+expect playing=false
+
+# ---- Load saved song back and play briefly ----
+load song SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML
+expect event /^song_loaded / within=60
+expect root_ui=arranger within=10
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true within=5
+wait 1500
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false within=5

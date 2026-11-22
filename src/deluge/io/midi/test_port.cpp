@@ -237,6 +237,11 @@ void holdMidiSetup(bool hold) {
 /// every row off, as start_state does (to_start_state() in deluge_probe.py), so a script that stopped mid-hold leaves
 /// nothing held for the next. A new hold is a row here and its hook, and nothing else
 /// needs it added: the probe's HOLDS_BEFORE_RELEASE_ALL is a frozen list for builds older than "release all".
+template <uint32_t Ms>
+void holdCardStall(bool on) {
+	deluge::generative::firmware::cardLog.setStall(on ? Ms : 0);
+}
+
 struct Hold {
 	const char* name;
 	void (*set)(bool on);
@@ -295,10 +300,10 @@ constexpr Hold kHolds[] = {
     /// Before Perform's entry.
     {"card_log_off", [](bool on) { deluge::generative::firmware::cardLog.setOff(on); }},
     /// Every 2 s the card log's task holds the card for this long without touching it, as a card that stalls (#448)
-    {"card_stall_100", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 100 : 0); }},
-    {"card_stall_200", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 200 : 0); }},
-    {"card_stall_400", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 400 : 0); }},
-    {"card_stall_800", [](bool on) { deluge::generative::firmware::cardLog.setStall(on ? 800 : 0); }},
+    {"card_stall_100", holdCardStall<100>},
+    {"card_stall_200", holdCardStall<200>},
+    {"card_stall_400", holdCardStall<400>},
+    {"card_stall_800", holdCardStall<800>},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
     /// Perform's fresh entropy (each Recipe, seed and sound roll) comes from a fixed sequence that starts again here,

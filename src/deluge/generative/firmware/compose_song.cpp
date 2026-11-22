@@ -16,7 +16,9 @@
  */
 
 #include "generative/firmware/compose_song.h"
+#include "generative/core/output_settings.h"
 #include "generative/firmware/log_header.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/runner/runner.h"
 #include "memory/general_memory_allocator.h"
@@ -57,9 +59,12 @@ void ComposeSong::prepare(Song* song, Roster& roster, const Genre& genre) {
 	host_ = nullptr;
 	chunks_ = nullptr;
 	palette_ = nullptr;
+	piece_ = nullptr;
 	rerolled_ = 0;
 	songStart_ = 0;
 	editCount_ = 0;
+	settingEditCount_ = 0;
+	settingPathCount_ = 0;
 	cuts_ = newTracks_ = droppedSegments_ = droppedEdits_ = 0;
 	soundsMissing_ = 0;
 	editedSounds_ = false;
@@ -69,7 +74,9 @@ void ComposeSong::prepare(Song* song, Roster& roster, const Genre& genre) {
 	bound_ = true;
 }
 
-void ComposeSong::prepareCapture(const SoundPicks& picks, const Palette& palette, Chunks& chunks, CaptureHost& host) {
+void ComposeSong::prepareCapture(const SteeringLog::Piece& piece, const SoundPicks& picks, const Palette& palette,
+                                 Chunks& chunks, CaptureHost& host) {
+	piece_ = &piece;
 	picks_ = picks;
 	playing_ = picks;
 	palette_ = &palette;
@@ -337,6 +344,9 @@ void ComposeSong::cutClip(uint8_t part, int32_t tick) {
 		return;
 	}
 	const Segment old = segments_[newest_[part]];
+	if (old.start == tick) {
+		return; // a setting-change track already opened a fresh clip on this tick
+	}
 	if (segmentCount_ == kSegmentRoom) {
 		droppedSegments_++; // the part's notes stay in the clip they're in, out of scale mode if need be
 		return;
@@ -415,6 +425,20 @@ void ComposeSong::newTrack(uint8_t part, uint8_t /*token*/, int32_t tick) {
 		}
 	}
 	editCount_ = kept;
+	int32_t keptSettings = 0;
+	for (int32_t i = 0; i < settingEditCount_; i++) {
+		if (settingEdits_[i].target != part) {
+			settingEdits_[keptSettings++] = settingEdits_[i];
+		}
+	}
+	settingEditCount_ = keptSettings;
+	int32_t keptPaths = 0;
+	for (int32_t i = 0; i < settingPathCount_; i++) {
+		if (settingPaths_[i].target != part) {
+			settingPaths_[keptPaths++] = settingPaths_[i];
+		}
+	}
+	settingPathCount_ = keptPaths;
 	newTracks_++;
 }
 
@@ -499,6 +523,140 @@ void ComposeSong::remember(const Command& edit) {
 	}
 	else {
 		droppedEdits_++; // a split's next song starts this param from the header's value
+	}
+}
+
+void ComposeSong::startSettingTrack(uint8_t part, int32_t tick) {
+	if (error_ != Error::NONE || chunks_ == nullptr || part >= partCount(*genre_) || tick <= startOf(part)) {
+		return;
+	}
+	if (segmentCount_ == kSegmentRoom) {
+		droppedSegments_++; // no room for another track: the setting applies in place on the current one
+		return;
+	}
+	PartOutput output;
+	const Error error = buildPartOutput(song_, *genre_, part, playing_, *palette_, &output, *chunks_, &soundsMissing_);
+	if (error != Error::NONE) {
+		fail(error);
+		return;
+	}
+	output.clip->inScaleMode = genre_->parts[part].synth();
+	roster_->parts[part] = output;
+	addSegment(part, tick, output);
+	// Restore the part's state up to this step: header settings & params (if not re-rolled), then prior setting and
+	// param/home edits on this part.
+	Roster single{};
+	single.parts[part] = output;
+	if ((rerolled_ & partBit(part)) == 0 && piece_ != nullptr) {
+		restoreSettings(*piece_, single, *genre_, *song_, true, false);
+		restoreSnapshot(*piece_, single, *genre_, *song_);
+	}
+	restoreSettingsEdits(single, *song_);
+	restoreEdits(single, *song_);
+	soundControls.rebindPart(*roster_, *genre_, part);
+	newTracks_++;
+}
+
+void ComposeSong::settingEdit(const Command& edit, int32_t tick) {
+	if (error_ != Error::NONE) {
+		return;
+	}
+	if (edit.target != kSongParams) {
+		startSettingTrack(edit.target, tick);
+		if (error_ != Error::NONE) {
+			return;
+		}
+	}
+	const auto setting = static_cast<OutputSetting>(edit.length);
+	if (applyOutputSetting(setting, edit.value, edit.target, edit.lane, *roster_, *genre_, *song_, false)
+	    && edit.target != kSongParams) {
+		finalizeSoundSettings(edit.target, edit.lane, *roster_, *genre_, *song_);
+	}
+	rememberSetting(edit);
+}
+
+void ComposeSong::settingPath(uint8_t part, Lane lane, uint16_t setting, const char* path, int32_t length,
+                              int32_t tick) {
+	if (error_ != Error::NONE || part == kSongParams) {
+		return;
+	}
+	startSettingTrack(part, tick);
+	if (error_ != Error::NONE) {
+		return;
+	}
+	const auto id = static_cast<OutputSetting>(setting);
+	if (applyOutputSettingPath(id, path, length, part, lane, *roster_, *genre_, *song_)) {
+		finalizeSoundSettings(part, lane, *roster_, *genre_, *song_);
+	}
+	rememberSettingPath(part, lane, setting, path, length);
+}
+
+void ComposeSong::rememberSetting(const Command& edit) {
+	for (int32_t i = 0; i < settingEditCount_; i++) {
+		Command& kept = settingEdits_[i];
+		if (kept.target == edit.target && kept.lane == edit.lane && kept.length == edit.length) {
+			kept.value = edit.value;
+			return;
+		}
+	}
+	if (settingEditCount_ < kMaxSettingEdits) {
+		settingEdits_[settingEditCount_++] = edit;
+	}
+	else {
+		droppedEdits_++;
+	}
+}
+
+void ComposeSong::rememberSettingPath(uint8_t part, Lane lane, uint16_t setting, const char* path, int32_t length) {
+	auto setCopy = [&](SoundPath& out) {
+		out.clear();
+		if (path != nullptr && length > 0) {
+			const int32_t n = std::min<int32_t>(length, kMaxSoundPath - 1);
+			std::memcpy(out.text, path, static_cast<size_t>(n));
+			out.text[n] = 0;
+		}
+	};
+	for (int32_t i = 0; i < settingPathCount_; i++) {
+		KeptSettingPath& kept = settingPaths_[i];
+		if (kept.target == part && kept.lane == lane && kept.setting == setting) {
+			setCopy(kept.path);
+			return;
+		}
+	}
+	if (settingPathCount_ < kMaxSettingPaths) {
+		KeptSettingPath& kept = settingPaths_[settingPathCount_++];
+		kept.target = part;
+		kept.lane = lane;
+		kept.setting = setting;
+		setCopy(kept.path);
+	}
+	else {
+		droppedEdits_++;
+	}
+}
+
+void ComposeSong::restoreSettingsEdits(const Roster& roster, Song& song) const {
+	// Apply in ascending OutputSetting order (SynthMode, OscType before filters/sample flags), then paths.
+	for (int32_t id = 0; id < kNumOutputSettings; id++) {
+		for (int32_t i = 0; i < settingEditCount_; i++) {
+			const Command& edit = settingEdits_[i];
+			if (edit.length == static_cast<uint16_t>(id)) {
+				applyOutputSetting(static_cast<OutputSetting>(id), edit.value, edit.target, edit.lane, roster, *genre_,
+				                   song, false);
+			}
+		}
+	}
+	for (int32_t i = 0; i < settingPathCount_; i++) {
+		const KeptSettingPath& kept = settingPaths_[i];
+		applyOutputSettingPath(static_cast<OutputSetting>(kept.setting), kept.path.c_str(),
+		                       static_cast<int32_t>(std::strlen(kept.path.c_str())), kept.target, kept.lane, roster,
+		                       *genre_, song);
+	}
+	for (int32_t i = 0; i < settingEditCount_; i++) {
+		const Command& edit = settingEdits_[i];
+		if (edit.target != kSongParams) {
+			finalizeSoundSettings(edit.target, edit.lane, roster, *genre_, song);
+		}
 	}
 }
 

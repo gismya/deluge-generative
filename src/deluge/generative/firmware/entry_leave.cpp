@@ -27,6 +27,7 @@
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
@@ -418,8 +419,10 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	song_ = song;
-	editedParts_ = 0; // every Output and the song as built (spec §17.2's header snapshot)
-	songEdited_ = false;
+	edited_ = {}; // every Output and the song as built (spec §17.2's header snapshot)
+	if (currentRecipe.recipe.genre != nullptr && song != nullptr) {
+		settingsTracker.resetAll(sink_.roster, *currentRecipe.recipe.genre, *song);
+	}
 	generator_ = blocks_[0];
 	steering_.enter(); // an empty queue, and a new Recipe: every take at 0 (spec §6.6)
 }

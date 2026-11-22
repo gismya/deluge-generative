@@ -17,6 +17,7 @@
 
 #include "generative/firmware/log_header.h"
 #include "generative/core/genre.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
 #include "model/clip/instrument_clip.h"
 #include "model/global_effectable/global_effectable.h"
@@ -232,7 +233,7 @@ int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, c
 }
 
 void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& roster, const Genre& genre, Song& song,
-                    uint8_t editedParts, bool songEdited) {
+                    EditedOutputs edited) {
 	const int32_t parts = partCount(genre);
 	for (int32_t p = 0; p < parts; p++) {
 		log.addPick(pickSlot(p), picks.part[p].c_str());
@@ -242,12 +243,12 @@ void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& ros
 	}
 	// Song params (song FX among them), then each part's Output, then its Kit's rows (spec §17.2): only those edited
 	// since they loaded.
-	if (songEdited) {
+	if (edited.song) {
 		logParams(log, kSongParams, Lane::None, song.paramManager);
 	}
 	for (int32_t p = 0; p < parts; p++) {
 		const PartOutput& part = roster.parts[p];
-		if (part.clip == nullptr || (editedParts & (1U << p)) == 0) {
+		if (part.clip == nullptr || (edited.parts & (1U << p)) == 0) {
 			continue;
 		}
 		const auto output = static_cast<uint8_t>(p);
@@ -260,6 +261,9 @@ void logPieceHeader(SteeringLog& log, const SoundPicks& picks, const Roster& ros
 			}
 		}
 	}
+	// Non-param sound-editor settings edited since their Output loaded (kSettingsTag = 0x92, spec §17.2).
+	settingsTracker.logHeader(log, roster, genre, song);
+	settingsTracker.clearPending();
 }
 
 int32_t editedOutput(const ParamManager* manager, const Roster& roster, const Genre& genre, Song& song) {
@@ -288,9 +292,8 @@ int32_t editedOutput(const ParamManager* manager, const Roster& roster, const Ge
 	return -1;
 }
 
-uint8_t snapshotParts(const SteeringLog::Piece& piece, bool* song) {
-	uint8_t parts = 0;
-	*song = false;
+EditedOutputs snapshotParts(const SteeringLog::Piece& piece) {
+	EditedOutputs out;
 	piece.forEachSnapshot([&](const void* data, int32_t length) {
 		if (length < static_cast<int32_t>(sizeof(SnapshotBlock))) {
 			return;
@@ -298,13 +301,13 @@ uint8_t snapshotParts(const SteeringLog::Piece& piece, bool* song) {
 		SnapshotBlock block{};
 		std::memcpy(&block, data, sizeof block);
 		if (block.output == kSongParams) {
-			*song = true;
+			out.song = true;
 		}
 		else if (block.output < kMaxParts) {
-			parts |= static_cast<uint8_t>(1U << block.output);
+			out.parts |= static_cast<uint8_t>(1U << block.output);
 		}
 	});
-	return parts;
+	return out;
 }
 
 void resetSongParams(Song& song) {

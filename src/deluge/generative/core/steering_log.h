@@ -75,6 +75,9 @@ enum class RecordKind : uint8_t {
 	NotWaiting,
 	/// Nothing happened: the piece got to this step (SteeringLog::kReachedTag). Readers never hand one over.
 	Reached,
+	/// A non-param setting's file path (oscillator sample/wavetable, SteeringLog::kSettingPathTag = 0x85):
+	/// command.target its part, command.lane its Kit row (or Lane::None), command.length its OutputSetting id, `path`.
+	SettingPath,
 };
 struct LogRecord {
 	RecordKind kind = RecordKind::Command;
@@ -112,7 +115,7 @@ int32_t encodeCommand(const Command& command, uint32_t delta, uint8_t* out);
 struct PieceInfo {
 	static constexpr uint32_t kMagic = 0x474C4F47; ///< "GOLG"
 	/// Goes up whenever the image's layout or a record's encoding changes: an image of another format can't be read.
-	static constexpr uint16_t kFormat = 1;
+	static constexpr uint16_t kFormat = 2;
 	uint32_t magic = kMagic;
 	uint16_t format = kFormat;
 	uint8_t genre = 0;         ///< In an image: start.recipe.genre's index in allGenres() (the pointer isn't stored).
@@ -162,6 +165,10 @@ public:
 	/// As addSnapshot(), for a caller that writes the block in place: its `length` bytes, to fill before anything
 	/// else is logged, or nullptr where addSnapshot() would have cut the piece.
 	uint8_t* snapshotSpace(int32_t length);
+	/// A block of non-param sound-editor settings for an edited Output (kSettingsTag = 0x92, spec §17.2).
+	void addSettings(const void* data, int32_t length);
+	/// As addSettings(), for a caller that writes the block in place.
+	uint8_t* settingsSpace(int32_t length);
 	/// The current piece ends before `step`: its first step not played. Everything it logged may go to the store.
 	void endPiece(int32_t step, PieceEnd why);
 	/// The driver is about to decide `step`: every record before it is final, and may go to the store (spec §17.2).
@@ -188,6 +195,8 @@ public:
 	/// An Arc move's pending slot changed on `step`: `command` waits there now (RecordKind::Waiting), or, with `waits`
 	/// false, nothing waits in its slot (RecordKind::NotWaiting).
 	bool appendWaiting(int32_t step, const Command& command, bool waits);
+	/// A non-param setting's file path (oscillator sample or wavetable, kSettingPathTag = 0x85), logged on `step`.
+	bool appendSettingPath(int32_t step, uint8_t part, Lane lane, uint16_t setting, const char* path);
 
 	// ---- The store's side: a consumer that never runs in the tick (firmware: a main-loop task, spec §17.2) ----
 	//
@@ -276,6 +285,15 @@ public:
 		void forEachSnapshot(Found found) const {
 			forEachHeader([&](uint8_t tag, const uint8_t* data, int32_t length) {
 				if (tag == kSnapshotTag) {
+					found(static_cast<const void*>(data), length);
+				}
+			});
+		}
+		/// Hands each non-param settings header block (kSettingsTag = 0x92) to `found(data, length)`.
+		template <typename Found>
+		void forEachSettings(Found found) const {
+			forEachHeader([&](uint8_t tag, const uint8_t* data, int32_t length) {
+				if (tag == kSettingsTag) {
 					found(static_cast<const void*>(data), length);
 				}
 			});
@@ -389,10 +407,13 @@ public:
 	static constexpr uint8_t kNotWaitingTag = 0x83;
 	/// Nothing happened: the piece got this far (commitBefore()). Readers skip it.
 	static constexpr uint8_t kReachedTag = 0x84;
+	/// A non-param setting's file path (oscillator sample or wavetable).
+	static constexpr uint8_t kSettingPathTag = 0x85;
 	/// A quiet piece says how far it got about once a bar.
 	static constexpr int32_t kReachedEvery = 16;
 	static constexpr uint8_t kPickTag = 0x90;
 	static constexpr uint8_t kSnapshotTag = 0x91;
+	static constexpr uint8_t kSettingsTag = 0x92;
 
 private:
 	/// A piece in the table, and how far the consumer has taken it.

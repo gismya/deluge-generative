@@ -166,9 +166,13 @@ otherwise.
   before, the capture screen was closed by it). The log outlives `freeBlocks()` while `PerformAdapter::keepLog_`;
   the job calls `freeLog()` at its end. `finishCompaction()` first: indices of kept pieces don't move with it.
 - A piece's song: `buildPerformSong()` from the header's picks (palette: the Current Recipe's for its genre, else
-  `stagePalette()`), `restoreSnapshot()` (#441's) before `ComposeSong::prepare()`, which reads the homes from the
-  restored values. Swapped in, saved (`song_file.cpp`, F13), and freed by the next song's blank swap. After every swap
-  `setUIForLoadedSong()` and the capture screen opens again, as Compose's fits-alone path does.
+  `stagePalette()`), `restoreSettings()` (non-param `0x92` header blocks, paths loaded in task context) then
+  `restoreSnapshot()` (#441's param snapshot) before `ComposeSong::prepare()`, which reads the homes from the
+  restored values. Mid-piece `SetSetting` / `SettingPath` (`0x85`) records on a part call `ComposeDriver::cutForSetting()`
+  once per `(part, tick)` so simultaneous edits share one new track (`ComposeSong::startSettingTrack()`, which restores
+  the part's header settings/params if not re-rolled and prior edits/homes); Song-level edits (`kSongParams`) apply
+  directly to the song. Swapped in, saved (`song_file.cpp`, F13), and freed by the next song's blank swap. After every
+  swap `setUIForLoadedSong()` and the capture screen opens again, as Compose's fits-alone path does.
 - `ComposeSong` keeps per-part clip segments (`Segment`, `kMaxSegments`): a note goes to the segment its start tick
   falls in (notes arrive at their note-off, maybe after a cut); a node goes to the newest, because the driver ends the
   part's lanes before each `cutClip()`/`newTrack()` (`ClipBuilder::cutPart()`): without it the bar buffer delivered

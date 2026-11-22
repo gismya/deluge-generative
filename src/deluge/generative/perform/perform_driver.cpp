@@ -233,6 +233,9 @@ void PerformDriver::decideDue(SteeringQueue& queue, NoteSink& sink) {
 			timer_->decisionsEnd(1);
 		}
 		logLandedSounds(soundsBefore, sink);
+		if (log_ != nullptr && log_->logging() && !generator_->stoppedDeciding()) {
+			sink.logSettings(*log_, generator_->nextStep() - 1);
+		}
 		if (incoming_ != nullptr && transitionFrom_ < 0) {
 			if (generator_->transitionStart() >= 0) {
 				const bool cut = generator_->stoppedDeciding();

@@ -124,6 +124,15 @@ public:
 	/// A player's param edit from `tick` on (spec §17.2, §17.6): a SetParam, automation on the song or on the part's
 	/// clip, or a SetHome, a sound control's new home.
 	virtual void paramEdit(const Command& /*edit*/, int32_t /*tick*/) {}
+	/// A player's non-param sound-editor setting edit from `tick` on (SetSetting, spec §17.2, §17.6). For a part
+	/// (target < kMaxParts), the driver ended the part's lanes at `tick` before this call when `tick` is past the
+	/// part's current clip start, so the writer starts a new track from `tick` (one sound per track); edits on the
+	/// same `tick` share that track. For the song (kSongParams), it applies directly to the song.
+	virtual void settingEdit(const Command& /*edit*/, int32_t /*tick*/) {}
+	/// A non-param setting's file path (oscillator sample or wavetable, kSettingPathTag = 0x85) from `tick` on:
+	/// `length` chars, not terminated, valid only during the call. Same track-cut rule as settingEdit().
+	virtual void settingPath(uint8_t /*part*/, Lane /*lane*/, uint16_t /*setting*/, const char* /*path*/,
+	                         int32_t /*length*/, int32_t /*tick*/) {}
 	/// Stock's stutter starts (`on`) or ends at `tick` (SetStutter, spec §17.2).
 	virtual void stutter(bool /*on*/, int32_t /*tick*/) {}
 	/// A split (spec §17.5): end() has ended one song at `tick`, and the next starts there, with that Section and the

@@ -51,6 +51,7 @@ void ComposeDriver::begin(Generator& generator, const Recipe& recipe, uint32_t s
 	songStart_ = 0;
 	songExtra_ = 0;
 	songs_ = 1;
+	std::fill(std::begin(partCutTick_), std::end(partCutTick_), 0);
 	generator.start(recipe, seed, takes, skipIntro);
 	writer.begin(recipe);
 	clips_.begin(writer);
@@ -159,6 +160,10 @@ void ComposeDriver::replayed(const LogRecord& record) {
 		case CommandKind::SetParam:
 			writer_->paramEdit(command, tick);
 			break;
+		case CommandKind::SetSetting:
+			cutForSetting(command.target, tick);
+			writer_->settingEdit(command, tick);
+			break;
 		case CommandKind::SetStutter:
 			writer_->stutter(command.value != 0, tick);
 			break;
@@ -176,6 +181,10 @@ void ComposeDriver::replayed(const LogRecord& record) {
 		break;
 	case RecordKind::SoundDropped:
 		dropped_ |= partBit(record.command.target);
+		break;
+	case RecordKind::SettingPath:
+		cutForSetting(command.target, tick);
+		writer_->settingPath(command.target, command.lane, command.length, record.path, record.pathLength, tick);
 		break;
 	}
 }
@@ -245,6 +254,7 @@ void ComposeDriver::shape(const Event& event) {
 			if (genre.parts[p].synth()) {
 				clips_.cutPart(static_cast<uint8_t>(p), event.tick,
 				               [this](const Automated& automated) { return centreOf(automated); });
+				partCutTick_[p] = std::max(partCutTick_[p], event.tick);
 				writer_->cutClip(static_cast<uint8_t>(p), event.tick);
 				songExtra_ += kSongCosts.synthClip;
 			}
@@ -259,6 +269,7 @@ void ComposeDriver::shape(const Event& event) {
 		}
 		// Every track has one sound for its whole life (spec §17.6).
 		clips_.cutPart(event.part, event.tick, [this](const Automated& automated) { return centreOf(automated); });
+		partCutTick_[event.part] = std::max(partCutTick_[event.part], event.tick);
 		writer_->newTrack(event.part, event.pitch, event.tick);
 		const PartSpec& part = generator_->recipe().genre->parts[event.part];
 		songExtra_ += part.synth() ? kSongCosts.synthClip : int64_t{laneCount(part)} * kSongCosts.kitRow;
@@ -291,10 +302,22 @@ void ComposeDriver::split(int32_t tick) {
 	songStart_ = tick;
 	songExtra_ = 0;
 	songs_++;
+	std::fill(std::begin(partCutTick_), std::end(partCutTick_), tick);
 	// The next song opens at the tempo that plays there.
 	if (tempoMoved_) {
 		writer_->tempo({tick, tempoPlan_.at(tick), false});
 	}
+}
+
+void ComposeDriver::cutForSetting(uint8_t target, int32_t tick) {
+	const Genre& genre = *generator_->recipe().genre;
+	if (target >= partCount(genre) || tick <= partCutTick_[target]) {
+		return;
+	}
+	clips_.cutPart(target, tick, [this](const Automated& automated) { return centreOf(automated); });
+	partCutTick_[target] = tick;
+	const PartSpec& part = genre.parts[target];
+	songExtra_ += part.synth() ? kSongCosts.synthClip : int64_t{laneCount(part)} * kSongCosts.kitRow;
 }
 
 void ComposeDriver::swingDifference(Event& note) const {
