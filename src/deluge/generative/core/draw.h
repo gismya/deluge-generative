@@ -91,7 +91,7 @@ constexpr uint32_t mix(uint32_t x) {
 } // namespace detail
 
 /// A uniform 32-bit value for `key`.
-constexpr uint32_t draw(const DrawKey& key) {
+GEN_STEP_CODE constexpr uint32_t draw(const DrawKey& key) {
 	uint32_t h = detail::mix(key.seed ^ 0x9e3779b9U);
 	h = detail::mix(h
 	                ^ (static_cast<uint32_t>(key.part) | static_cast<uint32_t>(key.lane) << 8
