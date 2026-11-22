@@ -15,7 +15,10 @@ otherwise.
   (`partKey()`, `onPhrase()`, `withField()`) in `core/draw.h`, `onPick()` beside `PatternState`, the Arc's rules
   (`effectiveOn()`, `rollStageOn()`, `rollHits()`) in `core/arc.h` and the keeps in `ArcSpec::keepsIn()`; a helper
   only one area uses stays file-local in that area's file. A step callee defined in another file than its caller is
-  marked `GEN_STEP_CODE` even when it is inlined today: LTO's choice can change with any edit.
+  marked `GEN_STEP_CODE` even when it is inlined today: LTO's choice can change with any edit. Trap: GCC LTO drops
+  `GEN_STEP_CODE` (`[[gnu::section(".text.generative_step")]]`) on a header `constexpr`/`inline` (COMDAT) function when
+  it emits an out-of-line copy — define any step callee LTO may outline out-of-line in a `.cpp` file (`draw()` lives in
+  `core/draw.cpp` beside `partKey()`, `onPhrase()` and `withField()`).
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
   rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.

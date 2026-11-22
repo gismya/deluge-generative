@@ -19,6 +19,17 @@
 
 namespace deluge::generative {
 
+GEN_STEP_CODE uint32_t draw(const DrawKey& key) {
+	uint32_t h = detail::mix(key.seed ^ 0x9e3779b9U);
+	h = detail::mix(h
+	                ^ (static_cast<uint32_t>(key.part) | static_cast<uint32_t>(key.lane) << 8
+	                   | static_cast<uint32_t>(key.take) << 16 | static_cast<uint32_t>(key.purpose) << 24));
+	for (uint32_t word : key.position) {
+		h = detail::mix(h ^ word);
+	}
+	return h;
+}
+
 GEN_STEP_CODE DrawKey partKey(uint32_t seed, uint8_t part, Lane lane, uint8_t take, Purpose purpose) {
 	DrawKey key;
 	key.seed = seed;
