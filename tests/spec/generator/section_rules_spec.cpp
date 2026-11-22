@@ -373,6 +373,121 @@ describe section_rules("Section rules", $ {
 		expect(ons(result, kDrumsPart, Lane::ClosedHat, kDrop8, kDrop8 + 1).size()).to_equal(size_t{1});
 	});
 
+	it("never bring a Fall in late during a Break, even when its gate opens mid-Break (#471)", _ {
+		// Fall gated at 40 alongside a ClosedHat gated at 40 (proving the gate really opens on bar 1 of the Break).
+		static constexpr LaneSpec kGatedDrums[] = {
+		    {.lane = Lane::Kick, .pool = kFourOnTheFloor},
+		    {.lane = Lane::Snare, .densityGate = macroPoints(30)},
+		    {.lane = Lane::ClosedHat, .pool = kEveryStep, .densityGate = macroPoints(40)},
+		    {.lane = Lane::Crash},
+		};
+		static constexpr LaneSpec kGatedFall[] = {
+		    {.lane = Lane::Riser},
+		    {.lane = Lane::Fall, .densityGate = macroPoints(40)},
+		    {.lane = Lane::Impact},
+		};
+		static constexpr PartSpec kGatedParts[] = {
+		    {.role = Role::Drums, .name = "DRUMS", .lanes = kGatedDrums},
+		    kParts[1],
+		    {.role = Role::FX, .name = "FX", .lanes = kGatedFall},
+		};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<8>::genre();
+			genre.parts = kGatedParts;
+			return genre;
+		}();
+
+		// 1) Gate shut on Break's first step, then Density rises past 40 mid-Break: Fall stays silent the whole Break,
+		// while the gated ClosedHat comes in on bar 1 of the Break.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.steer = steerAt({{kBreak + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(run, 6 * 8);
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, kBreak, kBreak + kStepsPerBar).empty()).to_be_true();
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, kBreak + kStepsPerBar, kBuild8).empty()).to_be_false();
+			expect(ons(result, kFxPart, Lane::Fall, kBreak, kBuild8).empty()).to_be_true();
+		}
+
+		// 2) Gate open on Break's first step: Fall plays across the whole Break as now.
+		{
+			Result result = playRules(kGenre, 6 * 8, macroPoints(25), kMacroFull);
+			auto falls = ons(result, kFxPart, Lane::Fall, kBreak, kBuild8);
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].tick).to_equal(stepTick(kBreak));
+			}
+			int32_t fallOff = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Fall && e.tick >= stepTick(kBreak)) {
+					fallOff = e.tick;
+					break;
+				}
+			}
+			expect(fallOff).to_equal(stepTick(kBuild8));
+		}
+
+		// 3) Gate open on Break's first step, closes on bar 1, then reopens on bar 2: Fall is cut on bar 1 and never
+		// re-enters late on bar 2.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.recipe.macros.set(Macro::Density, kMacroFull);
+			run.steer = steerAt({
+			    {kBreak + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), 0}},
+			    {kBreak + kStepsPerBar + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}},
+			});
+			Result result = play(run, 6 * 8);
+			auto falls = ons(result, kFxPart, Lane::Fall, kBreak, kBuild8);
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].tick).to_equal(stepTick(kBreak));
+			}
+			int32_t fallOff = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Fall && e.tick >= stepTick(kBreak)) {
+					fallOff = e.tick;
+					break;
+				}
+			}
+			expect(fallOff).to_equal(stepTick(kBreak + kStepsPerBar));
+		}
+
+		// 4) Real genre: Ambient's Fall is gated at 35 (default Density 25, Break offset -15). Raising Density to 50
+		// mid-Break opens the gate (effective Density 35) without bringing the Fall in late.
+		{
+			const Genre* amb = findGenre("ambient");
+			expect(amb != nullptr).to_be_true();
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*amb); p++) {
+				if (amb->parts[p].role == Role::FX && laneIndexOf(amb->parts[p], Lane::Fall) >= 0) {
+					fxPart = p;
+				}
+			}
+			expect(fxPart >= 0).to_be_true();
+			Run baseRun;
+			baseRun.recipe = newRecipe(*amb, 0);
+			Result base = play(baseRun, 256);
+			const int32_t breakTick = sectionStart(base, SectionKind::Break);
+			int32_t breakEnd = -1;
+			for (const Event& e : only(base.events, EventKind::Section)) {
+				if (breakTick >= 0 && e.tick > breakTick) {
+					breakEnd = e.tick;
+					break;
+				}
+			}
+			expect(breakTick >= 0 && breakEnd > breakTick + kBarTicks).to_be_true();
+			const int32_t breakStep = breakTick / kTicksPerStep;
+			const int32_t breakEndStep = breakEnd / kTicksPerStep;
+			Run steered;
+			steered.recipe = newRecipe(*amb, 0);
+			steered.steer =
+			    steerAt({{breakStep + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(steered, 256);
+			expect(ons(result, static_cast<uint8_t>(fxPart), Lane::Fall, breakStep, breakEndStep).empty()).to_be_true();
+		}
+	});
+
 	context("the Siren (spec §9.5)", _ {
 		// A Siren of 2 bars gated at 30, with a delay setup: Density 35 opens its gate, 25 keeps it shut. The FX part
 		// switches every Throw moment off: the Siren's release Throw has no switch.
