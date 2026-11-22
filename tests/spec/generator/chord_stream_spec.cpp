@@ -485,6 +485,28 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			expect(changes * 100 / drops).to_be_between(20, 40);
 			expect(returns * 100 / drops).to_be_less_than(5);
 		});
+
+		it("keeps one 4-bar loop for the whole piece when loopChance is 0 and halfLoopChance is 1000 (Dub, spec §7.4)", _ {
+			static constexpr ChordGraph kWholePieceLoop{.homePull = 20,
+			                                            .moves = kMelodicMoves,
+			                                            .repeatWeight = 20,
+			                                            .barsPerChord = 1,
+			                                            .loopChance = 0,
+			                                            .halfLoopChance = 1000};
+			static constexpr Genre kOneLoop{
+			    .name = "one-loop", .parts = kRootBass, .harmony = {.graph = &kWholePieceLoop}, .arc = kArc};
+			for (uint32_t seed = 1; seed <= 8; seed++) {
+				const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(kOneLoop), seed, 240 * kStepsPerBar));
+				expect(spans.size()).to_be_greater_than(size_t{2});
+				for (const LoopSpan& span : spans) {
+					expect(span.periodic).to_be_true();
+					expect(span.half()).to_be_true();
+					expect(span.chords[0]).to_equal(kHomeChord);
+					expect(span.chords[3] != kHomeChord).to_be_true();
+					expect(span.signature() == spans[0].signature()).to_be_true();
+				}
+			}
+		});
 	});
 
 	it("keeps Techno, with its empty Harmony slot, on the home chord", _ {

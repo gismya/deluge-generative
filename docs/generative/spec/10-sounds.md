@@ -43,7 +43,7 @@ The Generator builds its own Drums Kit, one sample per lane. Each palette lane e
 
 - A machine names, per lane, the tag that plays it: a filename prefix (`909`, `CR78`) for every lane, or a lane's own tag or exact path where the prefix names more than the machine's plain sound (the 909's and 808's kicks, by path; Techno's 808 kick is `808 Kick distorted`). The Psy set (`SAMPLES/Artists/Dean Daughters/Psy`) is a machine whose files have no machine prefix, so it names a prefix per lane (`KICK-`, `CLHAT-`, …) and is reached only by lanes whose folders include its own.
 - A kit tag matches the lane's files ([§10.3](#103-tags)) whatever the lane's own list says. A lane the machine has no file for (the 909's percussion, the 808's ride) rolls its own list, as a lane does with no kit.
-- A swap names a lane and a tag or exact path. When it is in, the lane tries it before the machine's tag. The Open hat follows a Closed hat swap (the hat pair), so a hat swap names the bare machine tag.
+- A swap names a lane and a tag or exact path. When it is in, the lane tries it before the machine's tag. The Open hat follows a Closed hat swap (the hat pair), so a hat swap names the bare machine tag. A machine may turn swaps off (`MachineWeight::swaps = false`) so it always plays pure, as Dub's CR78 does.
 - A NEW SOUND on the Drums part re-rolls the kit away from the machine playing now. Regenerate ([§9.7](09-arc.md)) rolls the machine by its weights, so it may keep the same one; each lane still moves off its file where the machine or its list has another. A lane a card override replaces leaves the kit.
 - The lists still matter: they are what a lane without the machine plays, and every load's fallback chain, so §10.1's minimum of 3 files counts a lane's own list.
 
@@ -51,7 +51,7 @@ The Generator builds its own Drums Kit, one sample per lane. Each palette lane e
 |---|---|---|
 | Techno (all four) | 909 (3), 808 (1); never the DDD1 | Acid: Kick `909 Kick distorted`, Rim `808 Rim`. Melodic: Kick `Deep Sky Kick HQ9094`, Crash `XV5080 Crash`. Dub: Rim `808 Rim`, Closed hat `808` (the Open hat follows), Perc 2 `808 Maraca`. Detroit: Kick the plain `808 Kick` |
 | Psytrance (Classic) | Psy set (3), 909 (1); no XV5080 anywhere | Ride `909 Ride`, Crash `909 Crash` |
-| Dub | 808 (2), CR78 (1); no Linndrum anywhere | Tom `SDS5 Tom medium`, Snare `DDD1 Snare wet`, Perc 2 `RX-5 Bongo low` |
+| Dub | 808 (2), CR78 (1, no swaps); no Linndrum anywhere | Tom `SDS5 Tom medium`, Snare `DDD1 Snare wet`, Perc 2 `RX-5 Bongo low` |
 | House | 909 (3), 808 (2), Linndrum (1) | Rim `808 Rim`, Perc 2 `808 Conga low`, Perc 1 `Linndrum Tambourine` |
 | Ambient | CR78 (2), KR55 (1) | Snare `GEN Brush 2`, Perc 1 `GEN Mallet 1`, Perc 2 `GEN Wood 1` |
 

@@ -447,8 +447,10 @@ KitRoll rollKit(const DrumKits& kits, const PartSpec& part, int32_t p, uint32_t 
 		return kit;
 	}
 	kit.machine = kits.machines[machine].machine;
-	for (int32_t s = 0; s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps; s++) {
-		kit.swapped[s] = draws.below(100) < kits.swapPercent;
+	if (kits.machines[machine].swaps) {
+		for (int32_t s = 0; s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps; s++) {
+			kit.swapped[s] = draws.below(100) < kits.swapPercent;
+		}
 	}
 	return kit;
 }
