@@ -142,8 +142,8 @@ button 4 3 up
 expect event gen_left within=15 since=mark
 expect event gen_capture_begin keep=2 within=10 since=mark
 expect event /^gen_capture_piece songs=1 notes=[1-9]\d* nodes=[1-9]\d* cuts=0 tracks=[1-9]\d* dropped=0 / within=120 since=mark
-expect event /^gen_capture_song n=1 of=1 error=0 name=GEN .+ LIVE$/ within=60 since=mark
-expect event /^gen_capture_end done songs=1 saved=1 .* name=GEN .+ LIVE$/ within=60 since=mark
+expect event /^gen_capture_song n=1 of=1 error=0 name=(?P<saved>GEN ACID TECHNO 3E9D8DZ LIVE(?: [A-Z0-9]+)?)$/ within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 .* name=(?P=saved)$/ within=60 since=mark
 expect ui=arranger within=10
 expect root_ui=arranger within=10
 expect playing=false
