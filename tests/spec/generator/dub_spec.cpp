@@ -66,7 +66,7 @@ describe dub("Dub", $ {
 		expect(std::string(dubGenre.oledName)).to_equal(std::string("ROOTS DUB"));
 		expect(std::string(dubGenre.oledName).find("TECHNO")).to_equal(std::string::npos);
 		expect(dubGenre.parent == nullptr).to_be_true();
-		expect(dubGenre.version).to_equal(4);
+		expect(dubGenre.version).to_equal(5);
 		expect(findGenre("dub") == &dubGenre).to_be_true();
 		expect(partCount(dubGenre)).to_equal(5);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -177,9 +177,13 @@ describe dub("Dub", $ {
 			}
 		});
 
-		it("plays the kick and the Rim together on beats 2 and 4 of every Groove bar no drop-out or fill touches", _ {
-			int32_t bars = 0;
-			for (uint32_t seed = 1; seed <= 3; seed++) {
+		it("plays the kick with Rim or Snare (never both) on beats 2 and 4 of Groove bars, Rim the norm and Snare taking some (#460 Q-RIM B)", _ {
+			const LaneSpec& rimLane = laneOf(kDrumsPart, Lane::Rim);
+			expect(rimLane.alternateLane == Lane::Snare).to_be_true();
+			expect(rimLane.alternateChance).to_be_between(int16_t{100}, int16_t{350});
+			int32_t rimBars = 0;
+			int32_t snareBars = 0;
+			for (uint32_t seed = 1; seed <= 8; seed++) {
 				Recipe recipe = harness::movingRecipe(dubGenre, seed);
 				Genre plain = dubGenre; // no fills or drop-outs, so every Groove bar holds the one drop
 				plain.fills = {};
@@ -188,6 +192,7 @@ describe dub("Dub", $ {
 				const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
 				std::set<int32_t> kicks;
 				std::set<int32_t> rims;
+				std::set<int32_t> snares;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kDrumsPart && e.lane == Lane::Kick) {
 						kicks.insert(stepAt(e));
@@ -195,12 +200,15 @@ describe dub("Dub", $ {
 					if (e.part == kDrumsPart && e.lane == Lane::Rim) {
 						rims.insert(stepAt(e));
 					}
-					// The Snare plays only the Build roll with no fills. Its Lean is +2 (never early) and 32nd rolls
-					// place a second hit at +12+2 = +14 ticks inside the step, which stepAt() would round onto the Drop.
 					if (e.part == kDrumsPart && e.lane == Lane::Snare) {
 						const int32_t step =
 						    std::min<int32_t>(e.tick / kTicksPerStep, static_cast<int32_t>(walked.steps.size()) - 1);
-						expect(walked.steps[step].section == SectionKind::Build).to_be_true();
+						expect(walked.steps[step].section == SectionKind::Build
+						       || walked.steps[step].section == SectionKind::Groove)
+						    .to_be_true();
+						if (walked.steps[step].section == SectionKind::Groove) {
+							snares.insert(stepAt(e));
+						}
 					}
 				}
 				for (int32_t bar = 0; bar * kStepsPerBar < static_cast<int32_t>(walked.steps.size()); bar++) {
@@ -209,12 +217,19 @@ describe dub("Dub", $ {
 					if (walked.steps[drop2].section != SectionKind::Groove) {
 						continue;
 					}
-					bars++;
 					expect(kicks.contains(drop2) && kicks.contains(drop4)).to_be_true();
-					expect(rims.contains(drop2) && rims.contains(drop4)).to_be_true();
+					const bool rim = rims.contains(drop2) && rims.contains(drop4);
+					const bool snare = snares.contains(drop2) && snares.contains(drop4);
+					expect(rim != snare).to_be_true();
+					expect(rims.contains(drop2) == rims.contains(drop4)).to_be_true();
+					expect(snares.contains(drop2) == snares.contains(drop4)).to_be_true();
+					rimBars += rim ? 1 : 0;
+					snareBars += snare ? 1 : 0;
 				}
 			}
-			expect(bars).to_be_greater_than(32);
+			expect(rimBars + snareBars).to_be_greater_than(200);
+			expect(snareBars).to_be_greater_than(20);
+			expect(rimBars).to_be_greater_than(snareBars * 2); // Rim stays the norm
 		});
 
 		it("leaves hats unleaned (song swing acts), ranks off-beat hats first, gates hand drums at 28, leans Snare +2, and lets Crash replace ClosedHat", _ {
@@ -416,6 +431,8 @@ describe dub("Dub", $ {
 			bool hasAllButBass = false;
 			const uint16_t hatsAndPerc =
 			    laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat) | laneBit(Lane::Perc1) | laneBit(Lane::Perc2);
+			const uint16_t allFx =
+			    laneBit(Lane::Riser) | laneBit(Lane::Fall) | laneBit(Lane::Impact) | laneBit(Lane::Siren);
 			for (const DropOutEntry& entry : dubGenre.dropOuts) {
 				hasBassOut = hasBassOut
 				             || (entry.mask == PartsAndLanes{.parts = partBit(kBassPart)} && entry.bars == 2
@@ -430,13 +447,15 @@ describe dub("Dub", $ {
 				                 || (entry.mask == PartsAndLanes{.lanes = hatsAndPerc} && entry.bars == 2
 				                     && entry.throwTarget == PartsAndLanes{});
 				hasTops = hasTops
-				          || (entry.mask == PartsAndLanes{.parts = partBit(kSkankPart) | partBit(kMelodicaPart)}
+				          || (entry.mask
+				                  == PartsAndLanes{.parts = partBit(kSkankPart) | partBit(kMelodicaPart), .lanes = allFx}
 				              && entry.bars == 4
 				              && entry.throwTarget == PartsAndLanes{.parts = partBit(kSkankPart)});
 				if (entry.bars == 4 && !entry.mask.has(kBassPart, Lane::None)
 				    && entry.mask.has(kSkankPart, Lane::None) && entry.mask.has(kMelodicaPart, Lane::None)
 				    && entry.mask.has(kDrumsPart, Lane::Kick)) {
 					hasAllButBass = true;
+					expect((entry.mask.lanes & allFx) == allFx).to_be_true();
 					expect(entry.throwTarget == PartsAndLanes{.parts = partBit(kMelodicaPart)}).to_be_true();
 				}
 			}
@@ -545,6 +564,7 @@ describe dub("Dub", $ {
 					std::vector<bool> groove(kBars, true);
 					std::vector<bool> silenced(kBars, true);
 					std::vector<std::set<int32_t>> hits(kBars);
+					std::vector<std::set<int32_t>> snareHits(kBars);
 					std::vector<int32_t> space(kBars * kStepsPerBar, 0);
 					int32_t level = 0;
 					for (int32_t step = 0; step < kBars * kStepsPerBar && !generator.ended(); step++) {
@@ -557,6 +577,10 @@ describe dub("Dub", $ {
 							const bool ours = e.part == target.part && (target.lane == Lane::None || e.lane == target.lane);
 							if (ours && e.kind == EventKind::NoteOn && stepAt(e) / kStepsPerBar < kBars) {
 								hits[stepAt(e) / kStepsPerBar].insert(stepAt(e) % kStepsPerBar);
+							}
+							if (target.lane == Lane::Rim && e.part == kDrumsPart && e.lane == Lane::Snare
+							    && e.kind == EventKind::NoteOn && stepAt(e) / kStepsPerBar < kBars) {
+								snareHits[stepAt(e) / kStepsPerBar].insert(stepAt(e) % kStepsPerBar);
 							}
 							if (ours && e.kind == EventKind::Control && e.control == SoundControl::Space) {
 								level = e.offset;
@@ -571,8 +595,12 @@ describe dub("Dub", $ {
 						if (target.lane == Lane::None) {
 							return silenced[bar];
 						}
-						return target.lane == Lane::Rim ? !hits[bar].contains(kDropBeat2) && !hits[bar].contains(kDropBeat4)
-						                                : hits[bar].empty();
+						// With Rim's alternateLane = Snare (#460 Q-RIM B), a non-dropped Groove bar has beats 2 and 4
+						// on either Rim or Snare; a Rim drop-out silences both.
+						return target.lane == Lane::Rim
+						           ? !hits[bar].contains(kDropBeat2) && !hits[bar].contains(kDropBeat4)
+						                 && !snareHits[bar].contains(kDropBeat2) && !snareHits[bar].contains(kDropBeat4)
+						           : hits[bar].empty();
 					};
 					for (int32_t bar = 1; bar + 1 < kBars; bar++) {
 						if (!dropped(bar) || dropped(bar - 1)) {
@@ -606,6 +634,62 @@ describe dub("Dub", $ {
 					expect(spikes).to_be_greater_than(3);
 				}
 			}
+		});
+
+		it("cuts a Drop's 2-bar Siren on bar 1 when an FX-masking drop-out starts there (#460 Q-THROW C)", _ {
+			// Isolate Dub's "everything but the bass" entry at chance 1000 so bar 1 of the Drop always triggers it.
+			const DropOutEntry* allButBass = nullptr;
+			for (const DropOutEntry& entry : dubGenre.dropOuts) {
+				if (entry.bars == 4 && entry.mask.has(kDrumsPart, Lane::Kick) && entry.mask.has(kFxPart, Lane::Siren)) {
+					allButBass = &entry;
+				}
+			}
+			expect(allButBass != nullptr).to_be_true();
+			if (allButBass == nullptr) {
+				return;
+			}
+			Genre genre = dubGenre;
+			genre.dropOuts = std::span(allButBass, 1);
+			genre.dropOutChance = 1000;
+			genre.fills = {};
+			Recipe recipe = harness::movingRecipe(genre, 1);
+			Run run;
+			run.recipe = recipe;
+			run.seed = 1;
+			const Result result = play(run, 96);
+			int32_t dropTick = -1;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				if (e.section == SectionKind::Groove && e.occurrence == 1) {
+					dropTick = e.tick;
+					break;
+				}
+			}
+			expect(dropTick).to_be_greater_than(0);
+			std::vector<Event> sirenEvents;
+			for (const Event& e : result.events) {
+				if (e.part == kFxPart && e.lane == Lane::Siren
+				    && (e.kind == EventKind::NoteOn || e.kind == EventKind::NoteOff)) {
+					sirenEvents.push_back(e);
+				}
+			}
+			const std::vector<Held> fx = heldNotes(sirenEvents, kFxPart);
+			const Held* siren = nullptr;
+			for (const Held& n : fx) {
+				if (n.on == dropTick) {
+					siren = &n;
+				}
+			}
+			expect(siren != nullptr).to_be_true();
+			if (siren == nullptr) {
+				return;
+			}
+			// Cut on bar 1 of the Drop when the drop-out starts, not ringing through bar 1 to bar 2.
+			expect(siren->off - siren->on).to_equal(kBarTicks);
+			// No FX note starts during bars 1..4 of the Drop.
+			expect(ons(result, kFxPart, Lane::Siren, dropTick / kTicksPerStep + kStepsPerBar,
+			           dropTick / kTicksPerStep + 5 * kStepsPerBar)
+			           .empty())
+			    .to_be_true();
 		});
 	});
 

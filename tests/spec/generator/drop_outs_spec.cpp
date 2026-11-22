@@ -33,6 +33,12 @@ constexpr LaneSpec kDrums[] = {
     {.lane = Lane::Tom, .fillPool = kTomFill},
 };
 constexpr LaneSpec kFx[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
+constexpr LaneSpec kFxWithSiren[] = {
+    {.lane = Lane::Riser},
+    {.lane = Lane::Fall},
+    {.lane = Lane::Impact},
+    {.lane = Lane::Siren, .delay = {.on = true}, .heldBars = 2},
+};
 
 /// No drift, so Space shows the Throw alone; the Drums' Throw acts on the Snare's row.
 constexpr DriftSpec kNoDrift{.weight = 0};
@@ -798,6 +804,78 @@ describe drop_outs("Drop-outs", $ {
 		expect(plain.spans.size()).to_be_greater_than(size_t{0});
 		expect(withTakes.spans == plain.spans).to_be_true();
 		expect(frozen.spans == plain.spans).to_be_true();
+	});
+
+	context("FX lanes in drop-outs (spec §8.8)", _ {
+		static constexpr PartSpec kSirenParts[] = {
+		    kParts[0], kParts[1], kParts[2], {.role = Role::FX, .name = "FX", .lanes = kFxWithSiren, .drift = kNoDrift}};
+		static constexpr uint8_t kFxPart = 3;
+		static constexpr uint16_t kAllFx =
+		    laneBit(Lane::Riser) | laneBit(Lane::Fall) | laneBit(Lane::Impact) | laneBit(Lane::Siren);
+		static constexpr DropOutEntry kPadAndFxTwoBars[] = {
+		    {.mask = {.parts = kPad.parts, .lanes = kAllFx}, .bars = 2}};
+		static constexpr DropOutEntry kPadTwoBars[] = {{.mask = kPad, .bars = 2}};
+		static constexpr WeightedBars kBuild1[] = {{1, 1}};
+
+		it("end a held Siren on the drop-out's first bar line, fire its release Throw, and dim FX", _ {
+			static constexpr Genre kWithFx = dropGenre(
+			    {.dropOuts = kPadAndFxTwoBars, .build = kBuild1, .grooveToBuild = 1000, .groove = {1, 1}, .parts = kSirenParts});
+			static constexpr Genre kWithoutFx = dropGenre(
+			    {.dropOuts = kPadTwoBars, .build = kBuild1, .grooveToBuild = 1000, .groove = {1, 1}, .parts = kSirenParts});
+			expect(dropOutsValid(kWithFx)).to_be_true();
+			// Build ends into a Drop at bar 8 (phrase 1): Siren starts its 2-bar note at bar 8, drop-out starts at bar 9.
+			const auto check = [](const Genre& genre) {
+				const Result result = play(dropRun(genre), 16);
+				std::vector<Event> sirenEvents;
+				for (const Event& e : result.events) {
+					if (e.part == kFxPart && e.lane == Lane::Siren
+					    && (e.kind == EventKind::NoteOn || e.kind == EventKind::NoteOff)) {
+						sirenEvents.push_back(e);
+					}
+				}
+				const std::vector<Held> fx = heldNotes(sirenEvents, kFxPart);
+				int32_t dropBar = -1;
+				for (const Event& e : only(result.events, EventKind::Section)) {
+					if (e.section == SectionKind::Groove && e.occurrence == 1) {
+						dropBar = e.tick / kBarTicks;
+					}
+				}
+				return std::pair{dropBar, fx};
+			};
+			const auto [dropWith, fxWith] = check(kWithFx);
+			const auto [dropWithout, fxWithout] = check(kWithoutFx);
+			expect(dropWith).to_be_greater_than(0);
+			expect(dropWith).to_equal(dropWithout);
+			const Held* sirenCut = nullptr;
+			for (const Held& n : fxWith) {
+				if (n.on == dropWith * kBarTicks) {
+					sirenCut = &n;
+				}
+			}
+			const Held* sirenFull = nullptr;
+			for (const Held& n : fxWithout) {
+				if (n.on == dropWithout * kBarTicks) {
+					sirenFull = &n;
+				}
+			}
+			expect(sirenCut != nullptr).to_be_true();
+			expect(sirenFull != nullptr).to_be_true();
+			if (sirenCut == nullptr || sirenFull == nullptr) {
+				return;
+			}
+			// Unmasked: Siren rings its full 2 bars. Masked: cut on bar 1 of the Drop when the drop-out begins.
+			expect(sirenFull->off - sirenFull->on).to_equal(2 * kBarTicks);
+			expect(sirenCut->off - sirenCut->on).to_equal(kBarTicks);
+			// Cutting the Siren on bar 1 triggers its release Throw there.
+			const Result result = play(dropRun(kWithFx), 16);
+			const int32_t cutStep = (dropWith + 1) * kStepsPerBar;
+			expect(offsetAt(result, kFxPart, Lane::Siren, SoundControl::Space, stepTick(cutStep - 1))).to_equal(0);
+			expect(offsetAt(result, kFxPart, Lane::Siren, SoundControl::Space, stepTick(cutStep))).to_equal(kThrowSpace);
+			// FX MUTE pad dims during the drop-out.
+			const Walk fxWalk = walkPiece(startOf(kWithFx), 16 * kStepsPerBar, kFxPart);
+			expect(static_cast<bool>(fxWalk.silenced[cutStep])).to_be_true();
+			expect(static_cast<bool>(fxWalk.silenced[cutStep + 2 * kStepsPerBar])).to_be_false();
+		});
 	});
 });
 

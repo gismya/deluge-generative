@@ -1031,12 +1031,15 @@ describe genre_data("Every built-in genre", $ {
 			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
 		});
 
-		it("refuses a length but 1, 2, 4, 8 or 16 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
-		   "target outside the mask or more than one", _ {
+		it("refuses a length but 1, 2, 4, 8 or 16 bars or one past the phrase, an empty mask, a lane not in the roster, a "
+		   "whole Kit, an FX throw target, or a target outside the mask or more than one", _ {
 			for (uint8_t bars : {1, 2, 4, 8}) {
 				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
 				expect(dropOutsValid(withEntries(ok))).to_be_true();
 			}
+			// FX lanes listed in the roster may be dropped out alongside other parts (spec §8.8).
+			const DropOutEntry withFx[] = {{.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Riser) | laneBit(Lane::Impact)}}};
+			expect(dropOutsValid(withEntries(withFx))).to_be_true();
 			{
 				const DropOutEntry sixteen[] = {{.mask = bass, .bars = 16}};
 				Genre longPhrases = withEntries(sixteen);
@@ -1057,18 +1060,21 @@ describe genre_data("Every built-in genre", $ {
 				expect(dropOutsValid(longPhrases)).to_be_false();
 			}
 			const DropOutEntry empty[] = {{.mask = {}}};
-			const DropOutEntry fxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
+			const DropOutEntry missingFxLane[] = {{.mask = {.lanes = laneBit(Lane::Siren)}}};
+			const DropOutEntry fxThrowTarget[] = {
+			    {.mask = {.lanes = laneBit(Lane::Riser)}, .throwTarget = {.lanes = laneBit(Lane::Riser)}}};
 			const DropOutEntry wholeKit[] = {{.mask = {.parts = partBit(kAcidDrums)}}};
+			const DropOutEntry wholeFxKit[] = {{.mask = {.parts = partBit(3)}}};
 			const DropOutEntry targetOutside[] = {{.mask = bass, .throwTarget = drone}};
 			const DropOutEntry twoTargets[] = {{.mask = pitched, .throwTarget = pitched}};
 			const DropOutEntry laneAndPart[] = {
 			    {.mask = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)},
 			     .throwTarget = {.parts = bass.parts, .lanes = laneBit(Lane::Kick)}}};
 			for (std::span<const DropOutEntry> entries :
-			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(fxLane),
-			      std::span<const DropOutEntry>(wholeKit),
-			      std::span<const DropOutEntry>(targetOutside), std::span<const DropOutEntry>(twoTargets),
-			      std::span<const DropOutEntry>(laneAndPart)}) {
+			     {std::span<const DropOutEntry>(empty), std::span<const DropOutEntry>(missingFxLane),
+			      std::span<const DropOutEntry>(fxThrowTarget), std::span<const DropOutEntry>(wholeKit),
+			      std::span<const DropOutEntry>(wholeFxKit), std::span<const DropOutEntry>(targetOutside),
+			      std::span<const DropOutEntry>(twoTargets), std::span<const DropOutEntry>(laneAndPart)}) {
 				expect(dropOutsValid(withEntries(entries))).to_be_false();
 			}
 		});
@@ -1113,6 +1119,68 @@ describe genre_data("Every built-in genre", $ {
 			expect(dropOutsValid(genre)).to_be_false();
 			genre.dropOutChance = -1;
 			expect(dropOutsValid(genre)).to_be_false();
+		});
+	});
+
+	context("alternate lanes (alternateLanesValid(), spec §5.7)", _ {
+		static constexpr Pattern kOne[] = {{"....X.......X...", "................", 0}};
+
+		it("holds every built-in genre", _ {
+			for (const Genre* genre : allGenres()) {
+				expect(alternateLanesValid(*genre)).to_be_true();
+			}
+		});
+
+		it("accepts a Drums lane with a pool swapping to a pool-less non-FX lane in the same kit, and rejects bad configs", _ {
+			const auto check = [](Role role, std::span<const LaneSpec> lanes) {
+				const PartSpec parts[] = {{.role = role, .lanes = lanes}};
+				return alternateLanesValid(Genre{.name = "alt", .parts = parts});
+			};
+			const LaneSpec good[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Snare, .alternateChance = 200},
+			    {.lane = Lane::Snare},
+			};
+			expect(check(Role::Drums, good)).to_be_true();
+
+			const LaneSpec chanceWithoutLane[] = {{.lane = Lane::Rim, .pool = kOne, .alternateChance = 200}};
+			const LaneSpec chanceNegative[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Snare, .alternateChance = -1},
+			    {.lane = Lane::Snare},
+			};
+			const LaneSpec chanceOver[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Snare, .alternateChance = 1001},
+			    {.lane = Lane::Snare},
+			};
+			const LaneSpec selfSwap[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Rim, .alternateChance = 200},
+			};
+			const LaneSpec missingTarget[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Snare, .alternateChance = 200},
+			};
+			const LaneSpec emptySource[] = {
+			    {.lane = Lane::Rim, .alternateLane = Lane::Snare, .alternateChance = 200},
+			    {.lane = Lane::Snare},
+			};
+			const LaneSpec pooledTarget[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Snare, .alternateChance = 200},
+			    {.lane = Lane::Snare, .pool = kOne},
+			};
+			const LaneSpec fxTarget[] = {
+			    {.lane = Lane::Rim, .pool = kOne, .alternateLane = Lane::Siren, .alternateChance = 200},
+			    {.lane = Lane::Siren},
+			};
+			const LaneSpec onFxPart[] = {
+			    {.lane = Lane::Riser, .pool = kOne, .alternateLane = Lane::Fall, .alternateChance = 200},
+			    {.lane = Lane::Fall},
+			};
+			for (std::span<const LaneSpec> bad :
+			     {std::span<const LaneSpec>(chanceWithoutLane), std::span<const LaneSpec>(chanceNegative),
+			      std::span<const LaneSpec>(chanceOver), std::span<const LaneSpec>(selfSwap),
+			      std::span<const LaneSpec>(missingTarget), std::span<const LaneSpec>(emptySource),
+			      std::span<const LaneSpec>(pooledTarget), std::span<const LaneSpec>(fxTarget)}) {
+				expect(check(Role::Drums, bad)).to_be_false();
+			}
+			expect(check(Role::FX, onFxPart)).to_be_false();
 		});
 	});
 });

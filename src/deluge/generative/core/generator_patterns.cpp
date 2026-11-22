@@ -439,6 +439,39 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			note.on = false;
 		}
 	}
+	// Alternate lane (spec §5.7): a Drums lane may hand whole Groove bars over to a pool-less lane in the same kit
+	// (Dub's Rim -> Snare). Skipped while a fill or Build roll touches either lane, when either lane is gated out or
+	// silenced, or on the bar before a drop-out whose Throw targets the primary lane.
+	if (arc_.section() == SectionKind::Groove) {
+		for (int32_t l = 0; l < lanes; l++) {
+			const LaneSpec& lane = spec.lanes[l];
+			if (lane.alternateLane == Lane::None || lane.alternateChance <= 0 || !notes[l].on) {
+				continue;
+			}
+			const int32_t alt = laneIndexOf(spec, lane.alternateLane);
+			if (alt < 0 || notes[alt].on || rolls[alt].stage != RollStage::None || !gateOpen(partIndex, lane.lane)
+			    || !gateOpen(partIndex, lane.alternateLane) || silenced(step, partIndex, lane.alternateLane)
+			    || step.rest.has(partIndex, lane.alternateLane) || step.swap.has(partIndex, lane.lane)
+			    || step.swap.has(partIndex, lane.alternateLane) || step.roll.has(partIndex, lane.lane)
+			    || step.roll.has(partIndex, lane.alternateLane) || buildRollsOn(step, lane.lane)
+			    || buildRollsOn(step, lane.alternateLane)) {
+				continue;
+			}
+			if (dropOut_.entry >= 0 && step.index < dropOut_.from
+			    && genre_->dropOuts[dropOut_.entry].throwTarget.has(partIndex, lane.lane)) {
+				continue;
+			}
+			DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), lane.lane, takes_.take[partIndex],
+			                      Purpose::AlternateLane);
+			key.position[0] =
+			    static_cast<uint32_t>(heldStep(partIndex, step.index)) / static_cast<uint32_t>(kStepsPerBar);
+			if (drawChance(key, lane.alternateChance)) {
+				notes[alt] = notes[l];
+				notes[alt].length = spec.lanes[alt].gateTicks;
+				notes[l].on = false;
+			}
+		}
+	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
 	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, the Build roll's
 	// whatever its gate. Nothing replaces the Build roll: the roll lane always plays (spec §9.5).

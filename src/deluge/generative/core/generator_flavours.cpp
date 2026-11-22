@@ -161,7 +161,7 @@ int32_t answerPeriod(int32_t bars, int32_t motion) {
 
 } // namespace
 
-int32_t Generator::heldStep(int32_t partIndex, int32_t step) const {
+GEN_STEP_CODE int32_t Generator::heldStep(int32_t partIndex, int32_t step) const {
 	return partFrozen(partIndex) ? parts_[partIndex].frozenPhraseStart + step % genre_->phraseSteps() : step;
 }
 
