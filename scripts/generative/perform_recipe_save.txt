@@ -7,7 +7,8 @@
 # reloads to the same Recipe, seed, takes and sound picks. Under the save UI the sidebar pads still show Perform's
 # ("report sidebar": pads_sidebar lit=<n>, from the frame sent to the pads). ACID is shifted an octave down first, so
 # the files carry a non-zero octave shift; a SAVE or SELECT released inside a card wait ("hold card_routine") is
-# refused with BUSY and leaves no long press behind.
+# refused with BUSY and leaves no long press behind. The card log is off ("hold card_log_off"): a press made while it
+# writes (its spare file, a flush) is handled inside that card wait and refused BUSY too (#485).
 # gen_recipe_save quick|full opened|saved|refused|failed|closed|overwrite? name=...; gen_recipe_check name= read=
 # error= match= recipe= seed= takes= sounds=.
 # writes: RECIPES/ACID TECHNO *
@@ -23,7 +24,9 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/deluge.cpp src/deluge/io/midi/test_port.h
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/generative/firmware/capture_files.cpp
 start_state
+hold card_log_off
 include perform_open.txt
 include perform_confirm.txt
 
