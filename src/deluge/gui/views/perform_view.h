@@ -169,6 +169,8 @@ private:
 	                    deluge::generative::perform::PunchPopup action);
 	/// Clears an active punch-in popup if a general popup is still showing.
 	void cancelPunchPopup();
+	/// Dismisses punch-in popup ownership and cancels the OLED popup if one was owned (overlays, leave, new roster).
+	void dismissPunchPopup();
 	/// The Drums part's lanes in its order, as the KEYBOARD page lays its mute pads out; the count, 0 with none.
 	int32_t drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const;
 	/// KEYBOARD's second page (spec §13.5): stock PerformanceView's song FX pads, its layout and logic hosted over

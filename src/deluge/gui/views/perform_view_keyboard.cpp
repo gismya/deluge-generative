@@ -88,6 +88,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		performAdapter.steering().holdFader(part, at.macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
 		           static_cast<long>(units), static_cast<long>(part));
+		punchHolds_.dismissPopup(); // the macro/bias popup replaces any held punch-in popup
 		if (part >= 0) {
 			// The bias the press sets, clamped as the Recipe's: worked out here, not read back from the hold, which a
 			// full queue leaves stale.
@@ -172,6 +173,12 @@ void PerformView::cancelPunchPopup() {
 		display->cancelPopup();
 	}
 	TEST_EVENT("gen_punch_popup off present=%d", display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+}
+
+void PerformView::dismissPunchPopup() {
+	if (punchHolds_.dismissPopup()) {
+		cancelPunchPopup();
+	}
 }
 
 int32_t PerformView::drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const {

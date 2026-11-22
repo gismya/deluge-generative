@@ -189,6 +189,43 @@ expect event gen_page KEYBOARD
 pad 2 5 up
 expect event /^gen_performance_pad x=2 y=5 up value=-?[0-9]+ held=0/
 
+# ---- A punch-in pad held across KEYBOARD -> stock Performance view still lets go and clears its popup ----
+mark
+pad 14 7 down
+expect event gen_punch_popup hold HAT ROLL present=1 since=mark
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page PERFORMANCE
+wait 400
+mark
+pad 14 7 up
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_punch_pad punch=1 lane=255 up on=0 since=mark
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+
+# ---- Opening an overlay (Perform menu) over a held punch-in pad dismisses its persistent popup ----
+mark
+pad 14 7 down
+expect event gen_punch_popup hold HAT ROLL present=1 since=mark
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_menu PERFORM since=mark
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+wait 400
+mark
+pad 14 7 up
+expect event gen_punch_pad punch=1 lane=255 up on=0 since=mark
+expect no_event gen_punch_popup since=mark within=1
+
 # ---- A restart lets the pump go and ducks again from its step 0 while PUMP is still on (R1 M1): a release made after
 # the last decision before the line never reaches the old instance, and the restart drops it from the queue, so the
 # instance start itself lets go. Then the release ----

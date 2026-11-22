@@ -106,6 +106,7 @@ ActionResult PerformView::openSoundEditor(int32_t part, Open openEditor) {
 		TEST_EVENT("gen_editor %s", !open ? "none" : wasClip != nullptr ? "stayed part" : "stayed song");
 		return result;
 	}
+	punchHolds_.dismissPopup(); // SoundEditor::setup already cleared any OLED popup
 	editorOpen_ = true;
 #if ENABLE_SYSEX_TEST
 	uint32_t cols = 0;
@@ -261,7 +262,9 @@ void PerformView::openPresetBrowser(int32_t part) {
 	}
 	// A held row lets go once the browser has opened (a failed open leaves Perform on top). A held End pad needs
 	// nothing: the browser is the current UI from the start of its opened(), which reads the card, so a release
-	// delivered meanwhile isn't a tap (endPadActs()); it still lets go of the hold.
+	// delivered meanwhile isn't a tap (endPadActs()); it still lets go of the hold. Clear any held punch-in popup
+	// before opening so it never sits over the browser.
+	dismissPunchPopup();
 	if (performSoundBrowser.open(part, deluge::generative::Lane::None,
 	                             deluge::generative::perform::BrowseKind::Preset)) {
 		letGoOfHeldPart();

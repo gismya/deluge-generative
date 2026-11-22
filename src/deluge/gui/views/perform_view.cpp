@@ -88,6 +88,7 @@ void PerformView::focusRegained() {
 	// No browser is open over Perform now, so nothing previews (spec §13.3): the browser stops its preview as it
 	// closes, and this catches a close that didn't go through it.
 	deluge::generative::firmware::presetPreview.stop();
+	punchHolds_.dismissPopup(); // an overlay Perform didn't open (e.g. SHIFT+SELECT) cleared any popup underneath
 	releaseLostHolds();
 	// The song's current Clip is set only while the sound editor is open on a part (openSoundEditor()).
 	if (currentSong->getCurrentClip() != nullptr) {
@@ -264,6 +265,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	if (b == SAVE) {
 		// Quick save while playing, else the full save UI; SHIFT+SAVE always the full one (spec §16.4).
 		if (on) {
+			dismissPunchPopup();
 			recipeSavePress(Buttons::isShiftButtonPressed(), inCardRoutine);
 		}
 		return ActionResult::DEALT_WITH;
@@ -271,6 +273,7 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 	if (b == LOAD) {
 		// The Recipe load browser (spec §16.5). SHIFT+LOAD (stock's new song) does nothing here.
 		if (on && !Buttons::isShiftButtonPressed()) {
+			dismissPunchPopup();
 			loadRecipeUI.open(inCardRoutine);
 		}
 		return ActionResult::DEALT_WITH;
@@ -413,9 +416,7 @@ ActionResult PerformView::exitUI() {
 }
 
 void PerformView::leave(deluge::generative::perform::LeaveOption keep) {
-	if (punchHolds_.dismissPopup()) {
-		cancelPunchPopup();
-	}
+	dismissPunchPopup();
 	// Focus is lost on exit (spec §13.1), stopped or not: the knobs leave the part's clip before its song goes.
 	dropFocus();
 	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
@@ -507,13 +508,17 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 	else if (velocity == 0 && performancePadHeld(x, y)) {
 		performancePadAction(x, y, false); // pressed on stock Performance view: its release goes there on any page
 	}
+	else if (velocity == 0 && keyboardPadHeld(x, y)) {
+		// A KEYBOARD pad held when the page changed (including to stock Performance view) lets go there, as a part row
+		// does.
+		keyboardPadAction(x, y, false);
+	}
 	else if (page_ == Page::Performance) {
 		if (velocity != 0) {
 			performancePadAction(x, y, true);
 		}
 	}
-	else if (page_ == Page::Keyboard || (velocity == 0 && keyboardPadHeld(x, y))) {
-		// A KEYBOARD pad held when the page changed lets go there, as a part row does.
+	else if (page_ == Page::Keyboard) {
 		keyboardPadAction(x, y, velocity != 0);
 	}
 	else if (page_ == Page::Clip) {
@@ -571,8 +576,10 @@ void PerformView::graphicsRoutine() {
 		refreshFaders();
 	}
 	if (react && transitions.starts() != seenStarts_) {
-		// A new roster plays (spec §12.9): focus and a lock drop to song level.
+		// A new roster plays (spec §12.9): focus and a lock drop to song level, and a held Drums lane-mute pad may map
+		// to another lane or none on the new genre, so dismiss any persistent punch-in popup.
 		seenStarts_ = transitions.starts();
+		dismissPunchPopup();
 		dropFocus();
 		refreshFaders();
 		TEST_EVENT("gen_focus part=-1 locked=-1 new_roster");
