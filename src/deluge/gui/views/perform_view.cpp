@@ -176,9 +176,11 @@ ActionResult PerformView::buttonAction(deluge::hid::Button b, bool on, bool inCa
 		const int32_t shown = page_ == Page::Clip ? shownPart() : -1;
 		if (shown >= 0) {
 			toggleLock(shown);
+			refreshScreen();
 		}
 		else if (lockedPart_ >= 0) {
 			unlock();
+			refreshScreen();
 		}
 		return ActionResult::DEALT_WITH;
 	}
@@ -411,6 +413,9 @@ ActionResult PerformView::exitUI() {
 }
 
 void PerformView::leave(deluge::generative::perform::LeaveOption keep) {
+	if (punchHolds_.dismissPopup()) {
+		cancelPunchPopup();
+	}
 	// Focus is lost on exit (spec §13.1), stopped or not: the knobs leave the part's clip before its song goes.
 	dropFocus();
 	// The screen reacts at once; the teardown runs behind the working animation, once the runner is free (spec
@@ -497,6 +502,7 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 		songPadAction(y, false);
 		refreshArcMap();
 		refreshFaders();
+		refreshScreen();
 	}
 	else if (velocity == 0 && performancePadHeld(x, y)) {
 		performancePadAction(x, y, false); // pressed on stock Performance view: its release goes there on any page
@@ -519,6 +525,7 @@ ActionResult PerformView::padAction(int32_t x, int32_t y, int32_t velocity) {
 			heldX_ = x;
 		}
 		refreshArcMap();
+		refreshScreen();
 	}
 	return ActionResult::DEALT_WITH;
 }
