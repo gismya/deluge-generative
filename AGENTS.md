@@ -25,10 +25,12 @@ CI runs only the **Run tests** workflow (`tests.yml`), on every PR. Hardware is 
   `src/deluge/generative/`, the firmware builds and delugemu (smoke, the leak check, the firmware check, `test_port_smoke.txt`) only for a
   change to a firmware input (`src/`, `lib/`, the build files), the emulator checks' code or a probe script, and the
   probe scripts whose `# covers:` paths changed (`scripts/generative/covers.py`). Its table's first line is the merge
-  rule: "covers pick suffices" (that run is the one a merge into a milestone branch needs) or "needs --full: WHY",
-  and then the final run before the merge is `check_all.py --full`: every check and every script. It needs `--full`
-  for a merge into `generative`, a changed firmware input (`src/`, `lib/`, the build files) no covers line names, or a change to the emulator checks' code
-  or what picks them. Real-time emulators wait for a slot in a host-wide pool (`scripts/generative/emu_slots.py`,
+  rule: "covers pick suffices" or "needs --full: WHY" (a merge into `generative`, a changed firmware input no covers
+  line names, or a change to the emulator checks' code or what picks them); `--full` runs every check and every
+  script. Agents on a milestone run `check_all.py --quick` plus the probe scripts they wrote or edited
+  (`--scripts`), never a default or `--full` run in their loop; the orchestrator runs `--full` on the milestone branch
+  after merges and audits it, and a milestone's latest full run must be clean before it merges into `generative`
+  (`docs/agents/orchestration.md`, **Full runs**). Real-time emulators wait for a slot in a host-wide pool (`scripts/generative/emu_slots.py`,
   `DELUGE_EMU_SLOTS`, default 6): don't count or gate them by hand.
 - A new probe script gets a `# covers:` line naming the paths it checks. A script with none runs with every change
   that runs delugemu. `covers.py --check` fails on a covers path that no longer exists, and on a `src/` file that

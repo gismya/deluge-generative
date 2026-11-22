@@ -46,8 +46,9 @@ user's standing rules: follow them without asking again. Where this differs from
    <branch> origin/<integration>` (`git reset` is blocked for agents).
 3. Build test-first with the `tdd` skill. It asks you to confirm the test seams with the user, which a subagent can't
    do: choose the seams yourself (prefer existing ones) and list them in your report.
-4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --base <integration>`
-   until it passes, push with `git delugepush -u <branch>`, and open a PR into the integration branch
+4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --quick --base
+   <integration>` until it passes, plus the probe scripts you wrote or edited, by name (`check_all.py --base
+   <integration> --scripts <script>...`; no default or `--full` run in your loop: see **Full runs** below), push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
    `Closes #<ticket>` line per ticket). It runs what the change needs: the probe scripts whose `# covers:` paths
    changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when no firmware input, emulator
@@ -57,8 +58,8 @@ user's standing rules: follow them without asking again. Where this differs from
    (`scripts/generative/emu_slots.py`); don't count or gate emulators by hand. Run it in the background (Bash
    `run_in_background` with `timeout: 7200000`; the default kills it at 30 minutes) as `check_all.py ... > LOG 2>&1;
    echo "check_all exit=$?" >> LOG` and wait for the `check_all exit=` line as item 7 says (each step prints a
-   `[check-all]` line as it starts and ends). Use `--quick` while iterating. The table's first line is the merge
-   rule: "covers pick suffices", or "needs --full: WHY", and then the final run before the merge is `--full`.
+   `[check-all]` line as it starts and ends). The table's first line is the merge rule ("covers pick suffices", or
+   "needs --full: WHY"): report it; the `--full` run it asks for happens after the merge (**Full runs** below).
    A new probe script gets a `# covers:` line of the paths it checks (`scripts/generative/covers.py`).
 5. Hardware runs, when the ticket needs them: the `deluge-hardware-test` skill. A hand-written song or card fixture
    runs in delugemu before it goes on the Deluge (#448's fixture froze the device with E410).
@@ -82,10 +83,8 @@ user's standing rules: follow them without asking again. Where this differs from
 8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
    fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
-   touches. Run the final `check_all.py` (with `--full` when its merge rule says so) and any hardware run once more
-   only when the orchestrator says the PR is ready to merge. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
-   session that has only the notes, the PR and the findings. The final runs go to a runner (see below), unless the
-   orchestrator asks you for them.
+   touches, and a hardware run once more when the fix touches what it checked. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
+   session that has only the notes, the PR and the findings.
 9. Keep your context small: every later call re-reads all of it. Send long command output (builds, `check_all.py`,
    probe and hardware logs) to a file and read only its tail or its failures. Grep first, then read only the line
    ranges you need: don't `cat` or read whole docs or source files.
@@ -95,7 +94,7 @@ user's standing rules: follow them without asking again. Where this differs from
 - Review each PR with one full round from each reviewer, **one at a time**, with a fresh agent per round:
   `mattpocock-skills:code-review` first, then the built-in `code-review`. Send fixes to the implementer's thread;
   make small ones yourself.
-- **Fresh context past 250k tokens.** Before sending a fix round or the final run, check the implementer's context
+- **Fresh context past 250k tokens.** Before sending a fix round, check the implementer's context
   (the latest call's input plus cache tokens, in its session transcript): `python3 scripts/agents/agent_context.py`
   prints it for each recent session, with its worktree to match it to its thread. Under about 250k tokens, send the
   round to the same session. Past 250k, send it with a fresh context (`freshContext: true`) and a self-contained
@@ -105,15 +104,18 @@ user's standing rules: follow them without asking again. Where this differs from
   delta reviewer re-checks, with the built-in `code-review` at medium effort, on `git diff <reviewed head>..HEAD` and
   the MUSTs the round answered. A full round again only when the fix rewrites the design (or adds a new stock edit),
   not for its size alone. `mattpocock-skills:code-review` (it starts two sub-agents) runs only full rounds.
-- **No review for a NIT-only round.** Read its diff yourself, then go to the runner.
-- **Final runs go to a runner on a small model** (Haiku, medium effort), with the Runner brief below. They are
-  mechanical: `check_all.py` and the hardware session on the final head, in the implementer's worktree. Give
-  `check_all.py` `--full` when the implementer's last table's first line (the merge rule) says "needs --full", and
-  always for a merge into `generative`. The
-  runner never edits, pushes, diagnoses, retries a hang or clears a marker. Failures come back to you; send fixes to
-  an implementer.
-- Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the final
-  `check_all.py` passed with no "this run isn't --full" on its merge rule line, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
+- **No review for a NIT-only round.** Read its diff yourself, then merge on green CI.
+- **Full runs** (owner rule, 2026-11-22): no agent runs a default or `--full` `check_all.py` in its loop; it runs
+  `--quick` plus the probe scripts it wrote or edited (`--scripts`), and the hardware session its ticket needs. After
+  each merge into the integration branch the orchestrator runs `check_all.py --full --base <integration>` on the new
+  head, outside every agent loop: one at a time, in a checkout of its own, started detached (never under a tool's
+  time limit), newest head first when merges pile up, writing one result file per head to a folder of its own. Audit
+  those files every few merges: rerun each failure alone; a flake gets a note, a real failure a ticket naming the
+  merge. Before a milestone merges into `generative`, its latest full run must be clean. A run the orchestrator wants
+  on one PR's head before its merge (a risky change to the emulator checks) can go to a runner on a small model
+  with the Runner brief below; the runner never edits, pushes, diagnoses, retries a hang or clears a marker.
+- Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the implementer's
+  `check_all.py --quick` and touched scripts passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
   #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
   tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
@@ -134,7 +136,7 @@ user's standing rules: follow them without asking again. Where this differs from
 - Raise a MUST only for a behaviour bug against the spec or the ticket. Everything else is a NIT, with file and fix.
 - End with a verdict: HAPPY, or CHANGES with the MUSTs.
 
-**Runner brief** (include in each final-run prompt, with the worktree, the expected head and the commands):
+**Runner brief** (include in each runner prompt, with the worktree, the expected head and the commands):
 
 - Check that the worktree is clean at the expected head; if not, report what you see and stop.
 - For the hardware session, the device's state is the milestone README's `- The Deluge:` line, a list item, not a
