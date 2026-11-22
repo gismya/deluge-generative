@@ -65,7 +65,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(3);
+		expect(psyGenre.version).to_equal(4);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -89,6 +89,9 @@ describe psytrance("Psytrance", $ {
 		expect(psyGenre.facts.scales.data() == parent->facts.scales.data()).to_be_true();
 		expect(psyGenre.phraseBars).to_equal(parent->phraseBars);
 		expect(psyGenre.fillChance).to_equal(parent->fillChance);
+		expect(psyGenre.sectionEndChance).to_equal(parent->sectionEndChance);
+		expect(psyGenre.repickChance).to_equal(parent->repickChance);
+		expect(psyGenre.densityJitter).to_equal(parent->densityJitter);
 		expect(psyGenre.arc.buildBars.data() == parent->arc.buildBars.data()).to_be_true();
 		expect(psyGenre.arc.dropDecayPhrases).to_equal(parent->arc.dropDecayPhrases);
 		expect(psyGenre.arc.breakKeeps.parts).to_equal(parent->arc.breakKeeps.parts);
@@ -100,7 +103,7 @@ describe psytrance("Psytrance", $ {
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
 		    {Role::Drums, Flavour::None, "DRUMS"},  {Role::Bass, Flavour::Loop, "BASS"},
 		    {Role::Pad, Flavour::Sustain, "DRONE"}, {Role::Lead, Flavour::Loop, "LEAD"},
-		    {Role::Lead, Flavour::Arp, "ARP"},      {Role::FX, Flavour::None, "FX"}};
+		    {Role::Lead, Flavour::Loop, "ARP"},     {Role::FX, Flavour::None, "FX"}};
 		for (size_t p = 0; p < roster.size(); p++) {
 			const PartSpec& part = psyGenre.parts[p];
 			expect(part.role == std::get<0>(roster[p])).to_be_true();
@@ -113,13 +116,50 @@ describe psytrance("Psytrance", $ {
 	it("ghosts step 10 of the Lead's tier-1 riff X.88.88.X.88.8.8, as notes/132.md meant (listening round 2, QM2)", _ {
 		int32_t riffs = 0;
 		for (const Pattern& pattern : psyGenre.parts[kLeadPart].pool) {
-			if (pattern.tier == 1 && pattern.length == 16 && pattern.importance[2] != 0 && pattern.importance[8] != 0) {
+			if (pattern.tier == 1 && pattern.length == 16 && pattern.importance[2] != 0 && pattern.importance[3] != 0
+			    && pattern.importance[8] != 0) {
 				riffs++;
 				expect(pattern.level[3] == VelocityLevel::Ghost).to_be_true();
 				expect(pattern.level[10] == VelocityLevel::Ghost).to_be_true();
 			}
 		}
 		expect(riffs).to_equal(1);
+	});
+
+	it("steps the Lead under its root and over its fifth too, in five tier-1 riffs, one of two bars (listening round 2, S7)", _ {
+		const PartSpec& lead = psyGenre.parts[kLeadPart];
+		std::map<int32_t, int32_t> degrees;
+		for (const LineWeight& degree : lead.loop.degrees) {
+			degrees[degree.value] = degree.weight;
+		}
+		// The root, the 2nd, the 3rd, the 5th and the 7th as before; the 7th and the 6th under the root and the 6th over
+		// the 5th now join them.
+		expect(degrees == std::map<int32_t, int32_t>{{-2, 1}, {-1, 2}, {0, 5}, {1, 2}, {2, 2}, {4, 3}, {5, 1}, {6, 1}})
+		    .to_be_true();
+		int32_t tierOne = 0;
+		int32_t twoBars = 0;
+		for (const Pattern& pattern : lead.pool) {
+			if (pattern.tier == 1) {
+				tierOne++;
+				twoBars += pattern.length == 2 * kStepsPerBar ? 1 : 0;
+				expect(pattern.importance[0] == kAnchor).to_be_true();
+			}
+		}
+		expect(tierOne).to_equal(5);
+		expect(twoBars).to_equal(1);
+		// Notes under the riff's root sound: over many pieces the Lead plays the leading tone (harmonic minor) too.
+		std::set<int32_t> intervals;
+		for (uint32_t seed = 1; seed <= 6; seed++) {
+			const Recipe recipe = harness::movingRecipe(psyGenre, Scale::HarmonicMinor, seed, 34);
+			const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
+			for (const Event& e : walked.noteOns) {
+				if (e.part == kLeadPart) {
+					intervals.insert(pitchClass(e.pitch - recipe.keyRoot));
+				}
+			}
+		}
+		expect(intervals.contains(11)).to_be_true();
+		expect(intervals.contains(8)).to_be_true();
 	});
 
 	it("plays 138–146 BPM in Minor, Phrygian or Harmonic Minor, straight, in 16-bar phrases, with an empty Harmony slot", _ {
@@ -135,40 +175,46 @@ describe psytrance("Psytrance", $ {
 		}
 	});
 
-	it("takes its Arc from the brief: Groove 3–6, Break 1 keeping Drone, Arp, Lead and Closed hat, Builds 16 ×2 and 32 ×1", _ {
+	it("takes its Arc from round 2: Intro 2, Groove 2–4, half into a Build, Break 1 keeping Drone, Arp, Lead and Closed "
+	   "hat, Builds 8 ×2, 16 ×2 and 32 ×1",
+	   _ {
 		const ArcSpec& arc = psyGenre.arc;
-		expect(arc.introPhrases).to_equal(1);
+		// A 32-bar Intro (round 2, Q8); more, shorter Grooves, half of them into a Build with no Break, and 8-bar Builds
+		// (round 2, S2).
+		expect(arc.introPhrases).to_equal(2);
 		expect(arc.outroPhrases).to_equal(1);
-		expect(arc.groovePhrases.low).to_equal(3);
-		expect(arc.groovePhrases.high).to_equal(6);
+		expect(arc.groovePhrases.low).to_equal(2);
+		expect(arc.groovePhrases.high).to_equal(4);
 		expect(arc.breakPhrases.low).to_equal(1);
 		expect(arc.breakPhrases.high).to_equal(1);
-		expect(arc.grooveToBuild).to_equal(0);
-		expect(arc.buildBars.size()).to_equal(size_t{2});
-		expect(arc.buildBars[0].bars).to_equal(16);
+		expect(arc.grooveToBuild).to_equal(500);
+		expect(arc.buildBars.size()).to_equal(size_t{3});
+		expect(arc.buildBars[0].bars).to_equal(8);
 		expect(arc.buildBars[0].weight).to_equal(2);
-		expect(arc.buildBars[1].bars).to_equal(32);
-		expect(arc.buildBars[1].weight).to_equal(1);
+		expect(arc.buildBars[1].bars).to_equal(16);
+		expect(arc.buildBars[1].weight).to_equal(2);
+		expect(arc.buildBars[2].bars).to_equal(32);
+		expect(arc.buildBars[2].weight).to_equal(1);
 		expect(arc.breakKeeps == PartsAndLanes{.parts = partBit(kDronePart) | partBit(kArpPart) | partBit(kLeadPart),
 		                                       .lanes = laneBit(Lane::ClosedHat)})
 		    .to_be_true();
 		// Everything but the Lead, which comes in on the Drop.
 		expect(arc.buildKeeps == kEverything.without({.parts = partBit(kLeadPart)})).to_be_true();
 		expect(arc.buildCut == PartsAndLanes{.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)}).to_be_true();
-		expect(arc.buildCutBars).to_equal(2);
+		expect(arc.buildCutBars).to_equal(4); // round 2, S5
 		expect(arc.gap == GapLength::Beat).to_be_true();
 		expect(arc.roll.lane == Lane::Snare).to_be_true();
 		expect(arc.roll.top == RollStage::ThirtySecond).to_be_true();
 		expect(arc.dropLiftEnergy).to_equal(macroPoints(8));
-		expect(arc.dropDecayPhrases).to_equal(2);
+		expect(arc.dropDecayPhrases).to_equal(4);
 		expect(arc.accentLane == Lane::Crash).to_be_true();
 		expect(arc.accentChance).to_equal(0);
 		expect(arc.transitionEntry == TransitionEntry::Drop).to_be_true();
 	});
 
-	it("stops its 2-phrase Drop decay at the next Section when a Groove after a Drop lasts one phrase (Motion 50)", _ {
-		// Psytrance's decay runs past its shortest Groove at Motion 50 (spec §9.3's named exception, #349): the lift
-		// is still up when that Groove ends, and the Break's offsets take over on its first step.
+	it("stops its 4-phrase Drop decay at the next Section when a Groove after a Drop lasts one phrase (Motion 50)", _ {
+		// Psytrance's decay runs past its shortest Groove at Motion 50 (spec §9.3's named exception, #349, round 2's
+		// S2): the lift is still up when that Groove ends, and the Break's offsets take over on its first step.
 		Macros centre;
 		centre.set(Macro::Motion, kMacroFull);
 		int32_t cut = 0;
@@ -179,12 +225,11 @@ describe psytrance("Psytrance", $ {
 			int32_t dropStart = -1;
 			for (int32_t step = 0; step < 400 * kStepsPerBar; step++) {
 				if (arc.enterStep(psyGenre, seed, step, centre)) {
-					if (dropStart >= 0 && step - dropStart == kPhraseSteps) {
-						// Half the 2-phrase decay (+8) is left when the 1-phrase Groove ends: a 1-phrase decay would
-						// be under 1 point there.
-						expect(lastDensity >= macroPoints(3)).to_be_true();
+					if (dropStart >= 0 && step - dropStart == kPhraseSteps && arc.section() == SectionKind::Break) {
+						// Three quarters of the 4-phrase decay (+8) are left when the 1-phrase Groove ends: a
+						// 1-phrase decay would be under 1 point there.
+						expect(lastDensity >= macroPoints(5)).to_be_true();
 						// The Break takes over on its first step: its own Density dip (-5) exactly, no lift left.
-						expect(arc.section() == SectionKind::Break).to_be_true();
 						expect(arc.offset(psyGenre, Macro::Density, centre[Macro::Density])).to_equal(macroPoints(-5));
 						cut++;
 						break;
@@ -197,7 +242,9 @@ describe psytrance("Psytrance", $ {
 		expect(cut).to_be_greater_than(0);
 	});
 
-	it("fills with a Rest on Kick and Bass (1–4 beats, weight 3, the held fill) and a Roll on Snare (1–2 beats, weight 2)", _ {
+	it("fills with a Rest on Kick and Bass (1–4 beats, weight 3, the held fill) and a Roll on Snare (1–2 beats, weight 2), "
+	   "at 600 per-mille and on every Section's last phrase, re-picking at 300 (round 2, S9)",
+	   _ {
 		int32_t restWeight = 0;
 		int32_t rollWeight = 0;
 		std::set<int32_t> restBeats;
@@ -221,7 +268,9 @@ describe psytrance("Psytrance", $ {
 		expect(rollBeats == std::set<int32_t>{1, 2}).to_be_true();
 		expect(psyGenre.fills[psyGenre.heldFill].kind == FillKind::Rest).to_be_true();
 		expect(psyGenre.fills[psyGenre.heldFill].beats).to_equal(2);
-		expect(psyGenre.fillChance).to_equal(400);
+		expect(psyGenre.fillChance).to_equal(600);
+		expect(psyGenre.sectionEndChance).to_equal(1000);
+		expect(psyGenre.repickChance).to_equal(300);
 	});
 
 	context("its kick and rolling bass (spec §4.5, §5.5)", _ {
@@ -260,8 +309,8 @@ describe psytrance("Psytrance", $ {
 			expect(bars).to_be_greater_than(100);
 		});
 
-		it("gives the Bass Avoid Kick at strength 100, sensitivity 0, onsets on every 16th at even levels, the & anchored, a "
-		   "20-tick gate, Lean 0, no slides",
+		it("gives the Bass Avoid Kick at strength 100, sensitivity 0, onsets on every 16th at even levels, the & anchored, "
+		   "the e's thinned before the a's, a 20-tick gate, Lean 0, no slides, no accents and no mutation (round 2, S8)",
 		   _ {
 			const PartSpec& bass = psyGenre.parts[kBassPart];
 			expect(bass.rules.size()).to_equal(size_t{1});
@@ -279,7 +328,17 @@ describe psytrance("Psytrance", $ {
 					// An even roll (#353): no ghost levels.
 					expect(pattern.level[i] == VelocityLevel::Ghost).to_be_false();
 				}
+				// Density takes every e before any a (round 2, S8): the Intro thins to the offbeat, then K.BB.
+				for (int32_t e = 1; e < pattern.length; e += kStepsPerBeat) {
+					for (int32_t a = 3; a < pattern.length; a += kStepsPerBeat) {
+						expect(pattern.importance[e]).to_be_less_than(pattern.importance[a]);
+					}
+				}
 			}
+			// Even and fixed per pick (round 2, S8), with a narrower Density jitter so the ranking holds.
+			expect(bass.loop.draws.accent).to_equal(0);
+			expect(bass.loop.mutation).to_equal(0);
+			expect(psyGenre.densityJitter).to_equal(15);
 			// Each 16th held 20 ticks (#133's listening session, round 1).
 			expect(bass.loop.gateTicks).to_equal(20);
 			for (int8_t lean : bass.expression.lean) {
@@ -388,18 +447,23 @@ describe psytrance("Psytrance", $ {
 			}
 		});
 
-		it("gates the Lead at 30 with a 16-bar Sweep, so it comes in on Drops, and leaves the Arp ungated with one", _ {
+		it("gates the Lead at 31 with a 16-bar Sweep, so it plays a Drop's first two phrases and leaves on the phrase line; the "
+		   "Arp ungated with an 8-bar Sweep, the Drone a 32-bar one (round 2, S2, S10)",
+		   _ {
 			const PartSpec& lead = psyGenre.parts[kLeadPart];
 			const PartSpec& arp = psyGenre.parts[kArpPart];
-			expect(lead.densityGate).to_equal(macroPoints(30));
+			expect(lead.densityGate).to_equal(macroPoints(31));
+			expect(laneOf(Lane::Perc1).densityGate).to_equal(macroPoints(29));
 			expect(lead.drift.sweepBars).to_equal(16);
 			expect(arp.densityGate).to_equal(0);
-			expect(arp.drift.sweepBars).to_equal(16);
+			expect(arp.drift.sweepBars).to_equal(8);
+			expect(psyGenre.parts[kDronePart].drift.sweepBars).to_equal(32);
+			int32_t leaves = 0;
 			int32_t onDrops = 0;
 			int32_t dropPhrases = 0;
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 240 * kStepsPerBar);
 				const int32_t steps = static_cast<int32_t>(walked.steps.size());
 				// The first phrase after each Drop, counted from the step where it starts (as buildEnds() finds it).
 				std::vector<bool> dropPhrase(walked.steps.size(), false);
@@ -424,29 +488,42 @@ describe psytrance("Psytrance", $ {
 					onDrops += dropPhrase[step] ? 1 : 0;
 					leadBars.insert(step / kStepsPerBar);
 				}
-				// The Lead plays every bar of each Drop's first phrase (#349: its lift decays over two phrases).
+				// The Lead plays every Groove bar of each Drop's first two phrases (its lift decays over four), and
+				// none of the third: it leaves on the phrase line (round 2, S2).
 				for (int32_t end : buildEnds(walked)) {
-					if (end + 1 + kPhraseSteps > steps) {
+					if (end + 1 + 3 * kPhraseSteps > steps) {
 						continue;
 					}
 					dropPhrases++;
-					for (int32_t bar = (end + 1) / kStepsPerBar; bar < (end + 1 + kPhraseSteps) / kStepsPerBar; bar++) {
-						expect(leadBars.count(bar)).to_equal(size_t{1});
+					const int32_t dropBar = (end + 1) / kStepsPerBar;
+					for (int32_t bar = dropBar; bar < dropBar + 48; bar++) {
+						if (walked.steps[bar * kStepsPerBar].section != SectionKind::Groove) {
+							break;
+						}
+						expect(leadBars.count(bar)).to_equal(bar < dropBar + 32 ? size_t{1} : size_t{0});
+						leaves += bar == dropBar + 32 ? 1 : 0;
 					}
 				}
 			}
 			expect(builds).to_be_greater_than(0);
 			expect(onDrops).to_be_greater_than(0);
 			expect(dropPhrases).to_be_greater_than(0);
+			expect(leaves).to_be_greater_than(0);
 		});
 
-		it("walks the Arp Up or Up-down over 1–2 octaves on 16ths, an onset on every 16th in every entry", _ {
+		it("plays the Arp as a seeded sequence of the root, 3rd, 5th and 7th that holds until the next pick, on 16ths, an "
+		   "onset on every 16th in every entry (round 2, S1 D)",
+		   _ {
 			const PartSpec& arp = psyGenre.parts[kArpPart];
-			expect(arp.arp.walks.size()).to_equal(arp.pool.size());
-			for (const ArpWalk& walk : arp.arp.walks) {
-				expect(walk.order == ArpOrder::Up || walk.order == ArpOrder::UpDown).to_be_true();
-				expect(walk.octaves >= 1 && walk.octaves <= 2).to_be_true();
+			std::map<int32_t, int32_t> degrees;
+			for (const LineWeight& degree : arp.loop.degrees) {
+				degrees[degree.value] = degree.weight;
 			}
+			expect(degrees == std::map<int32_t, int32_t>{{0, 5}, {2, 2}, {4, 3}, {6, 1}}).to_be_true();
+			expect(arp.loop.mutation).to_equal(0);
+			expect(arp.loop.slide.atZero).to_equal(0);
+			expect(arp.loop.slide.atFull).to_equal(0);
+			expect(arp.loop.gateTicks).to_equal(18);
 			for (const Pattern& pattern : arp.pool) {
 				expect(pattern.length).to_equal(kStepsPerBar);
 				// Straight 16ths, no gallop skipping the & (#354).
@@ -454,6 +531,29 @@ describe psytrance("Psytrance", $ {
 					expect(pattern.importance[i]).to_be_greater_than(0);
 				}
 			}
+			// Only the home chord's four notes, and a different figure from piece to piece: today's walks made four
+			// distinct Groove bars over 40 pieces.
+			std::set<std::vector<std::pair<int32_t, int32_t>>> figures;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				const Recipe recipe = harness::movingRecipe(psyGenre, Scale::Minor, seed);
+				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
+				std::map<int32_t, std::vector<std::pair<int32_t, int32_t>>> bars;
+				for (const Event& e : walked.noteOns) {
+					if (e.part != kArpPart) {
+						continue;
+					}
+					const int32_t interval = pitchClass(e.pitch - recipe.keyRoot);
+					expect(interval == 0 || interval == 3 || interval == 7 || interval == 10).to_be_true();
+					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
+					if (walked.steps[step].section == SectionKind::Groove) {
+						bars[step / kStepsPerBar].emplace_back(step % kStepsPerBar, e.pitch - recipe.keyRoot);
+					}
+				}
+				for (const auto& [bar, notes] : bars) {
+					figures.insert(notes);
+				}
+			}
+			expect(figures.size()).to_be_greater_than(size_t{6});
 		});
 	});
 
@@ -487,13 +587,15 @@ describe psytrance("Psytrance", $ {
 			expect(hats).to_be_greater_than(0);
 		});
 
-		it("cuts the Kick and Bass for a Build's last 2 bars, rolls the Snare, leaves a beat's Gap, and drops with a Crash", _ {
+		it("cuts the Kick and Bass for a Build's last 4 bars, rolls the Snare, leaves a beat's Gap, and drops with a Crash "
+		   "(round 2, S5)",
+		   _ {
 			int32_t builds = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
 				for (int32_t end : buildEnds(walked)) {
 					builds++;
-					const int32_t cutFrom = stepTick(end + 1 - 2 * kStepsPerBar);
+					const int32_t cutFrom = stepTick(end + 1 - 4 * kStepsPerBar);
 					const int32_t gapFrom = stepTick(end + 1 - kStepsPerBeat);
 					const int32_t drop = stepTick(end + 1);
 					int32_t snares = 0;
@@ -519,11 +621,13 @@ describe psytrance("Psytrance", $ {
 		});
 
 		it("plays non-silent through every Section kind, the Build and the Drop included", _ {
-			const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, 3), 3, 160 * kStepsPerBar);
 			std::map<SectionKind, int32_t> notes;
-			for (const Event& e : walked.noteOns) {
-				const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
-				notes[walked.steps[step].section]++;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				for (const Event& e : walked.noteOns) {
+					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
+					notes[walked.steps[step].section]++;
+				}
 			}
 			for (SectionKind kind : {SectionKind::Intro, SectionKind::Groove, SectionKind::Break, SectionKind::Build}) {
 				expect(notes[kind]).to_be_greater_than(0);
@@ -538,19 +642,48 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
-		it("gives the Bass GEN Psy Bass alone, the Drone and the Arp 2 presets and the Lead 3, each on the factory card or "
-		   "in the pack (the rest dropped by ear in #133)",
+		it("gives the Bass GEN Psy Bass with 000 Rich Saw Bass as its fallback, the Drone 5 presets, the Lead 3 and the Arp 2, "
+		   "each on the factory card or in the pack (the rest dropped by ear in #133)",
 		   _ {
 			   FakeCard card = harness::factoryCardWithPack();
 			   auto presets = [](int32_t part) { return psyGenre.palette->partEntries(psyGenre.parts[part]).size(); };
-			   expect(presets(kBassPart)).to_equal(size_t{1});
-			   expect(presets(kDronePart)).to_equal(size_t{2});
+			   expect(presets(kBassPart)).to_equal(size_t{2});
+			   expect(presets(kDronePart)).to_equal(size_t{5});
 			   expect(presets(kLeadPart)).to_equal(size_t{3});
 			   expect(presets(kArpPart)).to_equal(size_t{2});
 			   expect(harness::partPresetsMissing(psyGenre, card).empty()).to_be_true();
 			   expect(harness::mainPick(psyGenre, kBassPart))
 			       .to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML x3"));
+			   // Round 2 (H3): three darker pads join 149 and 126, all at the same weight.
+			   std::map<std::string, int32_t> drones;
+			   for (const PaletteEntry& entry : psyGenre.palette->partEntries(psyGenre.parts[kDronePart])) {
+				   drones[entry.path] = entry.weight;
+			   }
+			   expect(drones == std::map<std::string, int32_t>{{"SYNTHS/126 Dark FM Pad.XML", 2},
+			                                                   {"SYNTHS/149 Cold 5th Pad.XML", 2},
+			                                                   {"SYNTHS/130 Dark Strings.XML", 2},
+			                                                   {"SYNTHS/148 Warm 5th Pad.XML", 2},
+			                                                   {"SYNTHS/135 Soothing Growth Pad.XML", 2}})
+			       .to_be_true();
 		   });
+
+		it("falls back to 000 Rich Saw Bass on a card without the pack, never rolling it where the pack is (round 2, H5)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Psy Bass.XML"};
+			const SoundLoad bass = loadPartSound(*psyGenre.palette, psyGenre.parts[kBassPart],
+			                                     "SYNTHS/GENERATIVE/GEN Psy Bass.XML", loader);
+			expect(bass.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/000 Rich Saw Bass.XML"));
+			for (const PaletteEntry& entry : psyGenre.palette->partEntries(psyGenre.parts[kBassPart])) {
+				if (std::string(entry.path) == "SYNTHS/000 Rich Saw Bass.XML") {
+					expect(static_cast<int32_t>(entry.weight)).to_equal(0);
+				}
+			}
+		});
+
+		it("loads the Drone at 55 % of its preset's volume, louder than round 1's 40 (round 2, H3)", _ {
+			expect(psyGenre.parts[kDronePart].volume).to_equal(55);
+		});
 
 		it("finds at least 3 files for every ungated lane, the Psy set's among them, and pack risers alone on the Riser", _ {
 			FakeCard card = harness::factoryCardWithPack();
