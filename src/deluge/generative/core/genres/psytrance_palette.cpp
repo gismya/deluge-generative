@@ -31,20 +31,22 @@ namespace {
 // ---- Synth parts ----
 
 /// The rolling bass: the pack's tight saw-and-square alone, sustain 0, so the Loop's 20-tick gate ends each 16th. The
-/// owner dropped the factory picks by ear (047, 050, 008, 095; #133's listening session, round 1), so this part has
-/// one entry (spec §10.1's exception). Not the draft's 048 Thin Pulse Bass: its oscillators sit two and three octaves
-/// down (osc_octaves.py).
+/// owner dropped the factory picks by ear (047, 050, 008, 095; #133's listening session, round 1), and chose 000 Rich
+/// Saw Bass at weight 0 as the pack-less fallback (round 2, H5), never rolled when the pack is present. Not the draft's
+/// 048 Thin Pulse Bass: its oscillators sit two and three octaves down (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3},
+    {"SYNTHS/000 Rich Saw Bass.XML", 0},
 };
-/// The pedal tone under everything: dark and slow. Not 120 High Harsh Pad: dropped by ear (#133, round 1).
+/// The pedal tone under everything: dark and slow. Not 120 High Harsh Pad: dropped by ear (#133, round 1). 130, 148
+/// and 135 joined 126 and 149 in round 2 (H3).
 constexpr PaletteEntry kDrone[] = {
-    {"SYNTHS/126 Dark FM Pad.XML", 2},
-    {"SYNTHS/149 Cold 5th Pad.XML", 2},
+    {"SYNTHS/126 Dark FM Pad.XML", 2},  {"SYNTHS/149 Cold 5th Pad.XML", 2},        {"SYNTHS/130 Dark Strings.XML", 2},
+    {"SYNTHS/148 Warm 5th Pad.XML", 2}, {"SYNTHS/135 Soothing Growth Pad.XML", 2},
 };
-/// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 098 has saturation saved.
-/// Not the draft's main pick 087 Define Leader: its oscillators sit an octave up and an octave down, none at the note
-/// (osc_octaves.py). Not 059 Distorted Lead Guitar: dropped by ear (#133, round 1).
+/// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 098 has saturation saved
+/// (kept as is in round 2, H1). Not the draft's main pick 087 Define Leader: its oscillators sit an octave up and an
+/// octave down, none at the note (osc_octaves.py). Not 059 Distorted Lead Guitar: dropped by ear (#133, round 1).
 constexpr PaletteEntry kLead[] = {
     {"SYNTHS/057 FM Lead.XML", 3},
     {"SYNTHS/098 Saturated Sync.XML", 2},
@@ -53,7 +55,7 @@ constexpr PaletteEntry kLead[] = {
 /// The Arp: arp-shaped sounds, each saved arp cleared at load (spec §10.6). Not the draft's 165 Acid Arp: its
 /// oscillators sit two and three octaves down, so it would sound under the Bass in the Arp's Register (osc_octaves.py
 /// allows it for Acid techno's ACID alone, whose Register is the Bass's). Not 162 Busy Arp: dropped by ear (#133,
-/// round 1); 167 and 166 are asked about again in round 2.
+/// round 1); 167 and 166 kept as is in round 2 (H4).
 constexpr PaletteEntry kArp[] = {
     {"SYNTHS/167 FM Metallic Bass Arp.XML", 2},
     {"SYNTHS/166 Harpsichord Cyborg.XML", 1},

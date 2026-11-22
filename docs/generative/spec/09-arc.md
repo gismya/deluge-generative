@@ -23,9 +23,9 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 - **Break length** is drawn from a per-genre range. Motion doesn't scale it.
 - **Build length** is in bars: 1, 2, 4, 8, 16 or 32. It must divide the phrase or be a whole multiple of it, so the Drop lands on a phrase line. It is drawn (seeded) from a weighted list in the genre when the Build is scheduled or forced. A list with one entry is a fixed length. Motion doesn't scale it. `buildBarsValid()` checks every length against both rules, and each genre table `static_assert`s it.
 - **Build placement.** A Build of a phrase or longer starts on a phrase line. A shorter one takes the last bars of the phrase before the Drop, so it shortens the Section before it: a 1-phrase Break followed by a 4-bar Build in an 8-bar phrase plays 4 bars of Break.
-- **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50. **Named exception:** Psytrance's 2-phrase decay, so its Lead (gate 30) plays a Drop's whole first phrase (#349); its shortest Groove at Motion 50 is 1 phrase, where the lift stops at the next Section as above. A Psytrance spec shows that cut-off.
+- **Drop decay** is a genre value in phrases, 1 by default. If the next Section starts before the decay ends, the lift stops there and that Section's offsets take over. A harness spec checks that the decay fits in the genre's shortest Groove at Motion 50. **Named exception:** Psytrance's 4-phrase decay, so its Lead (gate 31) plays a Drop's first two phrases and leaves on the phrase line (#349, listening round 2 S2); its shortest Groove at Motion 50 is 1 phrase, where the lift stops at the next Section as above. A Psytrance spec shows that cut-off.
 - **Intro and Outro lengths** are fixed genre values in phrases, 1 by default.
-- Example Groove ranges (*tuning*): Techno 4–8, Psytrance 3–6, Ambient 4–8 phrases.
+- Example Groove ranges (*tuning*): Techno 4–8, Psytrance 2–4, Ambient 4–8 phrases.
 - Example Build and length values (*tuning*). Build keeps is the same as Break keeps in every genre:
 
 | Genre | Build lengths (bars ×weight) | Build cut | Roll top stage | Drop decay (phrases) | Intro / Outro (phrases) |
@@ -33,7 +33,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 | Techno | 8 ×2, 16 ×1 | Kick, last 1 bar | 32nds | 1 | 2 / 1 |
 | House | 4 ×1, 8 ×2 | none | 32nds | 1 | 1 / 1 |
 | Dub | 1 | none | 16ths | 1 | 1 / 1 |
-| Psytrance (16-bar phrase) | 16 ×2, 32 ×1 | Kick and Bass, last 2 bars | 32nds | 2 | 1 / 1 |
+| Psytrance (16-bar phrase) | 8 ×2, 16 ×2, 32 ×1 | Kick and Bass, last 4 bars | 32nds | 4 | 2 / 1 |
 | Ambient | 16 | none | no roll | 2 | 2 / 2 |
 
 ### 9.4 What the Arc moves
