@@ -602,13 +602,16 @@ describe psytrance("Psytrance", $ {
 					const int32_t cutFrom = stepTick(end + 1 - 4 * kStepsPerBar);
 					const int32_t gapFrom = stepTick(end + 1 - kStepsPerBeat);
 					const int32_t drop = stepTick(end + 1);
+					const int32_t lastBar = stepTick(end + 1 - kStepsPerBar);
 					int32_t snares = 0;
 					int32_t crash = 0;
 					for (const Event& e : walked.noteOns) {
 						if (e.tick >= cutFrom && e.tick < drop) {
 							expect(e.part == kBassPart).to_be_false();
 							expect(e.part == kDrumsPart && e.lane == Lane::Kick).to_be_false();
-							snares += e.part == kDrumsPart && e.lane == Lane::Snare && e.tick < gapFrom ? 1 : 0;
+							snares += e.part == kDrumsPart && e.lane == Lane::Snare && e.tick >= lastBar && e.tick < gapFrom
+							              ? 1
+							              : 0;
 						}
 						if (e.tick >= gapFrom && e.tick < drop) {
 							// The Gap: only an FX lane (the Riser) may still start.
@@ -616,8 +619,8 @@ describe psytrance("Psytrance", $ {
 						}
 						crash += e.tick == drop && e.part == kDrumsPart && e.lane == Lane::Crash ? 1 : 0;
 					}
-					// 32nds by the cut: more than one hit a step.
-					expect(snares).to_be_greater_than(2 * kStepsPerBar - kStepsPerBeat);
+					// 32nds in the last bar before the Gap: more than one hit a step (a 16th roll gives 12 at most).
+					expect(snares).to_be_greater_than(kStepsPerBar - kStepsPerBeat);
 					expect(crash).to_equal(1);
 				}
 			}
@@ -625,16 +628,26 @@ describe psytrance("Psytrance", $ {
 		});
 
 		it("plays non-silent through every Section kind, the Build and the Drop included", _ {
-			std::map<SectionKind, int32_t> notes;
+			std::set<SectionKind> seen;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
 				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				std::map<SectionKind, int32_t> notes;
 				for (const Event& e : walked.noteOns) {
 					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
 					notes[walked.steps[step].section]++;
 				}
+				// Every Section kind this seed reaches plays something in it.
+				std::set<SectionKind> reached;
+				for (const auto& step : walked.steps) {
+					reached.insert(step.section);
+				}
+				for (SectionKind kind : reached) {
+					expect(notes[kind]).to_be_greater_than(0);
+					seen.insert(kind);
+				}
 			}
 			for (SectionKind kind : {SectionKind::Intro, SectionKind::Groove, SectionKind::Break, SectionKind::Build}) {
-				expect(notes[kind]).to_be_greater_than(0);
+				expect(seen.count(kind)).to_equal(1U);
 			}
 		});
 	});
