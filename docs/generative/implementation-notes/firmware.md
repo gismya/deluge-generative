@@ -40,6 +40,10 @@ otherwise.
   stock edit to the patching (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so
   a bound cable is kept as its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the
   player deleted it.
+- A Space Control event's offset, under a delay Throw (level > 0), holds the Throw's reverb spike, summed and clamped
+  in the core: the driver can't take it back out. Anything that wants Space's share without the Throw (a player edit
+  to the delay feedback, `gen_throw_delay`'s `rest=`) reads `Set::restSpace`, Space's offset from its last event at
+  level 0 (#343's MUST and #344 were both this bug). `rebindPart()` carries it to the new sound's set.
 - A preset's control ranges (spec §11.1) travel with its Output: the core's loaders hand back the loaded entry's
   `ControlRanges` in `SoundLoad`, `loadSynth()`/`buildRow()` store them in `PartOutput::ranges` (a synth's at 0, an FX
   lane's synth at its row), and `SoundControls::forEachTarget()` scales each target with `scaledRange()` as it binds.
