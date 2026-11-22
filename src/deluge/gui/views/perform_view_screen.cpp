@@ -252,6 +252,8 @@ void PerformView::compose(Screen& screen) {
 	in.ext = playbackHandler.isExternalClockActive();
 	in.peek = peek_;
 	in.page = page_;
+	in.focusedPart = focusedPart();
+	in.rosterGenre = performAdapter.steering().rosterGenre();
 	if (page_ == Page::Clip) {
 		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
 		const int32_t part = shownPart(); // the Recipe has sound picks for the roster's parts only

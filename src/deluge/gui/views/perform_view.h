@@ -164,6 +164,13 @@ private:
 	/// A punch-in pad on the KEYBOARD page (spec §8.9, §13.5): the 300 ms rule, a tap latching and a second tap or a
 	/// hold letting go. `lane` is the Drums lane a LaneMute pad stands for.
 	void punchPadAction(deluge::generative::PunchIn punch, deluge::generative::Lane lane, bool on);
+	/// Updates the stock OLED popup for a punch-in pad press or release (spec §13.5).
+	void showPunchPopup(deluge::generative::PunchIn punch, deluge::generative::Lane lane,
+	                    deluge::generative::perform::PunchPopup action);
+	/// Clears an active punch-in popup if a general popup is still showing.
+	void cancelPunchPopup();
+	/// Dismisses punch-in popup ownership and cancels the OLED popup if one was owned (overlays, leave, new roster).
+	void dismissPunchPopup();
 	/// The Drums part's lanes in its order, as the KEYBOARD page lays its mute pads out; the count, 0 with none.
 	int32_t drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const;
 	/// KEYBOARD's second page (spec §13.5): stock PerformanceView's song FX pads, its layout and logic hosted over

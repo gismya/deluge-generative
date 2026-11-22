@@ -148,6 +148,10 @@ BUILDERS = {
         "src/deluge/generative/perform/keyboard_page.*",
     ),  # describePunches()
     "gen_punch_pad": (),  # down or up
+    "gen_punch_popup": (
+        "src/deluge/generative/core/lane_names.h",
+        *_L10N,
+    ),  # laneName() + MUTE, or punch-in l10n name
     "gen_compose": (),  # the outcome's name
     "gen_compose_pick": (
         *_GENRE,

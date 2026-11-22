@@ -81,6 +81,14 @@ struct KeyboardPadAt {
 /// Main pad (`x`, `row`), its row counted from the top from 0.
 KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
 
+/// What a punch-in pad press or release asks the OLED popup to do (spec §13.5).
+enum class PunchPopup : uint8_t {
+	None,   ///< leave any popup alone
+	Hold,   ///< show this punch-in's name persistently while the pad is held
+	Brief,  ///< a tap latched it: show its name briefly (stock popup timeout)
+	Cancel, ///< let go and off: clear the popup now
+};
+
 /// The punch-in pads' presses (spec §13.5): the faders' 300 ms rule. A press turns an off punch-in on at once; let go
 /// within kMacroTapMs it latches, held longer it springs back off. A tap on a latched one turns it off as it is let
 /// go, a hold too. Several can be on at once. A pad is keyed by punchKey().
@@ -101,6 +109,10 @@ public:
 	/// The steering refused the change press() or release() asked for (a full queue): the pad stays as it was, on
 	/// (`on`) or off, and isn't held.
 	void refused(int32_t key, bool on);
+	/// The popup action for `key` after a press (`down` true) or release (`down` false) that was not refused.
+	PunchPopup popup(int32_t key, bool down);
+	/// Clears popup ownership when an overlay opens or Perform closes. @return Whether a punch-in popup was active.
+	bool dismissPopup();
 	/// Everything off and let go: a new entry starts with no punch-in.
 	void clear() { *this = {}; }
 
@@ -114,6 +126,7 @@ private:
 	uint32_t held_ = 0;
 	uint32_t wasOn_ = 0; ///< on as it went down: a release turns it off
 	uint32_t pressedAt_[kKeys] = {};
+	int8_t popupKey_ = -1; ///< key whose persistent popup is up, or -1
 };
 
 /// The macro units a fader level sets: its share of 0–50 in whole points, to the nearest.

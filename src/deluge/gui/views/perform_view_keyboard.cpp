@@ -17,6 +17,7 @@
 
 // PerformView's KEYBOARD page (spec §13.5): the macro faders, FILL, the punch-in pads.
 
+#include "generative/core/lane_names.h"
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::Macro;
@@ -52,6 +53,23 @@ static_assert(sizeof(kPunchColours) / sizeof(kPunchColours[0]) == deluge::genera
 	return part >= 0 ? currentRecipe.recipe.bias.of(part, macro) : currentRecipe.recipe.macros[macro];
 }
 
+/// The punch-in pad's OLED popup label (spec §13.5): `<LANE> MUTE` for a Drums lane mute, or the punch-in's name.
+void punchPopupText(deluge::generative::PunchIn punch, deluge::generative::Lane lane, char (&out)[24]) {
+	using deluge::generative::PunchIn;
+	if (punch == PunchIn::LaneMute) {
+		snprintf(out, sizeof(out), "%s %s", deluge::generative::laneName(lane),
+		         deluge::l10n::get(deluge::l10n::String::STRING_FOR_MUTE));
+		return;
+	}
+	constexpr deluge::l10n::String kNames[] = {
+	    deluge::l10n::String::STRING_FOR_MUTE,        deluge::l10n::String::STRING_FOR_HAT_ROLL,
+	    deluge::l10n::String::STRING_FOR_SNARE_ROLL,  deluge::l10n::String::STRING_FOR_FLAM,
+	    deluge::l10n::String::STRING_FOR_DOUBLE_KICK, deluge::l10n::String::STRING_FOR_PUMP,
+	};
+	static_assert(sizeof(kNames) / sizeof(kNames[0]) == deluge::generative::kNumPunchIns);
+	snprintf(out, sizeof(out), "%s", deluge::l10n::get(kNames[static_cast<int32_t>(punch)]));
+}
+
 } // namespace
 
 void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
@@ -70,6 +88,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		performAdapter.steering().holdFader(part, at.macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
 		           static_cast<long>(units), static_cast<long>(part));
+		punchHolds_.dismissPopup(); // the macro/bias popup replaces any held punch-in popup
 		if (part >= 0) {
 			// The bias the press sets, clamped as the Recipe's: worked out here, not read back from the hold, which a
 			// full queue leaves stale.
@@ -107,6 +126,7 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 void PerformView::punchPadAction(deluge::generative::PunchIn punch, deluge::generative::Lane lane, bool on) {
 	using deluge::generative::perform::PunchHolds;
 	const int32_t key = PunchHolds::punchKey(punch, lane);
+	const bool wasHeld = punchHolds_.held(key);
 	// A press turns an off punch-in on at once; a tap latches it, a hold or a tap on a latched one lets it go (spec
 	// §13.5). The core plays each change from the next undecided step (§8.9).
 	const bool changes = on ? punchHolds_.press(key, AudioEngine::audioSampleTimer)
@@ -115,8 +135,50 @@ void PerformView::punchPadAction(deluge::generative::PunchIn punch, deluge::gene
 		punchHolds_.refused(key, !on);
 		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
 	}
+	else if (on != wasHeld) {
+		showPunchPopup(punch, lane, punchHolds_.popup(key, on));
+	}
 	TEST_EVENT("gen_punch_pad punch=%d lane=%d %s on=%d", static_cast<int>(punch), static_cast<int>(lane),
 	           on ? "down" : "up", punchHolds_.on(key) ? 1 : 0);
+}
+
+void PerformView::showPunchPopup(deluge::generative::PunchIn punch, deluge::generative::Lane lane,
+                                 deluge::generative::perform::PunchPopup action) {
+	using deluge::generative::perform::PunchPopup;
+	switch (action) {
+	case PunchPopup::Hold: {
+		char text[24];
+		punchPopupText(punch, lane, text);
+		display->popupText(text);
+		TEST_EVENT("gen_punch_popup hold %s present=%d", text, display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+		break;
+	}
+	case PunchPopup::Brief: {
+		char text[24];
+		punchPopupText(punch, lane, text);
+		display->displayPopup(text);
+		TEST_EVENT("gen_punch_popup brief %s present=%d", text, display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+		break;
+	}
+	case PunchPopup::Cancel:
+		cancelPunchPopup();
+		break;
+	case PunchPopup::None:
+		break;
+	}
+}
+
+void PerformView::cancelPunchPopup() {
+	if (display->hasPopupOfType(PopupType::GENERAL)) {
+		display->cancelPopup();
+	}
+	TEST_EVENT("gen_punch_popup off present=%d", display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+}
+
+void PerformView::dismissPunchPopup() {
+	if (punchHolds_.dismissPopup()) {
+		cancelPunchPopup();
+	}
 }
 
 int32_t PerformView::drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const {

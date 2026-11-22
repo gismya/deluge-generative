@@ -277,6 +277,30 @@ void PunchHolds::refused(int32_t key, bool on) {
 	const uint32_t bit = 1U << key;
 	held_ &= ~bit;
 	on_ = on ? on_ | bit : on_ & ~bit;
+	popupKey_ = -1; // the refusal popup replaces any punch-in popup
+}
+
+PunchPopup PunchHolds::popup(int32_t key, bool down) {
+	if (down) {
+		if (!held(key)) {
+			return PunchPopup::None;
+		}
+		popupKey_ = static_cast<int8_t>(key);
+		return PunchPopup::Hold;
+	}
+	if (popupKey_ != key) {
+		return PunchPopup::None;
+	}
+	popupKey_ = -1;
+	return on(key) ? PunchPopup::Brief : PunchPopup::Cancel;
+}
+
+bool PunchHolds::dismissPopup() {
+	if (popupKey_ < 0) {
+		return false;
+	}
+	popupKey_ = -1;
+	return true;
 }
 
 void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t now, int32_t part) {

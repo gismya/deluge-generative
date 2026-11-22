@@ -234,6 +234,49 @@ describe keyboard_page("The KEYBOARD page", $ {
 			expect(holds.on(kKey) || holds.held(kKey)).to_be_false();
 			expect(holds.release(kKey, 1000, kMacroTapMs)).to_be_false();
 		});
+		it("shows a popup while held, clears it on release, and shows briefly on a latching tap", _ {
+			PunchHolds holds;
+			// Hold past 300 ms: Hold on down, Cancel on up.
+			holds.press(kKey, 0);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, kMacroTapMs, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Cancel).to_be_true();
+			// Spurious release does nothing.
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			// Tap under 300 ms latches: Hold on down, Brief on up.
+			holds.press(kKey, 1000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 1050, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Brief).to_be_true();
+			// Second tap or hold unlatches: Hold on down, Cancel on up.
+			holds.press(kKey, 2000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 2050, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Cancel).to_be_true();
+			// Two pads held: the newer pad owns the popup, so releasing the older one leaves it up.
+			const int32_t pump = PunchHolds::punchKey(PunchIn::Pump, Lane::None);
+			holds.press(kKey, 3000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.press(pump, 3010);
+			expect(holds.popup(pump, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 3500, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			holds.release(pump, 3600, kMacroTapMs);
+			expect(holds.popup(pump, false) == PunchPopup::Cancel).to_be_true();
+			// Queue full refusal clears popup ownership so a later release doesn't cancel the Queue full popup.
+			holds.press(kKey, 4000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 4500, kMacroTapMs);
+			holds.refused(kKey, true);
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			// Overlay dismissPopup() clears an active popup once.
+			holds.press(pump, 5000);
+			expect(holds.popup(pump, true) == PunchPopup::Hold).to_be_true();
+			expect(holds.dismissPopup()).to_be_true();
+			expect(holds.dismissPopup()).to_be_false();
+			holds.release(pump, 5500, kMacroTapMs);
+			expect(holds.popup(pump, false) == PunchPopup::None).to_be_true();
+		});
 	});
 
 	it("gives each macro two columns, in Energy, Density, Complexity, Motion order", _ {

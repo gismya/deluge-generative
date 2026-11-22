@@ -105,6 +105,11 @@ struct OledInput {
 	OledPeek peek = OledPeek::None;
 	/// The grid page: with no peek, the OLED's page follows it.
 	GridPage page = GridPage::Song;
+	/// The focused part (held or locked, spec §13.5), or -1 for none: on the SONG page its name takes the place of
+	/// the Section and count on the status line.
+	int32_t focusedPart = -1;
+	/// The roster's genre for `focusedPart`'s name (falls back to `recipe->genre` when null).
+	const Genre* rosterGenre = nullptr;
 	/// PART, read on the CLIP page: the part's title, and its six controls as last read, indexed by SoundControl.
 	PartTitleInput title;
 	ControlLevel levels[kNumSoundControls];

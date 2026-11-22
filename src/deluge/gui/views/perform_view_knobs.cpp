@@ -184,9 +184,12 @@ void PerformView::bindKnobs() {
 
 void PerformView::letGoForOverlay() {
 	// An overlay opening over a held row lets go of the hold (a lock stays), and a held End pad never arms (spec
-	// §13.5): their releases would go to the overlay.
+	// §13.5): their releases would go to the overlay. A persistent punch-in popup clears too so it doesn't sit over
+	// the overlay, and the status line refreshes before LEAVE PERFORM? (which shows Perform underneath).
+	dismissPunchPopup();
 	releaseEndPad();
 	letGoOfHeldPart();
+	refreshScreen();
 }
 
 void PerformView::letGoOfHeldPart() {
