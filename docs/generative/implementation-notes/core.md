@@ -216,6 +216,15 @@ otherwise.
   a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
   the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
   rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
+- An FX lane whose roll finds no sample rolls one of its `synths` by weight from the lane's own draws
+  (`rollLaneOrPreset()`, `palette.cpp`), and that preset path is its pick: the Siren's pick is `GEN Siren` and the
+  Impact's one of its presets (#472). A lane listing both folders and presets still rolls a file whenever one
+  matches, so its presets stay fallbacks. Give an Impact-style lane no folders and no tags, or a factory file that
+  matches would win. Its default folder `SAMPLES/FX/<lane>` is empty in the pack, and lists of a lane's picks
+  (`lanePicks`) now hold the preset paths.
+- The Fall and the Impact span their Section's start (the Break, the Drop's phrase), so they never enter late
+  (`entersLate()`, `core/types.h`, used where `updateGates()` and `express()` hold notes back). A new FX lane with a
+  long note should join it.
 - A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
   usually meant the mark had slid one step off the hit it was for.
 - Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the

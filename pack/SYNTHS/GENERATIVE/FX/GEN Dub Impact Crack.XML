@@ -12,7 +12,6 @@
 		<fileName>SAMPLES/DRUMS/Rim/808 Rim.wav</fileName>
 	</osc2>
 	<polyphonic>auto</polyphonic>
-	<clippingAmount>3</clippingAmount>
 	<mode>subtractive</mode>
 	<transpose>0</transpose>
 	<lpfMode>24dB</lpfMode>
@@ -44,7 +43,7 @@
 			<patchCable>
 				<source>velocity</source>
 				<destination>volume</destination>
-				<amount>0x0A3D70A0</amount>
+				<amount>0x3FFFFFE8</amount>
 			</patchCable>
 		</patchCables>
 	</defaultParams>

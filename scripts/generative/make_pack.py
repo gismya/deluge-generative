@@ -479,9 +479,6 @@ class Delay(NamedTuple):
         ]
 
 
-# The Impacts' saturation (`clippingAmount`): measured in delugemu against round 2's level (#472).
-IMPACT_CLIPPING = 3
-
 # A dotted 8th, analog, ping-pong: Dub's echo (spec §4.5), and the Impact wash's and crack's.
 DOTTED_EIGHTH = {"ping_pong": True, "analog": True, "sync_level": 6, "sync_type": 19}
 
@@ -498,8 +495,9 @@ def sample_preset(
 ):
     """A preset playing one or two factory samples once through (loopMode 1, ONCE), with an open filter, full
     sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob full,
-    `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. The samples stay on
-    the factory card: the pack holds only the preset."""
+    `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
+    about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples stay on the factory
+    card: the pack holds only the preset."""
     oscillators = []
     for name, path in (("osc1", osc1), ("osc2", osc2)):
         if path is None:
@@ -611,16 +609,19 @@ PRESETS = {
         transpose=-12,
         osc2_transpose=-12,
     ),
-    # The Drop's Impacts (#472, impact round 2): each plays out across the Drop's phrase (spec §10.5). Volume and
-    # sustain full and a velocity cable of 8, so an Impact's velocity (about 80-94) costs it under a dB; the
-    # saturation (IMPACT_CLIPPING) lifts each about 6 dB over round 2's level, which the owner found too quiet.
-    # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz).
+    # The Drop's Impacts (#472, impact round 2): each plays out across the Drop's phrase (spec §10.5), with volume
+    # and sustain full. The owner found round 2's levels too quiet, so each is about 6 dB louder, by a lever past
+    # the volume knob's top measured in delugemu (Acid techno and Dub, the FX part alone). Saturation
+    # (`clippingAmount`) caps a voice at a fixed level, under round 2's boom peak, so it lifts only the wash.
+    # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz) on both
+    # oscillators, in phase: +6.0 dB.
     "SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML": lambda: sample_preset(
-        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav", clipping=IMPACT_CLIPPING
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
     ),
     # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
     # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
-    # 8th analog ping-pong echo.
+    # 8th analog ping-pong echo. Saturation 4: +6.1 dB on its first beat.
     "SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML": lambda: preset(
         "square",
         "saw",
@@ -643,10 +644,11 @@ PRESETS = {
         volume=50,
         hpf=14,
         delay=Delay(**DOTTED_EIGHTH, feedback=24),
-        clipping=IMPACT_CLIPPING,
+        clipping=4,
     ),
     # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo (feedback 26:
-    # five or six repeats over about 3 s) and some reverb.
+    # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
+    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
@@ -654,15 +656,16 @@ PRESETS = {
         osc2_volume=44,
         reverb=24,
         delay=Delay(**DOTTED_EIGHTH, feedback=26),
-        clipping=IMPACT_CLIPPING,
+        velocity=50,
     ),
-    # Dub's kick and crash: the factory 808 Kick and 808 Cymbal layered, into some reverb.
+    # Dub's kick and crash: the factory 808 Kick and 808 Cymbal layered, into some reverb; velocity 50 as the crack's
+    # (about 5.1 dB, peak).
     "SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Kick/808 Kick.wav",
         "SAMPLES/DRUMS/Crash/808 Cymbal.wav",
         osc1_volume=44,
         reverb=22,
-        clipping=IMPACT_CLIPPING,
+        velocity=50,
     ),
     # Psytrance's rolling bass (spec §18.2): a saw and a square an octave under it into the resonant 24 dB low-pass,
     # sustain 0, so each 16th dies on its own at any gate; env2 closes the filter over the note for the pluck. Its

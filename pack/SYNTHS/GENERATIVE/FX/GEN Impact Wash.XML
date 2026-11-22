@@ -10,7 +10,7 @@
 		<cents>37</cents>
 	</osc2>
 	<polyphonic>auto</polyphonic>
-	<clippingAmount>3</clippingAmount>
+	<clippingAmount>4</clippingAmount>
 	<mode>subtractive</mode>
 	<transpose>12</transpose>
 	<lpfMode>24dB</lpfMode>
