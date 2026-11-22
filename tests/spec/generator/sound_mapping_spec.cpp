@@ -298,6 +298,32 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(throwDelayValue(inUse, menu(10), 40, 12, 0)).to_equal(targetValue(inUse, menu(10), 40));
 			expect(throwDelayValue(unused, menu(0), kControlFull, 12, 0)).to_equal(menu(0));
 		});
+
+		context("a player edit while the Throw plays (#344)", _ {
+			it("takes Space's share from its offset without the spike, so the fall lands where the player set it", _ {
+				// Home 10 holding at 22, Space's offset clamped at the spike, its other layers at 0: an edit to 21 is
+				// home 21, not 21 − the spiked share (17), and the fall ends at 21.
+				const int32_t home = throwDelayHomeFor(inUse, menu(21), kControlFull, 0, 100);
+				expect(home).to_equal(menu(21));
+				expect(throwDelayValue(inUse, home, 0, 12, 0)).to_equal(menu(21));
+			});
+			it("lands where the player set it from any level of the Throw and any rest offset", _ {
+				for (const int32_t percent : {100, 75, 50, 25}) {
+					for (const int32_t rest : {-kControlFull, -40, 0, 40}) {
+						const int32_t spiked = std::min(rest + percent, kControlFull);
+						for (const int32_t value : {menu(4), menu(12), menu(21), menu(30)}) {
+							const int32_t home = throwDelayHomeFor(inUse, value, spiked, rest, percent);
+							expect(home).to_equal(homeFor(inUse, value, rest));
+							expect(throwDelayValue(inUse, home, rest, 12, 0)).to_equal(value);
+						}
+					}
+				}
+			});
+			it("takes it from the offset playing where no Throw plays", _ {
+				expect(throwDelayHomeFor(inUse, menu(21), 40, 0, 0)).to_equal(homeFor(inUse, menu(21), 40));
+				expect(throwDelayHomeFor(unused, menu(21), kControlFull, 0, 0)).to_equal(menu(21));
+			});
+		});
 	});
 });
 
