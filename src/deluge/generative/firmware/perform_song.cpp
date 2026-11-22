@@ -566,6 +566,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	// every event lands on its exact tick (spec §12.3).
 	song->insideWorldTickMagnitude = kGeneratorTickMagnitude;
 	song->insideWorldTickMagnitudeOffsetFromBPM = 0;
+	applySyncDefaults(&song->globalEffectable, song);
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
 	song->swingInterval = static_cast<uint8_t>(swingSyncLevel(recipe.swingInterval));

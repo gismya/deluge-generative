@@ -1,6 +1,7 @@
 // The steering log (spec §17.2, §17.3): its records, piece headers and pieces, in the buffer and as the Perform
 // driver writes them.
 
+#include "generative/core/output_settings.h"
 #include "generative/core/steering_log.h"
 #include "harness.h"
 #include "stream_helpers.h"
@@ -734,7 +735,7 @@ describe steering_log("The steering log", $ {
 			std::vector<uint8_t> file = good;
 			expect(SteeringLog::readImage(file.data(), static_cast<int32_t>(file.size()))).to_be_true();
 			expect(SteeringLog::Piece(file.data()).start().recipe.genre == acidRecipe().genre).to_be_true();
-			for (const int32_t field : {0, 1, 2}) {
+			for (const int32_t field : {0, 1, 2, 3}) {
 				file = good;
 				PieceInfo info;
 				std::memcpy(&info, file.data(), sizeof info);
@@ -743,6 +744,9 @@ describe steering_log("The steering log", $ {
 				}
 				else if (field == 1) {
 					info.format++;
+				}
+				else if (field == 2) {
+					info.format = 1; // pre-settings-log format rejected
 				}
 				else {
 					info.genreVersion++;
@@ -1047,6 +1051,184 @@ describe steering_log("The steering log", $ {
 			expect(transition).to_be_true();
 			// The new piece counts its own steps from the start step.
 			expect(log.piece(1).ended() == PieceEnd::Playing).to_be_true();
+		});
+	});
+
+	context("settings log (spec §17.2)", _ {
+		it("round-trips SetSetting, SettingPath (0x85) and settings header blocks (0x92) at format 2", _ {
+			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(2));
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			// Build a 0x92 settings header block with 2 scalars and 1 path.
+			const char* sample = "SAMPLES/KICK.WAV";
+			const auto pathLen = static_cast<uint8_t>(std::strlen(sample));
+			const int32_t blockBytes = static_cast<int32_t>(sizeof(SettingsBlockHeader)) + 2 * kScalarSettingBytes
+			                           + kPathSettingPrefixBytes + pathLen;
+			uint8_t* space = b.log.settingsSpace(blockBytes);
+			expect(space != nullptr).to_be_true();
+			SettingsBlockHeader hdr{1, Lane::None, 2, 1};
+			uint8_t* at = space;
+			std::memcpy(at, &hdr, sizeof hdr);
+			at += sizeof hdr;
+			const uint16_t s0 = static_cast<uint16_t>(OutputSetting::Osc0Type);
+			const int32_t v0 = 7;
+			const uint16_t s1 = static_cast<uint16_t>(OutputSetting::LpfMode);
+			const int32_t v1 = 2;
+			std::memcpy(at, &s0, sizeof s0);
+			std::memcpy(at + 2, &v0, sizeof v0);
+			at += kScalarSettingBytes;
+			std::memcpy(at, &s1, sizeof s1);
+			std::memcpy(at + 2, &v1, sizeof v1);
+			at += kScalarSettingBytes;
+			const uint16_t sp = static_cast<uint16_t>(OutputSetting::Osc0SamplePath);
+			std::memcpy(at, &sp, sizeof sp);
+			at[2] = pathLen;
+			std::memcpy(at + 3, sample, pathLen);
+
+			const Command setFilter{CommandKind::SetSetting, 1, 3, static_cast<uint16_t>(OutputSetting::LpfMode),
+			                        Lane::None};
+			const Command setSong{CommandKind::SetSetting, kSongParams, 1,
+			                      static_cast<uint16_t>(OutputSetting::ModFxType), Lane::None};
+			expect(b.log.append(12, setFilter)).to_be_true();
+			expect(b.log.appendSettingPath(12, 1, Lane::None, static_cast<uint16_t>(OutputSetting::Osc0SamplePath),
+			                               "SAMPLES/LEAD.WAV"))
+			    .to_be_true();
+			expect(b.log.appendSettingPath(16, 0, Lane::Kick, static_cast<uint16_t>(OutputSetting::Osc1SamplePath), ""))
+			    .to_be_true();
+			expect(b.log.append(20, setSong)).to_be_true();
+			b.log.endPiece(24, PieceEnd::Stopped);
+
+			const PieceImage img = image(b.log, 0);
+			const SteeringLog::Piece piece = img.piece();
+			int32_t blocks = 0;
+			std::vector<std::pair<OutputSetting, int32_t>> scalars;
+			std::vector<std::pair<OutputSetting, std::string>> paths;
+			piece.forEachSettings([&](const void* data, int32_t length) {
+				blocks++;
+				SettingsBlockHeader readHdr{};
+				expect(readSettingsBlock(
+				           data, length, readHdr,
+				           [&](OutputSetting s, int32_t v) { scalars.emplace_back(s, v); },
+				           [&](OutputSetting s, const char* p, int32_t n) {
+					           paths.emplace_back(s, std::string(p, static_cast<size_t>(n)));
+				           }))
+				    .to_be_true();
+				expect(readHdr.output).to_equal(static_cast<uint8_t>(1));
+				expect(readHdr.lane == Lane::None).to_be_true();
+			});
+			expect(blocks).to_equal(1);
+			expect(scalars.size()).to_equal(2U);
+			expect(scalars[0].first == OutputSetting::Osc0Type && scalars[0].second == 7).to_be_true();
+			expect(scalars[1].first == OutputSetting::LpfMode && scalars[1].second == 2).to_be_true();
+			expect(paths.size()).to_equal(1U);
+			expect(paths[0].first == OutputSetting::Osc0SamplePath && paths[0].second == sample).to_be_true();
+
+			const std::vector<LogRecord> read = records(b.log, 0);
+			expect(read.size()).to_equal(4U);
+			expect(read[0].kind == RecordKind::Command && read[0].command == setFilter && read[0].step == 12)
+			    .to_be_true();
+			expect(read[1].kind == RecordKind::SettingPath && read[1].step == 12 && read[1].command.target == 1
+			       && read[1].command.lane == Lane::None
+			       && read[1].command.settingId() == static_cast<uint16_t>(OutputSetting::Osc0SamplePath)
+			       && std::string(read[1].path, static_cast<size_t>(read[1].pathLength)) == "SAMPLES/LEAD.WAV")
+			    .to_be_true();
+			expect(read[2].kind == RecordKind::SettingPath && read[2].step == 16 && read[2].command.target == 0
+			       && read[2].command.lane == Lane::Kick && read[2].pathLength == 0)
+			    .to_be_true();
+			expect(read[3].kind == RecordKind::Command && read[3].command == setSong && read[3].step == 20).to_be_true();
+		});
+
+		it("recovers cleanly when a 0x85 SettingPath record is torn past the last flush", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.commitBefore(5);
+			b.log.append(5, macro(Macro::Energy, 25));
+			b.log.commitBefore(10);
+			b.store.drain();
+			const int32_t flushedBytes = b.log.piece(0).bytes();
+			b.log.append(10, {CommandKind::SetSetting, 1, 7, static_cast<uint16_t>(OutputSetting::Osc0Type), Lane::None});
+			b.log.appendSettingPath(10, 1, Lane::None, static_cast<uint16_t>(OutputSetting::Osc0SamplePath),
+			                        "SAMPLES/LONG_SAMPLE_NAME.WAV");
+			b.log.commitBefore(11);
+			b.store.drain();
+			std::vector<uint8_t> torn = b.store.files[b.log.piece(0).id()];
+			// Cut partway through the SettingPath record and set info.bytes back to the earlier flush.
+			torn.resize(static_cast<size_t>(torn.size() - 8));
+			PieceInfo info;
+			std::memcpy(&info, torn.data(), sizeof info);
+			info.bytes = flushedBytes;
+			info.ended = PieceEnd::Playing;
+			std::memcpy(torn.data(), &info, sizeof info);
+			expect(SteeringLog::readImage(torn.data(), static_cast<int32_t>(torn.size()))).to_be_true();
+			const SteeringLog::Piece piece(torn.data());
+			expect(piece.cutAt()).to_equal(10); // torn step 10 dropped whole
+			int32_t count = 0;
+			piece.forEachRecord([&](const LogRecord&) { count++; });
+			expect(count).to_equal(1); // step 5 survived
+		});
+
+		it("does not poison storeFailing() on the playing piece when a non-newest slot fails", _ {
+			Buffer b(4096);
+			b.log.beginPiece(startOf(1));
+			b.log.mark(true);
+			b.log.endPiece(8, PieceEnd::Stopped);
+			b.store.drain();
+			const int32_t firstSlot = b.log.slotOf(0);
+			b.log.beginPiece(startOf(2));
+			b.log.append(2, macro(Macro::Energy, 10));
+			expect(b.log.isNewest(firstSlot)).to_be_false();
+			expect(b.log.isNewest(b.log.slotOf(1))).to_be_true();
+			b.log.storeFailed(firstSlot); // an earlier adopted/marked piece's info rewrite failed
+			expect(b.log.storeFailing()).to_be_false();
+			expect(b.log.full()).to_be_false();
+			expect(b.log.mark(true)).to_be_true();
+			// Stopping the newest piece ends growing(), but isNewest() stays true so a failed info rewrite still marks
+			// storeFailing().
+			const int32_t newestSlot = b.log.slotOf(1);
+			b.log.endPiece(8, PieceEnd::Stopped);
+			expect(b.log.growing(newestSlot)).to_be_false();
+			expect(b.log.isNewest(newestSlot)).to_be_true();
+			b.log.storeFailed(newestSlot);
+			expect(b.log.storeFailing()).to_be_true();
+		});
+
+		it("calls NoteSink::logSettings() after each decided step", _ {
+			struct SettingSink final : perform::NoteSink {
+				int32_t logged = 0;
+				void play(const Event&) override {}
+				void logSettings(SteeringLog& log, int32_t step) override {
+					if (step == 16) {
+						log.append(step, {CommandKind::SetSetting, 1, 2,
+						                  static_cast<uint16_t>(OutputSetting::LpfMode), Lane::None});
+						log.appendSettingPath(step, 1, Lane::None,
+						                      static_cast<uint16_t>(OutputSetting::Osc0SamplePath), "SAMPLES/A.WAV");
+						logged++;
+					}
+				}
+			};
+			SettingSink sink;
+			StoredLog stored;
+			// Drive with our custom sink directly.
+			Generator gen;
+			perform::PerformDriver drv;
+			SteeringQueue q;
+			drv.setLog(&stored.log);
+			gen.start(acidRecipe(), 3, Takes{}, false);
+			drv.begin(gen, 0, kGeneratorTickMagnitude);
+			for (int32_t s = 0; s < 32; s++) {
+				drv.advance(kTicksPerStep, kGeneratorTickMagnitude, q, sink);
+			}
+			drv.stop(sink);
+			expect(sink.logged).to_equal(1);
+			const std::vector<LogRecord> read = records(stored.log, 0);
+			bool hasCmd = false;
+			bool hasPath = false;
+			for (const LogRecord& r : read) {
+				hasCmd = hasCmd || (r.kind == RecordKind::Command && r.command.kind == CommandKind::SetSetting && r.step == 16);
+				hasPath = hasPath || (r.kind == RecordKind::SettingPath && r.step == 16);
+			}
+			expect(hasCmd).to_be_true();
+			expect(hasPath).to_be_true();
 		});
 	});
 });

@@ -101,6 +101,9 @@ private:
 	void tempoReaches(int32_t tick);
 	/// Replay: the song ends at a Section line, `tick`, and the next starts there (spec §17.5).
 	void split(int32_t tick);
+	/// Replay: a non-param setting edit on a part past its current clip's start ends its lanes at `tick`, so the
+	/// writer starts a new track there (one sound per track, spec §17.6).
+	void cutForSetting(uint8_t target, int32_t tick);
 	/// The base of an automation lane that moves (ClipBuilder::finish()).
 	[[nodiscard]] int8_t centreOf(const Automated& automated) const;
 	/// The first step past the replayed span: no step from it on is decided.
@@ -150,6 +153,9 @@ private:
 	int32_t songStart_ = 0;
 	int64_t songExtra_ = 0;
 	int32_t songs_ = 1;
+	/// Where each part's current clip/track started: prevents cutting twice when multiple setting edits land on one
+	/// step.
+	int32_t partCutTick_[kMaxParts] = {};
 };
 
 } // namespace deluge::generative::compose

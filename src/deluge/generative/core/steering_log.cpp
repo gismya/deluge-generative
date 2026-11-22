@@ -28,6 +28,7 @@ namespace {
 static_assert(static_cast<int32_t>(kLastCommandKind) < 0x40, "a kind fits the tag's low 6 bits");
 constexpr uint8_t kExtended = 0x40; ///< The command's length and lane follow.
 constexpr int32_t kMaxPathRecord = 1 + 5 + 4 + kMaxSoundPath;
+constexpr int32_t kMaxSettingPathRecord = 1 + 5 + 1 + 1 + 3 + 1 + kMaxSoundPath;
 
 GEN_STEP_CODE uint8_t* putVarint(uint8_t* out, uint32_t value) {
 	while (value >= 0x80) {
@@ -205,6 +206,14 @@ void SteeringLog::addSnapshot(const void* data, int32_t length) {
 
 uint8_t* SteeringLog::snapshotSpace(int32_t length) {
 	return writeHeader(kSnapshotTag, nullptr, length);
+}
+
+void SteeringLog::addSettings(const void* data, int32_t length) {
+	writeHeader(kSettingsTag, data, length);
+}
+
+uint8_t* SteeringLog::settingsSpace(int32_t length) {
+	return writeHeader(kSettingsTag, nullptr, length);
 }
 
 void SteeringLog::endPiece(int32_t step, PieceEnd why) {
@@ -428,6 +437,26 @@ GEN_STEP_CODE bool SteeringLog::appendWaiting(int32_t step, const Command& comma
 	return write(step, record, static_cast<int32_t>(at - record));
 }
 
+bool SteeringLog::appendSettingPath(int32_t step, uint8_t part, Lane lane, uint16_t setting, const char* path) {
+	if (!open_ || cut_) {
+		return false;
+	}
+	uint8_t record[kMaxSettingPathRecord];
+	uint8_t* at = record;
+	*at++ = kSettingPathTag;
+	at = putVarint(at, static_cast<uint32_t>(step - lastStep_));
+	*at++ = part;
+	*at++ = static_cast<uint8_t>(lane);
+	at = putVarint(at, setting);
+	const int32_t length = path != nullptr ? pathLength(path) : 0;
+	*at++ = static_cast<uint8_t>(length);
+	if (length > 0) {
+		std::memcpy(at, path, static_cast<size_t>(length));
+		at += length;
+	}
+	return write(step, record, static_cast<int32_t>(at - record));
+}
+
 bool SteeringLog::appendSoundDropped(int32_t step, uint8_t part) {
 	if (!open_ || part >= kMaxParts || landed_[part] < 0) {
 		return false;
@@ -567,8 +596,11 @@ void SteeringLog::released(int32_t slot) {
 }
 
 void SteeringLog::storeFailed(int32_t slot) {
+	if (slot != newest_) {
+		return; // a closed-file rewrite failure on an adopted/dropped piece doesn't poison the playing piece
+	}
 	storeFailed_ = true;
-	if (slot == newest_ && open_ && !cut_) {
+	if (open_ && !cut_) {
 		Slot& s = newest();
 		markedAtCut_ = s.info.marked;
 		s.info.cutAt = inRecords_ ? lastStep_ + 1 : 0;
@@ -763,6 +795,19 @@ const uint8_t* SteeringLog::Piece::decode(const uint8_t* at, int32_t step, LogRe
 		}
 		return at;
 	}
+	if (tag == kSettingPathTag) {
+		out.kind = RecordKind::SettingPath;
+		out.command.kind = CommandKind::SetSetting;
+		out.command.target = *at++;
+		out.command.lane = static_cast<Lane>(*at++);
+		uint32_t setting = 0;
+		at = getVarint(at, setting);
+		out.command.length = static_cast<uint16_t>(setting);
+		out.pathLength = *at++;
+		out.path = reinterpret_cast<const char*>(at);
+		at += out.pathLength;
+		return at;
+	}
 	if (tag == kWaitingTag || tag == kNotWaitingTag) {
 		out.kind = tag == kWaitingTag ? RecordKind::Waiting : RecordKind::NotWaiting;
 		out.command.kind = static_cast<CommandKind>(*at++);
@@ -817,6 +862,11 @@ const uint8_t* SteeringLog::Piece::recordEnd(const uint8_t* at, const uint8_t* e
 	case kSoundPathTag: {
 		const uint8_t* length = bytes(at, 3);
 		return length != nullptr && length < end ? bytes(length + 1, *length) : nullptr;
+	}
+	case kSettingPathTag: {
+		at = bytes(at, 2);                         // part, lane
+		at = at != nullptr ? varint(at) : nullptr; // setting id
+		return at != nullptr && at < end ? bytes(at + 1, *at) : nullptr;
 	}
 	case kNotWaitingTag:
 		return bytes(at, 1);

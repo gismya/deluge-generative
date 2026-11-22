@@ -24,6 +24,7 @@
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
@@ -104,6 +105,18 @@ public:
 			}
 			restartBegan.built_[p] = built;
 			restartBegan.builtParts_ |= 1U << p;
+			// Apply any header settings (including sample/wavetable paths, which need task context) onto the rebuilt
+			// part alone (never the Song, which stays untouched until the restart's line).
+			const SteeringLog& log = performAdapter.steeringLog();
+			if (log.newestWithHeader() >= 0) {
+				if (chunks.boundary()) { // the restore gets its own chunk, never the tail of the build's
+					freeBuilt(song);
+					return JobOutcome::Cancelled;
+				}
+				Roster single{};
+				single.parts[p] = built;
+				restoreSettings(log.newestHeader(), single, *genre, *song, true, false, false);
+			}
 			if (chunks.boundary()) {
 				freeBuilt(song);
 				return JobOutcome::Cancelled;
@@ -184,10 +197,14 @@ uint32_t RestartBegan::changedParts(const SteeringLog::Piece& piece) const {
 		}
 	}
 	// An Output edited since the header was written, which the header holds no block for (it was as its preset loaded
-	// then, spec §17.2): built again from its preset, so it goes back as it began.
-	bool song = false;
-	const uint8_t inHeader = snapshotParts(piece, &song);
-	parts |= performAdapter.editedParts() & ~inHeader;
+	// then, spec §17.2), or whose non-param settings need a rebuild/path reload: built again from its preset.
+	const EditedOutputs inHeader = snapshotParts(piece);
+	parts |= performAdapter.editedOutputs().parts & ~inHeader.parts;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (settingsTracker.partNeedsRebuild(piece, p)) {
+			parts |= 1U << p;
+		}
+	}
 	return parts;
 }
 
@@ -239,6 +256,8 @@ void RestartBegan::press() {
 	piece_ = at;
 	startsStopped_ = !playing;
 	const SteeringLog::Piece piece = log.newestHeader(); // the piece `at`: its header stays in RAM (spec §17.2)
+	// Sweep all slots before checking changedParts(): bounded 2-slots/frame polling can lag behind non-focused edits.
+	settingsTracker.scanAll(adapter.sink_.roster, *currentRecipe.recipe.genre, *adapter.song_, playing);
 	const uint32_t parts = changedParts(piece);
 	if (parts == 0) {
 		TEST_EVENT("gen_restart_press began parts=0");
@@ -343,23 +362,39 @@ const PieceStart* RestartBegan::lands() {
 void RestartBegan::restore(const SteeringLog::Piece& piece) {
 	PerformAdapter& adapter = performAdapter;
 	const Genre& genre = *currentRecipe.recipe.genre;
+	const uint32_t rebuilt = builtParts_;
 	for (int32_t p = 0; p < kMaxParts; p++) {
-		if ((builtParts_ & (1U << p)) != 0) {
+		if ((rebuilt & (1U << p)) != 0) {
 			soundSwaps.adoptRestarted(p, built_[p], beganPicks);
 			built_[p] = PartOutput{};
 		}
 	}
 	builtParts_ = 0;
+	// Sweep slot 0 (Song, tick-safe) before checking songNeedsReset(), so a Song edit made after press() isn't missed.
+	settingsTracker.scanSong(adapter.sink_.roster, genre, *adapter.song_);
+	// Restore non-param settings first (scalar only in the tick; parts rebuilt by BeganJob already ran
+	// restoreSettings() in task context and are skipped here), then params.
+	if (settingsTracker.songNeedsReset(piece)) {
+		resetSongSettings(*adapter.song_, true);
+	}
+	Roster inPlace = adapter.sink_.roster;
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		if ((rebuilt & (1U << p)) != 0) {
+			inPlace.parts[p] = PartOutput{};
+		}
+	}
+	const int32_t settingsWritten = restoreSettings(piece, inPlace, genre, *adapter.song_, false, true);
 	const int32_t written = restoreSnapshot(piece, adapter.sink_.roster, genre, *adapter.song_);
 	// What the header holds blocks for is as it was edited then; an edited song it holds no block for goes back to
 	// how it was built (spec §17.2).
-	bool song = false;
-	const uint8_t inHeader = snapshotParts(piece, &song);
-	if (!song && adapter.songEdited()) {
+	const EditedOutputs inHeader = snapshotParts(piece);
+	if (!inHeader.song && adapter.editedOutputs().song) {
 		resetSongParams(*adapter.song_);
 	}
-	adapter.outputsEdited(inHeader, song);
-	TEST_EVENT("gen_restart_snapshot params=%ld", static_cast<long>(written));
+	adapter.outputsEdited(inHeader);
+	settingsTracker.syncToHeader(piece, adapter.sink_.roster, genre, *adapter.song_);
+	TEST_EVENT("gen_restart_snapshot params=%ld settings=%ld", static_cast<long>(written),
+	           static_cast<long>(settingsWritten));
 }
 
 void RestartBegan::service() {

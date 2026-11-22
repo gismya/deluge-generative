@@ -66,11 +66,21 @@ struct RecordingWriter final : SongWriter {
 		int32_t tick;
 		bool operator==(const Track&) const = default;
 	};
+	struct SettingPath {
+		uint8_t part;
+		Lane lane;
+		uint16_t setting;
+		std::string path;
+		int32_t tick;
+		bool operator==(const SettingPath&) const = default;
+	};
 	std::vector<std::pair<uint8_t, int32_t>> cuts; ///< (part, tick)
 	std::vector<Pick> picks;
 	std::vector<Track> tracks;
 	std::vector<TempoNode> tempos;
 	std::vector<std::pair<Command, int32_t>> edits;
+	std::vector<std::pair<Command, int32_t>> settings;
+	std::vector<SettingPath> settingPaths;
 	std::vector<std::pair<bool, int32_t>> stutters;
 	std::vector<int32_t> songs; ///< nextSong() ticks
 	/// Each part's last clip cut or new track, and the nodes that came for the part after it with a tick before it.
@@ -96,6 +106,19 @@ struct RecordingWriter final : SongWriter {
 	void paramEdit(const Command& edit, int32_t tick) override {
 		edits.emplace_back(edit, tick);
 		editNodes.push_back(nodes.size());
+	}
+	void settingEdit(const Command& edit, int32_t tick) override {
+		settings.emplace_back(edit, tick);
+		if (edit.target < kMaxParts) {
+			cutAt[edit.target] = std::max(cutAt[edit.target], tick);
+		}
+	}
+	void settingPath(uint8_t part, Lane lane, uint16_t setting, const char* path, int32_t length,
+	                 int32_t tick) override {
+		settingPaths.push_back({part, lane, setting, std::string(path, static_cast<size_t>(length)), tick});
+		if (part < kMaxParts) {
+			cutAt[part] = std::max(cutAt[part], tick);
+		}
 	}
 	void stutter(bool on, int32_t tick) override { stutters.emplace_back(on, tick); }
 	void nextSong(int32_t tick) override { songs.push_back(tick); }

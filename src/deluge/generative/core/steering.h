@@ -110,11 +110,17 @@ enum class CommandKind : uint8_t {
 	/// Performance view's stutter column or a gold knob's push. Stutter isn't a param edit, so Capture needs it apart
 	/// from the stutter rate's SetParam. The core keeps nothing. Lands on the next undecided step.
 	SetStutter,
+	/// Logged only, by the Perform driver (spec §17.2): a player edit to a non-param sound-editor setting (oscillator
+	/// type, filter mode, arp mode, polyphony, synth mode, etc.). target: the part whose Output holds it, or
+	/// kSongParams. lane: the Drums or FX lane whose row holds it, or Lane::None. length: OutputSetting (settingId()).
+	/// value: the setting's value. Never pushed into SteeringQueue: written by NoteSink::logSettings() at the step
+	/// being decided, so a sample/wavetable path can follow as a kSettingPathTag (0x85) record.
+	SetSetting,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::SetStutter;
+constexpr CommandKind kLastCommandKind = CommandKind::SetSetting;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;
@@ -185,6 +191,8 @@ struct Command {
 
 	/// SetHome and SetParam: the param, as the driver keys it on the part's Output.
 	[[nodiscard]] constexpr uint16_t homeParam() const { return length; }
+	/// SetSetting: the OutputSetting id on the part's Output or the song.
+	[[nodiscard]] constexpr uint16_t settingId() const { return length; }
 	/// SetBias: the macro whose Part bias it sets.
 	[[nodiscard]] constexpr uint16_t biasMacro() const { return length; }
 

@@ -84,6 +84,9 @@ public:
 	virtual void logPieceHeader(SteeringLog& /*log*/) {}
 	/// `part`'s new sound, `token`, landed on `step`: its picks, one SteeringLog::appendSoundPath() per slot.
 	virtual void logSoundPaths(SteeringLog& /*log*/, int32_t /*step*/, uint8_t /*part*/, uint8_t /*token*/) {}
+	/// Non-param sound-editor setting edits waiting to be logged on `step`: written via SteeringLog::append()
+	/// (CommandKind::SetSetting) and SteeringLog::appendSettingPath() (kSettingPathTag = 0x85) (spec §17.2).
+	virtual void logSettings(SteeringLog& /*log*/, int32_t /*step*/) {}
 	// ---- A restart (spec §13.2) ----
 
 	/// A restart reached its bar line: every note of the piece has ended there. Starts `generator` again for the new

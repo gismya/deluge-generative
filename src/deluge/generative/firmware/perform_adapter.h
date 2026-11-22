@@ -28,6 +28,7 @@
 #include "generative/core/steering_log.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/entry_source.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/transitions.h"
 #include "generative/perform/capture.h"
@@ -85,6 +86,8 @@ public:
 	void logPieceHeader(SteeringLog& log) override;
 	/// A re-roll's new picks, from its waiting sound (spec §17.2).
 	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
+	/// Non-param sound-editor setting edits queued since the step before (spec §17.2).
+	void logSettings(SteeringLog& log, int32_t step) override;
 	/// A restart reached its line (spec §13.2): the adapter starts the piece again (PerformAdapter::restartPiece()).
 	void restartPiece(Generator& generator) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
@@ -236,15 +239,13 @@ public:
 
 	/// What a piece's header snapshots (spec §17.2, H13 option A): the parts whose Output was edited since it loaded,
 	/// and whether the song's params were. Set by any player edit, playing or stopped.
-	[[nodiscard]] uint8_t editedParts() const { return editedParts_; }
-	[[nodiscard]] bool songEdited() const { return songEdited_; }
-	/// Part `part`'s Output loaded, or swapped in by a re-roll: its params are its preset's.
-	void outputLoaded(int32_t part) { editedParts_ &= static_cast<uint8_t>(~(1U << part)); }
-	/// The marks for `parts` (and the song if `song`), as AS IT BEGAN left them: written back from a header block.
-	void outputsEdited(uint8_t parts, bool song) {
-		editedParts_ |= parts;
-		songEdited_ = song;
-	}
+	[[nodiscard]] EditedOutputs editedOutputs() const { return edited_; }
+	/// Part `part`'s Output loaded, or swapped in by a re-roll: its params and settings are its preset's.
+	void outputLoaded(int32_t part);
+	/// Replaces the edited marks with AS IT BEGAN's header snapshot marks (no stale bits survive a rebuild).
+	void outputsEdited(EditedOutputs edited) { edited_ = edited; }
+	/// Bounded per-frame poll for non-param sound-editor setting edits (from PerformView::graphicsRoutine()).
+	void pollSettings(int32_t focusedPart);
 
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }
@@ -323,8 +324,8 @@ private:
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
-	/// A transition's `incoming` roster plays, and is emptied.
-	void takeRoster(Roster& incoming);
+	/// A transition's `incoming` roster plays (for `genre`), and is emptied.
+	void takeRoster(Roster& incoming, const Genre* genre);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();
@@ -372,10 +373,8 @@ private:
 	uint32_t restarts_ = 0;
 	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).
 	bool keepLog_ = false;
-	/// The song's params were edited since Perform's song was built (spec §17.2's header snapshot).
-	bool songEdited_ = false;
-	/// The parts whose Output was edited since it loaded (a bit a part): the header snapshots only those.
-	uint8_t editedParts_ = 0;
+	/// Which Outputs' params were edited since they loaded (spec §17.2's header snapshot).
+	EditedOutputs edited_;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;

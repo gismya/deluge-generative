@@ -5,6 +5,7 @@
 #include "generative/compose/capture_timing.h"
 #include "generative/compose/compose_driver.h"
 #include "generative/compose/song_size.h"
+#include "generative/core/output_settings.h"
 #include "harness.h"
 #include "stream_helpers.h"
 #include "transition_piece.h"
@@ -149,6 +150,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			t.push({CommandKind::SetSwingInterval, 0, playing.swingInterval});
 			t.push({CommandKind::SetHome, kAcid, 30, 4});
 			t.push({CommandKind::SetParam, kSongParams, 900, 7});
+			t.push({CommandKind::SetSetting, kAcid, 2, static_cast<uint16_t>(OutputSetting::LpfMode), Lane::None});
 			t.decideBefore(9);
 			t.push({CommandKind::SetFreeze, 3, kPress});
 			t.push(mute(0, true));
@@ -234,6 +236,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			expect(w.tempos.size()).to_be_greater_than(2U);
 			expect(w.tempos.empty() || w.tempos.back().tempo == pending.tempo).to_be_true();
 			expect(w.edits.size()).to_equal(2U);
+			expect(w.settings.size()).to_equal(1U);
 			expect(w.stutters.size()).to_equal(2U);
 		});
 
@@ -664,6 +667,89 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 				const int32_t cut = agreedTick(piece);
 				expect(notesBefore(writer->notes, cut) == notesBefore(expected, cut)).to_be_true();
 			}
+		});
+
+		it("replays mid-piece SetSetting and SettingPath without altering the event stream, ending the part's lanes at the step", _ {
+			StoredLog stored;
+			SteeringLog& log = stored.log;
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.recipe.macros.set(Macro::Motion, kMacroFull);
+			start.seed = 3;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			const int32_t at = phrase + 5;
+			const Command oscType{CommandKind::SetSetting, kAcid, 7, static_cast<uint16_t>(OutputSetting::Osc0Type),
+			                      Lane::None};
+			const Command songMod{CommandKind::SetSetting, kSongParams, 2,
+			                      static_cast<uint16_t>(OutputSetting::ModFxType), Lane::None};
+			log.append(at, oscType);
+			log.appendSettingPath(at, kAcid, Lane::None, static_cast<uint16_t>(OutputSetting::Osc0SamplePath),
+			                      "SAMPLES/TEST.WAV");
+			log.append(at + 4, songMod);
+			log.endPiece(2 * phrase, PieceEnd::Stopped);
+
+			// Replay matches an untouched run of the same Recipe and seed, while delivering the settings at their steps.
+			Run run;
+			run.recipe = start.recipe;
+			run.seed = start.seed;
+			run.skipIntro = true;
+			const Result live = play(run, 2 * phrase / kStepsPerBar);
+
+			const PieceImage img = image(log, 0);
+			auto replayed = replay(img.piece());
+			const RecordingWriter& w = replayed->writer;
+			const int32_t cut = agreedTick(img.piece());
+			expect(notesBefore(w.notes, cut) == notesBefore(pairNotes(live.events), cut)).to_be_true();
+			expect(w.lateNodes).to_equal(0);
+			expect(w.settings.size()).to_equal(2U);
+			expect(w.settings[0].first == oscType && w.settings[0].second == stepTick(at)).to_be_true();
+			expect(w.settings[1].first == songMod && w.settings[1].second == stepTick(at + 4)).to_be_true();
+			expect(w.settingPaths.size()).to_equal(1U);
+			expect(w.settingPaths[0]
+			       == RecordingWriter::SettingPath{kAcid, Lane::None,
+			                                       static_cast<uint16_t>(OutputSetting::Osc0SamplePath),
+			                                       "SAMPLES/TEST.WAV", stepTick(at)})
+			    .to_be_true();
+		});
+
+		it("replays ArpMain before a mid-piece key change (cutClip) and keeps same-step SetSetting order", _ {
+			StoredLog stored;
+			SteeringLog& log = stored.log;
+			PieceStart start;
+			start.recipe = acidRecipe();
+			start.seed = 4;
+			start.first = SectionKind::Groove;
+			log.beginPiece(start);
+			const int32_t phrase = start.recipe.genre->phraseSteps();
+			const Command arpOn{CommandKind::SetSetting, kAcid, 1, static_cast<uint16_t>(OutputSetting::ArpMain),
+			                    Lane::None};
+			const Command keyChange{CommandKind::SetKey, 0, 5, static_cast<uint16_t>(Scale::Minor), Lane::None};
+			const Command synthFm{CommandKind::SetSetting, kAcid, 1, static_cast<uint16_t>(OutputSetting::SynthMode),
+			                      Lane::None};
+			const Command lpfNotch{CommandKind::SetSetting, kAcid, 5, static_cast<uint16_t>(OutputSetting::LpfMode),
+			                       Lane::None};
+			log.append(12, arpOn);
+			log.append(phrase, keyChange);
+			log.append(phrase + 4, synthFm);
+			log.append(phrase + 4, lpfNotch);
+			log.endPiece(2 * phrase, PieceEnd::Stopped);
+
+			const PieceImage img = image(log, 0);
+			auto replayed = replay(img.piece());
+			const RecordingWriter& w = replayed->writer;
+			expect(w.settings.size()).to_equal(3U);
+			expect(w.settings[0].first == arpOn && w.settings[0].second == stepTick(12)).to_be_true();
+			expect(w.settings[1].first == synthFm && w.settings[1].second == stepTick(phrase + 4)).to_be_true();
+			expect(w.settings[2].first == lpfNotch && w.settings[2].second == stepTick(phrase + 4)).to_be_true();
+			bool cutAcidAfterArp = false;
+			for (const auto& [part, tick] : w.cuts) {
+				if (part == kAcid && tick == stepTick(phrase)) {
+					cutAcidAfterArp = true;
+				}
+			}
+			expect(cutAcidAfterArp).to_be_true();
 		});
 	});
 });

@@ -15,6 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/preset_preview.h"
 #include "gui/views/perform_view_internal.h"
 
@@ -540,6 +541,10 @@ void PerformView::showMainPads(const RGB pads[kDisplayHeight][kDisplayWidth]) {
 }
 
 void PerformView::graphicsRoutine() {
+#if ENABLE_SYSEX_TEST
+	const uint32_t frameStarted = getSystemTicks();
+	uint32_t settingsCounts = 0;
+#endif
 	checkEndHold();
 	// Not UI::graphicsRoutine(): it calls the root UI's, which is this one.
 	if (peek_ != Peek::None && static_cast<int32_t>(peekUntil_ - AudioEngine::audioSampleTimer) <= 0) {
@@ -591,6 +596,17 @@ void PerformView::graphicsRoutine() {
 			TEST_EVENT("gen_stutter on=%d", stuttering ? 1 : 0);
 		}
 	}
+	// Non-param sound-editor settings (oscillator type/sample, filter mode, arp mode, polyphony, synth mode, etc.):
+	// bounded per-frame check of at most 2 slots so graphicsRoutine() stays well under 1 ms (spec §17.2).
+	{
+#if ENABLE_SYSEX_TEST
+		const uint32_t settingsStarted = getSystemTicks();
+#endif
+		performAdapter.pollSettings(focusedPart());
+#if ENABLE_SYSEX_TEST
+		settingsCounts = getSystemTicks() - settingsStarted;
+#endif
+	}
 	if (AudioEngine::audioSampleTimer - performanceAt_ >= kFaderRefreshSamples) {
 		refreshPerformancePage(); // a knob or MIDI turn moves a column's value
 	}
@@ -607,6 +623,7 @@ void PerformView::graphicsRoutine() {
 	refreshScreen();
 #if ENABLE_SYSEX_TEST
 	checkKnobRings();
+	deluge::generative::firmware::graphicsTiming.record(getSystemTicks() - frameStarted, settingsCounts);
 #endif
 }
 

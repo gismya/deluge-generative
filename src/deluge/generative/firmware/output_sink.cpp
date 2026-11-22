@@ -21,6 +21,7 @@
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
@@ -273,7 +274,7 @@ void OutputSink::logPieceHeader(SteeringLog& log) {
 		return;
 	}
 	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_,
-	                         performAdapter.editedParts(), performAdapter.songEdited());
+	                         performAdapter.editedOutputs());
 	// header: the newest piece's opening and header records, in bytes; used: the ring's bytes not yet on the card;
 	// us: what opening the piece and its header cost in the tick.
 	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d us=%lu", static_cast<long>(log.pieces()),
@@ -286,6 +287,10 @@ void OutputSink::logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uin
 	if (const Generator* playing = performAdapter.driver().playing()) {
 		firmware::logSoundPaths(log, step, part, token, SoundSwaps::waitingPicks(), *playing->recipe().genre);
 	}
+}
+
+void OutputSink::logSettings(SteeringLog& log, int32_t step) {
+	settingsTracker.drainToLog(log, step);
 }
 
 void OutputSink::outgoingDrained() {

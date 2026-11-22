@@ -35,10 +35,23 @@ constexpr uint32_t kCountsPerUs = DELUGE_CLOCKS_PER / 1'000'000;
 
 DecisionTiming decisionTiming;
 ControlTiming controlTiming;
+GraphicsTiming graphicsTiming;
+
+void GraphicsTiming::report() {
+	if (frames_ == 0) {
+		return;
+	}
+	TEST_EVENT("gen_graphics frames=%lu mean_us=%lu max_us=%lu settings_max_us=%lu",
+	           static_cast<unsigned long>(frames_), static_cast<unsigned long>((totalCounts_ / frames_) / kCountsPerUs),
+	           static_cast<unsigned long>(maxCounts_ / kCountsPerUs),
+	           static_cast<unsigned long>(settingsMaxCounts_ / kCountsPerUs));
+	reset();
+}
 
 void ControlTiming::report(const char* ramps) {
 	closeStep();
 	cardLog.report(); // the card log's window and the streaming counters, before the reset below (#448)
+	graphicsTiming.report();
 	TestPort::RenderTiming render = TestPort::renderTiming;
 	TestPort::renderTiming = {};
 	const auto renderMean =
@@ -91,6 +104,7 @@ void ControlTiming::reset() {
 	stepOpen_ = false;
 	stepCounts_ = stepsSending_ = totalCounts_ = maxCounts_ = 0;
 	soundControls.takeParamsMoved();
+	graphicsTiming.reset();
 	TestPort::renderTiming = {};
 }
 

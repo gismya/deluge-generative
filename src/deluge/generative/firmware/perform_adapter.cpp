@@ -21,6 +21,7 @@
 #include "generative/firmware/perform_midi.h"
 #include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
@@ -104,6 +105,10 @@ void OutputSink::restartPiece(Generator& generator) {
 
 void PerformAdapter::stopPiece() {
 	if (driver_.running()) {
+		if (song_ != nullptr && currentRecipe.recipe.genre != nullptr) {
+			settingsTracker.scanAll(sink_.roster, *currentRecipe.recipe.genre, *song_, false);
+		}
+		settingsTracker.clearPending();
 		driver_.stop(sink_);
 		reportLog(true);
 	}
@@ -139,6 +144,7 @@ void PerformAdapter::dropSong() {
 	restartBegan.forgetSong();
 	transitions.forget();
 	retirements.forget();
+	settingsTracker.forget();
 	generator_ = nullptr;
 	song_ = nullptr;
 	sink_ = OutputSink{};
@@ -430,11 +436,11 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		// Stopped too: a Start keeps the Outputs, so the next piece's header must snapshot this one (spec §17.2).
 		const int32_t output = editedOutput(stack.paramManager, sink_.roster, *currentRecipe.recipe.genre, *song_);
 		if (output == kSongParams) {
-			songEdited_ = true;
+			edited_.song = true;
 		}
 		else if (output >= 0) {
-			static_assert(kMaxParts <= 8, "editedParts_ holds a bit a part");
-			editedParts_ |= static_cast<uint8_t>(1U << output);
+			static_assert(kMaxParts <= 8, "edited_.parts holds a bit a part");
+			edited_.parts |= static_cast<uint8_t>(1U << output);
 		}
 	}
 	if (!active() || leaving() || !driver_.running()) {
@@ -452,10 +458,26 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 	}
 }
 
-void PerformAdapter::takeRoster(Roster& incoming) {
+void PerformAdapter::outputLoaded(int32_t part) {
+	edited_.parts &= static_cast<uint8_t>(~(1U << part));
+	if (currentRecipe.recipe.genre != nullptr) {
+		settingsTracker.resetPart(part, sink_.roster, *currentRecipe.recipe.genre);
+	}
+}
+
+void PerformAdapter::pollSettings(int32_t focusedPart) {
+	if (active() && !leaving() && song_ != nullptr && currentRecipe.recipe.genre != nullptr) {
+		settingsTracker.poll(sink_.roster, *currentRecipe.recipe.genre, *song_, driver_.running(), focusedPart);
+	}
+}
+
+void PerformAdapter::takeRoster(Roster& incoming, const Genre* genre) {
 	sink_.roster = incoming;
 	incoming = Roster{};
-	editedParts_ = 0; // a transition's new roster: every Output as its preset loaded
+	edited_.parts = 0; // a transition's new roster: every Output as its preset loaded
+	if (genre != nullptr) {
+		settingsTracker.resetRoster(sink_.roster, *genre);
+	}
 }
 
 void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingRecipe& pending) {
@@ -471,7 +493,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	              "the start step's copy of the roster must not have the same address modulo 8 at both ends");
 #pragma GCC diagnostic pop
 	sink_.outgoing = sink_.roster;
-	takeRoster(incoming);
+	takeRoster(incoming, pending.recipe.genre);
 	generator_ = idleBlock(); // the incoming instance started there
 	steering_.handOver(pending);
 	instanceStarts(); // as at a start: a FILL still held reaches the new instance (spec §8.7)
@@ -479,7 +501,7 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 
 void PerformAdapter::incomingCommits(Roster& incoming, const perform::PendingRecipe& pending, uint32_t capSamples) {
 	retirements.retireRoster(sink_.roster, Retirements::When::AfterTail, Retirements::Owner::Transition, capSamples);
-	takeRoster(incoming);
+	takeRoster(incoming, pending.recipe.genre);
 	// This can run in the tick, when the piece ended by itself with the transition Queued (the lifecycle's
 	// playbackEnded() says when). The transport has stopped by then (endPlayback() clears playbackState before the
 	// view's playbackEnded()), so the swing interval's write (Steering::swingIntervalChanged()) only sets the

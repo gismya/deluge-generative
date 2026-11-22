@@ -67,6 +67,30 @@ uint32_t idOf(const char* name) {
 	return id;
 }
 
+/// Reads `kCaptureFolder` for piece file ids (`ids`, at most `maxIds`); every file's id counts toward `*highest`.
+int32_t scanIds(uint32_t* ids, int32_t maxIds, uint32_t* highest = nullptr) {
+	DIR dir;
+	if (f_opendir(&dir, kCaptureFolder) != FR_OK) {
+		return 0;
+	}
+	FILINFO info;
+	int32_t found = 0;
+	while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
+		const uint32_t id = (info.fattrib & AM_DIR) != 0 ? 0 : idOf(info.fname);
+		if (highest != nullptr) {
+			*highest = std::max(*highest, id);
+		}
+		if (id != 0 && found < maxIds) {
+			ids[found++] = id;
+		}
+	}
+	f_closedir(&dir);
+	return found;
+}
+
+/// Slots held back at entry so a folder full of marked files still leaves room to log new pieces.
+constexpr int32_t kAdoptReserve = 4;
+
 /// Reads all of `path` into a buffer from allocExternal(). @return FR_OK, with `*bytes` its length.
 FRESULT readAll(const char* path, uint8_t** out, int32_t* bytes) {
 	*out = nullptr;
@@ -148,22 +172,11 @@ Error CardLog::enter(SteeringLog& log) {
 	int32_t adopted = 0;
 	int32_t kept = 0;
 	int32_t deleted = 0;
-	DIR dir;
-	if (error == Error::NONE && f_opendir(&dir, kCaptureFolder) == FR_OK) {
-		FILINFO info;
+	if (error == Error::NONE) {
 		// Names first: deleting while reading the folder could skip entries.
 		static constexpr int32_t kMaxFiles = 256;
 		uint32_t ids[kMaxFiles];
-		int32_t found = 0;
-		// Every name counts for the next id, past the list's room too: a new file never lands on an old one.
-		while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0) {
-			const uint32_t id = (info.fattrib & AM_DIR) != 0 ? 0 : idOf(info.fname);
-			highest = std::max(highest, id);
-			if (id != 0 && found < kMaxFiles) {
-				ids[found++] = id;
-			}
-		}
-		f_closedir(&dir);
+		const int32_t found = scanIds(ids, kMaxFiles, &highest);
 		// Oldest first, so adopted pieces keep their set order.
 		std::sort(ids, ids + found);
 		for (int32_t i = 0; i < found; i++) {
@@ -176,7 +189,10 @@ Error CardLog::enter(SteeringLog& log) {
 			if (readAll(path, &image, &bytes) == FR_OK && SteeringLog::readImage(image, bytes)) {
 				const auto* info = reinterpret_cast<const PieceInfo*>(image);
 				marked = info->marked && info->id == ids[i];
-				slot = marked ? log.adopt(*info) : -1;
+				// Hold back kAdoptReserve slots so a full folder of marked files still leaves room to log this set.
+				if (marked && log.pieces() < kMaxLogPieces - kAdoptReserve) {
+					slot = log.adopt(*info);
+				}
 			}
 			if (image != nullptr) {
 				delugeDealloc(image);
@@ -223,7 +239,7 @@ void CardLog::finish() {
 		for (int32_t s = 0; s < kMaxLogPieces && !busy; s++) {
 			busy = log_->used(s)
 			       && (!log_->allTaken(s) || log_->dropped(s) || (!closed_[s] && !failed_[s])
-			           || (!failed_[s] && version_[s] != log_->infoVersion(s)));
+			           || version_[s] != log_->infoVersion(s));
 		}
 		if (!busy) {
 			break;
@@ -379,7 +395,7 @@ void CardLog::step(bool finishing) {
 	}
 	// A thrown-away piece's slot goes back once nothing of it is left to skip.
 	for (int32_t s = 0; s < kMaxLogPieces; s++) {
-		const bool infoStale = closed_[s] && !failed_[s] && version_[s] != log_->infoVersion(s);
+		const bool infoStale = (closed_[s] || failed_[s]) && version_[s] != log_->infoVersion(s);
 		if (log_->used(s) && log_->dropped(s) && log_->allTaken(s) && writingSlot_ != s && !infoStale) {
 			log_->released(s);
 			failed_[s] = false;
@@ -464,7 +480,11 @@ void CardLog::step(bool finishing) {
 	// thrown away once unmarked): its info again, a quiet moment after a piece change (spec §17.2, §17.4).
 	const bool quiet = finishing || now - openedAt_ >= kLogSpareAfterSeconds;
 	for (int32_t s = 0; s < kMaxLogPieces && quiet; s++) {
-		if (log_->used(s) && closed_[s] && !failed_[s] && version_[s] != log_->infoVersion(s)) {
+		if (log_->used(s) && (closed_[s] || failed_[s]) && version_[s] != log_->infoVersion(s)) {
+			const bool wasFailed = failed_[s];
+			// A failed slot gets one best-effort rewrite (so marked -> card error -> unmark can clear marked=1 on
+			// disk), then advances version_ either way so it doesn't loop.
+			version_[s] = log_->infoVersion(s);
 			char path[40];
 			pathOf(log_->idOf(s), path);
 			FRESULT result = f_open(&other_, path, FA_WRITE | FA_OPEN_EXISTING);
@@ -473,11 +493,19 @@ void CardLog::step(bool finishing) {
 				const FRESULT closed = f_close(&other_);
 				result = result != FR_OK ? result : closed;
 			}
-			if (result != FR_OK) {
-				fail(s, result);
+			if (result != FR_OK && !wasFailed) {
+				failed_[s] = true; // closed-file rewrite failure on an earlier piece doesn't poison the playing piece
+				if (log_->isNewest(s)) {
+					fail(s, result);
+				}
 			}
 			return;
 		}
+	}
+	// Drop a spare whose id was already passed by the log (e.g. a dropped piece or adopted id jump).
+	if (quiet && spare_ >= 0 && spareId_ < log_->nextId()) {
+		dropSpare();
+		return;
 	}
 	// The next piece's file, made ahead in a quiet moment (spec §17.2).
 	if (!finishing && spare_ < 0 && !spareTried_ && now - openedAt_ >= kLogSpareAfterSeconds) {
@@ -537,21 +565,9 @@ void CardLog::clean(bool keepMarked) {
 	if (StorageManager::initSD() != Error::NONE) {
 		return;
 	}
-	DIR dir;
-	if (f_opendir(&dir, kCaptureFolder) != FR_OK) {
-		return;
-	}
 	static constexpr int32_t kMaxFiles = 256;
 	uint32_t ids[kMaxFiles];
-	int32_t found = 0;
-	FILINFO info;
-	while (f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0 && found < kMaxFiles) {
-		const uint32_t id = (info.fattrib & AM_DIR) != 0 ? 0 : idOf(info.fname);
-		if (id != 0) {
-			ids[found++] = id;
-		}
-	}
-	f_closedir(&dir);
+	const int32_t found = scanIds(ids, kMaxFiles);
 	int32_t deleted = 0;
 	for (int32_t i = 0; i < found; i++) {
 		char path[40];

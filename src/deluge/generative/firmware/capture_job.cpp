@@ -27,6 +27,7 @@
 #include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/song_file.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_modal.h"
@@ -156,14 +157,16 @@ public:
 		if (error != Error::NONE) {
 			return error;
 		}
-		// The header's params for every part still on its first sound, then each param's newest edit and home.
+		// The header's settings and params for every part still on its first sound, then each edit and home.
 		Roster first = work_->roster;
 		for (int32_t p = 0; p < kMaxParts; p++) {
 			if ((writer.rerolledParts() & partBit(p)) != 0) {
 				first.parts[p] = PartOutput{};
 			}
 		}
+		restoreSettings(*piece_, first, *genre_, *building_, true, false);
 		restoreSnapshot(*piece_, first, *genre_, *building_);
+		writer.restoreSettingsEdits(work_->roster, *building_);
 		writer.restoreEdits(work_->roster, *building_);
 		writer.restart(building_, work_->roster, tick);
 		return Error::NONE;
@@ -210,11 +213,12 @@ private:
 		if (started != Error::NONE) {
 			return stopBuild(started);
 		}
+		restoreSettings(piece, work_->roster, *genre_, *building_, true, false);
 		restoreSnapshot(piece, work_->roster, *genre_, *building_);
 
 		CaptureWork& work = *work_;
 		work.writer.prepare(building_, work.roster, *genre_);
-		work.writer.prepareCapture(picks, picksPalette(), chunks, *this);
+		work.writer.prepareCapture(piece, picks, picksPalette(), chunks, *this);
 		work.driver.beginReplay(work.generator, piece, work.writer);
 		expected_ = std::max<int32_t>(piece.spanEnd() / kStepsPerBar, 1);
 		bars_ = 0;

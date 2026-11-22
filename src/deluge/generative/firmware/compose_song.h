@@ -23,6 +23,7 @@
 
 #include "definitions_cxx.hpp"
 #include "generative/compose/clip_builder.h"
+#include "generative/core/steering_log.h"
 #include "generative/firmware/perform_song.h"
 
 class AutoParam;
@@ -53,9 +54,11 @@ public:
 	/// Before the driver's begin(): the private song and the roster buildPerformSong() made for it. Binds the parts'
 	/// sound controls (soundControls, which only Perform uses otherwise) for the automation.
 	void prepare(Song* song, Roster& roster, const Genre& genre);
-	/// Capture (spec §17.6), after prepare(): the piece's header picks and its genre's palette, for the new tracks a
-	/// re-roll starts, which read the card through `chunks`; `host` hears of splits.
-	void prepareCapture(const SoundPicks& picks, const Palette& palette, Chunks& chunks, CaptureHost& host);
+	/// Capture (spec §17.6), after prepare(): the piece's header (for restoring header snapshots on setting-triggered
+	/// new tracks), its picks, and its genre's palette, for new tracks which read the card through `chunks`; `host`
+	/// hears of splits.
+	void prepareCapture(const SteeringLog::Piece& piece, const SoundPicks& picks, const Palette& palette,
+	                    Chunks& chunks, CaptureHost& host);
 	/// A split's next song (spec §17.5), from `tick`: its Outputs built from playingPicks(), with restoreEdits()
 	/// applied. Binds them as prepare() does.
 	void restart(Song* song, Roster& roster, int32_t tick);
@@ -78,15 +81,23 @@ public:
 	void newTrack(uint8_t part, uint8_t token, int32_t tick) override;
 	void tempo(const compose::TempoNode& node) override;
 	void paramEdit(const Command& edit, int32_t tick) override;
+	void settingEdit(const Command& edit, int32_t tick) override;
+	void settingPath(uint8_t part, Lane lane, uint16_t setting, const char* path, int32_t length,
+	                 int32_t tick) override;
 	void nextSong(int32_t tick) override;
 
 	/// The sounds playing at a split: the header's picks, with each part's re-rolls that started a track.
 	[[nodiscard]] const SoundPicks& playingPicks() const { return playing_; }
 	/// Parts whose sound a re-roll replaced: the header's param snapshot isn't theirs any more.
 	[[nodiscard]] uint32_t rerolledParts() const { return rerolled_; }
-	/// A split's next song, before restart(): the param edits and homes heard so far, each param's newest, written
-	/// as its value on `roster` and `song` (spec §17.5).
-	void restoreEdits(const Roster& roster, Song& song) const;
+	/// A split's next song (or a setting-triggered new track with `includeSong = false`), before restoreEdits() and
+	/// restart(): the non-param settings heard so far, each setting's newest, applied onto `roster` and (when
+	/// `includeSong`) `song` (spec §17.5).
+	void restoreSettingsEdits(const Roster& roster, Song& song, bool includeSong = true) const;
+	/// A split's next song (or a setting-triggered new track with `includeSong = false`), before restart(): the param
+	/// edits and homes heard so far, each param's newest, written as its value on `roster` and (when `includeSong`)
+	/// `song` (spec §17.5).
+	void restoreEdits(const Roster& roster, Song& song, bool includeSong = true) const;
 
 	/// The first error a write met (no memory for a note or a node, or a new track's card read), or Error::NONE.
 	[[nodiscard]] Error error() const { return error_; }
@@ -109,6 +120,9 @@ public:
 	/// The param edits and homes a split song starts from (restoreEdits()): each param's newest (spec §17.5). Past
 	/// it, a param's first edit isn't kept for the next song (droppedEdits()). (tuning)
 	static constexpr int32_t kMaxEdits = 64;
+	/// Non-param setting edits remembered for setting-triggered new tracks and split songs. (tuning)
+	static constexpr int32_t kMaxSettingEdits = 64;
+	static constexpr int32_t kMaxSettingPaths = 16;
 	/// Capture: params whose edits restoreEdits() can't give a split's next song (kMaxEdits).
 	[[nodiscard]] uint32_t droppedEdits() const { return droppedEdits_; }
 
@@ -140,6 +154,18 @@ private:
 	/// Where `target`'s clip starts now: a part's newest segment, or the song's start for the song's params.
 	[[nodiscard]] int32_t startOf(uint8_t target) const;
 	void remember(const Command& edit);
+	void rememberSetting(const Command& edit);
+	void rememberSettingPath(uint8_t part, Lane lane, uint16_t setting, const char* path, int32_t length);
+	/// Starts a new track for `part` at `tick` on a mid-piece non-param setting change, carrying over its current
+	/// preset picks, header snapshot (if not re-rolled), and prior setting/param/home edits (spec §17.6).
+	void startSettingTrack(uint8_t part, int32_t tick);
+
+	struct KeptSettingPath {
+		uint8_t target = 0;
+		Lane lane = Lane::None;
+		uint16_t setting = 0;
+		SoundPath path;
+	};
 
 	Song* song_ = nullptr;
 	Roster* roster_ = nullptr;
@@ -154,6 +180,7 @@ private:
 	CaptureHost* host_ = nullptr;
 	Chunks* chunks_ = nullptr;
 	const Palette* palette_ = nullptr;
+	const SteeringLog::Piece* piece_ = nullptr;
 	SoundPicks picks_;   ///< The picks re-rolls have logged, by slot
 	SoundPicks playing_; ///< The picks whose tracks play
 	uint32_t rerolled_ = 0;
@@ -165,6 +192,10 @@ private:
 	int16_t newest_[kMaxParts] = {};
 	Command edits_[kMaxEdits];
 	int32_t editCount_ = 0;
+	Command settingEdits_[kMaxSettingEdits];
+	int32_t settingEditCount_ = 0;
+	KeptSettingPath settingPaths_[kMaxSettingPaths];
+	int32_t settingPathCount_ = 0;
 	uint32_t cuts_ = 0;
 	uint32_t newTracks_ = 0;
 	uint32_t droppedSegments_ = 0;
