@@ -1098,6 +1098,10 @@ describe genre_data("Every built-in genre", $ {
 			genre.phraseBars = 16;
 			genre.dropOutGridBars = 8;
 			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 12; // a power of two that doesn't divide the phrase
+			genre.dropOutGridBars = 8;
+			expect(dropOutsValid(genre)).to_be_false();
+			genre.phraseBars = 16;
 			genre.dropOutGridBars = 16;
 			expect(dropOutsValid(genre)).to_be_true();
 			genre.phraseBars = 8;

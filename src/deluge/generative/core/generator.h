@@ -962,8 +962,8 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
-	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
-	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
+	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
 	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
 	PunchIns punch_;
