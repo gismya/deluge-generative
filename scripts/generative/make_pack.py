@@ -315,7 +315,10 @@ SAMPLES = {
 
 
 def knob(value):
-    """A 0–50 sound editor value as the param it stores (getParamFromUserValue's default branch)."""
+    """A 0–50 sound editor value as the param it stores, as the menu saves it (computeFinalValueForStandardMenuItem):
+    50 is INT32_MAX exactly, not 50 * 85899345 - 2**31, so a check against full sees a full knob as full (#483)."""
+    if value == 50:
+        return "0x7FFFFFFF"
     return f"0x{(value * 85899345 - 2**31) & 0xFFFFFFFF:08X}"
 
 

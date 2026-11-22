@@ -116,6 +116,18 @@ class MakePackCheckTest(unittest.TestCase):
         self.assertTrue(lines[0].startswith("unlisted: " + derived), lines)
 
 
+class KnobTest(unittest.TestCase):
+    # As the sound editor saves a menu value (computeFinalValueForStandardMenuItem): the top is INT32_MAX exactly, so
+    # a check against full (sound_controls.cpp's kMenuFull) sees a full knob as full (#483).
+    def test_the_top_is_full_scale(self):
+        self.assertEqual(make_pack.knob(50), "0x7FFFFFFF")
+
+    def test_the_bottom_and_the_middle_follow_the_menu(self):
+        self.assertEqual(make_pack.knob(0), "0x80000000")
+        self.assertEqual(make_pack.knob(25), "0xFFFFFFE9")
+        self.assertEqual(make_pack.knob(49), "0x7AE14781")
+
+
 class DerivedTest(unittest.TestCase):
     SOURCE = (
         "<sound>\n\t<defaultParams>\n\t\t<volume>0x74000000</volume>\n"
