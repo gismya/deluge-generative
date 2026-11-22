@@ -7,7 +7,9 @@
 # 2. While stopped, choosing a sample for DRUMS' KICK swaps it into the Current Recipe before the piece opens, so the
 #    piece's header records it and Capture builds the piece's DRUMS Kit with that sample from step 0 (tracks=0).
 #
-# Writes SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML and LIVE B.XML (a hardware run deletes them after). Runs on a Deluge
+# Writes SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML and LIVE B.XML (a hardware run deletes them after). Those names
+# must be absent before it runs: perform_capture_leave.txt and perform_settings_log.txt write the same ones, so in one
+# hardware session a leftover from either shifts the names to LIVE B, LIVE C (#476); run it in its own session. Runs on a Deluge
 # (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip
 # a synth or kit clip.
 #

@@ -597,6 +597,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			SoundChoice droppedChoice;
 			droppedChoice.path.set("SAMPLES/MINE/DroppedKick.wav");
 			droppedChoice.lane = Lane::Kick;
+			expect(chooseSound(*playing.genre, kDrums, droppedChoice, waitingPicks)).to_be_true();
 			expect(t.sounds.choose(kDrums, droppedChoice) == perform::SoundPress::Preloading).to_be_true();
 			t.sounds.endPreload();
 			t.runToStepLine(2 * phrase, -1);

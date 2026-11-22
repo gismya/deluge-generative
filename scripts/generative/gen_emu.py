@@ -930,6 +930,10 @@ class Emu:
     """One delugemu run under icount. The VM moves only in run_to(); every input lands at a fixed virtual time."""
 
     def __init__(self, args, elf, out, name, *, card=None, snapshot=True):
+        if not snapshot and card is None:
+            raise ValueError(
+                "snapshot=False needs a card clone: it would write to the master card image"
+            )
         sys.path.insert(0, os.path.join(args.delugemu, "pylib"))
         from delugemu import DelugeSession
         from delugemu._controls import CONTROLS
@@ -1267,7 +1271,11 @@ def smoke(args):
             ) as exc:
                 check(f"Capture song {songs[0]} holds notes ({exc})", False)
     finally:
-        if not getattr(args, "keep_card", False) and os.path.exists(card):
+        if (
+            not getattr(args, "keep_card", False)
+            and os.path.exists(card)
+            and os.path.realpath(card) != os.path.realpath(args.card)
+        ):
             os.remove(card)
     log(f"{total} checks, {failed} failed; logs in {args.out}")
     leak_failed = 0 if args.no_leak else leak(args)
