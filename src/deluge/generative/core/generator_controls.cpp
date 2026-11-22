@@ -456,11 +456,12 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	}
 	ThrowLine line = throwLine();
 	line.sirenReleased = sirenReleases(step);
-	if (dropOut_ >= 0) {
-		line.dropOutTarget = genre_->dropOuts[dropOut_].throwTarget;
-		line.dropOutNear = inThrowWindow(dropOutFrom_ - step.index);
-		line.dropOutLeft = step.index >= dropOutFrom_ && step.index < dropOutTo_ ? dropOutTo_ - step.index : 0;
-		line.dropOutFalling = step.index >= dropOutTo_ && step.index - dropOutTo_ < kThrowDecaySteps;
+	if (dropOut_.entry >= 0) {
+		const int32_t to = dropOut_.to();
+		line.dropOutTarget = genre_->dropOuts[dropOut_.entry].throwTarget;
+		line.dropOutNear = inThrowWindow(dropOut_.from - step.index);
+		line.dropOutLeft = step.index >= dropOut_.from && step.index < to ? to - step.index : 0;
+		line.dropOutFalling = step.index >= to && step.index - to < kThrowDecaySteps;
 	}
 	// The macro layer, shared by every part with no Part bias; a biased part's sets take its own (spec §3.3).
 	int32_t shared[kNumSoundControls];

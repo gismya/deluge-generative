@@ -1031,11 +1031,18 @@ describe genre_data("Every built-in genre", $ {
 			expect(genreValid(withEntries(leavesTheDrone))).to_be_true();
 		});
 
-		it("refuses a length but 1, 2, 4 or 8 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
+		it("refuses a length but 1, 2, 4, 8 or 16 bars or one past the phrase, an empty mask, an FX lane, a whole Kit, a "
 		   "target outside the mask or more than one", _ {
 			for (uint8_t bars : {1, 2, 4, 8}) {
 				const DropOutEntry ok[] = {{.mask = bass, .bars = bars, .throwTarget = bass}};
 				expect(dropOutsValid(withEntries(ok))).to_be_true();
+			}
+			{
+				const DropOutEntry sixteen[] = {{.mask = bass, .bars = 16}};
+				Genre longPhrases = withEntries(sixteen);
+				longPhrases.phraseBars = 16;
+				expect(dropOutsValid(longPhrases)).to_be_true();
+				expect(dropOutsValid(withEntries(sixteen))).to_be_false(); // 8-bar phrase
 			}
 			{
 				const DropOutEntry eight[] = {{.mask = bass, .bars = 8}};
@@ -1043,9 +1050,11 @@ describe genre_data("Every built-in genre", $ {
 				shortPhrases.phraseBars = 4;
 				expect(dropOutsValid(shortPhrases)).to_be_false();
 			}
-			for (uint8_t bars : {0, 3, 6, 16}) {
+			for (uint8_t bars : {0, 3, 6, 12, 32}) {
 				const DropOutEntry wrong[] = {{.mask = bass, .bars = bars}};
-				expect(dropOutsValid(withEntries(wrong))).to_be_false();
+				Genre longPhrases = withEntries(wrong);
+				longPhrases.phraseBars = 32;
+				expect(dropOutsValid(longPhrases)).to_be_false();
 			}
 			const DropOutEntry empty[] = {{.mask = {}}};
 			const DropOutEntry fxLane[] = {{.mask = {.lanes = laneBit(Lane::Riser)}}};
@@ -1064,7 +1073,7 @@ describe genre_data("Every built-in genre", $ {
 			}
 		});
 
-		it("refuses an entry longer than the phrase, which the Arc plan's leaving it out relies on", _ {
+		it("refuses an entry longer than the phrase, so a drop-out never runs past a phrase line", _ {
 			const DropOutEntry fourBars[] = {{.mask = bass, .bars = 4}};
 			Genre genre = withEntries(fourBars);
 			expect(dropOutsValid(genre)).to_be_true();
@@ -1074,10 +1083,25 @@ describe genre_data("Every built-in genre", $ {
 			expect(dropOutsValid(genre)).to_be_false();
 		});
 
-		it("refuses a gap under a bar and a chance outside 0 to 1000", _ {
+		it("refuses a gap under a bar, a grid not a power of two dividing the phrase, and a chance outside 0 to 1000", _ {
 			const DropOutEntry entries[] = {{.mask = bass}};
 			Genre genre = withEntries(entries);
 			expect(dropOutsValid(genre)).to_be_true();
+			for (uint8_t grid : {1, 2, 4, 8}) {
+				genre.dropOutGridBars = grid;
+				expect(dropOutsValid(genre)).to_be_true();
+			}
+			for (uint8_t bad : {0, 3, 6, 16}) {
+				genre.dropOutGridBars = bad;
+				expect(dropOutsValid(genre)).to_be_false();
+			}
+			genre.phraseBars = 16;
+			genre.dropOutGridBars = 8;
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.dropOutGridBars = 16;
+			expect(dropOutsValid(genre)).to_be_true();
+			genre.phraseBars = 8;
+			genre.dropOutGridBars = 1;
 			genre.dropOutGapBars = 0;
 			expect(dropOutsValid(genre)).to_be_false();
 			genre.dropOutGapBars = 1;
