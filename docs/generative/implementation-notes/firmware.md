@@ -160,7 +160,8 @@ otherwise.
   `Sound::setModFXType()`/`setOscType()`/`setNumUnison()`/`setReversed()` allocate or touch clusters, so
   `partNeedsRebuild()` forces a `BeganJob` task-context rebuild for any part whose live or header mask includes them
   (`SynthMode`, `Osc0Type`, `Osc1Type`, `LpfMode`, `HpfMode`, `ModFxType`, `Unison`, `Osc0/1SampleFlags`,
-  `Osc0/1SamplePath`), `RestartBegan::restore()` skips `restoreSettings()` for rebuilt parts, and `restoreSettings()`
+  `Osc0/1SamplePath`, and `OscSync`, `Lfo0`, `Lfo2`: `Sound::maySourcePatchToParam()` reads them, so they change
+  `setupPatching()`'s result), `RestartBegan::restore()` skips `restoreSettings()` for rebuilt parts, and `restoreSettings()`
   with `loadPaths = false` only runs `performInitialPatching()` (never `setupPatchingForAllParamManagers()`).
 
 - The preset preview (#443, `preset_preview.*`, the portable `perform/preset_preview.h`) builds with

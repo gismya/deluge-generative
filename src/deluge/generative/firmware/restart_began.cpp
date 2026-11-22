@@ -109,6 +109,10 @@ public:
 			// part alone (never the Song, which stays untouched until the restart's line).
 			const SteeringLog& log = performAdapter.steeringLog();
 			if (log.newestWithHeader() >= 0) {
+				if (chunks.boundary()) { // the restore gets its own chunk, never the tail of the build's
+					freeBuilt(song);
+					return JobOutcome::Cancelled;
+				}
 				Roster single{};
 				single.parts[p] = built;
 				restoreSettings(log.newestHeader(), single, *genre, *song, true, false, false);

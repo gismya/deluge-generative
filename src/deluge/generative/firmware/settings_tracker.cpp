@@ -1227,7 +1227,8 @@ bool SettingsTracker::partNeedsRebuild(const SteeringLog::Piece& piece, int32_t 
 	    | settingBit(OutputSetting::LpfMode) | settingBit(OutputSetting::HpfMode) | settingBit(OutputSetting::ModFxType)
 	    | settingBit(OutputSetting::Unison) | settingBit(OutputSetting::Osc0SampleFlags)
 	    | settingBit(OutputSetting::Osc1SampleFlags) | settingBit(OutputSetting::Osc0SamplePath)
-	    | settingBit(OutputSetting::Osc1SamplePath);
+	    | settingBit(OutputSetting::Osc1SamplePath) | settingBit(OutputSetting::OscSync)
+	    | settingBit(OutputSetting::Lfo0) | settingBit(OutputSetting::Lfo2);
 	for (int32_t s = 1; s < kMaxSlots; s++) {
 		const Slot& slot = slots_[s];
 		if (!slot.valid || slot.output != part) {
