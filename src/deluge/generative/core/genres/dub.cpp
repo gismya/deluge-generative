@@ -142,8 +142,8 @@ constexpr DelaySetup kRimEcho{.on = true, .note = DelayNote::Eighth, .feel = Del
 
 constexpr int16_t kPercGate = macroPoints(35);
 
-/// In the fixed lane order (spec §5.4). The Snare plays only Swaps and the Build roll; the Crash only the Phrase
-/// accent; the Tom only the Swap.
+/// In the fixed lane order (spec §5.4). The Snare plays only Swaps, the Roll fill and the Build roll; the Crash only
+/// the Phrase accent; the Tom only the Swap.
 constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Kick, .pool = kKick, .band = {0, 1}, .expression = {.spread = 4}},
     {.lane = Lane::Snare, .fillPool = kSnareFill, .band = {0, 1}, .expression = kLazySnare},
@@ -153,7 +153,7 @@ constexpr LaneSpec kDrumLanes[] = {
         .fillPool = kRimFill,
         .band = {0, 2},
         .expression = {.spread = 8},
-        .delay = kRimEcho, // the second drop-out entry's throw target
+        .delay = kRimEcho, // the Rim and drum drop-outs' throw target
     },
     {
         .lane = Lane::ClosedHat,
@@ -249,7 +249,7 @@ constexpr PartSpec kParts[] = {
         // 80 % of the preset's volume knob (tuning): at the preset's level the skank sat about 3 dB under the rest of
         // the mix, over the bass (delugemu A/B capture, seed 1, a card with the pack).
         .volume = 80,
-        .delay = kWideEcho, // the first drop-out entry's throw target
+        .delay = kWideEcho, // the Skank and tops drop-outs' throw target
     },
     {
         .role = Role::Lead,
@@ -265,7 +265,7 @@ constexpr PartSpec kParts[] = {
         .gestures = kGestures,
         // 80 % of the preset's volume knob (tuning, round 2 I1: 70 too quiet, 100 too loud).
         .volume = 80,
-        .delay = kWideEcho, // the third drop-out entry's throw target
+        .delay = kWideEcho, // the Melodica drop-outs' throw target
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
