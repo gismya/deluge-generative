@@ -2,6 +2,7 @@
 # take the default name and then A to Z; the next quick save is refused with NO FREE NAME. SHIFT+SAVE's full save UI
 # then offers the remembered name itself (not stock's numeric `<name> 2`), and saving under it asks to overwrite.
 # gen_recipe_save quick|full saved|refused|opened|overwrite? name=...
+# writes: RECIPES/ACID TECHNO *
 # covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
 # covers: src/deluge/generative/perform/recipe_name.* src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*

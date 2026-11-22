@@ -13,6 +13,7 @@
 # made ahead). gen_card_log flush piece= bytes=: a timed flush.
 # gen_card_log closed piece= bytes= dropped=: a piece's file closed at its end. gen_card_log removed piece= result=:
 # Capture saved its songs. gen_card_log clean keep_marked= deleted=: a leave or a Capture cleaned the folder.
+# writes: SONGS/GEN ACID TECHNO *
 # covers: src/deluge/generative/firmware/capture_files.* src/deluge/generative/core/steering_log.*
 # covers: src/deluge/generative/firmware/capture_job.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/perform/capture.*

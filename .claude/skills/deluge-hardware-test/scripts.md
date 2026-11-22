@@ -52,6 +52,11 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   `scripts/generative/covers.py` picks the scripts a change needs from them, for `check_all.py` and for a session
   (`covers.py --hardware`). A new script gets them, naming at least every `src/` file
   that sends an event it expects (`covers.py --check` lists the ones missing); one with none runs with every change.
+- A script that leaves files in `SONGS/` or `RECIPES/` (a `save song`, a Capture, a Recipe SAVE) declares them in
+  `# writes: GLOB` lines, one glob each, from the card's root, matched without regard to case
+  (`# writes: SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*`, `# writes: RECIPES/ACID TECHNO *`). A session fails on a new file
+  there that no script in it declares, and prints every new file's path so the run's files can be deleted after.
+  `test_deluge_probe.py` fails on a script with a save action and no `# writes:` line.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).
 - Scripts that need MIDI follow, its feedback or the global MIDI commands use `hold midi_setup` (see `MidiSetup` in
