@@ -174,3 +174,9 @@ otherwise.
   `perform_recipe_save.txt`, `_load`, `_no_free_name`). Waiting for a quiet moment doesn't cover a section longer
   than the 10 s flush: a script whose card presses must not be refused, and that doesn't test the log, holds
   `card_log_off` before Perform's entry (the log takes every byte and touches no card).
+- A retune (spec §21.2) reaches the probe scripts too: `fixtures/recipe_load/RECIPES/` holds Acid techno files meant
+  to be today's (`read=ok`), and the scripts expect their `version=` and the `version older ... genre=` notice. Bump
+  them with the genre; `test_recipe_fixtures.py` fails until they match the golden's version (#488). A palette change
+  moves `gen_sound` expects: since #488 an FX lane with no sample picks one of its presets per piece (`pick ...
+  SYNTHS/...`, not `fallback`), and on delugemu's factory card, which has no pack, the Impact is `silent` and counts
+  in `gen_sound_missing` as the Riser does. A script that runs on both cards matches either.

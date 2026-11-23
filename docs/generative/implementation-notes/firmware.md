@@ -179,3 +179,8 @@ otherwise.
   may be loading samples no Output holds yet. What a preview holds, on the Deluge with the pack (`gen_mem preset_preview`
   against `preset_preview_freed`): a synth part's preset 13.7 KB of internal RAM, an FX lane's (a whole Kit, the
   lane's row a synth) 39 KB, external RAM about 0 for both.
+- The browser services the preview every frame, also while its build runs (a build that yields at a card read or a
+  chunk boundary lets frames through). `PresetPreviewLifecycle::service()` cancels a running build only when its token
+  is no longer the newest want. It used to cancel on any frame mid-build, so a build longer than a frame
+  was cancelled and resubmitted forever (`gen_preset_preview cancelled` every ~45 ms). It showed once #488 made the FX
+  Kit's Impact pick a pack preset: on a card without the pack, the missing preset's lookup made the build span frames.

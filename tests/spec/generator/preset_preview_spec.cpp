@@ -105,6 +105,18 @@ describe preset_preview("Perform's preset preview", $ {
 			expect(fake.take()).to_equal(std::string("off free submit"));
 		});
 
+		it("lets the build for the preset under the cursor run on over frames: only a move cancels it", _ {
+			FakePreview fake;
+			PresetPreviewLifecycle<FakePreview> preview(fake);
+			preview.want();
+			preview.service(0);
+			preview.service(1);
+			preview.service(2);
+			expect(fake.take()).to_equal(std::string("submit"));
+			expect(preview.built(fake.submitted, 3)).to_be_true();
+			expect(fake.take()).to_equal(std::string("on"));
+		});
+
 		it("cancels a build the cursor has moved off, once, and builds the newest when it ends", _ {
 			FakePreview fake;
 			PresetPreviewLifecycle<FakePreview> preview(fake);

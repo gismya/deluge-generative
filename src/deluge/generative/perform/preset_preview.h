@@ -82,7 +82,8 @@ public:
 			return;
 		}
 		if (building_) {
-			if (!cancelSent_) {
+			// A build is for the newest want until the cursor moves; a frame during it changes nothing.
+			if (buildToken_ != token_ && !cancelSent_) {
 				adapter_.cancelBuild(); // the cursor moved on: the newest builds once this one has unwound
 				cancelSent_ = true;
 			}
