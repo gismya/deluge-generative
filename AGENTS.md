@@ -27,8 +27,8 @@ CI runs only the **Run tests** workflow (`tests.yml`), on every PR. Hardware is 
   probe scripts whose `# covers:` paths changed (`scripts/generative/covers.py`). Its table's first line is the merge
   rule: "covers pick suffices" or "needs --full: WHY" (a merge into `generative`, a changed firmware input no covers
   line names, or a change to the emulator checks' code or what picks them); `--full` runs every check and every
-  script. Agents on a milestone run `check_all.py --quick` plus the probe scripts they wrote or edited
-  (`--scripts`), never a default or `--full` run in their loop; the orchestrator runs `--full` on the milestone branch
+  script. Agents on a milestone run the default `check_all.py --base <integration>` (the covers pick: the
+  probe scripts their change's covers lines select, their own new or edited scripts included), never `--full` in their loop; the orchestrator runs `--full` on the milestone branch
   after merges and audits it, and a milestone's latest full run must be clean before it merges into `generative`
   (`docs/agents/orchestration.md`, **Full runs**). Real-time emulators wait for a slot in a host-wide pool (`scripts/generative/emu_slots.py`,
   `DELUGE_EMU_SLOTS`, default 6): don't count or gate them by hand.
