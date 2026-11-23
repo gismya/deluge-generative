@@ -46,9 +46,8 @@ user's standing rules: follow them without asking again. Where this differs from
    <branch> origin/<integration>` (`git reset` is blocked for agents).
 3. Build test-first with the `tdd` skill. It asks you to confirm the test seams with the user, which a subagent can't
    do: choose the seams yourself (prefer existing ones) and list them in your report.
-4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --quick --base
-   <integration>` until it passes, plus the probe scripts you wrote or edited, by name (`check_all.py --base
-   <integration> --scripts <script>...`; no default or `--full` run in your loop: see **Full runs** below), push with `git delugepush -u <branch>`, and open a PR into the integration branch
+4. Before reporting: merge `origin/<integration>`, run `python3 scripts/generative/check_all.py --base
+   <integration>` until it passes (the covers pick; no `--full` run in your loop: see **Full runs** below), push with `git delugepush -u <branch>`, and open a PR into the integration branch
    (`gh pr create --base <integration>`; body from the `mattpocock-skills:pr` skill, with `Part of #<spec>` and a
    `Closes #<ticket>` line per ticket). It runs what the change needs: the probe scripts whose `# covers:` paths
    changed, with smoke and `test_port_smoke.txt`, and no firmware build or delugemu when no firmware input, emulator
@@ -82,8 +81,8 @@ user's standing rules: follow them without asking again. Where this differs from
    Never make a status message ("waiting for …") your last output: the turn ends there.
 8. On review findings: fix on the same branch, push, and report what you changed and what you declined, with the
    reason. Before fixing a MUST, look for other cases of the same bug (the same route, state or class of input) and
-   fix those too; list what you checked. In a fix round run `check_all.py --quick` plus the probe scripts the fix
-   touches, and a hardware run once more when the fix touches what it checked. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
+   fix those too; list what you checked. In a fix round run `check_all.py --base <integration>` (the covers pick),
+   and a hardware run once more when the fix touches what it checked. Add each round's changes and choices to `notes/<ticket>.md`: a later round may start in a fresh
    session that has only the notes, the PR and the findings.
 9. Keep your context small: every later call re-reads all of it. Send long command output (builds, `check_all.py`,
    probe and hardware logs) to a file and read only its tail or its failures. Grep first, then read only the line
@@ -105,8 +104,10 @@ user's standing rules: follow them without asking again. Where this differs from
   the MUSTs the round answered. A full round again only when the fix rewrites the design (or adds a new stock edit),
   not for its size alone. `mattpocock-skills:code-review` (it starts two sub-agents) runs only full rounds.
 - **No review for a NIT-only round.** Read its diff yourself, then merge on green CI.
-- **Full runs** (owner rule, 2026-11-22): no agent runs a default or `--full` `check_all.py` in its loop; it runs
-  `--quick` plus the probe scripts it wrote or edited (`--scripts`), and the hardware session its ticket needs. After
+- **Full runs** (owner rule, 2026-11-22; covers pick 2026-11-23): no agent runs `--full` `check_all.py` in its loop;
+  it runs the default covers pick (`check_all.py --base <integration>`: the probe scripts the covers lines of the
+  files it changed select, since `--quick` plus only its own scripts let #488 break nine scripts it never edited),
+  and the hardware session its ticket needs. After
   each merge into the integration branch the orchestrator runs `check_all.py --full --base <integration>` on the new
   head, outside every agent loop: one at a time, in a checkout of its own, started detached (never under a tool's
   time limit), newest head first when merges pile up, writing one result file per head to a folder of its own. Audit
@@ -115,7 +116,7 @@ user's standing rules: follow them without asking again. Where this differs from
   on one PR's head before its merge (a risky change to the emulator checks) can go to a runner on a small model
   with the Runner brief below; the runner never edits, pushes, diagnoses, retries a hang or clears a marker.
 - Merge (yourself, into the integration branch) when each reviewer is happy by the rules above, the implementer's
-  `check_all.py --quick` and touched scripts passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
+  `check_all.py` covers-pick run passed, and CI is green. A run stuck in the queue may be ignored; a failing one is fixed.
 - Right after merging a ticket's PR into the integration branch, close each of its tickets, first commenting "Done in
   #<PR>, merged into the integration branch; reaches the default branch with the draft PR". Closing unblocks the
   tickets blocked by it; the draft PR's `Closes` lines stay only as a record.
