@@ -171,7 +171,8 @@ describe psytrance("Psytrance", $ {
 		expect(psyGenre.facts.tempoHighBpm).to_equal(146);
 		std::set<Scale> scales(psyGenre.facts.scales.begin(), psyGenre.facts.scales.end());
 		expect(scales == std::set<Scale>{Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor}).to_be_true();
-		expect(psyGenre.facts.swing).to_equal(0);
+		expect(psyGenre.facts.swingLow).to_equal(int8_t{0});
+		expect(psyGenre.facts.swingHigh).to_equal(int8_t{0});
 		expect(psyGenre.phraseBars).to_equal(16);
 		expect(psyGenre.harmony.graph == nullptr).to_be_true();
 		for (int32_t m = 0; m < kNumMacros; m++) {

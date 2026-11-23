@@ -94,12 +94,13 @@ describe house("House", $ {
 		expect(genreValid(houseGenre)).to_be_true();
 	});
 
-	it("plays 120–126 BPM in Minor, Dorian or Mixolydian, swing +15, in 8-bar phrases, every macro at 25", _ {
+	it("plays 120–126 BPM in Minor, Dorian or Mixolydian, swing +10 to +20 (+15 before #498), in 8-bar phrases, every macro at 25", _ {
 		expect(houseGenre.facts.tempoLowBpm).to_equal(120);
 		expect(houseGenre.facts.tempoHighBpm).to_equal(126);
 		const std::set<Scale> scales(houseGenre.facts.scales.begin(), houseGenre.facts.scales.end());
 		expect(scales == std::set<Scale>{Scale::Minor, Scale::Dorian, Scale::Mixolydian}).to_be_true();
-		expect(houseGenre.facts.swing).to_equal(15);
+		expect(houseGenre.facts.swingLow).to_equal(int8_t{10});
+		expect(houseGenre.facts.swingHigh).to_equal(int8_t{20});
 		expect(houseGenre.phraseBars).to_equal(8);
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			expect(houseGenre.defaults[static_cast<Macro>(m)]).to_equal(macroPoints(25));
