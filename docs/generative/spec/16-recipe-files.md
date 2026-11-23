@@ -12,6 +12,7 @@ A **Recipe file** holds the Current Recipe and nothing more:
 - each pitched part's octave shift ([§7.3](07-pitch.md#73-register)); a file without it loads as 0;
 - each part's Part bias per macro ([§3.3](03-recipe.md#33-macros)); a file without it loads as 0, and a value past ±50 is clamped;
 - every sound pick as a card path;
+- each variant set's pick and allowed variants ([§3.6](03-recipe.md#36-variant-sets)), a `<variant set="skank" pick="plain" allow="sevenths,plain" />` child a set, by stable names, so reordering a genre's data doesn't break a file. `allow` is left out when every variant is allowed. A set the reader doesn't know is skipped, an unknown name in `allow` dropped (none left: every variant), and a set the file leaves out (a file from before the genre had it), or a pick it doesn't know, is drawn fresh within what the file allows, as a missing sound is re-rolled ([§16.6](#166-missing-sounds-and-sharing)). A genre that gains a set has a new version, so the `OLDER <GENRE>` notice already says the file plays differently ([§16.2](#162-genre-versions));
 - the seed and every part's take.
 
 Freezes, mutes, sound-control homes, Arc position, Compose LENGTH and the Glide setting stay out. A Recipe file holds no steering, so it doesn't replay a piece. A Capture song does that.

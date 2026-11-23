@@ -865,7 +865,7 @@ struct Facts {
 	int8_t swing = 0;
 };
 
-// ---- Variant sets (slot 10, spec §4.4, ADR 0008) ----
+// ---- Variant sets (slot 11, spec §3.6, §4.2, ADR 0008) ----
 
 struct ResolvedGenre;
 
@@ -955,7 +955,7 @@ struct Genre {
 	const Palette* palette = nullptr;
 	// Slot 9: section rules
 	ArcSpec arc;
-	// Slot 10: variant sets (spec §3.6), at most kMaxVariantSets. None: every piece plays the table as written.
+	// Slot 11: variant sets (spec §3.6), at most kMaxVariantSets. None: every piece plays the table as written.
 	std::span<const VariantSet> variantSets;
 
 	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }

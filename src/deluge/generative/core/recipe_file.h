@@ -46,14 +46,20 @@
 //   	<lane
 //   		name="kick"
 //   		sound="SAMPLES/DRUMS/Kick/909 Kick.wav" />
+//   	<variant
+//   		set="skank"
+//   		pick="plain"
+//   		allow="sevenths,plain" />
 //   </generativeRecipe>
 //
 // Tempo is in hundredths of a BPM, macros in their full-resolution units (kMacroUnitsPerPoint a point), a part's octave
 // shift in octaves (clamped on read to the part's octaveRange()), its Part bias per macro in macro units (clamped on
 // read to ±kMacroFull; a file without them, from before Part bias, loads 0). Parts go by
 // their name in the genre table, lanes by their palette file name (lanePaletteName()). A part or lane with no pick
-// leaves out its sound. Nothing else is stored: no steering, sound-control homes, freezes, mutes, Arc position or
-// LENGTH (spec §16.1).
+// leaves out its sound. A `variant` child per variant set of the genre (spec §3.6) names the set, its pick and, unless
+// every variant is allowed, the allowed variants, by stable names: parseRecipeFile() leaves a set it doesn't name, or
+// a pick it doesn't know, at kUnsetVariant for drawUnsetVariants(). Nothing else is stored: no steering, sound-control
+// homes, freezes, mutes, Arc position or LENGTH (spec §16.1).
 
 #pragma once
 

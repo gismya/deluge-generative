@@ -256,3 +256,14 @@ otherwise.
   never busier where the source anchors. House's #368 Bass line makes the second half busier, where the Lead anchors;
   its specs allow the anchor steps. A gated source (House's Lead at 30) plays little at the default Density: run
   interplay specs above the gate.
+- Variant sets (§3.6, #493): `Generator::begin()` sets `genre_` to `resolveGenre()` (`core/variants.h`): the constant
+  table when no picked variant patches it, else the instance's `ResolvedGenre`, which its owner holds beside it and
+  hands over once with `useResolvedGenre()` (Perform's `allocateBlocks()`, `ComposeWork`, `CaptureWork`,
+  `harness::Instance` in `tests/spec/generator/instance.h`). Trap: a bare `Generator` has nowhere to copy and plays
+  every genre as written, whatever its picks, so a spec or owner that plays a genre with sets on a patched variant
+  uses an `Instance` (harness `play()`, `StepwisePiece`, `walk()`, `TransitionPiece` and the render do). Code that
+  needs the patched data reads `genre_`, never `recipe_.genre` (the constant table, kept for identity and files).
+  A patch writes `ResolvedGenre::genre` (a scalar, or a span or pointer to another constexpr table) or
+  `ResolvedGenre::parts[p]`; `genre.parts` points at the copy's parts.
+- Trap: `PerformAdapter`'s members before `steering_` are baked into the step's code (offset 20): #493's
+  `resolved_[2]` first went beside `blocks_` and moved `steering_` to 28. New adapter members go after `sink_`.

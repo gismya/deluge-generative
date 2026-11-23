@@ -351,9 +351,6 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file) {
 		}
 		writer.closeEmptyTag();
 	}
-	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
-		writeVariant(writer, genre.variantSets[s], recipe.variants.pick[s], recipe.variants.allowed[s]);
-	}
 	for (int32_t l = 0; l < kNumLanes; l++) {
 		if (file.sounds.lane[l].empty()) {
 			continue;
@@ -362,6 +359,9 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file) {
 		writer.attribute("name", lanePaletteName(static_cast<Lane>(l)));
 		writer.attribute("sound", Encoded(file.sounds.lane[l].c_str()).text);
 		writer.closeEmptyTag();
+	}
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		writeVariant(writer, genre.variantSets[s], recipe.variants.pick[s], recipe.variants.allowed[s]);
 	}
 	writer.closeTag(kRecipeFileTag);
 }
