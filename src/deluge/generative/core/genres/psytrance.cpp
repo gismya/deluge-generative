@@ -316,7 +316,7 @@ constexpr Genre kPsytranceParent{
     .name = "psytrance",
     .oledName = "PSYTRANCE",
     .version = 0,
-    .facts = {.tempoLowBpm = 138, .tempoHighBpm = 146, .scales = kScales, .swing = 0},
+    .facts = {.tempoLowBpm = 138, .tempoHighBpm = 146, .scales = kScales},
     .phraseBars = 16,
     .parts = kParts,
     .densityJitter = 15,

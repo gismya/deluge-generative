@@ -166,7 +166,8 @@ describe ambient("Ambient", $ {
 		std::set<Scale> scales(ambientGenre.facts.scales.begin(), ambientGenre.facts.scales.end());
 		expect(scales == std::set<Scale>{Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian})
 		    .to_be_true(); // Minor and Mixolydian: rules round 1's S6-scales A
-		expect(ambientGenre.facts.swing).to_equal(0);
+		expect(ambientGenre.facts.swingLow).to_equal(int8_t{0});
+		expect(ambientGenre.facts.swingHigh).to_equal(int8_t{0});
 		expect(ambientGenre.phraseBars).to_equal(8);
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			expect(ambientGenre.defaults[static_cast<Macro>(m)]).to_equal(macroPoints(25));

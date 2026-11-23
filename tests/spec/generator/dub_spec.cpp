@@ -100,13 +100,14 @@ describe dub("Dub", $ {
 		expect(matched).to_equal(1);
 	});
 
-	it("plays 70–80 BPM in Minor or Dorian, swing +10, in 8-bar phrases, every macro at 25 (listening round 2, DOR)", _ {
+	it("plays 70–80 BPM in Minor or Dorian, swing +5 to +15, in 8-bar phrases, every macro at 25 (listening round 2, DOR)", _ {
 		expect(dubGenre.facts.tempoLowBpm).to_equal(70);
 		expect(dubGenre.facts.tempoHighBpm).to_equal(80);
 		expect(dubGenre.facts.scales.size()).to_equal(size_t{2});
 		expect(dubGenre.facts.scales[0] == Scale::Minor).to_be_true();
 		expect(dubGenre.facts.scales[1] == Scale::Dorian).to_be_true();
-		expect(dubGenre.facts.swing).to_equal(10);
+		expect(dubGenre.facts.swingLow).to_equal(int8_t{5});
+		expect(dubGenre.facts.swingHigh).to_equal(int8_t{15});
 		expect(dubGenre.phraseBars).to_equal(8);
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			expect(dubGenre.defaults[static_cast<Macro>(m)]).to_equal(macroPoints(25));

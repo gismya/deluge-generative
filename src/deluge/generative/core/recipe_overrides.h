@@ -32,7 +32,7 @@ namespace deluge::generative {
 struct RecipeOverrides {
 	/// A genre's stable name. nullptr, or a name no genre has, plays the fallback genre.
 	const char* genre = nullptr;
-	/// Fresh entropy the facts (tempo, key, scale) are rolled from.
+	/// Fresh entropy the facts (tempo, key, scale, swing) are rolled from.
 	uint32_t entropy = 0;
 	uint32_t seed = 1;
 	/// OLED points (0–50) per Macro, in Macro order. -1 keeps the genre's default.
@@ -43,7 +43,7 @@ struct RecipeOverrides {
 	int8_t keyRoot = -1;
 	/// A Scale value. -1 keeps the rolled scale.
 	int8_t scale = -1;
-	/// -49..49. kKeepSwing keeps the genre's swing.
+	/// -49..49. kKeepSwing keeps the rolled swing.
 	int8_t swing = kKeepSwing;
 	/// Per variant set of the genre, by index: a variant that set is fixed to (its pick, and its allowed variants that
 	/// one alone), or -1 to keep the drawn pick (spec §3.6). The goldens fix every set to 0 (golden_case.h).

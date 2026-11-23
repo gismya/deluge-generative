@@ -108,7 +108,7 @@ otherwise.
 - **Variant sets (#493, ADR 0008).** Data: `Variant`/`VariantSet` in `core/genre.h` (slot 11, `Genre::variantSets`),
   the rules in `variantSetsValid()` (`core/variants.h`, in `genreValid()`). A genre's new set lists today's behaviour
   first (apply nullptr) and bumps the genre's version; its spec pins the set's names. The draw is `drawVariants()`,
-  called last in `newRecipe()` (#498's swing roll goes before it). The menus (#494) edit `Recipe::variants.allowed`
+  called last in `newRecipe()`, after #498's swing roll. The menus (#494) edit `Recipe::variants.allowed`
   and pass it as `newRecipe()`'s `narrowed` (the Compose screen's REGENERATE already does,
   `CurrentRecipe::regenerate()`; Perform's `rollPending()` passes none: its page opens on RANDOM). Drop changes and
   live switches (#495): `VariantSet::live`, `changeAt` and `changeChance` are in the data, refused by

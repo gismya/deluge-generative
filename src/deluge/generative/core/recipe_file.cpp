@@ -166,7 +166,7 @@ private:
 		Recipe& recipe = out_.recipe;
 		recipe.genre = genre;
 		recipe.macros = genre->defaults;
-		recipe.swing = genre->facts.swing;
+		recipe.swing = genre->facts.swingMiddle();
 		// A set the file leaves out is drawn fresh within every variant (drawUnsetVariants(), spec §16.1).
 		for (size_t v = 0; v < genre->variantSets.size() && v < kMaxVariantSets; v++) {
 			recipe.variants.pick[v] = kUnsetVariant;

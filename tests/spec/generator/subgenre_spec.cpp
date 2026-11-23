@@ -26,7 +26,7 @@ constexpr Genre kTestParent{
     .name = "polka",
     .oledName = "POLKA",
     .version = 0,
-    .facts = {.tempoLowBpm = 101, .tempoHighBpm = 103, .scales = kTestScales, .swing = 7},
+    .facts = {.tempoLowBpm = 101, .tempoHighBpm = 103, .scales = kTestScales, .swingLow = 4, .swingHigh = 7},
     .throwHoldSteps = 3,
     .phraseBars = 4,
     .parts = kTestParts,
@@ -79,7 +79,8 @@ describe subgenre("Subgenres", $ {
 		it("reads every field it doesn't list from its parent", _ {
 			expect(kTestChild.facts.tempoHighBpm).to_equal(103);
 			expect(kTestChild.facts.scales.data() == kTestScales).to_be_true();
-			expect(kTestChild.facts.swing).to_equal(7);
+			expect(kTestChild.facts.swingLow).to_equal(int8_t{4});
+			expect(kTestChild.facts.swingHigh).to_equal(int8_t{7});
 			expect(kTestChild.throwHoldSteps).to_equal(3);
 			expect(kTestChild.parts.data() == kTestParts).to_be_true();
 			expect(kTestChild.densityJitter).to_equal(41);
