@@ -21,9 +21,9 @@ The **seed** and each part's **take** sit beside the Recipe, not in it ([§6](06
 | Tempo | any tempo the Deluge supports, held as an integer in hundredths of a BPM, as `UNPATCHED_TEMPO` holds it. Float BPM appears only at the firmware edge. A genre's range is where rolls come from, not a clamp |
 | Key root | C..B |
 | Scale | one of the 12 seven-note preset scales: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Melodic Minor, Harmonic Minor, Hungarian Minor, Marva, Arabian |
-| Swing | song swing amount −49..49, plus swing interval |
+| Swing | song swing amount −49..49, plus swing interval. A genre's amount is a range, `swingLow`..`swingHigh` ([ADR 0008](../../adr/0008-a-piece-draws-its-genres-variants-into-the-recipe.md)), straight (0..0) by default; the interval is always the 16th in a new Recipe |
 
-For each fact, the genre gives either a fixed default or a range or weighted list to roll from. Facts are rolled once, when a Recipe is created from a genre, from fresh entropy (not from the seed), and stored as concrete values. Rolling again is always an explicit action: picking a genre, Regenerate, or a genre change. A genre change or Regenerate leans the key roll towards the playing key ([§9.7](09-arc.md#97-transitions)).
+For each fact, the genre gives either a fixed default or a range or weighted list to roll from. Facts are rolled once, when a Recipe is created from a genre, from fresh entropy (not from the seed), and stored as concrete values. They roll in a fixed order from one stream of that entropy: tempo, root, scale, then swing, so a fact added later appends and leaves what any entropy gave before. Rolling again is always an explicit action: picking a genre, Regenerate, or a genre change. A genre change or Regenerate leans the key roll towards the playing key ([§9.7](09-arc.md#97-transitions)).
 
 ### 3.3 Macros
 

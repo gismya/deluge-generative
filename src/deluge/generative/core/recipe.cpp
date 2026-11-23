@@ -26,7 +26,6 @@ Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFr
 	Recipe recipe;
 	recipe.genre = &genre;
 	recipe.macros = genre.defaults;
-	recipe.swing = genre.facts.swing;
 
 	// Facts are rolled from fresh entropy, never the seed (spec §3.2). Each fact takes its own mix of it.
 	EntropyStream rolls(entropy);
@@ -34,6 +33,10 @@ Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFr
 	recipe.tempo = (genre.facts.tempoLowBpm + rolls.below(tempoSpan > 0 ? tempoSpan : 1)) * 100;
 	const uint32_t rootDraw = rolls.next();
 	const uint32_t scaleDraw = rolls.next();
+	// Swing after tempo, root and scale, so the facts any entropy gave before stay the same (ADR 0008). Drawn before
+	// the key, which may return early.
+	const int32_t swingSpan = genre.facts.swingHigh - genre.facts.swingLow + 1;
+	recipe.swing = static_cast<int8_t>(genre.facts.swingLow + rolls.below(swingSpan > 0 ? swingSpan : 1));
 	// The scale first, so a lean knows which keys are related (spec §9.7).
 	if (!genre.facts.scales.empty()) {
 		recipe.scale = genre.facts.scales[scaleBelow(scaleDraw, static_cast<int32_t>(genre.facts.scales.size()))];

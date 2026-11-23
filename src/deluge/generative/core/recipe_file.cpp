@@ -138,7 +138,7 @@ private:
 		Recipe& recipe = out_.recipe;
 		recipe.genre = genre;
 		recipe.macros = genre->defaults;
-		recipe.swing = genre->facts.swing;
+		recipe.swing = genre->facts.swingMiddle();
 		int64_t version = genre->version;
 		int64_t tempo = recipe.tempo;
 		int64_t swing = recipe.swing;

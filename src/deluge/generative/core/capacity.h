@@ -22,6 +22,7 @@
 #pragma once
 
 #include "generative/core/genre.h"
+#include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/types.h"
 #include <cstdint>
@@ -103,19 +104,25 @@ constexpr bool rosterFits(const Genre& genre) {
 	       && controlEventsOf(genre) <= kMaxControlEventsPerStep;
 }
 
+/// Whether a genre's swing range is ordered and inside the Recipe's swing bounds (spec §3.2).
+constexpr bool swingRangeValid(const Genre& genre) {
+	return -kMaxSwing <= genre.facts.swingLow && genre.facts.swingLow <= genre.facts.swingHigh
+	       && genre.facts.swingHigh <= kMaxSwing;
+}
+
 /// Whether a genre's data holds every rule the Generator relies on (spec §2.7, §5, §7.4, §8, §9.1, §9.3, §10.1,
 /// §11.5): its interplay rules, Avoid's sources and anchors, its Roll fills' lanes, its roster's size, each flavour's
 /// data, its Chord graph, its Sweeps and Build lengths, a Build cut that leaves the roll lane, a cut and a Gap shorter
-/// than a phrase, its drop-outs (§8.8), and a palette (dereferenced unchecked). Each built-in genre table
-/// `static_assert`s it; genre_data_spec checks each rule on its own for every genre, so a failure there names the rule.
-/// The data checks that only the harness makes (pools, weights and lane names, for example) are in genre_data_spec
-/// alone.
+/// than a phrase, its drop-outs (§8.8), its swing range, and a palette (dereferenced unchecked). Each built-in genre
+/// table `static_assert`s it; genre_data_spec checks each rule on its own for every genre, so a failure there names the
+/// rule. The data checks that only the harness makes (pools, weights and lane names, for example) are in
+/// genre_data_spec alone.
 constexpr bool genreValid(const Genre& genre) {
 	return genre.palette != nullptr && interplayRulesValid(genre) && avoidRulesValid(genre) && rollFillsValid(genre)
 	       && rosterFits(genre) && sustainValid(genre) && loopNotesValid(genre) && stabNotesValid(genre)
 	       && arpNotesValid(genre) && motifNotesValid(genre) && harmonyValid(genre) && sweepsValid(genre)
 	       && buildBarsValid(genre) && rollUncut(genre) && cutAndGapUnderBuild(genre) && dropOutsValid(genre)
-	       && alternateLanesValid(genre) && sirensValid(genre) && registersShiftValid(genre);
+	       && alternateLanesValid(genre) && sirensValid(genre) && registersShiftValid(genre) && swingRangeValid(genre);
 }
 
 } // namespace deluge::generative

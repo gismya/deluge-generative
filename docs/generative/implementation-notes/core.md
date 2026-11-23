@@ -107,6 +107,10 @@ otherwise.
   (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
   `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness. `subgenreOf()` is `consteval` and
   rejects a subgenre as a parent at compile time.
+- `newRecipe()` (`core/recipe.cpp`) rolls its facts from one `EntropyStream` in a fixed order: tempo, root, scale,
+  swing (#498), then the variant sets (#493). A new fact appends its draw after these, and draws it before the key's
+  early `return` (no lean), or a lean shifts it. `new_recipe_spec` pins the order. Swing is `Facts::swingLow/High`;
+  a Recipe file without swing takes `Facts::swingMiddle()`.
 - Shared helpers for draws and card names, so a new genre's palette or roll code doesn't grow a fifth copy:
   `EntropyStream` (fresh-entropy rolls: a Recipe's facts, sound picks), `scaleBelow()` and `rollWeighted()` (keyed and
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
