@@ -899,6 +899,8 @@ struct VariantSet {
 /// The OLED names fit a menu row (ADR 0008): a set's name, and a variant's, in characters.
 constexpr int32_t kMaxVariantSetOledName = 8;
 constexpr int32_t kMaxVariantOledName = 9;
+/// A variant's stable name, in characters: a Recipe file's `allow` list holds every variant's (recipe_file.cpp).
+constexpr int32_t kMaxVariantNameChars = 23;
 
 struct Genre {
 	// Slot 1: identity (spec §4.4)

@@ -188,11 +188,8 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	const Genre* named = findGenre(genreName.data());
 	for (std::string_view left = variantText.data(); named != nullptr && !left.empty();) {
 		const size_t comma = left.find(',');
-		VariantPicks fixed;
-		const std::string_view one = left.substr(0, comma);
-		if (fixVariant(*named, one, fixed)) {
-			const int32_t set = findVariantSet(*named, one.substr(0, one.find('=')));
-			overrides.variant[set] = static_cast<int8_t>(fixed.pick[set]);
+		if (const std::optional<VariantFix> fix = parseVariantFix(*named, left.substr(0, comma))) {
+			overrides.variant[fix->set] = static_cast<int8_t>(fix->variant);
 		}
 		left = comma == std::string_view::npos ? std::string_view{} : left.substr(comma + 1);
 	}

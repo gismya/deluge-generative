@@ -27,6 +27,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -44,6 +45,13 @@ void longerGrooves(ResolvedGenre& resolved) {
 }
 void otherRegister(ResolvedGenre& resolved) {
 	resolved.parts[1].reg.anchor += 12;
+}
+void deeperBreak(ResolvedGenre& resolved) {
+	resolved.genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)].densityTo -= macroPoints(5);
+}
+void longerRoll(ResolvedGenre& resolved) {
+	resolved.genre.arc.roll.top = RollStage::SixtyFourth;
+	resolved.genre.arc.roll.stageFraction[3] = 32;
 }
 void fewerRepicks(ResolvedGenre& resolved) {
 	resolved.genre.repickChance = 50;
@@ -66,7 +74,8 @@ Genre madeUp() {
 }
 
 /// The fields a live or Drop-changing set's patch may never touch (ADR 0008): what the Arc's look-ahead reads across
-/// a Drop's line, the Arc's lengths, the Build, the Break and the Registers. True when `a` and `b` agree on them.
+/// a Drop's line, the Arc's lengths, its Section offsets, the Build (with its roll), the Break and the Registers. True
+/// when `a` and `b` agree on them.
 bool sameLookAhead(const Genre& a, const Genre& b) {
 	const ArcSpec& x = a.arc;
 	const ArcSpec& y = b.arc;
@@ -76,7 +85,15 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	            && x.buildBars.data() == y.buildBars.data() && x.buildBars.size() == y.buildBars.size()
 	            && x.grooveToBuild == y.grooveToBuild && x.dropDecayPhrases == y.dropDecayPhrases
 	            && x.breakKeeps == y.breakKeeps && x.buildKeeps == y.buildKeeps && x.buildCut == y.buildCut
-	            && x.buildCutBars == y.buildCutBars && x.gap == y.gap && a.phraseBars == b.phraseBars;
+	            && x.buildCutBars == y.buildCutBars && x.gap == y.gap && a.phraseBars == b.phraseBars
+	            && x.roll.lane == y.roll.lane && x.roll.top == y.roll.top
+	            && std::ranges::equal(x.roll.stageFraction, y.roll.stageFraction);
+	for (int32_t k = 0; k < kNumSectionKinds; k++) {
+		const SectionOffsets& o = x.offsets[k];
+		const SectionOffsets& q = y.offsets[k];
+		same = same && o.energyFrom == q.energyFrom && o.energyTo == q.energyTo && o.densityFrom == q.densityFrom
+		       && o.densityTo == q.densityTo;
+	}
 	for (int32_t p = 0; p < partCount(a); p++) {
 		same = same && a.parts[p].reg.anchor == b.parts[p].reg.anchor
 		       && a.parts[p].reg.spanLow == b.parts[p].reg.spanLow
@@ -137,12 +154,14 @@ describe variant_sets("Variant sets", $ {
 				expect(genreValid(*genre)).to_be_true();
 			}
 		});
-		it("refuses a set with one variant, a weight of 0, a repeated name or an OLED name too long", _ {
+		it("refuses a set with one variant, a weight of 0, a repeated name, or a stable or OLED name too long", _ {
 			static constexpr Variant kOne[] = {{.name = "a", .oledName = "A"}};
 			static constexpr Variant kZero[] = {{.name = "a", .oledName = "A"}, {.name = "b", .oledName = "B", .weight = 0}};
 			static constexpr Variant kTwice[] = {{.name = "a", .oledName = "A"}, {.name = "a", .oledName = "B"}};
 			static constexpr Variant kLong[] = {{.name = "a", .oledName = "ABCDEFGHIJ"}, {.name = "b", .oledName = "B"}};
 			static constexpr Variant kFits[] = {{.name = "a", .oledName = "ABCDEFGHI"}, {.name = "b", .oledName = "B"}};
+			static constexpr Variant kLongName[] = {{.name = "abcdefghijklmnopqrstuvwx", .oledName = "A"},
+			                                        {.name = "b", .oledName = "B"}}; // 24 characters: one past the cap
 			static constexpr VariantSet kSets[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kOne}},
 			    {{.name = "s", .oledName = "S", .variants = kZero}},
@@ -150,6 +169,7 @@ describe variant_sets("Variant sets", $ {
 			    {{.name = "s", .oledName = "S", .variants = kLong}},
 			    {{.name = "s", .oledName = "ABCDEFGHI", .variants = kFits}},
 			    {{.name = "s", .oledName = "ABCDEFGH", .variants = kFits}},
+			    {{.name = "s", .oledName = "S", .variants = kLongName}},
 			};
 			std::vector<bool> valid;
 			for (const auto& sets : kSets) {
@@ -157,7 +177,7 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				valid.push_back(variantSetsValid(genre));
 			}
-			expect(valid).to_equal(std::vector<bool>{false, false, false, false, false, true});
+			expect(valid).to_equal(std::vector<bool>{false, false, false, false, false, true, false});
 			static constexpr VariantSet kSameName[] = {{.name = "s", .oledName = "S", .variants = kFits},
 			                                           {.name = "s", .oledName = "T", .variants = kFits}};
 			Genre twice = genres::dub;
@@ -210,7 +230,7 @@ describe variant_sets("Variant sets", $ {
 			}
 			expect(drawn.size()).to_equal(size_t{3});
 		});
-		it("moves no fact: the tempo, key and scale any entropy gave stay, with or without a lean", _ {
+		it("moves no fact: the tempo, key, scale and swing any entropy gave stay, with or without a lean", _ {
 			const Genre with = madeUp();
 			Genre without = genres::dub;
 			without.variantSets = {};
@@ -218,7 +238,8 @@ describe variant_sets("Variant sets", $ {
 				for (const std::optional<Key> lean : {std::optional<Key>{}, std::optional<Key>{Key{2, Scale::Dorian}}}) {
 					const Recipe a = newRecipe(with, entropy * 7919U, lean);
 					const Recipe b = newRecipe(without, entropy * 7919U, lean);
-					expect(a.tempo == b.tempo && a.keyRoot == b.keyRoot && a.scale == b.scale).to_be_true();
+					expect(a.tempo == b.tempo && a.keyRoot == b.keyRoot && a.scale == b.scale && a.swing == b.swing)
+					    .to_be_true();
 				}
 			}
 		});
@@ -310,18 +331,24 @@ describe variant_sets("Variant sets", $ {
 				expect(patchesKeepLookAhead(*genre)).to_be_true();
 			}
 		});
-		it("catches a live set that moves the Arc's lengths or a Register, and lets one that moves the repicks by", _ {
+		it("catches a live set that moves the Arc's lengths, offsets or roll, or a Register, and lets one that moves the repicks by", _ {
 			static constexpr Variant kArc[] = {{.name = "a", .oledName = "A"},
 			                                   {.name = "b", .oledName = "B", .apply = longerGrooves}};
 			static constexpr Variant kRegister[] = {{.name = "a", .oledName = "A"},
 			                                        {.name = "b", .oledName = "B", .apply = otherRegister}};
 			static constexpr Variant kRepicks[] = {{.name = "a", .oledName = "A"},
 			                                       {.name = "b", .oledName = "B", .apply = fewerRepicks}};
+			static constexpr Variant kOffsets[] = {{.name = "a", .oledName = "A"},
+			                                       {.name = "b", .oledName = "B", .apply = deeperBreak}};
+			static constexpr Variant kRoll[] = {{.name = "a", .oledName = "A"},
+			                                    {.name = "b", .oledName = "B", .apply = longerRoll}};
 			static constexpr VariantSet kLive[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kArc, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRegister, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRepicks, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kArc}}, // not live: Regenerate takes it
+			    {{.name = "s", .oledName = "S", .variants = kOffsets, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kRoll, .live = true}},
 			};
 			std::vector<bool> kept;
 			for (const auto& sets : kLive) {
@@ -329,23 +356,23 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				kept.push_back(patchesKeepLookAhead(genre));
 			}
-			expect(kept).to_equal(std::vector<bool>{false, false, true, true});
+			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false});
 		});
 	});
 
 	context("the Recipe overrides and the goldens (spec §21.2, §21.5)", _ {
-		it("fixes a set to a variant by name, its pick and its allowed variants that one alone", _ {
+		it("parses set=name into the set and variant, and fixes the pick and allowed variants to that one alone", _ {
 			const Genre& dub = genres::dub;
 			VariantPicks picks = newRecipe(dub, 3).variants;
-			expect(fixVariant(dub, "skank=plain", picks)).to_be_true();
+			fixVariant(picks, parseVariantFix(dub, "skank=plain").value());
 			expect(picks.pick[0] == 1 && picks.allowed[0] == 0b10).to_be_true();
-			expect(fixVariant(dub, "skank=sevenths", picks)).to_be_true();
+			fixVariant(picks, parseVariantFix(dub, "skank=sevenths").value());
 			expect(picks.pick[0] == 0 && picks.allowed[0] == 0b01).to_be_true();
-			const VariantPicks before = picks;
-			expect(fixVariant(dub, "skank=jazz", picks)).to_be_false();
-			expect(fixVariant(dub, "drums=plain", picks)).to_be_false();
-			expect(fixVariant(dub, "plain", picks)).to_be_false();
-			expect(picks == before).to_be_true();
+			const std::optional<VariantFix> plain = parseVariantFix(dub, "skank=plain");
+			expect(plain.has_value() && plain->set == 0 && plain->variant == 1).to_be_true();
+			for (const char* unknown : {"skank=jazz", "drums=plain", "plain", "skank=", "=plain"}) {
+				expect(parseVariantFix(dub, unknown).has_value()).to_be_false();
+			}
 		});
 		it("pins every set of every genre to its first variant in the golden case", _ {
 			for (const Genre* genre : allGenres()) {
@@ -393,14 +420,14 @@ describe variant_sets("Variant sets", $ {
 		});
 		it("plays 7th chords on the Skank with sevenths, and never more than a triad with plain", _ {
 			Recipe recipe = newRecipe(genres::dub, 0);
-			expect(fixVariant(genres::dub, "skank=sevenths", recipe.variants)).to_be_true();
+			fixVariant(recipe.variants, parseVariantFix(genres::dub, "skank=sevenths").value());
 			expect(widestChord(recipe, kSkankPart, 16)).to_equal(4);
-			expect(fixVariant(genres::dub, "skank=plain", recipe.variants)).to_be_true();
+			fixVariant(recipe.variants, parseVariantFix(genres::dub, "skank=plain").value());
 			expect(widestChord(recipe, kSkankPart, 16)).to_equal(3);
 		});
 		it("plays plain as written on a bare Generator, which has nowhere to copy the genre", _ {
 			Recipe recipe = newRecipe(genres::dub, 0);
-			expect(fixVariant(genres::dub, "skank=plain", recipe.variants)).to_be_true();
+			fixVariant(recipe.variants, parseVariantFix(genres::dub, "skank=plain").value());
 			Generator bare;
 			bare.start(recipe, 7, Takes{}, true);
 			SteeringQueue queue;

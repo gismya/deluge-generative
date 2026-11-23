@@ -25,6 +25,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -81,9 +82,21 @@ int32_t findVariantSet(const Genre& genre, std::string_view name);
 /// Variant `v` of `set` by its stable name, or -1.
 int32_t findVariant(const VariantSet& set, std::string_view name);
 
-/// Fixes a set to one variant from `text`, `set=name` (the tuning tools' --variant, spec §21.5): the pick, and its
-/// allowed mask to that variant alone. False, with `picks` as it was, if `genre` has no such set or variant.
-bool fixVariant(const Genre& genre, std::string_view text, VariantPicks& picks);
+/// One set fixed to one variant, by their indices in the genre's lists.
+struct VariantFix {
+	int32_t set = 0;
+	int32_t variant = 0;
+};
+
+/// `text`, `set=name` by stable names (the tuning tools' --variant, spec §21.5), as indices in `genre`'s lists, or
+/// nullopt if it has no such set or variant.
+std::optional<VariantFix> parseVariantFix(const Genre& genre, std::string_view text);
+
+/// Fixes `fix.set` to `fix.variant`: the pick, and the allowed variants that one alone. The one place that rule lives.
+constexpr void fixVariant(VariantPicks& picks, VariantFix fix) {
+	picks.pick[fix.set] = static_cast<uint8_t>(fix.variant);
+	picks.allowed[fix.set] = static_cast<uint8_t>(1U << fix.variant);
+}
 
 namespace detail {
 
@@ -102,7 +115,8 @@ constexpr bool sameText(const char* a, const char* b) {
 } // namespace detail
 
 /// The genre's variant sets hold the rules ADR 0008 sets (spec §4.4): at most kMaxVariantSets, each with 2 to
-/// kMaxVariants variants of weight above 0, stable names that are there and unique in their list, and OLED names that
+/// kMaxVariants variants of weight above 0, stable names that are there (a variant's at most kMaxVariantNameChars)
+/// and unique in their list, and OLED names that
 /// fit a menu row.
 constexpr bool variantSetsValid(const Genre& genre) {
 	if (genre.variantSets.size() > kMaxVariantSets) {
@@ -123,7 +137,7 @@ constexpr bool variantSetsValid(const Genre& genre) {
 		for (size_t v = 0; v < set.variants.size(); v++) {
 			const Variant& variant = set.variants[v];
 			if (variant.weight == 0 || detail::textLength(variant.name) == 0
-			    || detail::textLength(variant.oledName) == 0
+			    || detail::textLength(variant.name) > kMaxVariantNameChars || detail::textLength(variant.oledName) == 0
 			    || detail::textLength(variant.oledName) > kMaxVariantOledName) {
 				return false;
 			}

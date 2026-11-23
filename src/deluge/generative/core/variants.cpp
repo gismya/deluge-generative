@@ -105,22 +105,20 @@ int32_t findVariant(const VariantSet& set, std::string_view name) {
 	return -1;
 }
 
-bool fixVariant(const Genre& genre, std::string_view text, VariantPicks& picks) {
+std::optional<VariantFix> parseVariantFix(const Genre& genre, std::string_view text) {
 	const size_t equals = text.find('=');
 	if (equals == std::string_view::npos) {
-		return false;
+		return std::nullopt;
 	}
-	const int32_t s = findVariantSet(genre, text.substr(0, equals));
-	if (s < 0) {
-		return false;
+	const int32_t set = findVariantSet(genre, text.substr(0, equals));
+	if (set < 0) {
+		return std::nullopt;
 	}
-	const int32_t v = findVariant(genre.variantSets[s], text.substr(equals + 1));
-	if (v < 0) {
-		return false;
+	const int32_t variant = findVariant(genre.variantSets[set], text.substr(equals + 1));
+	if (variant < 0) {
+		return std::nullopt;
 	}
-	picks.pick[s] = static_cast<uint8_t>(v);
-	picks.allowed[s] = static_cast<uint8_t>(1U << v);
-	return true;
+	return VariantFix{set, variant};
 }
 
 } // namespace deluge::generative

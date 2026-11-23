@@ -350,14 +350,17 @@ Error PerformAdapter::allocateBlocks() {
 	const auto internalFree = static_cast<unsigned long>(freeInternal());
 	const auto largestSpan = static_cast<unsigned long>(largestFreeSpan(MEMORY_REGION_INTERNAL));
 #endif
-	for (size_t i = 0; i < std::size(blocks_); i++) {
+	for (Generator*& block : blocks_) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
 		if (memory == nullptr) {
 			freeBlocks();
 			return Error::INSUFFICIENT_RAM;
 		}
-		blocks_[i] = new (memory) Generator();
-		// Its genre's copy (spec §3.6, §20), beside it: the step reads it, so the internal heap first too.
+		block = new (memory) Generator();
+	}
+	// Each block's genre copy (spec §3.6, §20), after both blocks, so a 1.4 KB copy never takes the internal span a
+	// 13.6 KB block needed. The step reads it, so the internal heap first too.
+	for (size_t i = 0; i < std::size(blocks_); i++) {
 		void* resolved = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(ResolvedGenre));
 		if (resolved == nullptr) {
 			freeBlocks();

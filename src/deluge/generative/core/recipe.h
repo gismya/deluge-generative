@@ -140,6 +140,7 @@ struct SoundChoice {
 /// A genre lists at most this many variant sets (spec §4.4), each with 2 to kMaxVariants variants.
 constexpr int32_t kMaxVariantSets = 8;
 constexpr int32_t kMaxVariants = 8;
+static_assert(kMaxVariants <= 8, "VariantPicks::allowed is a uint8_t bitmask, a bit a variant");
 /// A pick a Recipe file named but this firmware doesn't know, until drawUnsetVariants() draws it (core/variants.h).
 constexpr uint8_t kUnsetVariant = 0xFF;
 

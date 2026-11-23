@@ -357,6 +357,18 @@ describe recipe_file("Recipe files", $ {
 			drawUnsetVariants(loaded->recipe, 99);
 			expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(1); // the one allowed: plain
 		});
+		it("draws a pick outside the file's own allow list within that list", _ {
+			const std::string root = "genre=\"dub\" genreVersion=\"" + versionOf(genres::dub) + "\"";
+			for (uint32_t entropy = 0; entropy < 16; entropy++) {
+				auto loaded = std::make_unique<RecipeFile>();
+				expect(parseRecipeFile(fileWith(root, "<variant set=\"skank\" pick=\"sevenths\" allow=\"plain\" />\n"),
+				                       *loaded) == RecipeFileRead::Ok).to_be_true();
+				expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(0); // as the file says, for now
+				drawUnsetVariants(loaded->recipe, entropy);
+				expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(1); // plain, the one allowed
+				expect(static_cast<int32_t>(loaded->recipe.variants.allowed[0])).to_equal(0b10);
+			}
+		});
 		it("draws a set the file leaves out within every variant, and keeps a pick it knows", _ {
 			const std::string root = "genre=\"dub\" genreVersion=\"" + versionOf(genres::dub) + "\"";
 			std::set<int32_t> drawn;

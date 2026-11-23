@@ -1756,7 +1756,7 @@ def add_leak_args(p):
 
 def variant_arg(text):
     """A --variant value: SET=NAME, stable names as the genre's data writes them (lowercase letters and digits)."""
-    if not re.fullmatch(r"[a-z][a-zA-Z0-9]*=[a-z][a-zA-Z0-9]*", text):
+    if not re.fullmatch(r"[a-z][a-z0-9]*=[a-z][a-z0-9]*", text):
         raise argparse.ArgumentTypeError(f"takes SET=NAME, not {text!r}")
     return text
 

@@ -94,7 +94,7 @@ void writeVariant(RecipeFileWriter& writer, const VariantSet& set, uint8_t pick,
 	writer.attribute("pick", set.variants[pick < set.variants.size() ? pick : 0].name);
 	allowed = allowedIn(set, allowed);
 	if (allowed != allVariants(set)) {
-		char list[kMaxVariants * 24] = {};
+		char list[kMaxVariants * (kMaxVariantNameChars + 1)] = {}; // each name and its comma
 		int32_t at = 0;
 		for (size_t v = 0; v < set.variants.size(); v++) {
 			if (((allowed >> v) & 1U) == 0) {
@@ -103,7 +103,7 @@ void writeVariant(RecipeFileWriter& writer, const VariantSet& set, uint8_t pick,
 			for (const char* c = at == 0 ? "" : ","; *c != 0; c++) {
 				list[at++] = *c;
 			}
-			for (const char* c = set.variants[v].name; *c != 0 && at < static_cast<int32_t>(sizeof(list)) - 2; c++) {
+			for (const char* c = set.variants[v].name; *c != 0 && at < static_cast<int32_t>(sizeof(list)) - 1; c++) {
 				list[at++] = *c;
 			}
 		}

@@ -261,7 +261,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			auto run = std::make_unique<Steered>();
 			Run live;
 			live.recipe = newRecipe(genres::dub, 0);
-			expect(fixVariant(genres::dub, "skank=plain", live.recipe.variants)).to_be_true();
+			fixVariant(live.recipe.variants, parseVariantFix(genres::dub, "skank=plain").value());
 			live.seed = 3;
 			live.skipIntro = true;
 			live.log = &run->log.log;

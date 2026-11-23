@@ -24,6 +24,7 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
+#include "generative/core/variants.h"
 #include <cstdint>
 
 namespace deluge::generative {
@@ -54,14 +55,13 @@ struct RecipeOverrides {
 
 static_assert(kMaxVariantSets == 8, "RecipeOverrides::variant's initializer has one -1 a set");
 
-/// Fixes each of `recipe`'s variant sets that `variant` names (0 or more) to that variant: its pick, and its allowed
-/// variants that one alone. A value past the set's variants is skipped.
-inline void fixVariants(Recipe& recipe, const int8_t (&variant)[kMaxVariantSets]) {
+/// Fixes each of `recipe`'s variant sets that `variant` names (0 or more) to that variant (fixVariant()). A value past
+/// the set's variants is skipped.
+inline void applyVariantOverrides(Recipe& recipe, const int8_t (&variant)[kMaxVariantSets]) {
 	const Genre& genre = *recipe.genre;
 	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
 		if (variant[s] >= 0 && static_cast<size_t>(variant[s]) < genre.variantSets[s].variants.size()) {
-			recipe.variants.pick[s] = static_cast<uint8_t>(variant[s]);
-			recipe.variants.allowed[s] = static_cast<uint8_t>(1U << variant[s]);
+			fixVariant(recipe.variants, {static_cast<int32_t>(s), variant[s]});
 		}
 	}
 }
@@ -93,7 +93,7 @@ inline RolledRecipe rollWithOverrides(const Genre& fallback, const RecipeOverrid
 	if (overrides.swing != RecipeOverrides::kKeepSwing) {
 		recipe.swing = overrides.swing;
 	}
-	fixVariants(recipe, overrides.variant);
+	applyVariantOverrides(recipe, overrides.variant);
 	return rolled;
 }
 

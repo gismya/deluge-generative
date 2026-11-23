@@ -339,8 +339,8 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	}
 	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
 	for (const std::string& variant : variants) {
-		VariantPicks picks;
-		if (!fixVariant(*genre, variant, picks)) {
+		const std::optional<VariantFix> fix = parseVariantFix(*genre, variant);
+		if (!fix) {
 			std::string have;
 			for (const VariantSet& set : genre->variantSets) {
 				for (const Variant& v : set.variants) {
@@ -350,8 +350,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			return fail("unknown variant for " + std::string(genre->name) + ": " + variant + " (have "
 			            + (have.empty() ? std::string("none") : have) + ")");
 		}
-		const int32_t set = findVariantSet(*genre, variant.substr(0, variant.find('=')));
-		r.overrides.variant[set] = static_cast<int8_t>(picks.pick[set]);
+		r.overrides.variant[fix->set] = static_cast<int8_t>(fix->variant);
 	}
 	const auto parts = static_cast<int32_t>(genre->parts.size());
 	if ((r.mutedParts >> parts) != 0) {
