@@ -39,7 +39,7 @@ std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32
 	auto out = std::make_unique<Composed>();
 	out->target = target;
 	out->writer.riserMicros = riserMicros;
-	auto generator = std::make_unique<Generator>();
+	auto generator = std::make_unique<harness::Instance>();
 	ComposeDriver driver;
 	driver.begin(*generator, recipe, seed, takes, target, out->writer, skipIntro);
 	// Each call decides one step.
@@ -57,7 +57,7 @@ std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32
 
 /// The Sections an untouched Perform plays, step by step: the core with nothing on its queue.
 std::vector<SectionKind> untouchedSections(const Recipe& recipe, uint32_t seed, int32_t steps) {
-	auto generator = std::make_unique<Generator>();
+	auto generator = std::make_unique<harness::Instance>();
 	SteeringQueue queue;
 	generator->start(recipe, seed, Takes{});
 	std::vector<SectionKind> out;
@@ -447,7 +447,7 @@ describe compose_driver("The Compose driver", $ {
 				recipe.macros.set(Macro::Density, macroPoints(10));
 				recipe.macros.set(Macro::Complexity, macroPoints(40));
 				auto composed = composeSong(recipe, 1, targetSteps(60, recipe.tempo));
-				auto centres = std::make_unique<Generator>();
+				auto centres = std::make_unique<harness::Instance>();
 				centres->start(recipe, 1, Takes{});
 				int32_t away = 0;
 				for (const auto& [id, value] : composed->writer.bases) {

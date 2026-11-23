@@ -350,13 +350,21 @@ Error PerformAdapter::allocateBlocks() {
 	const auto internalFree = static_cast<unsigned long>(freeInternal());
 	const auto largestSpan = static_cast<unsigned long>(largestFreeSpan(MEMORY_REGION_INTERNAL));
 #endif
-	for (Generator*& block : blocks_) {
+	for (size_t i = 0; i < std::size(blocks_); i++) {
 		void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(Generator));
 		if (memory == nullptr) {
 			freeBlocks();
 			return Error::INSUFFICIENT_RAM;
 		}
-		block = new (memory) Generator();
+		blocks_[i] = new (memory) Generator();
+		// Its genre's copy (spec §3.6, §20), beside it: the step reads it, so the internal heap first too.
+		void* resolved = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(ResolvedGenre));
+		if (resolved == nullptr) {
+			freeBlocks();
+			return Error::INSUFFICIENT_RAM;
+		}
+		resolved_[i] = new (resolved) ResolvedGenre();
+		blocks_[i]->useResolvedGenre(resolved_[i]);
 	}
 	// The steering log's buffer, in SDRAM: not the fast heap (spec §17.2, §20). Its pieces stream to the card.
 	constexpr int32_t logBytes = SteeringLog::bytesFor(kLogHeaderBytes, kLogRingBytes);
@@ -402,6 +410,13 @@ void PerformAdapter::freeBlocks() {
 			block->~Generator();
 			delugeDealloc(block);
 			block = nullptr;
+		}
+	}
+	for (ResolvedGenre*& resolved : resolved_) {
+		if (resolved != nullptr) {
+			resolved->~ResolvedGenre();
+			delugeDealloc(resolved);
+			resolved = nullptr;
 		}
 	}
 }

@@ -8,6 +8,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
+#include "generative/core/variants.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -17,6 +18,7 @@
 #include <iterator>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace harness::render {
 
@@ -27,7 +29,7 @@ const char* const kUsage =
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR] [--end-after-drop [N] | --end-at-bar BAR] [--midi-only]\n"
-    "                        [--mute PART]...\n"
+    "                        [--mute PART]... [--variant SET=NAME]...\n"
     "       generator_render --list-sounds [--genre NAME] [--entropy N] [Recipe flags] [--pack DIR] [--card DIR]\n"
     "       generator_render --list-palettes\n"
     "       generator_render --list-risers\n"
@@ -46,7 +48,10 @@ const char* const kUsage =
     "capture --mute; "
     "repeatable)\n"
     "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"
-    "MIDI file and piano roll keep every part. --midi-only writes only PREFIX.mid. The MIDI file's last track, "
+    "MIDI file and piano roll keep every part. --variant SET=NAME (repeatable) fixes one of the genre's variant sets "
+    "to\n"
+    "that variant by their stable names (skank=plain, spec 3.6); a set not given keeps what --entropy draws.\n"
+    "--midi-only writes only PREFIX.mid. The MIDI file's last track, "
     "THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n"
@@ -188,6 +193,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	Request& r = parsed.request;
 	std::string pack = GENERATOR_RENDER_REPO_ROOT "/pack";
 	std::string card = defaultCard();
+	std::vector<std::string> variants;
 	auto fail = [&](std::string why) {
 		parsed.error = std::move(why);
 		return parsed;
@@ -237,9 +243,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
-		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy",   "--bars", "--key",
-		                                              "--scale", "--tempo", "--swing",     "--pack", "--card",
-		                                              "--out",   "--mute",  "--end-at-bar"};
+		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy",    "--bars",   "--key",
+		                                              "--scale", "--tempo", "--swing",      "--pack",   "--card",
+		                                              "--out",   "--mute",  "--end-at-bar", "--variant"};
 		if (macro < 0 && std::find(std::begin(kFlags), std::end(kFlags), flag) == std::end(kFlags)) {
 			return fail("unknown argument: " + std::string(flag));
 		}
@@ -314,6 +320,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			}
 			r.mutedParts |= 1U << (n - 1);
 		}
+		else if (flag == "--variant") {
+			variants.emplace_back(value); // named against the genre once every flag is read
+		}
 		else if (flag == "--pack") {
 			pack = value;
 		}
@@ -329,6 +338,21 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		return fail("--end-after-drop and --end-at-bar: give one");
 	}
 	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
+	for (const std::string& variant : variants) {
+		VariantPicks picks;
+		if (!fixVariant(*genre, variant, picks)) {
+			std::string have;
+			for (const VariantSet& set : genre->variantSets) {
+				for (const Variant& v : set.variants) {
+					have += std::string(have.empty() ? "" : ", ") + set.name + "=" + v.name;
+				}
+			}
+			return fail("unknown variant for " + std::string(genre->name) + ": " + variant + " (have "
+			            + (have.empty() ? std::string("none") : have) + ")");
+		}
+		const int32_t set = findVariantSet(*genre, variant.substr(0, variant.find('=')));
+		r.overrides.variant[set] = static_cast<int8_t>(picks.pick[set]);
+	}
 	const auto parts = static_cast<int32_t>(genre->parts.size());
 	if ((r.mutedParts >> parts) != 0) {
 		return fail(std::string(genre->name) + " has " + std::to_string(parts) + " parts: --mute takes 1 to "

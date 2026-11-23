@@ -115,7 +115,8 @@ int32_t encodeCommand(const Command& command, uint32_t delta, uint8_t* out);
 struct PieceInfo {
 	static constexpr uint32_t kMagic = 0x474C4F47; ///< "GOLG"
 	/// Goes up whenever the image's layout or a record's encoding changes: an image of another format can't be read.
-	static constexpr uint16_t kFormat = 2;
+	/// 3: the Recipe in `start` holds its variant picks (spec §3.6).
+	static constexpr uint16_t kFormat = 3;
 	uint32_t magic = kMagic;
 	uint16_t format = kFormat;
 	uint8_t genre = 0;         ///< In an image: start.recipe.genre's index in allGenres() (the pointer isn't stored).

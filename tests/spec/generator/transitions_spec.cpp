@@ -232,7 +232,7 @@ describe transitions("Transitions", $ {
 				Recipe recipe = acidRecipe();
 				recipe.genre = &genre;
 				recipe.macros.set(Macro::Motion, motion);
-				auto generator = std::make_unique<Generator>();
+				auto generator = std::make_unique<harness::Instance>();
 				generator->start(recipe, seed, Takes{}, true);
 				SteeringQueue queue;
 				SpaceAtCut out;

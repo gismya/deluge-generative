@@ -19,6 +19,7 @@
 #include "definitions.h"
 #include "extern.h"
 #include "fatfs/ff.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/card_text.h"
 #include "generative/firmware/current_recipe.h"
@@ -173,7 +174,15 @@ RecipeFileRead readRecipeFile(const char* path, RecipeFile& out, Error& error) {
 		RecipeFileRead result = RecipeFileRead::Unreadable;
 	} parse{out};
 	const CardText read = readCardText(path, kMaxRecipeFileBytes, parse, error);
-	return read == CardText::Read ? parse.result : RecipeFileRead::Unreadable;
+	if (read != CardText::Read) {
+		return RecipeFileRead::Unreadable;
+	}
+	if (parse.result == RecipeFileRead::Ok || parse.result == RecipeFileRead::OtherVersion) {
+		// A variant set the file leaves out, or a pick it names that this firmware doesn't know, is drawn fresh within
+		// what the file allows, as a missing sound is re-rolled (spec §16.1).
+		drawUnsetVariants(out.recipe, freshEntropy());
+	}
+	return parse.result;
 }
 
 void showVersionNotice(const RecipeFile& file) {

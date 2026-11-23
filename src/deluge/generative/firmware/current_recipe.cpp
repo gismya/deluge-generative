@@ -184,7 +184,7 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	uint32_t soundEntropy = freshEntropy();
 #if ENABLE_SYSEX_TEST
 	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
-		rolled = newRecipe(genre, golden_case::kEntropy);
+		rolled = rollWithOverrides(genre, golden_case::overrides()).recipe; // each variant set on its first
 		rolledSeed = golden_case::kSeed;
 	}
 #endif
@@ -234,7 +234,8 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 		return Error::NONE;
 	}
 	const Genre& genre = *recipe.genre;
-	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
+	// Each variant set draws within the variants the Recipe allows (spec §3.6, §14.4).
+	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale}, &recipe.variants);
 	rolled.macros = recipe.macros;
 	if (perform::keepsPartBias(perform::HandoverMacros::Live, rolled.genre, recipe.genre)) {
 		rolled.bias = recipe.bias; // always: a Regenerate keeps the roster

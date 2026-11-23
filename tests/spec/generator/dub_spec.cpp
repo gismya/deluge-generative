@@ -66,7 +66,7 @@ describe dub("Dub", $ {
 		expect(std::string(dubGenre.oledName)).to_equal(std::string("ROOTS DUB"));
 		expect(std::string(dubGenre.oledName).find("TECHNO")).to_equal(std::string::npos);
 		expect(dubGenre.parent == nullptr).to_be_true();
-		expect(dubGenre.version).to_equal(6);
+		expect(dubGenre.version).to_equal(7);
 		expect(findGenre("dub") == &dubGenre).to_be_true();
 		expect(partCount(dubGenre)).to_equal(5);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -557,7 +557,7 @@ describe dub("Dub", $ {
 					Recipe recipe = newRecipe(genre, seed);
 					recipe.macros.set(Macro::Complexity, macroPoints(5));
 					recipe.macros.set(Macro::Density, macroPoints(target.lane == Lane::ClosedHat ? 25 : 15));
-					Generator generator;
+					harness::Instance generator;
 					generator.start(recipe, seed, Takes{}, true);
 					SteeringQueue queue;
 					constexpr int32_t kBars = 96;

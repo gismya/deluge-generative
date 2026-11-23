@@ -24,6 +24,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/types.h"
+#include "generative/core/variants.h"
 #include <cstdint>
 #include <span>
 
@@ -115,7 +116,7 @@ constexpr bool genreValid(const Genre& genre) {
 	       && rosterFits(genre) && sustainValid(genre) && loopNotesValid(genre) && stabNotesValid(genre)
 	       && arpNotesValid(genre) && motifNotesValid(genre) && harmonyValid(genre) && sweepsValid(genre)
 	       && buildBarsValid(genre) && rollUncut(genre) && cutAndGapUnderBuild(genre) && dropOutsValid(genre)
-	       && alternateLanesValid(genre) && sirensValid(genre) && registersShiftValid(genre);
+	       && alternateLanesValid(genre) && sirensValid(genre) && registersShiftValid(genre) && variantSetsValid(genre);
 }
 
 } // namespace deluge::generative

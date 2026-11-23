@@ -4,6 +4,7 @@
 #include "render/render.h"
 
 #include "generative/core/genre.h"
+#include "generative/core/variants.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -69,6 +70,17 @@ bool sameChord(const Chord& a, const Chord& b) {
 	return a.size == b.size && std::equal(a.steps, a.steps + a.size, b.steps);
 }
 
+/// Each variant set's pick, ` variant.<set>=<variant>` by stable names (spec §3.6): what the listening tools check.
+std::string variantFields(const Recipe& recipe) {
+	std::string out;
+	const Genre& genre = *recipe.genre;
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		out += std::string(" variant.") + genre.variantSets[s].name + "="
+		       + pickedVariant(genre, recipe.variants, static_cast<int32_t>(s)).name;
+	}
+	return out;
+}
+
 } // namespace
 
 std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& rendering) {
@@ -84,7 +96,7 @@ std::vector<std::pair<int32_t, std::string>> theoryText(const Rendering& renderi
 	                          + " density=" + points(recipe.macros[Macro::Density])
 	                          + " complexity=" + points(recipe.macros[Macro::Complexity]) + " motion="
 	                          + points(recipe.macros[Macro::Motion]) + " phrase=" + std::to_string(genre.phraseBars)
-	                          + " hysteresis=" + points(kGateHysteresis));
+	                          + " hysteresis=" + points(kGateHysteresis) + variantFields(recipe));
 	for (int32_t p = 0; p < partCount(genre); p++) {
 		const PartSpec& part = genre.parts[p];
 		lines.emplace_back(0, std::string("part ") + part.name + " role=" + roleName(part.role)

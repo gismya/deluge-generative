@@ -37,7 +37,7 @@ struct Replayed {
 std::unique_ptr<Replayed> replay(const SteeringLog::Piece& piece, int32_t riserMicros = 0) {
 	auto out = std::make_unique<Replayed>();
 	out->writer.riserMicros = riserMicros;
-	auto generator = std::make_unique<Generator>();
+	auto generator = std::make_unique<harness::Instance>();
 	ComposeDriver driver;
 	driver.beginReplay(*generator, piece, out->writer);
 	for (int32_t calls = 0; calls < 20000 && !out->done; calls++) {
@@ -364,7 +364,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const Recipe recipe = acidRecipe();
 			RecordingWriter composed;
 			{
-				auto generator = std::make_unique<Generator>();
+				auto generator = std::make_unique<harness::Instance>();
 				ComposeDriver driver;
 				driver.begin(*generator, recipe, 3, Takes{}, targetSteps(60, recipe.tempo), composed);
 				while (!driver.run(64)) {}
@@ -709,7 +709,7 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 				// A budget a few bars past the empty song's.
 				const int64_t budget = estimateBarsBytes(*genre, 20);
 				auto writer = std::make_unique<RecordingWriter>();
-				auto generator = std::make_unique<Generator>();
+				auto generator = std::make_unique<harness::Instance>();
 				ComposeDriver driver;
 				driver.beginReplay(*generator, piece, *writer, budget);
 				while (!driver.run(64)) {}
