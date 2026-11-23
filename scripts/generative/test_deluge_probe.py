@@ -32,14 +32,19 @@ class FakeDeluge:
     """A link to a build already in start state. It answers state requests, and each inject with "queued", or with
     "parse error" for the words the build doesn't know. An inject listed in `events` sends those test events (a list,
     or a function that returns one each time), each after a timestamp as the firmware's TestPort::event() writes it
-    ("%.4f: "): 1.0001, 1.0002 and so on. "reset recipe" answers gen_recipe_reset done unless `events` says otherwise.
+    ("%.4f: "): 1.0001, 1.0002 and so on. "reset recipe" answers gen_recipe_reset done and "reset settings"
+    gen_settings_reset done unless `events` says otherwise.
     `held` is what "hold NAME" lines have set and no "release NAME" or "release all" has let go. `event_queue` is the
     lines still in the firmware's event queue, as the events each drops: a state request answers how many there are
     (state's event_queue), then sends one, adding its drops to events_dropped."""
 
     def __init__(self, unknown=(), events=None, silent=None):
         self.unknown = set(unknown)
-        self.events = {"reset recipe": ["gen_recipe_reset done"], **(events or {})}
+        self.events = {
+            "reset recipe": ["gen_recipe_reset done"],
+            "reset settings": ["gen_settings_reset done"],
+            **(events or {}),
+        }
         self.replies, self.injected, self.held = [], [], set()
         self.sent_events = 0
         self.event_queue = []
@@ -117,7 +122,9 @@ class StartState(unittest.TestCase):
     def test_a_build_in_start_state_passes(self):
         link = FakeDeluge()
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
-        self.assertEqual(link.script_injected, ["release all", "reset recipe"])
+        self.assertEqual(
+            link.script_injected, ["release all", "reset recipe", "reset settings"]
+        )
 
     def test_it_releases_what_a_stopped_script_left_held(self):
         # A hold the probe has never heard of: only the firmware lists them. A stopped probe (a crash, a lost link)
@@ -150,13 +157,43 @@ class StartState(unittest.TestCase):
 
     def test_a_build_older_than_reset_recipe_passes_with_a_warning(self):
         # Bisecting: the Current Recipe stays as the last script left it, and the script still runs.
-        link = FakeDeluge(unknown=["reset recipe"])
+        link = FakeDeluge(unknown=["reset recipe", "reset settings"])
         failed, total, out = run(link, "start_state")
         self.assertEqual((failed, total), (0, 1))
         self.assertEqual(link.script_injected, ["release all"])
         warnings = [line for line in out if line.startswith("WARNING line 1:")]
-        self.assertEqual(len(warnings), 1, out)
+        self.assertEqual(len(warnings), 2, out)
         self.assertIn("reset recipe", warnings[0])
+        self.assertIn("reset settings", warnings[1])
+
+    def test_a_build_older_than_reset_settings_passes_with_a_warning(self):
+        # #500: a build from before it still resets the Current Recipe; the Perform settings stay as left.
+        link = FakeDeluge(unknown=["reset settings"])
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (0, 1))
+        self.assertEqual(link.script_injected, ["release all", "reset recipe"])
+        warnings = [line for line in out if line.startswith("WARNING line 1:")]
+        self.assertEqual(len(warnings), 1, out)
+        self.assertIn("reset settings", warnings[0])
+
+    def test_start_state_resets_the_settings_after_the_recipe(self):
+        # #500: BROWSER PREVIEW left at OFF by one script made the next one's previews fail; start_state puts the
+        # Perform settings and the sample browser's last file back as boot does.
+        link = FakeDeluge(
+            events={"reset settings": ["gen_settings_reset refused why=perform"]}
+        )
+        failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (1, 1))
+        self.assertIn(
+            "`reset settings` got gen_settings_reset refused why=perform", out[0]
+        )
+
+    def test_a_settings_reset_with_no_event_fails_start_state(self):
+        link = FakeDeluge(events={"reset settings": []})
+        with mock.patch.object(dp, "time", FakeClock()):
+            failed, total, out = run(link, "start_state")
+        self.assertEqual((failed, total), (1, 1))
+        self.assertIn("no gen_settings_reset event", out[0])
 
     def test_a_refused_reset_fails_start_state(self):
         link = FakeDeluge(
@@ -174,7 +211,8 @@ class StartState(unittest.TestCase):
         link = FakeDeluge(events={"reset recipe": lambda: next(answers)})
         self.assertEqual(run(link, "start_state")[:2], (0, 1))
         self.assertEqual(
-            link.script_injected, ["release all", "reset recipe", "reset recipe"]
+            link.script_injected,
+            ["release all", "reset recipe", "reset recipe", "reset settings"],
         )
 
     def test_a_reset_that_stays_busy_fails_start_state_in_time(self):
@@ -212,6 +250,14 @@ class StartState(unittest.TestCase):
             run(link, "reset recipe", "expect event gen_recipe_reset done")[:2], (0, 1)
         )
         self.assertEqual(link.script_injected, ["reset recipe"])
+
+    def test_a_reset_settings_line_is_queued_on_the_firmware(self):
+        link = FakeDeluge()
+        self.assertEqual(
+            run(link, "reset settings", "expect event gen_settings_reset done")[:2],
+            (0, 1),
+        )
+        self.assertEqual(link.script_injected, ["reset settings"])
 
     def test_another_rejected_inject_still_stops_the_script(self):
         with self.assertRaises(RuntimeError):
@@ -758,8 +804,8 @@ class ExpectEventFailure(unittest.TestCase):
             "button BACK up",
             "expect event gen_left delete_us=999 within=0.1",
         )
-        # 1.0002 is start_state's gen_recipe_reset
-        self.assertEqual(out[2:], ["  got 1.0004: gen_left delete_us=310"])
+        # 1.0002 and 1.0003 are start_state's gen_recipe_reset and gen_settings_reset
+        self.assertEqual(out[2:], ["  got 1.0005: gen_left delete_us=310"])
 
     def test_says_when_none_of_that_kind_arrived(self):
         _, _, out = run(

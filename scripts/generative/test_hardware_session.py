@@ -6,6 +6,7 @@ python3 scripts/generative/test_hardware_session.py
 import argparse
 import os
 import re
+import shlex
 import socket
 import sys
 import tempfile
@@ -37,6 +38,8 @@ def args(**kw):
         "key": None,
         "key_file": None,
         "force_build_mismatch": False,
+        "max_minutes": hs.SESSION_MAX_MINUTES,
+        "keep_writes": False,
     }
     base.update(kw)
     return argparse.Namespace(**base)
@@ -64,6 +67,7 @@ class FakeSession(hs.Session):
         super().__init__(deluge_probe, a, hw, out=self.lines.append)
         self.ready, self.results, self.loads = ready, scripts or {}, 0
         self.listings, self.writes = list(listings or []), writes or {}
+        self.deleted, self.delete_errors = [], {}
 
     lines: ClassVar[list]
 
@@ -78,6 +82,11 @@ class FakeSession(hs.Session):
 
     def script_writes(self, script):
         return self.writes.get(script, [])
+
+    def delete_card_file(self, port, path):
+        if path in self.delete_errors:
+            raise self.delete_errors[path]
+        self.deleted.append(path)
 
     def wait_ready(self, fresh, before=None):
         return FakePort() if self.ready else None
@@ -468,7 +477,11 @@ class CardWrites(Base):
         s = FakeSession(
             self.hw,
             args=["a.txt", "b.txt"],
-            listings=[set(), {"RECIPES/ACID TECHNO 1234567.XML"}],
+            listings=[
+                set(),
+                {"RECIPES/ACID TECHNO 1234567.XML"},
+                {"RECIPES/ACID TECHNO 1234567.XML"},
+            ],
             writes={"b.txt": ["RECIPES/ACID TECHNO *"]},
         )
         self.assertEqual(s.run(), 0)
@@ -483,7 +496,11 @@ class CardWrites(Base):
         s = Unreadable(
             self.hw,
             args=["a.txt", "b.txt"],
-            listings=[set(), {"RECIPES/ACID TECHNO 1234567.XML", "SONGS/X.XML"}],
+            listings=[
+                set(),
+                {"RECIPES/ACID TECHNO 1234567.XML", "SONGS/X.XML"},
+                {"RECIPES/ACID TECHNO 1234567.XML", "SONGS/X.XML"},
+            ],
             writes={"b.txt": ["/RECIPES/ACID TECHNO *"]},
         )
         self.assertEqual(s.run(), hs.EXIT_FAILED)
@@ -516,6 +533,208 @@ class CardWrites(Base):
         self.assertEqual(s.run(), hs.EXIT_FAILED)
         self.assertFalse(any("a.txt:" in line for line in s.lines))
         self.assertIsNone(self.hw.hung_text())
+
+
+class WritesDeletedPerScript(Base):
+    """Each script's declared new files are deleted when it ends, not left for the next script (#500: a Capture
+    song perform_capture_leave.txt left made perform_lane_capture.txt's save get another name)."""
+
+    NEW = "SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"
+    LIVE: ClassVar[list] = ["SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*"]
+
+    def test_a_scripts_declared_file_is_deleted_before_the_next_script(self):
+        order = []
+
+        class Ordered(FakeSession):
+            def run_one(self, port, script):
+                order.append(("run", script, list(self.deleted)))
+                return super().run_one(port, script)
+
+        s = Ordered(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), {self.NEW}, {self.NEW}],
+            writes={"a.txt": self.LIVE, "b.txt": self.LIVE},
+        )
+        self.assertEqual(s.run(), 0)
+        # b.txt starts after a.txt's file went, and writes the same name again, which goes too
+        self.assertEqual(order, [("run", "a.txt", []), ("run", "b.txt", [self.NEW])])
+        self.assertEqual(s.deleted, [self.NEW, self.NEW])
+        self.assertIn(f"session: deleted /{self.NEW} (a.txt's # writes:)", s.lines)
+
+    def test_only_the_scripts_own_globs_delete(self):
+        # Another script's declaration still passes the session's check, but deletes nothing.
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), {self.NEW}, {self.NEW}],
+            writes={"b.txt": self.LIVE},
+        )
+        self.assertEqual(s.run(), 0)
+        self.assertEqual(s.deleted, [])
+        self.assertTrue(any(f"declared: /{self.NEW}" in line for line in s.lines))
+
+    def test_a_file_there_before_is_never_deleted(self):
+        s = FakeSession(
+            self.hw, listings=[{self.NEW}, {self.NEW}], writes={"a.txt": self.LIVE}
+        )
+        self.assertEqual(s.run(), 0)
+        self.assertEqual(s.deleted, [])
+
+    def test_keep_writes_leaves_them(self):
+        s = FakeSession(
+            self.hw,
+            keep_writes=True,
+            listings=[set(), {self.NEW}],
+            writes={"a.txt": self.LIVE},
+        )
+        self.assertEqual(s.run(), 0)
+        self.assertEqual(s.deleted, [])
+        self.assertTrue(any(f"declared: /{self.NEW}" in line for line in s.lines))
+
+    def test_a_failed_delete_is_said_and_the_file_reported(self):
+        s = FakeSession(
+            self.hw,
+            listings=[set(), {self.NEW}],
+            writes={"a.txt": self.LIVE},
+        )
+        s.delete_errors[self.NEW] = TimeoutError("no reply to delete within 10 s")
+        self.assertEqual(s.run(), 0)
+        self.assertTrue(
+            any(f"can't delete /{self.NEW}" in line for line in s.lines), s.lines
+        )
+        self.assertTrue(any(f"declared: /{self.NEW}" in line for line in s.lines))
+
+    def test_a_listing_that_fails_between_scripts_keeps_going(self):
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), TimeoutError("no reply to dir within 10 s"), {self.NEW}],
+            writes={"b.txt": self.LIVE},
+        )
+        self.assertEqual(s.run(), 0)
+        self.assertTrue(any("after a.txt" in line for line in s.lines), s.lines)
+        self.assertEqual(s.deleted, [self.NEW])
+
+
+class Times(Base):
+    """Each script's time on the Deluge is kept (times.json), and a set longer than --max-minutes is split into
+    sessions by those times (#500: a full set ran past 2 h and was killed mid-script)."""
+
+    def test_a_finished_script_records_its_time(self):
+        s = FakeSession(self.hw, args=["x/a.txt"])
+        self.assertEqual(s.run(), 0)
+        self.assertIn("a.txt", self.hw.read_times())
+
+    def test_a_script_stopped_by_no_reply_records_nothing(self):
+        stop = deluge_probe.ScriptStopped(TimeoutError(hs.NO_REPLY + " 0x10"), 0, 1)
+        s = FakeSession(self.hw, scripts={"a.txt": stop})
+        self.assertEqual(s.run(), hs.EXIT_HUNG)
+        self.assertEqual(self.hw.read_times(), {})
+
+    def test_split_keeps_order_and_puts_the_smoke_script_first_in_each_part(self):
+        times = {"test_port_smoke.txt": 60, "a.txt": 3000, "b.txt": 3000, "c.txt": 600}
+        parts = hs.split_sessions(
+            ["s/test_port_smoke.txt", "s/a.txt", "s/b.txt", "s/c.txt"], times, 5400
+        )
+        self.assertEqual(
+            [p for p, _ in parts],
+            [
+                ["s/test_port_smoke.txt", "s/a.txt"],
+                ["s/test_port_smoke.txt", "s/b.txt", "s/c.txt"],
+            ],
+        )
+        self.assertEqual(parts[1][1], hs.LOAD_SECONDS + 60 + 3000 + 600)
+
+    def test_an_untimed_script_counts_the_default(self):
+        parts = hs.split_sessions(["a.txt"], {}, 5400)
+        self.assertEqual(
+            parts, [(["a.txt"], hs.LOAD_SECONDS + hs.UNTIMED_SCRIPT_SECONDS)]
+        )
+
+    def test_a_script_longer_than_the_limit_gets_a_part_alone(self):
+        parts = hs.split_sessions(
+            ["a.txt", "b.txt"], {"a.txt": 9000, "b.txt": 60}, 5400
+        )
+        self.assertEqual([p for p, _ in parts], [["a.txt"], ["b.txt"]])
+
+    def test_a_set_over_the_limit_refuses_and_prints_each_parts_command(self):
+        self.hw.record_time("a.txt", 3000)
+        self.hw.record_time("b.txt", 3000)
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            no_load=False,
+            build="hardware",
+            owner="#500",
+        )
+        s.load = lambda: self.fail("loaded")
+        s.build_firmware = lambda: self.fail("built")
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertFalse(os.path.exists(self.hw.lock))
+        commands = [line for line in s.lines if "deluge_probe.py session" in line]
+        self.assertEqual(len(commands), 2, s.lines)
+        self.assertIn("--build hardware", commands[0])
+        self.assertIn("--owner '#500 (part 1 of 2)'", commands[0])
+        self.assertTrue(commands[0].rstrip('"').endswith(" a.txt"))
+        self.assertTrue(commands[1].rstrip('"').endswith(" b.txt"))
+        # The parts keep this run's options: the same limit, lock wait and test-port timeout
+        for part in commands:
+            self.assertIn("--max-minutes 90", part)
+            self.assertIn("--timeout 1", part)
+            self.assertIn("--no-wait", part)
+
+    def test_the_parts_keep_every_option_that_changes_where_or_how_they_run(self):
+        # R1 of #504: a part that lost --max-minutes re-split at 90, one that lost --force-build-mismatch refused,
+        # and one that lost --udp ran on the real Deluge instead of delugemu.
+        for name in ("a.txt", "b.txt", "c.txt"):
+            self.hw.record_time(name, 3000)
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt", "c.txt"],
+            max_minutes=120,
+            force_build_mismatch=True,
+            udp="5000:5001",
+            wait=600,
+            no_wait=False,
+            key_file=".deluge_hex_key",
+        )
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        commands = [line for line in s.lines if "deluge_probe.py session" in line]
+        self.assertEqual(len(commands), 2, s.lines)
+        for part in commands:
+            for option in (
+                "--no-load",
+                "--max-minutes 120",
+                "--force-build-mismatch",
+                "--udp 5000:5001",
+                "--wait 600",
+                "--key-file .deluge_hex_key",
+            ):
+                self.assertIn(option, part)
+            self.assertNotIn("--no-wait", part)
+
+    def test_a_part_command_survives_the_double_quotes_around_it(self):
+        # dbt exec "...": $, backticks, " and \ in an option would be read by the outer shell.
+        a = args(events='gen_mem|"x" $HOME `y` \\', note=None)
+        command = hs.session_command(a, ["a.txt"])
+        inner = command[len('./dbt exec "') : -1]
+        unescaped = re.sub(r'\\([\\"$`])', r"\1", inner)
+        words = shlex.split(unescaped)
+        i = words.index("--events")
+        self.assertEqual(words[i + 1], 'gen_mem|"x" $HOME `y` \\')
+        self.assertNotRegex(inner, r'(?<!\\)[$`"]')
+
+    def test_an_emulator_session_records_no_deluge_time(self):
+        s = FakeSession(self.hw, udp="5000:5001")
+        self.assertEqual(s.run(), 0)
+        self.assertEqual(self.hw.read_times(), {})
+
+    def test_max_minutes_zero_runs_the_whole_set(self):
+        self.hw.record_time("a.txt", 3000)
+        self.hw.record_time("b.txt", 3000)
+        s = FakeSession(self.hw, args=["a.txt", "b.txt"], max_minutes=0)
+        self.assertEqual(s.run(), 0)
 
 
 class StopsReplying(Base):
