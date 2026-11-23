@@ -16,8 +16,14 @@ A content file is a Python file defining SESSION, a dict:
         listen                one line: the part, and where in the clip
         setup                 the Recipe and bars, small print
         clips                 [{stem, src, bars: [first, end), label, kind}]: src is a job name (a capture in
-                              raw/, or an offline render); kind: "full" (default) or "isolated"
+                              raw/, or an offline render); kind: "full" (default) or "isolated". Or
+                              [{stem, reuse, label, kind}]: reuse is an m4a already cut, as another round's
+                              audio/<stem>.m4a, relative to the session folder (or ~/...): copied as it is, so
+                              the owner hears the very clip they answered before. A clip may give its own kbps.
         rough                 True: rough render (stand-in sounds), badged
+        kbps                  optional: the AAC bitrate of its clips, in kb/s (a whole song at 80 keeps the page
+                              small); a clip's own kbps wins
+        max_words             optional: its word limit, for a song card whose timeline needs more than 60
         normal_mode, picks, question, midi   optional, as earlier sessions used them; midi is [{label, variant,
                               args, bars}] rendered by bin/<variant> --midi-only
         genre                 optional: the genre its MIDI renders in (default the session's; a midi entry's
@@ -25,12 +31,15 @@ A content file is a Python file defining SESSION, a dict:
         verdicts              optional, with picks: the answers each clip takes, {name: [answer, ...]} in
                               order, as {"level": ["louder", "fine", "quieter"], "weight": ["0", "1", "2"]};
                               default {"verdict": ["keep", "unsure", "drop"]}
+    kbps                      optional: the clips' AAC bitrate in kb/s, unless a card or clip gives one (default
+                              cutter.AAC_BITRATE, 160)
     later                     [{title, ticket, waits}]: held for a later round
     not_renderable            [{title, ticket, why}]
     details                   optional {card id: Markdown}: what the card stood for, for variants.md
     variants_intro            optional Markdown for variants.md's top: the base commit, how to apply a diff
 
-Card text is short (SKILL.md step 4): `words()` counts it, and the build warns past 60.
+Card text is short (SKILL.md step 4): `words()` counts it, and the build warns past 60 (or the card's max_words).
+Its line breaks show on the page (white-space: pre-line).
 """
 
 import importlib.util
@@ -38,6 +47,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 
 from . import cutter, variants
@@ -46,6 +56,7 @@ from . import jobs as _jobs
 HERE = os.path.dirname(os.path.abspath(__file__))
 CARD_FIELDS = ("id", "ticket", "title", "section", "now", "listen", "setup", "clips")
 MAX_WORDS = 60
+KBPS_RANGE = (32, 320)  # what afconvert's AAC encoder takes for stereo at 44.1 kHz
 # A picks card's answers per clip, unless it names its own.
 VERDICTS = {"verdict": ["keep", "unsure", "drop"]}
 
@@ -64,6 +75,10 @@ def header(session):
     )
 
 
+def word_limit(card):
+    return card.get("max_words") or MAX_WORDS
+
+
 def words(card):
     text = " ".join(
         [card.get("now", ""), card.get("listen", ""), card.get("question") or ""]
@@ -72,9 +87,11 @@ def words(card):
     return len(text.split())
 
 
-def problems(session, sources):
-    """What's wrong with a content file, one line each. `sources` holds the names clips may cut from."""
+def problems(session, sources, folder=None):
+    """What's wrong with a content file, one line each. `sources` holds the names clips may cut from; `folder`, the
+    session folder a reused clip's path is from (None: reused files aren't looked for)."""
     out = []
+    out += kbps_problems("session", session.get("kbps"))
     for f in ("genre", "round", "folder", "title", "sections", "cards"):
         if not session.get(f):
             out.append(f"session: no {f}")
@@ -95,6 +112,7 @@ def problems(session, sources):
         ):
             out.append(f"{cid}: unknown genre {card['genre']}")
         out += verdict_problems(cid, card.get("verdicts", VERDICTS))
+        out += kbps_problems(cid, card.get("kbps"))
         keys = [o.get("key") for o in card.get("options", [])]
         if len(set(keys)) != len(keys):
             out.append(f"{cid}: option keys repeated")
@@ -104,6 +122,19 @@ def problems(session, sources):
             if stem in stems:
                 out.append(f"{cid} clip {stem}: stem repeated")
             stems.add(stem)
+            out += kbps_problems(f"{cid} clip {stem}", clip.get("kbps"))
+            if "reuse" in clip:
+                if "src" in clip or "bars" in clip:
+                    out.append(
+                        f"{cid} clip {stem}: reuse is cut already: no src or bars"
+                    )
+                elif folder is not None and not os.path.isfile(
+                    reused_path(folder, clip)
+                ):
+                    out.append(
+                        f"{cid} clip {stem}: no {reused_path(folder, clip)} to reuse"
+                    )
+                continue
             if clip.get("src") not in sources:
                 out.append(
                     f"{cid} clip {stem}: no capture or render named {clip.get('src')}"
@@ -114,6 +145,42 @@ def problems(session, sources):
                     f"{cid} clip {stem}: bars must be [first, end) with first < end"
                 )
     return out
+
+
+def kbps_problems(where, kbps):
+    """What's wrong with a kbps (None: not given)."""
+    lo, hi = KBPS_RANGE
+    if kbps is None or (isinstance(kbps, int) and lo <= kbps <= hi):
+        return []
+    return [f"{where}: kbps must be a whole number of kb/s, {lo} to {hi}"]
+
+
+def bitrate(session, card, clip):
+    """A clip's AAC bitrate in bits a second: its own kbps, else its card's, else the session's, else the cutter's."""
+    kbps = clip.get("kbps") or card.get("kbps") or session.get("kbps")
+    return kbps * 1000 if kbps else cutter.AAC_BITRATE
+
+
+def reused_path(folder, clip):
+    """The m4a a reuse clip copies: its path, from `folder` (the session folder) unless absolute or ~/..."""
+    return os.path.normpath(os.path.join(folder, os.path.expanduser(clip["reuse"])))
+
+
+def m4a_seconds(path):
+    """An m4a's seconds: its folder's cuts.json says (the round that cut it), else afinfo's estimate."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    try:
+        with open(os.path.join(os.path.dirname(path), "cuts.json")) as fh:
+            return float(json.load(fh)[stem]["seconds"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    out = subprocess.run(
+        ["afinfo", path], capture_output=True, text=True, check=True
+    ).stdout
+    for line in out.splitlines():
+        if "estimated duration" in line:
+            return round(float(line.split(":", 1)[1].split()[0]), 1)
+    raise ValueError(f"{path}: afinfo gives no duration")
 
 
 def verdict_problems(cid, verdicts):
@@ -222,14 +289,20 @@ def render_midi(card, scratch, out_dir, genre):
     return files
 
 
-def cut_key(scratch, clip):
+def cut_key(scratch, clip, rate=None, folder=None):
     """What a clip's m4a was cut from: its source, bars, and the source WAV's identity (inode, size, mtime) and
-    sidecar. A capture taken again, or new bars, changes it, and build() cuts the clip again."""
+    sidecar, and its bitrate (`rate`, None: the cutter's default). A capture taken again, new bars or a new bitrate
+    changes it, and build() cuts the clip again. A reused clip's is the file it copies (path, size, mtime), from the
+    session folder `folder`."""
+    if "reuse" in clip:
+        path = reused_path(folder, clip)
+        st = os.stat(path)
+        return ["reuse", path, st.st_size, st.st_mtime_ns]
     raw = os.path.join(scratch, "raw", clip["src"])
     st = os.stat(raw + ".wav")
     with open(raw + ".json") as fh:
         sidecar = fh.read()
-    return [
+    key = [
         clip["src"],
         list(clip["bars"]),
         st.st_ino,
@@ -237,6 +310,8 @@ def cut_key(scratch, clip):
         st.st_mtime_ns,
         sidecar,
     ]
+    # Only a bitrate other than the default joins the key, so clips cut before #489 stay current.
+    return key + [rate] if rate and rate != cutter.AAC_BITRATE else key
 
 
 def clip_warnings(card_id, clip, info):
@@ -260,13 +335,13 @@ def clip_warnings(card_id, clip, info):
 def build(session, scratch, out_dir, recut=False):
     """Cuts every clip, renders the MIDI files, writes index.html and variants.md. Returns warning lines; raises
     ValueError listing the content file's problems."""
-    found = problems(session, sources(scratch))
+    found = problems(session, sources(scratch), out_dir)
     if found:
         raise ValueError("the content file:\n  " + "\n  ".join(found))
     warnings = [
-        f"{c['id']}: {words(c)} words (at most {MAX_WORDS})"
+        f"{c['id']}: {words(c)} words (at most {word_limit(c)})"
         for c in session["cards"]
-        if words(c) > MAX_WORDS
+        if words(c) > word_limit(c)
     ]
     seconds = {}
     index_path = os.path.join(out_dir, "audio", "cuts.json")
@@ -277,21 +352,29 @@ def build(session, scratch, out_dir, recut=False):
         cuts = {}
     for card in session["cards"]:
         for clip in card["clips"]:
-            info = source_info(scratch, clip["src"])
             dest = os.path.join(out_dir, "audio", clip["stem"] + ".m4a")
-            first, end = clip["bars"]
-            warnings += clip_warnings(card["id"], clip, info)
-            key = cut_key(scratch, clip)
+            rate = bitrate(session, card, clip)
+            key = cut_key(scratch, clip, rate, out_dir)
             done = cuts.get(clip["stem"])
+            if "reuse" not in clip:
+                info = source_info(scratch, clip["src"])
+                warnings += clip_warnings(card["id"], clip, info)
             if recut or not os.path.exists(dest) or not done or done["key"] != key:
-                cut_s = cutter.cut(
-                    os.path.join(scratch, "raw", clip["src"] + ".wav"),
-                    dest,
-                    info["tempo"],
-                    first,
-                    end,
-                    scratch=scratch,
-                )
+                if "reuse" in clip:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    shutil.copyfile(reused_path(out_dir, clip), dest)
+                    cut_s = m4a_seconds(reused_path(out_dir, clip))
+                else:
+                    first, end = clip["bars"]
+                    cut_s = cutter.cut(
+                        os.path.join(scratch, "raw", clip["src"] + ".wav"),
+                        dest,
+                        info["tempo"],
+                        first,
+                        end,
+                        scratch=scratch,
+                        bitrate=rate,
+                    )
                 cuts[clip["stem"]] = done = {"key": key, "seconds": round(cut_s, 1)}
                 os.makedirs(os.path.dirname(index_path), exist_ok=True)
                 with open(index_path, "w") as fh:
@@ -316,6 +399,8 @@ def variants_md(session, scratch, out_dir):
                     f"{card['id']} ({card['ticket']}) option {o['key']}: {o['label']}"
                 )
         for clip in card["clips"]:
+            if "reuse" in clip:
+                continue  # cut in another round: its variant is that round's variants.md's
             v = source_info(scratch, clip["src"]).get("variant", "base")
             if v != "base":
                 used.setdefault(v, []).append(f"{card['id']} clip {clip['stem']}")

@@ -1126,6 +1126,179 @@ class CaptureExit(unittest.TestCase):
         build.assert_not_called()
 
 
+class EndPiece:
+    """A theory_review Piece as end_press reads it: tempo, Section markers, bars played."""
+
+    def __init__(self, tempo, sections=(), bars=0):
+        self.recipe = {"tempo": str(tempo)}
+        self.sections = list(sections)
+        self.bars = bars
+
+
+# Two Arc cycles at 120 BPM (2 s a bar): Drops at bars 40 and 96; with End on the second, the Outro ends at bar 112.
+TWO_DROPS = [(0, "INTRO 1"), (8, "GROOVE 1"), (24, "BREAK 1"), (32, "BUILD 1"), (40, "GROOVE 2"),
+             (64, "BREAK 2"), (88, "BUILD 2"), (96, "GROOVE 3"), (104, "OUTRO 1")]  # fmt: skip
+
+
+class End(unittest.TestCase):
+    """#489: capture and check press End at a bar, or from the Nth Drop, as generator_render arms it."""
+
+    def args(self, *argv):
+        return gen_emu.parser().parse_args(["capture", *argv])
+
+    def test_end_after_drop_takes_an_optional_count_and_end_at_bar_a_bar(self):
+        self.assertIsNone(self.args().end_after_drop)
+        self.assertIsNone(self.args().end_at_bar)
+        self.assertEqual(self.args("--end-after-drop").end_after_drop, 1)
+        self.assertEqual(self.args("--end-after-drop", "2").end_after_drop, 2)
+        self.assertEqual(self.args("--end-at-bar", "40").end_at_bar, 40)
+        for bad in (
+            ["--end-after-drop", "0"],
+            ["--end-at-bar", "-1"],
+            ["--end-at-bar", "x"],
+        ):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                self.args(*bad)
+
+    def test_both_are_refused_before_anything_builds(self):
+        with self.assertRaisesRegex(SystemExit, "give one"):
+            gen_emu.check_args(self.args("--end-after-drop", "--end-at-bar", "4"))
+
+    def test_the_harness_render_arms_end_the_same_way(self):
+        for argv, flags in (
+            (["--end-after-drop"], ["--end-after-drop", "1"]),
+            (["--end-after-drop", "2"], ["--end-after-drop", "2"]),
+            (["--end-at-bar", "40"], ["--end-at-bar", "40"]),
+            ([], []),
+        ):
+            with self.subTest(argv=argv):
+                cmd = gen_emu.render_command("/r", self.args(*argv), "/tmp/o", 9)
+                self.assertEqual(
+                    cmd[-5:], ["--bars", "9", "--midi-only", "--out", "/tmp/o"]
+                )
+                self.assertEqual(
+                    cmd[cmd.index("--seed") + 2 : cmd.index("--bars")], flags
+                )
+
+    def test_a_drop_is_a_groove_a_build_lands_on(self):
+        self.assertEqual(gen_emu.drop_bars(TWO_DROPS), [40, 96])
+        self.assertEqual(gen_emu.drop_bars([(0, "INTRO 1"), (8, "GROOVE 1")]), [])
+
+    def test_the_capture_is_named_after_its_end(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(
+                gen_emu.capture_path(self.args("--end-after-drop", "2"), tmp).endswith(
+                    "-end-drop2-60s.wav"
+                )
+            )
+            self.assertTrue(
+                gen_emu.capture_path(self.args("--end-at-bar", "40"), tmp).endswith(
+                    "-end-bar40-60s.wav"
+                )
+            )
+
+    def end_press(self, *argv, sections=TWO_DROPS, bars=112):
+        args = self.args("--seconds", "240", "--tempo", "120", *argv)
+        with mock.patch.object(
+            gen_emu, "render_piece", return_value=EndPiece(120, sections, bars)
+        ):
+            return gen_emu.end_press("/r", args)
+
+    def test_end_after_the_nth_drop_holds_end_from_its_first_bar(self):
+        self.assertEqual(
+            self.end_press("--end-after-drop", "2"), (96, 192.0, 112, 224.0)
+        )
+        self.assertEqual(
+            self.end_press("--end-at-bar", "50", bars=121)[:2], (50, 100.0)
+        )
+
+    def test_a_piece_still_playing_at_the_end_of_seconds_says_so(self):
+        press = self.end_press("--end-at-bar", "50", sections=TWO_DROPS[:5], bars=121)
+        self.assertEqual((press.ends_bar, press.ends_seconds), (None, None))
+
+    def test_too_few_drops_or_a_bar_past_seconds_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "1 Drop"):
+            self.end_press("--end-after-drop", "2", sections=TWO_DROPS[:5])
+        with self.assertRaisesRegex(ValueError, "past --seconds"):
+            self.end_press("--end-at-bar", "120")
+
+    def test_no_end_renders_nothing(self):
+        with mock.patch.object(gen_emu, "render_piece") as render:
+            self.assertIsNone(gen_emu.end_press("/r", self.args()))
+        render.assert_not_called()
+
+    def test_end_is_a_hold_of_the_end_pad_past_the_arm_time(self):
+        emu = FakeEmu()
+        gen_emu.press_end(emu)
+        (down, pad, d), (up, pad2, u) = emu.presses
+        self.assertEqual((pad, d, pad2, u), ((17, 0), True, (17, 0), False))
+        self.assertGreater(up - down, 600 * gen_emu.MS)
+
+    def test_capture_passes_the_end_to_each_capture(self):
+        args = self.args("--no-play", "--end-at-bar", "8")
+        press = gen_emu.EndPress(8, 16.0, 24, 48.0)
+        with (
+            mock.patch.object(gen_emu, "warn_pin"),
+            mock.patch.object(gen_emu, "build_capture", return_value="fw.elf"),
+            mock.patch.object(
+                gen_emu, "fresh_harness_piece", return_value=(["p"], 0.1)
+            ),
+            mock.patch.object(gen_emu, "end_press", return_value=press) as end,
+            mock.patch.object(
+                gen_emu, "capture_one", return_value=("x.wav", [])
+            ) as one,
+            mock.patch.object(gen_emu, "log"),
+        ):
+            self.assertEqual(gen_emu.capture(args), 0)
+        self.assertEqual(end.call_args.args[0], gen_emu.HARNESS_RENDER)
+        self.assertEqual(one.call_args.args[4], press)
+
+    def test_no_check_with_end_still_needs_a_render(self):
+        args = self.args("--no-play", "--no-check", "--end-after-drop")
+        with (
+            mock.patch.object(gen_emu, "warn_pin"),
+            mock.patch.object(gen_emu, "find_render", return_value=None),
+            mock.patch.object(gen_emu, "build_capture") as build,
+            self.assertRaisesRegex(SystemExit, "End needs generator_render"),
+        ):
+            gen_emu.capture(args)
+        build.assert_not_called()
+
+
+class DumpEmu:
+    """An emulator whose audio dump lags its virtual clock by `lag_ms`."""
+
+    def __init__(self, lag_ms):
+        self.t, self.lag = 0, lag_ms * gen_emu.MS
+
+    def run_to(self, ns, each_step=None):
+        self.t = ns
+
+    def dump_size(self):
+        return max(0, (self.t - self.lag) * RATE // SEC) * gen_emu.FRAME
+
+
+class AudioTail(unittest.TestCase):
+    """#489: the dump lags the virtual clock, so a capture runs on until it holds the whole --seconds."""
+
+    def test_it_runs_on_until_the_dump_holds_the_seconds(self):
+        emu = DumpEmu(lag_ms=37)
+        emu.t = 10 * SEC  # --seconds 10 from bar 0 at t 0, now run
+        ran = gen_emu.run_for_audio(emu, 0, 10)
+        self.assertGreaterEqual(emu.dump_size(), int(10 * RATE) * gen_emu.FRAME)
+        self.assertEqual(ran, 40)  # in 10 ms steps
+
+    def test_a_whole_dump_runs_no_further(self):
+        emu = DumpEmu(lag_ms=0)
+        emu.t = 10 * SEC
+        self.assertEqual(gen_emu.run_for_audio(emu, 0, 10), 0)
+
+    def test_it_gives_up_after_the_tail_limit(self):
+        emu = DumpEmu(lag_ms=5000)
+        emu.t = 10 * SEC
+        self.assertEqual(gen_emu.run_for_audio(emu, 0, 10), gen_emu.TAIL_LIMIT_S * 1000)
+
+
 class CaptureOne(unittest.TestCase):
     """capture_one around a faked emulator: what it leaves on disk and what it logs."""
 

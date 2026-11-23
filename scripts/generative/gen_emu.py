@@ -42,12 +42,20 @@ capture  the tuning loop's main step: builds a capture firmware in build-capture
          the arguments, never overwriting one) or a .wav path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
+         --end-after-drop [N] (default 1) or --end-at-bar BAR presses End: it holds the End pad (AUDITION/SECTION
+         row 8) from the Nth Drop's first bar line, or bar BAR's (bar 0 at PLAY), so End arms in that bar and the
+         Outro follows from the next phrase line; the transport stops where it ends and the rest of --seconds is
+         silence. The Drop's bar comes from the harness render, which arms End the same way (generator_render
+         --end-after-drop N, --end-at-bar BAR), so the check reads the ended piece. With --no-check it still needs
+         generator_render (--render, or the newest under build/tests/). The log says where the piece ends.
          --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
          level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
          on the first step.
          Each capture keeps its patched ELF as <WAV stem>-pid<N>.elf and its raw dump and run log as
          <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so captures sharing a --out folder or a --build-dir
-         never patch the same firmware or read each other's audio. The ELF and dumps are deleted after, the logs when
+         never patch the same firmware or read each other's audio. The emulator's audio runs a little behind its
+         virtual clock (13-60 ms over a few minutes), so a capture runs on past --seconds until the dump holds the
+         whole --seconds (at most TAIL_LIMIT_S more): the WAV is exactly --seconds long. The ELF and dumps are deleted after, the logs when
          the audio is whole; a capture also deletes the ELFs, dumps (and the empty WAV) of captures that were killed. It
          then runs the check below on its WAV and exits 1 if the audio isn't whole: after the firmware it builds
          generator_render (only that target, in build/tests/) and renders the same Recipe, so the check reads what
@@ -59,7 +67,8 @@ check    is a capture whole? Takes the WAVs and the arguments they were captured
          same Recipe (generator_render --midi-only) starts a note in a part the capture didn't mute (step 0 at PLAY;
          the last beat is cut at --seconds; silence elsewhere is fine, so isolated captures and sparse sections
          pass), or is at full scale for 50 ms in a row (clipped flat or corrupt; a shorter run is a WARNING: the
-         mix clips). Exit 1 if any WAV fails. Reads the newest generator_render under build/tests/ (or --render)
+         mix clips). A capture made with --end-after-drop or --end-at-bar takes the same flag, so the render ends
+         as it did. Exit 1 if any WAV fails. Reads the newest generator_render under build/tests/ (or --render)
          and warns if the Generator's source changed after it was built.
 
 Everything runs under icount (-icount shift=2,sleep=off -S): the VM only moves in run_until steps, every input goes in
@@ -82,6 +91,7 @@ import difflib
 import fcntl
 import glob
 import hashlib
+import itertools
 import math
 import os
 import re
@@ -132,6 +142,11 @@ STEPS_PER_BAR = theory_review.STEPS_PER_BAR
 RISER_LANE = (
     "Riser"  # the harness MIDI's lane name (tests/spec/generator/render/names.cpp)
 )
+# The End pad: AUDITION/SECTION (x 17), row 8 (firmware y 0). End arms after a 600 ms hold (spec §13.5).
+END_PAD = (17, 0)
+END_HOLD_MS = 800
+# How far past --seconds a capture may run for the audio its dump lags behind the virtual clock: a few blocks.
+TAIL_LIMIT_S = 1.0
 WINDOW_STEPS = 4  # a beat: a sounding step must have sound within it, so firmware latency can't fail a capture
 MAX_BARS = 10000  # the most generator_render --bars takes
 MAX_TEMPO = 999  # the fastest generator_render --tempo takes
@@ -318,6 +333,28 @@ def bar_set(text):
             raise argparse.ArgumentTypeError(f"{text!r}: bars from 0, as 47 or 3,40-42")
         bars.update(range(a, b + 1))
     return frozenset(bars)
+
+
+def drop_count(text):
+    """--end-after-drop's N: 1 to 99, as generator_render takes it."""
+    try:
+        n = int(text)
+    except ValueError:
+        n = 0
+    if not 1 <= n <= 99:
+        raise argparse.ArgumentTypeError("takes a Drop count, 1 to 99")
+    return n
+
+
+def bar_number(text):
+    """--end-at-bar's BAR: 0 to 9999, as generator_render takes it."""
+    try:
+        n = int(text)
+    except ValueError:
+        n = -1
+    if not 0 <= n <= 9999:
+        raise argparse.ArgumentTypeError("takes a bar, 0 to 9999")
+    return n
 
 
 def quiet_bars(args):
@@ -661,6 +698,10 @@ def capture_path(args, out, mutes=()):
         name += f"-swing{args.swing}"
     for part in sorted(set(mutes)):
         name += f"-mute{part}"
+    if getattr(args, "end_after_drop", None):
+        name += f"-end-drop{args.end_after_drop}"
+    elif getattr(args, "end_at_bar", None) is not None:
+        name += f"-end-bar{args.end_at_bar}"
     name += f"-{args.seconds:g}s"
     n = 1
     while True:
@@ -825,7 +866,64 @@ def render_command(render, args, out, bars):
         cmd += ["--tempo", f"{args.tempo:g}"]
     if args.swing is not None:
         cmd += ["--swing", str(args.swing)]
-    return cmd + ["--bars", str(bars), "--midi-only", "--out", out]
+    return cmd + end_flags(args) + ["--bars", str(bars), "--midi-only", "--out", out]
+
+
+def end_flags(args):
+    """--end-after-drop N or --end-at-bar BAR as given, for generator_render (which takes the same)."""
+    if getattr(args, "end_after_drop", None):
+        return ["--end-after-drop", str(args.end_after_drop)]
+    if getattr(args, "end_at_bar", None) is not None:
+        return ["--end-at-bar", str(args.end_at_bar)]
+    return []
+
+
+def drop_bars(sections):
+    """The bars where a Drop starts (a Groove a Build lands on), from a Piece's (bar, label) Section markers."""
+    return [
+        bar
+        for (_, before), (bar, label) in itertools.pairwise(sections)
+        if label.startswith("GROOVE") and before.startswith("BUILD")
+    ]
+
+
+EndPress = collections.namedtuple("EndPress", "bar seconds ends_bar ends_seconds")
+
+
+def end_press(render, args):
+    """Where a capture with --end-after-drop or --end-at-bar holds the End pad, as an EndPress: the bar (from PLAY,
+    bar 0) and its seconds, and the bar and seconds where the piece ends (None if it doesn't end in --seconds). From
+    the harness render with the same End, which arms it on that bar's first step. None without End. Raises
+    ValueError when the Drop doesn't come, or the bar is past --seconds."""
+    if not end_flags(args):
+        return None
+    tempo = args.tempo
+    if tempo is None:
+        tempo = float(render_piece(render, args, 1).recipe["tempo"])
+    bars = bars_for(args.seconds, tempo)
+    piece = render_piece(render, args, bars)
+    bar_s = bar_seconds(float(piece.recipe["tempo"]))
+    if args.end_at_bar is not None:
+        bar = args.end_at_bar
+    else:
+        drops = drop_bars(piece.sections)
+        if len(drops) < args.end_after_drop:
+            raise ValueError(
+                f"--end-after-drop {args.end_after_drop}: the piece has {len(drops)} Drop(s) in --seconds "
+                f"{args.seconds:g} ({bars} bars); raise --seconds"
+            )
+        bar = drops[args.end_after_drop - 1]
+    if bar * bar_s + END_HOLD_MS / 1000 >= args.seconds:
+        raise ValueError(
+            f"End at bar {bar} ({bar * bar_s:g} s) is past --seconds {args.seconds:g}"
+        )
+    ended = (
+        piece.sections
+        and piece.sections[-1][1].startswith("OUTRO")
+        and piece.bars < bars
+    )
+    ends = piece.bars if ended else None
+    return EndPress(bar, bar * bar_s, ends, None if ends is None else ends * bar_s)
 
 
 def bars_for(seconds, tempo):
@@ -1104,10 +1202,30 @@ def mute_parts(emu, parts):
     emu.button("SHIFT", False)
 
 
-def check_perform_plays(emu, seconds, check, mutes=(), check_silence=True):
+def press_end(emu):
+    """Holds the End pad END_HOLD_MS, past the 600 ms that arms End, and lets go."""
+    emu.s.pad_event(*END_PAD, True)
+    emu.wait(END_HOLD_MS)
+    emu.s.pad_event(*END_PAD, False)
+
+
+def run_for_audio(emu, start, seconds, each_step=None):
+    """Runs on until the dump holds `seconds` of audio from `start` (bytes), at most TAIL_LIMIT_S of virtual time:
+    the emulator's audio lags its virtual clock by a few blocks. Returns the milliseconds it ran on."""
+    need = int(seconds * RATE) * FRAME
+    began = emu.t
+    while emu.dump_size() - start < need and emu.t - began < TAIL_LIMIT_S * SEC:
+        emu.run_to(emu.t + 10 * MS, each_step)
+    return (emu.t - began) // MS
+
+
+def check_perform_plays(
+    emu, seconds, check, mutes=(), check_silence=True, end_at=None, ends_at=None
+):
     """PLAY, then `seconds` of Perform: sound all the way (unless not `check_silence`: a capture checks its audio by
     the harness's notes instead) and an OLED that keeps moving. Returns the rendered PCM. Each part in `mutes` is muted
-    right after PLAY."""
+    right after PLAY. `end_at`: seconds after PLAY to hold the End pad from; `ends_at`: seconds after PLAY where the
+    piece then ends, after which the OLED shows STOPPED and stays still."""
     check(
         "entered Perform on the SONG page (BACK and SONG lit, CLIP dark)",
         emu.led("BACK") and emu.led("SESSION_VIEW") and not emu.led("CLIP_VIEW"),
@@ -1117,21 +1235,30 @@ def check_perform_plays(emu, seconds, check, mutes=(), check_silence=True):
     # delugemu writes the dump unbuffered (rza1l_ssif.c fflushes each write), and the VM is stopped between
     # run_until steps, so the dump's size now is where the audio after PLAY starts.
     start = emu.dump_size()
+    played = emu.t
     emu.button("PLAY", True)
     emu.wait(150)
     emu.button("PLAY", False)
     check("PLAY starts Perform", emu.led("PLAY"))
     mute_parts(emu, list(mutes))
     frames = []
-    emu.run_to(
-        emu.t + int(seconds * SEC), each_step=lambda t: frames.append((t, emu.oled()))
-    )
+    step = lambda t: frames.append((t, emu.oled()))
+    stop = emu.t + int(seconds * SEC)
+    if end_at is not None:
+        emu.run_to(played + int(end_at * SEC), each_step=step)
+        press_end(emu)
+    emu.run_to(stop, each_step=step)
+    tail = run_for_audio(emu, start, seconds, step)
+    if tail:
+        log(f"ran {tail} ms past --seconds for the audio the dump lagged behind")
     pcm = emu.audio(start, seconds)
     if check_silence:
         silences = audio_failures(pcm, seconds)
         for failure in silences:
             check(failure, False)
         check("Perform sounds all the way through", not silences)
+    if ends_at is not None:
+        frames = [f for f in frames if f[0] <= played + int(ends_at * SEC)]
     freezes = freeze_failures(frames)
     for failure in freezes:
         check(failure, False)
@@ -1438,10 +1565,10 @@ def check_capture_args(args):
         sys.exit("capture --ab writes two captures: give --out a folder")
 
 
-def capture_one(args, elf, mutes, harness=None):
+def capture_one(args, elf, mutes, harness=None, end=None):
     """One capture with `mutes` muted. Returns (the WAV's path, why its audio isn't whole). `harness` is
     harness_piece's (parts, seconds a step): the audio is checked as `gen_emu.py check` does. Without it, only its
-    length and full-scale runs fail it, and silence is a WARNING."""
+    length and full-scale runs fail it, and silence is a WARNING. `end`: end_press()'s EndPress, or None."""
     out = (os.path.dirname(args.out) or ".") if is_wav_path(args.out) else args.out
     os.makedirs(out, exist_ok=True)
     clear_dead_captures(out)
@@ -1463,6 +1590,8 @@ def capture_one(args, elf, mutes, harness=None):
                 lambda what, ok: ok or warnings.append(what),
                 mutes,
                 check_silence=False,
+                end_at=None if end is None else end.seconds,
+                ends_at=None if end is None else end.ends_seconds,
             )
         finally:
             emu.close()
@@ -1523,6 +1652,13 @@ def capture(args):
     check = not args.no_check
     if check and args.render:
         require_render(args.render)  # before the minutes-long build
+    if not check and end_flags(args):
+        render = find_render(args)
+        if not render:
+            sys.exit(
+                "capture: End needs generator_render even with --no-check: " + NO_RENDER
+            )
+        require_render(render)
     elf = args.elf or build_capture(args)
     harness = None
     if check and args.render:
@@ -1530,13 +1666,29 @@ def capture(args):
         harness = harness_piece(args.render, args)
     elif check:
         harness = fresh_harness_piece(args)
+    end = None
+    if end_flags(args):
+        try:
+            end = end_press(
+                args.render or (HARNESS_RENDER if check else find_render(args)), args
+            )
+        except ValueError as error:
+            sys.exit(f"capture: {error}")
+        log(
+            f"End: held from bar {end.bar} ({end.seconds:g} s); "
+            + (
+                f"the piece ends at bar {end.ends_bar} ({end.ends_seconds:g} s)"
+                if end.ends_bar is not None
+                else "the piece doesn't end in --seconds: raise it to hear the Outro"
+            )
+        )
     if not args.ab:
-        wav, failures = capture_one(args, elf, args.mute or [], harness)
+        wav, failures = capture_one(args, elf, args.mute or [], harness, end)
         if not args.no_play:
             subprocess.run(["afplay", wav], check=False)
         return 1 if failures else 0
-    full, full_failures = capture_one(args, elf, [], harness)
-    without, failures = capture_one(args, elf, args.mute, harness)
+    full, full_failures = capture_one(args, elf, [], harness, end)
+    without, failures = capture_one(args, elf, args.mute, harness, end)
     if full_failures or failures:
         return 1
     import wav_levels
@@ -1620,6 +1772,21 @@ def add_recipe_args(p):
         choices=range(1, MUTE_ROWS + 1),
         metavar="PART",
         help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+    )
+    p.add_argument(
+        "--end-after-drop",
+        type=drop_count,
+        nargs="?",
+        const=1,
+        metavar="N",
+        help="press End from the Nth Drop's first bar (default the first), so the Outro follows that Drop's phrase "
+        "and the piece ends",
+    )
+    p.add_argument(
+        "--end-at-bar",
+        type=bar_number,
+        metavar="BAR",
+        help="press End from this bar (bar 0 at PLAY): the Outro follows from the next phrase line",
     )
     p.add_argument(
         "--quiet-bars",
@@ -1745,6 +1912,11 @@ def check_args(args):
     script = getattr(args, "cycle_script", None)
     if script is not None and not os.path.isfile(script):
         sys.exit(f"--cycle-script {script}: no such file")
+    if (
+        getattr(args, "end_after_drop", None)
+        and getattr(args, "end_at_bar", None) is not None
+    ):
+        sys.exit("--end-after-drop and --end-at-bar: give one")
 
 
 def main():

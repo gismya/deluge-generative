@@ -63,11 +63,23 @@ describe render_command("Rough render command", $ {
 	it("takes --end-after-drop and --midi-only, which need no value", _ {
 		harness::render::Parsed parsed = parse({"--end-after-drop", "--midi-only", "--bars", "8"});
 		expect(parsed.error).to_equal(std::string{});
-		expect(parsed.request.endAfterDrop).to_be_true();
+		expect(parsed.request.endAfterDrop).to_equal(1);
 		expect(parsed.request.midiOnly).to_be_true();
 		expect(parsed.request.bars).to_equal(8);
-		expect(parse({}).request.endAfterDrop).to_be_false();
+		expect(parse({}).request.endAfterDrop).to_equal(0);
+		expect(parse({}).request.endAtBar).to_equal(-1);
 		expect(parse({}).request.midiOnly).to_be_false();
+	});
+
+	it("takes a Drop count after --end-after-drop, and --end-at-bar, but not both", _ {
+		expect(parse({"--end-after-drop", "2", "--bars", "8"}).request.endAfterDrop).to_equal(2);
+		expect(parse({"--end-after-drop", "2", "--bars", "8"}).request.bars).to_equal(8);
+		expect(parse({"--end-at-bar", "40"}).request.endAtBar).to_equal(40);
+		expect(parse({"--end-after-drop", "0"}).error).to_equal(std::string("--end-after-drop takes a Drop count, 1 to 99"));
+		expect(parse({"--end-after-drop", "x"}).error).to_equal(std::string("--end-after-drop takes a Drop count, 1 to 99"));
+		expect(parse({"--end-at-bar", "-1"}).error).to_equal(std::string("--end-at-bar takes a bar, 0 to 9999"));
+		expect(parse({"--end-after-drop", "--end-at-bar", "4"}).error)
+		    .to_equal(std::string("--end-after-drop and --end-at-bar: give one"));
 	});
 
 	it("records the step that decided each Ornament hit, for the THEORY track", _ {
@@ -108,6 +120,57 @@ describe render_command("Rough render command", $ {
 		expect(sections.back().tick - drop.tick).to_equal(8 * bar);
 		expect(rendering.bars * bar - sections.back().tick).to_equal(8 * bar);
 		expect(rendering.steps.size()).to_equal(static_cast<size_t>(rendering.bars) * kStepsPerBar);
+	});
+
+	it("with --end-at-bar at the Drop's bar plays what --end-after-drop plays; with a count, the Nth Drop's", _ {
+		harness::render::Request once = parse({"--genre", "techno-acid", "--end-after-drop", "--bars", "1000"}).request;
+		const harness::render::Rendering first = harness::render::playRequest(once);
+		std::vector<Event> sections;
+		for (const Event& e : first.events) {
+			if (e.kind == EventKind::Section) {
+				sections.push_back(e);
+			}
+		}
+		const int32_t bar = kStepsPerBar * kTicksPerStep;
+		const int32_t dropBar = sections[sections.size() - 2].tick / bar;
+		harness::render::Request atBar = parse({"--genre", "techno-acid", "--bars", "1000"}).request;
+		atBar.endAtBar = dropBar;
+		bool armed = false;
+		const harness::render::Rendering same = harness::render::playRequest(atBar, nullptr, &armed);
+		expect(armed).to_be_true();
+		expect(same.bars).to_equal(first.bars);
+		expect(same.events == first.events).to_be_true();
+
+		harness::render::Request twice = parse({"--genre", "techno-acid", "--end-after-drop", "2", "--bars", "1000"}).request;
+		const harness::render::Rendering second = harness::render::playRequest(twice);
+		std::vector<Event> later;
+		int32_t drops = 0;
+		for (const Event& e : second.events) {
+			if (e.kind == EventKind::Section) {
+				later.push_back(e);
+				drops += e.section == SectionKind::Groove && later.size() > 1
+				                 && later[later.size() - 2].section == SectionKind::Build
+				             ? 1
+				             : 0;
+			}
+		}
+		expect(drops).to_equal(2);
+		expect(later.back().section == SectionKind::Outro).to_be_true();
+		expect(later[later.size() - 3].section == SectionKind::Build).to_be_true();
+		expect(second.bars).to_be_greater_than(first.bars);
+	});
+
+	it("with --end-at-bar past --bars warns that End was never armed", _ {
+		harness::render::Request request =
+		    parse({"--genre", "techno-acid", "--end-at-bar", "20", "--bars", "8", "--midi-only", "--out", "unused"})
+		        .request;
+		request.out = (scratchRoot.path / "no-end-bar" / "a").string();
+		const harness::render::Rendered rendered = harness::render::render(request);
+		expect(std::find(rendered.warnings.begin(), rendered.warnings.end(),
+		                 std::string("--end-at-bar: no bar 20 in 8 bars, so End was never armed and the piece has no "
+		                             "Outro"))
+		       != rendered.warnings.end())
+		    .to_be_true();
 	});
 
 	it("with --end-after-drop warns when no Drop came in --bars, so the piece has no Outro, beside the WAV's warnings", _ {
