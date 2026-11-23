@@ -14,11 +14,15 @@ namespace harness::render {
 
 struct Request {
 	deluge::generative::RecipeOverrides overrides;
-	/// The most bars it plays. With endAfterDrop the piece may end sooner.
+	/// The most bars it plays. With End armed (endAfterDrop, endAtBar) the piece may end sooner.
 	int32_t bars = 16;
-	/// Arms End on the Drop's first step (the first Groove after a Build), so the Drop plays to the next phrase line,
-	/// the Outro follows and the piece ends by itself: one Arc cycle, for the theory review (spec §21.5).
-	bool endAfterDrop = false;
+	/// --end-after-drop [N]: arms End on the Nth Drop's first step (a Groove a Build lands on), so that Drop plays to
+	/// the next phrase line, the Outro follows and the piece ends by itself. 1: one Arc cycle, for the theory review
+	/// (spec §21.5). 0: no End.
+	int32_t endAfterDrop = 0;
+	/// --end-at-bar BAR: arms End on bar BAR's first step (bar 0 at PLAY), as gen_emu.py capture holds the End pad
+	/// from that bar line. -1: no End.
+	int32_t endAtBar = -1;
 	/// Writes only <out>.mid: no WAV or piano roll, and no sound picks.
 	bool midiOnly = false;
 	/// --mute: bit p leaves part p (sidebar row p + 1, the genre's part order) out of the WAV from step 0, as a Perform
@@ -47,6 +51,11 @@ extern const char* const kUsage;
 /// defaults to the repo's build/renders/<genre>-seed<seed>.
 Parsed parseArgs(int argc, const char* const* argv);
 
+/// Whether the request arms End (--end-after-drop or --end-at-bar), so --bars is only a ceiling.
+inline bool armsEnd(const Request& request) {
+	return request.endAfterDrop > 0 || request.endAtBar >= 0;
+}
+
 struct Rendered {
 	std::vector<std::string> warnings;
 	std::string error; ///< Empty when all the files were written.
@@ -69,7 +78,7 @@ std::string soundPicks(const Request& request, bool* rolledAll = nullptr);
 
 /// Plays the Recipe through the harness for the request's bars, or until the piece ends, with each decided step's
 /// chord and macros. Its `bars` is the bars it played. No sound picks.
-/// `endArmed`: whether endAfterDrop found its Drop and armed End.
+/// `endArmed`: whether End was armed (endAfterDrop found its Drop, or endAtBar came in --bars).
 Rendering playRequest(const Request& request, uint32_t* droppedEvents = nullptr, bool* endArmed = nullptr);
 
 /// Plays the Recipe (playRequest()) and writes the three files, or only the MIDI file with midiOnly.

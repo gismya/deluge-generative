@@ -11,7 +11,7 @@ import tempfile
 import wave
 
 FADE_S = 0.01
-AAC_BITRATE = 160000
+AAC_BITRATE = 160000  # bits a second, unless the content file gives a clip its own kbps
 
 
 def window(tempo, first_bar, end_bar, rate, total=None):
@@ -60,8 +60,9 @@ def cut_wav(src, dest_wav, tempo, first_bar, end_bar):
     return count / rate
 
 
-def cut(src, dest_m4a, tempo, first_bar, end_bar, scratch=None):
-    """Cuts bars [first_bar, end_bar) of `src` to an AAC m4a with afconvert. Returns the clip's seconds."""
+def cut(src, dest_m4a, tempo, first_bar, end_bar, scratch=None, bitrate=None):
+    """Cuts bars [first_bar, end_bar) of `src` to an AAC m4a with afconvert, at `bitrate` bits a second (default
+    AAC_BITRATE). Returns the clip's seconds."""
     with tempfile.TemporaryDirectory(dir=scratch) as tmp:
         wav = os.path.join(tmp, "cut.wav")
         seconds = cut_wav(src, wav, tempo, first_bar, end_bar)
@@ -74,7 +75,7 @@ def cut(src, dest_m4a, tempo, first_bar, end_bar, scratch=None):
                 "-d",
                 "aac",
                 "-b",
-                str(AAC_BITRATE),
+                str(bitrate or AAC_BITRATE),
                 wav,
                 dest_m4a,
             ],

@@ -8,7 +8,9 @@
   parser, so a bad flag fails when the file loads. A job's --genre is its genre; a job without one takes the
   command's --genre (#426), so one session can capture several genres. --quiet-bars names bars where gen_emu's check
   expects silence (an FX part alone: its riser starts from silence); it isn't part of the audio, so it never makes a
-  WAV stale.
+  WAV stale. --end-after-drop [N] and --end-at-bar BAR press End (gen_emu.py capture): the piece plays to its Outro
+  and stops, so give bars past the Outro's end (the capture logs where it ends). The rough render (clips.py) takes
+  them too.
 
 A comment is a whole line starting with `#`. Never cut a line at `#`: keys are spelled with it (`--key D#`).
 """
@@ -105,13 +107,18 @@ class Job:
     line: int = 0
     args: str = field(default="", compare=False)
     quiet: tuple = ()  # --quiet-bars, sorted: for the check only
+    end: tuple = ()  # --end-after-drop N or --end-at-bar BAR, as flags
 
     def group(self):
-        """What a capture shares with a longer one it is a prefix of: (variant, card, Recipe, mutes)."""
-        return (self.variant, self.card, self.recipe, self.mutes)
+        """What a capture shares with a longer one it is a prefix of: (variant, card, Recipe, mutes, End)."""
+        return (self.variant, self.card, self.recipe, self.mutes, self.end)
 
     def capture_flags(self):
-        return self.recipe.flags() + [f for m in self.mutes for f in ("--mute", str(m))]
+        return (
+            self.recipe.flags()
+            + [f for m in self.mutes for f in ("--mute", str(m))]
+            + list(self.end)
+        )
 
 
 _PARSER = None
@@ -138,8 +145,9 @@ def _recipe_parser():
 
 
 def parse_args(args, genre=None):
-    """(Recipe, mutes, quiet bars) from a job's args. Its genre is its own --genre, else `genre` (the command's
-    --genre). Raises JobError on a flag gen_emu's capture would refuse, one the runner sets itself, or no genre."""
+    """(Recipe, mutes, quiet bars, End flags) from a job's args. Its genre is its own --genre, else `genre` (the
+    command's --genre). Raises JobError on a flag gen_emu's capture would refuse, one the runner sets itself, or no
+    genre."""
     try:
         words = shlex.split(args)
     except ValueError as e:
@@ -166,11 +174,14 @@ def parse_args(args, genre=None):
         raise JobError(
             f"--genre {ns.genre}: unknown genre (have {', '.join(_names('genres', gen_emu.genre_names))})"
         )
+    if ns.end_after_drop and ns.end_at_bar is not None:
+        raise JobError("--end-after-drop and --end-at-bar: give one")
     recipe = Recipe(**{f: getattr(ns, f) for f in RECIPE_FIELDS})
     return (
         recipe,
         tuple(sorted(set(ns.mute or []))),
         tuple(sorted(gen_emu.quiet_bars(ns))),
+        tuple(gen_emu.end_flags(ns)),
     )
 
 
@@ -197,11 +208,11 @@ def parse_jobs(text, genre=None, source="jobs"):
                 raise JobError(f"bars {bars!r}: not a number") from None
             if bars <= 0:
                 raise JobError("bars must be more than 0")
-            recipe, mutes, quiet = parse_args(args, genre)
+            recipe, mutes, quiet, end = parse_args(args, genre)
         except JobError as e:
             raise JobError(f"{source}:{n}: {e}") from None
         seen.add(name)
-        out.append(Job(name, variant, card, bars, recipe, mutes, n, args, quiet))
+        out.append(Job(name, variant, card, bars, recipe, mutes, n, args, quiet, end))
     return out
 
 

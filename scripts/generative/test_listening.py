@@ -289,6 +289,146 @@ class Recut(unittest.TestCase):
             self.assertNotEqual(page.cut_key(scratch, clip), first)
 
 
+class JobEnd(unittest.TestCase):
+    """#489: a job may press End; it passes the flag on and never shares a capture with a job that doesn't."""
+
+    def test_end_flags_pass_to_the_capture_and_split_the_group(self):
+        a, b, c = jobs.parse_jobs(
+            "a | base | pack | 8  | --seed 1\n"
+            "b | base | pack | 40 | --seed 1 --end-after-drop 2\n"
+            "c | base | pack | 40 | --seed 1 --end-at-bar 24\n",
+            genre="house",
+        )
+        self.assertEqual(b.capture_flags()[-2:], ["--end-after-drop", "2"])
+        self.assertEqual(c.capture_flags()[-2:], ["--end-at-bar", "24"])
+        self.assertNotIn("--end-after-drop", a.capture_flags())
+        self.assertEqual(len(jobs.merge([a, b, c])), 3)
+
+    def test_both_fail_at_load(self):
+        with self.assertRaisesRegex(jobs.JobError, "give one"):
+            jobs.parse_jobs(
+                "a | base | pack | 8 | --end-after-drop --end-at-bar 4\n", genre="house"
+            )
+
+
+class Bitrate(unittest.TestCase):
+    """#489: a clip's AAC bitrate: its own kbps, its card's, the session's, else 160 kb/s."""
+
+    def test_the_clip_then_the_card_then_the_session(self):
+        session = content(kbps=80)
+        session["kbps"] = 112
+        card = session["cards"][0]
+        clip = card["clips"][0]
+        self.assertEqual(page.bitrate(session, card, dict(clip, kbps=96)), 96000)
+        self.assertEqual(page.bitrate(session, card, clip), 80000)
+        self.assertEqual(page.bitrate(session, dict(card, kbps=None), clip), 112000)
+        plain = content()
+        self.assertEqual(
+            page.bitrate(plain, plain["cards"][0], clip), cutter.AAC_BITRATE
+        )
+
+    def test_a_bad_kbps_is_a_problem(self):
+        self.assertIn(
+            "S1: kbps must be a whole number of kb/s, 32 to 320",
+            page.problems(content(kbps=16), {"s1_e5"}),
+        )
+
+    def test_a_new_bitrate_cuts_the_clip_again_and_the_default_keeps_old_cuts(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            os.makedirs(os.path.join(scratch, "raw"))
+            for ext, data in (
+                (".wav", "x"),
+                (".json", '{"tempo": 120.0, "seconds": 10}'),
+            ):
+                with open(os.path.join(scratch, "raw", "e1" + ext), "w") as fh:
+                    fh.write(data)
+            clip = {"stem": "c", "src": "e1", "bars": [0, 4]}
+            plain = page.cut_key(scratch, clip)
+            self.assertEqual(page.cut_key(scratch, clip, cutter.AAC_BITRATE), plain)
+            self.assertNotEqual(page.cut_key(scratch, clip, 80000), plain)
+
+    def test_the_cutter_encodes_at_the_bitrate_given(self):
+        seen = []
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(cutter, "cut_wav", return_value=1.0),
+            mock.patch.object(
+                cutter.subprocess, "run", side_effect=lambda cmd, **kw: seen.append(cmd)
+            ),
+        ):
+            cutter.cut("a.wav", os.path.join(tmp, "a.m4a"), 120.0, 0, 1, bitrate=80000)
+            cutter.cut("a.wav", os.path.join(tmp, "b.m4a"), 120.0, 0, 1)
+        self.assertEqual([c[c.index("-b") + 1] for c in seen], ["80000", "160000"])
+
+
+class ReuseClip(unittest.TestCase):
+    """#489: a card may reuse a clip cut in another round, copied as it is."""
+
+    def setUp(self):
+        self.root = self.enterContext(tempfile.TemporaryDirectory())
+        self.scratch = os.path.join(self.root, "scratch")
+        self.session_dir = os.path.join(self.root, "house", "signoff-1")
+        other = os.path.join(self.root, "impact", "round-3", "audio")
+        os.makedirs(other)
+        os.makedirs(os.path.join(self.scratch, "raw"))
+        with open(os.path.join(other, "ho_boom.m4a"), "wb") as fh:
+            fh.write(b"m4a bytes")
+        with open(os.path.join(other, "cuts.json"), "w") as fh:
+            fh.write('{"ho_boom": {"key": [], "seconds": 31.0}}')
+        self.clip = {
+            "stem": "h1-a",
+            "reuse": "../../impact/round-3/audio/ho_boom.m4a",
+            "label": "A",
+        }
+
+    def test_it_needs_no_capture_and_takes_no_bars(self):
+        self.assertEqual(
+            page.problems(content(clips=[self.clip]), set(), self.session_dir), []
+        )
+        self.assertIn(
+            "S1 clip h1-a: reuse is cut already: no src or bars",
+            page.problems(content(clips=[dict(self.clip, bars=[0, 8])]), set()),
+        )
+        missing = dict(self.clip, reuse="../nope.m4a")
+        self.assertEqual(
+            page.problems(content(clips=[missing]), set(), self.session_dir),
+            [
+                f"S1 clip h1-a: no {os.path.join(self.root, 'house', 'nope.m4a')} to reuse"
+            ],
+        )
+
+    def test_the_page_copies_it_with_its_rounds_seconds(self):
+        with (
+            mock.patch.object(cutter, "cut") as cut,
+            mock.patch.object(page, "render_midi", return_value=[]),
+        ):
+            warnings = page.build(
+                content(clips=[self.clip]), self.scratch, self.session_dir
+            )
+        cut.assert_not_called()
+        self.assertEqual(warnings, [])
+        with open(os.path.join(self.session_dir, "audio", "h1-a.m4a"), "rb") as fh:
+            self.assertEqual(fh.read(), b"m4a bytes")
+        with open(os.path.join(self.session_dir, "index.html")) as fh:
+            self.assertIn('"seconds": 31.0', fh.read())
+
+
+class CardText(unittest.TestCase):
+    """#489: card text keeps its line breaks, and a song card may raise its word limit."""
+
+    def test_the_page_keeps_line_breaks(self):
+        self.assertIn(
+            ".card p, .options li { white-space: pre-line; }",
+            page.html(page.page_data(content(), clips={})),
+        )
+
+    def test_a_card_may_raise_its_word_limit(self):
+        self.assertEqual(page.word_limit(content()["cards"][0]), page.MAX_WORDS)
+        self.assertEqual(
+            page.word_limit(dict(content()["cards"][0], max_words=120)), 120
+        )
+
+
 STAMP = {
     "variant": "base",
     "diff": "-",

@@ -67,6 +67,8 @@ button.secondary { background: transparent; color: var(--accent); }
 .tip { font-size: .85rem; color: var(--accent); opacity: 0; transition: opacity .2s; }
 .tip:not(:empty) { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+/* Card text keeps the line breaks the content file gives it (a song card's timeline, a list of questions). */
+.card p, .options li { white-space: pre-line; }
 </style>
 </head>
 <body>
