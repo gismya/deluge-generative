@@ -43,11 +43,11 @@ expect event gen_sound DRUMS CRASH within=20
 expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML porta= within=20
 # The Drone: POLY, low priority, a drone pad by the Pad role (spec §10.6)
 expect event gen_sound DRONE - pick mode=1 prio=0 arp=0 SYNTHS/ within=20
-# FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact
-# from factory files. Low priority.
+# FX lanes: Riser from SAMPLES/FX/Riser or the pack preset, Fall from factory files, Impact one of its two pack presets
+# (Boom or Wash, rolled per piece, spec §10.5). Riser and Impact are silent on a card without the pack. Low priority.
 expect event gen_sound FX RISER within=20
 expect event gen_sound FX FALL pick mode=0 prio=0 SAMPLES/Artists/Danny Taurus/MoDrama/Downer within=20
-expect event gen_sound FX IMPACT pick mode=0 prio=0 SAMPLES/ within=20
+expect event /^gen_sound FX IMPACT (pick mode=0 prio=0 SYNTHS\/GENERATIVE\/FX\/GEN Impact (Boom|Wash)\.XML|silent mode=0 prio=0 -)$/ within=20
 expect event gen_perform_entered within=20
 expect root_ui=generative_perform within=10
 expect ui=generative_perform

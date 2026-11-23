@@ -1,7 +1,8 @@
 # Sounds (#104), the fallback chain and its one warning, in delugemu (test_port_emu.py --card-overlay
 # scripts/generative/fixtures/perform_sounds_fallback). The card is the factory card without the Generative pack and
 # without Acid techno's one ACID preset (SYNTHS/005 Sweet Mono Bass):
-# the ACID part falls to the default synth and the Riser lane stays silent, and one warning covers both (spec §10.1).
+# the ACID part falls to the default synth and the Riser and Impact lanes stay silent, and one warning covers the three
+# (spec §10.1).
 # gen_sound PART LANE SOURCE mode=<PolyphonyMode> prio=<VoicePriority> PATH; synths: mode= prio= arp=<ArpMode> PATH porta=<param>
 # needs: card fixtures/perform_sounds_fallback (its own card, above; test_port_emu.py builds it)
 # covers: src/deluge/generative/firmware/card_sounds.* src/deluge/generative/firmware/perform_song.*
@@ -32,12 +33,12 @@ expect event gen_sound DRUMS CRASH pick mode=0 prio=2 SAMPLES/DRUMS/Crash/ withi
 expect event gen_sound ACID - default mode=3 prio=2 arp=0 - porta= within=20
 # The Drone: POLY, low priority, a drone pad by the Pad role (spec §10.6)
 expect event gen_sound DRONE - within=20
-# FX lanes: Riser from SAMPLES/FX/Riser or the pack preset (silent on a card without the pack), Fall and Impact
-# from factory files. Low priority.
+# FX lanes: Riser's and Impact's pack presets aren't on this card, so both stay silent; Fall from factory files
+# (spec §10.5). Low priority. One warning counts the default ACID and the two silent lanes.
 expect event gen_sound FX RISER silent mode=0 prio=0 - within=20
 expect event gen_sound FX FALL pick mode=0 prio=0 SAMPLES/Artists/Danny Taurus/MoDrama/Downer within=20
-expect event gen_sound FX IMPACT pick mode=0 prio=0 SAMPLES/ within=20
-expect event gen_sound_missing sounds=2 within=20
+expect event gen_sound FX IMPACT silent mode=0 prio=0 - within=20
+expect event gen_sound_missing sounds=3 within=20
 expect event gen_perform_entered within=20
 expect root_ui=generative_perform within=10
 expect ui=generative_perform
