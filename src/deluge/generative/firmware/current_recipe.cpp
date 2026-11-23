@@ -21,6 +21,7 @@
 #include "fatfs/fatfs.hpp"
 #include "generative/core/draw.h"
 #include "generative/core/golden_case.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/card_text.h"
 #include "generative/perform/pending_recipe.h"
@@ -31,6 +32,7 @@
 #include "util/functions.h"
 #include <cstddef>
 #include <cstring>
+#include <string_view>
 
 #ifdef GENERATIVE_CAPTURE
 #include "generative/core/recipe_overrides.h"
@@ -54,9 +56,11 @@ struct CaptureRecipe {
 	int8_t scale;
 	int8_t swing;
 	uint8_t unused;
+	char variants[64]; ///< NUL-terminated `set=name,set=name` (gen_emu.py's --variant): each fixes a set (spec §3.6).
 };
-static_assert(sizeof(CaptureRecipe) == 60 && offsetof(CaptureRecipe, entropy) == 40
-              && offsetof(CaptureRecipe, macroPoints) == 52 && offsetof(CaptureRecipe, swing) == 58);
+static_assert(sizeof(CaptureRecipe) == 124 && offsetof(CaptureRecipe, entropy) == 40
+              && offsetof(CaptureRecipe, macroPoints) == 52 && offsetof(CaptureRecipe, swing) == 58
+              && offsetof(CaptureRecipe, variants) == 60);
 
 } // namespace deluge::generative::firmware
 
@@ -66,7 +70,7 @@ using CaptureRecipe = deluge::generative::firmware::CaptureRecipe;
 // `externally_visible`, so it stays in .data under this name (LTO would make it local and rename it) for gen_emu.py
 // to find.
 extern "C" __attribute__((used, externally_visible)) volatile CaptureRecipe generative_capture_recipe = {
-    .magic = "GENCAP1",
+    .magic = "GENCAP2",
     .genre = "",
     .entropy = 0,
     .seed = 1,
@@ -76,6 +80,7 @@ extern "C" __attribute__((used, externally_visible)) volatile CaptureRecipe gene
     .scale = -1,
     .swing = deluge::generative::RecipeOverrides::kKeepSwing,
     .unused = 0,
+    .variants = "",
 };
 #endif
 
@@ -174,6 +179,23 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	overrides.keyRoot = capture.keyRoot;
 	overrides.scale = capture.scale;
 	overrides.swing = capture.swing;
+	// Each `set=name` the capture names fixes that set; a name the genre doesn't have is skipped (the harness render
+	// that checks a capture refuses it).
+	std::array<char, sizeof(capture.variants)> variantText{};
+	for (size_t i = 0; i + 1 < variantText.size(); i++) {
+		variantText[i] = capture.variants[i];
+	}
+	const Genre* named = findGenre(genreName.data());
+	for (std::string_view left = variantText.data(); named != nullptr && !left.empty();) {
+		const size_t comma = left.find(',');
+		VariantPicks fixed;
+		const std::string_view one = left.substr(0, comma);
+		if (fixVariant(*named, one, fixed)) {
+			const int32_t set = findVariantSet(*named, one.substr(0, one.find('=')));
+			overrides.variant[set] = static_cast<int8_t>(fixed.pick[set]);
+		}
+		left = comma == std::string_view::npos ? std::string_view{} : left.substr(comma + 1);
+	}
 	RolledRecipe rolledRecipe = rollWithOverrides(genre, overrides);
 	Recipe rolled = rolledRecipe.recipe;
 	uint32_t rolledSeed = rolledRecipe.seed;

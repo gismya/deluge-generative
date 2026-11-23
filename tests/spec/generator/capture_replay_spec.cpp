@@ -6,6 +6,7 @@
 #include "generative/compose/compose_driver.h"
 #include "generative/compose/song_size.h"
 #include "generative/core/output_settings.h"
+#include "generative/core/variants.h"
 #include "harness.h"
 #include "stream_helpers.h"
 #include "transition_piece.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -253,6 +255,35 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			const std::vector<Note> live = notesBefore(pairNotes(run->live.events), cut);
 			expect(live.size()).to_be_greater_than(100U);
 			expect(notesBefore(replayed->writer.notes, cut) == live).to_be_true();
+		});
+
+		it("with a variant that patches the genre: Dub's plain skank replays plain (spec §3.6)", _ {
+			auto run = std::make_unique<Steered>();
+			Run live;
+			live.recipe = newRecipe(genres::dub, 0);
+			expect(fixVariant(genres::dub, "skank=plain", live.recipe.variants)).to_be_true();
+			live.seed = 3;
+			live.skipIntro = true;
+			live.log = &run->log.log;
+			run->live = play(live, 24);
+			const PieceImage pieceImage = image(run->log.log, 0);
+			const SteeringLog::Piece piece = pieceImage.piece();
+			expect(piece.start().recipe.variants == live.recipe.variants).to_be_true();
+			auto replayed = replay(piece);
+			expect(replayed->done).to_be_true();
+			const int32_t cut = agreedTick(piece);
+			const std::vector<Note> notes = notesBefore(pairNotes(run->live.events), cut);
+			expect(notes.size()).to_be_greater_than(100U);
+			expect(notesBefore(replayed->writer.notes, cut) == notes).to_be_true();
+			// And it is plain: no Skank stab holds a 7th's four pitch classes.
+			std::map<int32_t, std::set<int32_t>> stabs;
+			for (const Note& n : notes) {
+				if (n.part == 2) {
+					stabs[n.tick].insert(n.pitch % 12);
+				}
+			}
+			expect(stabs.empty()).to_be_false();
+			expect(std::ranges::all_of(stabs, [](const auto& stab) { return stab.second.size() <= 3; })).to_be_true();
 		});
 
 		it("with forces, End and holds pressed mid-phrase", _ {

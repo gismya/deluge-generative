@@ -53,6 +53,10 @@ def mismatches(job, piece):
         differs(
             "swing", asked.swing, r.get("swing"), r.get("swing") == str(asked.swing)
         )
+    for variant in asked.variant:
+        name, want = variant.split("=", 1)
+        have = r.get("variant." + name)
+        differs("variant " + name, want, have, have == want)
     return out
 
 
