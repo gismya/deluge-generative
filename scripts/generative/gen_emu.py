@@ -42,7 +42,8 @@ capture  the tuning loop's main step: builds a capture firmware in build-capture
          the arguments, never overwriting one) or a .wav path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
-         --end-after-drop [N] (default 1) or --end-at-bar BAR presses End: it holds the End pad (AUDITION/SECTION
+         --end-after-drop [N] (default 1; put WAV paths before it, or give N, or it reads the WAV as N) or
+         --end-at-bar BAR presses End: it holds the End pad (AUDITION/SECTION
          row 8) from the Nth Drop's first bar line, or bar BAR's (bar 0 at PLAY), so End arms in that bar and the
          Outro follows from the next phrase line; the transport stops where it ends and the rest of --seconds is
          silence. The Drop's bar comes from the harness render, which arms End the same way (generator_render

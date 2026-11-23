@@ -362,7 +362,10 @@ def build(session, scratch, out_dir, recut=False):
             if recut or not os.path.exists(dest) or not done or done["key"] != key:
                 if "reuse" in clip:
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    shutil.copyfile(reused_path(out_dir, clip), dest)
+                    if not os.path.exists(dest) or not os.path.samefile(
+                        reused_path(out_dir, clip), dest
+                    ):
+                        shutil.copyfile(reused_path(out_dir, clip), dest)
                     cut_s = m4a_seconds(reused_path(out_dir, clip))
                 else:
                     first, end = clip["bars"]
