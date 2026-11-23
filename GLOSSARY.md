@@ -33,8 +33,16 @@ A built-in style definition. It gives a new Recipe its starting values and sets 
 _Avoid_: Style, preset, piece, template
 
 **Subgenre**:
-A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu.
-_Avoid_: Variant, sub-style, flavour, family
+A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu. A subgenre changes the roster or palette; a variant changes one rule within a genre.
+_Avoid_: Sub-style, flavour, family
+
+**Variant set**:
+A rule a genre offers several ways of playing, each with a weight. Each piece draws one of them, and the player can narrow the draw or fix it to one.
+_Avoid_: Option set, alternatives, mode
+
+**Variant**:
+One way of playing a variant set's rule, such as rockers or steppers for Dub's drums. It is a Recipe value: Regenerate draws it again, a new seed keeps it.
+_Avoid_: Option, alternative, subgenre
 
 **Macro**:
 A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion. The Recipe value is the one centre every part follows; a part's Part bias only moves where it sits around that centre.
