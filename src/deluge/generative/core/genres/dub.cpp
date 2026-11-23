@@ -132,7 +132,7 @@ constexpr Pattern kMelodicaPhrases[] = {
 
 /// A lazy snare: late on every 16th (spec §4.5).
 constexpr Expression kLazySnare{.lean = {2, 2, 2, 2}, .spread = 8};
-/// No extra hat lean: the song swing (+10) swings the 16ths directly (round 2 S1).
+/// No extra hat lean: the song swing (+5 to +15) swings the 16ths directly (round 2 S1).
 constexpr int8_t kHatLean = 0;
 
 /// The drop-out and Throw echoes: a dotted 8th with the analog delay (spec §10.6, tuning).
@@ -356,7 +356,7 @@ constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
     .version = 6,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
-    .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swing = 10},
+    .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,
     // The Crash replaces the closed hat on the Phrase accent's step, as the open hat does on its &: the Crash never

@@ -862,7 +862,12 @@ struct Facts {
 	int16_t tempoLowBpm = 120; ///< Rolls come from here; not a clamp.
 	int16_t tempoHighBpm = 130;
 	std::span<const Scale> scales;
-	int8_t swing = 0;
+	/// The song swing amount a new Recipe rolls from, swingLow..swingHigh inclusive, in -kMaxSwing..kMaxSwing (spec
+	/// §3.2, ADR 0008). Like tempo, a range rolled from fresh entropy; straight (0..0) by default.
+	int8_t swingLow = 0;
+	int8_t swingHigh = 0;
+	/// What a Recipe file that leaves out swing plays (spec §16.2): the range's middle.
+	[[nodiscard]] constexpr int8_t swingMiddle() const { return static_cast<int8_t>((swingLow + swingHigh) / 2); }
 };
 
 struct Genre {
