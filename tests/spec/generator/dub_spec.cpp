@@ -100,7 +100,7 @@ describe dub("Dub", $ {
 		expect(matched).to_equal(1);
 	});
 
-	it("plays 70–80 BPM in Minor or Dorian, swing +5 to +15 (+10 before #498), in 8-bar phrases, every macro at 25 (listening round 2, DOR)", _ {
+	it("plays 70–80 BPM in Minor or Dorian, swing +5 to +15, in 8-bar phrases, every macro at 25 (listening round 2, DOR)", _ {
 		expect(dubGenre.facts.tempoLowBpm).to_equal(70);
 		expect(dubGenre.facts.tempoHighBpm).to_equal(80);
 		expect(dubGenre.facts.scales.size()).to_equal(size_t{2});

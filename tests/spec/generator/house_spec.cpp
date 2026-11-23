@@ -94,7 +94,7 @@ describe house("House", $ {
 		expect(genreValid(houseGenre)).to_be_true();
 	});
 
-	it("plays 120–126 BPM in Minor, Dorian or Mixolydian, swing +10 to +20 (+15 before #498), in 8-bar phrases, every macro at 25", _ {
+	it("plays 120–126 BPM in Minor, Dorian or Mixolydian, swing +10 to +20, in 8-bar phrases, every macro at 25", _ {
 		expect(houseGenre.facts.tempoLowBpm).to_equal(120);
 		expect(houseGenre.facts.tempoHighBpm).to_equal(126);
 		const std::set<Scale> scales(houseGenre.facts.scales.begin(), houseGenre.facts.scales.end());

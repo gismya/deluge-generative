@@ -741,6 +741,20 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(10, Role::Drums)).to_be_true(); // no Register: the anchor is never read
 	});
 
+	it("has an ordered swing range inside the Recipe's swing bounds (swingRangeValid(), spec §3.2)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(swingRangeValid(*genre)).to_be_true();
+		}
+		const auto valid = [](int8_t low, int8_t high) {
+			return swingRangeValid(Genre{.name = "swing", .facts = {.swingLow = low, .swingHigh = high}});
+		};
+		expect(valid(0, 0)).to_be_true();
+		expect(valid(-49, 49)).to_be_true();
+		expect(valid(10, 5)).to_be_false();
+		expect(valid(-50, 0)).to_be_false();
+		expect(valid(0, 50)).to_be_false();
+	});
+
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {
 		using deluge::generative::perform::GlideLength;
 		using deluge::generative::perform::glideTicks;
