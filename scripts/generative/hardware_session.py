@@ -25,12 +25,19 @@ In order:
    it also prints the script's test events that match the regex after each script (`--events 'gen_mem|gen_left'`,
    `--events .` for all), counted from after its first start_state (a script should have only one, counting its
    include files). A script that gets no reply from the test port writes the hung marker and stops the run (exit 2).
-   Any failure exits 1.
-7. Lists SONGS/ and RECIPES/ again and prints each new file's path. One that no script's "# writes: GLOB" line
-   (deluge_probe.script_writes()) declares is a failure: delete it.
+   Any failure exits 1. Each script that runs to its end records its time in times.json. After each script it lists
+   the folders again and deletes the new files that script's own "# writes: GLOB" lines declare, so the next script
+   can save under the same name (#500; --keep-writes keeps them).
+7. Lists SONGS/ and RECIPES/ after the last script and prints each file still new. One that no script's "# writes:
+   GLOB" line (deluge_probe.script_writes()) declares is a failure: delete it.
+
+Before 2, a set whose estimate (LOAD_SECONDS plus each script's last time in times.json, UNTIMED_SCRIPT_SECONDS for
+one never timed) passes --max-minutes (default 90; 0 for no limit) runs nothing: it prints the set split into parts
+under the limit (split_sessions(), the smoke script first in each), each as its own session command, and exits 1.
+A full hardware set takes over 2 h, past the harness's longest background limit (#500).
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
-loaded.json (the last load this script saw) and released/.
+loaded.json (the last load this script saw), times.json (each script's last time) and released/.
 """
 
 import datetime
@@ -83,6 +90,13 @@ DEV_SYSEX_KEY = "4D750EA4"
 NO_REPLY = "no reply to test port command"
 
 EXIT_FAILED, EXIT_HUNG, EXIT_REFUSED = 1, 2, 3
+
+# A session's length (#500): the full hardware set took over 2 h, the harness's longest background limit, and was
+# killed mid-script. A set whose estimate passes --max-minutes is split into sessions by the scripts' last times.
+SESSION_MAX_MINUTES = 90
+LOAD_SECONDS = 180  # a session's build check, load, boot and card listings, before and around its scripts
+UNTIMED_SCRIPT_SECONDS = 180  # a script with no time in times.json yet
+SMOKE_SCRIPT = "test_port_smoke.txt"  # starts every part of a split set
 
 
 def still_answers_window(timeout):
@@ -142,6 +156,7 @@ class Hardware:
         self.hung = os.path.join(self.root, "hung")
         self.pending = os.path.join(self.root, "pending.md")
         self.loaded = os.path.join(self.root, "loaded.json")
+        self.times = os.path.join(self.root, "times.json")
         self.released = os.path.join(self.root, "released")
         self.owned = False
 
@@ -381,6 +396,26 @@ class Hardware:
         with open(self.loaded, "w") as fh:
             json.dump(record, fh, indent=2)
 
+    # -- each script's last time on the Deluge --
+
+    def read_times(self):
+        """{script file name: seconds} from times.json: each script's last run to its end on the Deluge."""
+        try:
+            with open(self.times) as fh:
+                times = json.load(fh)
+        except (OSError, ValueError):
+            return {}
+        return times if isinstance(times, dict) else {}
+
+    def record_time(self, name, seconds):
+        times = self.read_times()
+        times[name] = round(seconds, 1)
+        self._ensure()
+        tmp = f"{self.times}.{os.getpid()}"
+        with open(tmp, "w") as fh:
+            json.dump(times, fh, indent=2, sort_keys=True)
+        os.replace(tmp, self.times)
+
 
 def build_mismatch(record, head, where):
     """Why a --no-load session mustn't run on the build `record` (loaded.json at `where`) says is loaded, given the
@@ -600,6 +635,58 @@ def loadfw(build, out=print):
     return proc.returncode
 
 
+def script_seconds(script, times):
+    """A script's last time on the Deluge (times.json, by file name), or UNTIMED_SCRIPT_SECONDS."""
+    return float(times.get(os.path.basename(script), UNTIMED_SCRIPT_SECONDS))
+
+
+def split_sessions(scripts, times, limit_seconds):
+    """Splits `scripts` (paths, run in this order) into parts, each estimated under `limit_seconds`: LOAD_SECONDS plus
+    each script's last time (script_seconds()). The parts keep the order; the smoke script, if it's among them, starts
+    every part, as a session's first script. A script longer than the limit alone gets a part of its own. Returns
+    [(scripts, estimated seconds)]."""
+    smoke = [s for s in scripts if os.path.basename(s) == SMOKE_SCRIPT][:1]
+    rest = [s for s in scripts if s not in smoke]
+    base = LOAD_SECONDS + sum(script_seconds(s, times) for s in smoke)
+    parts, current, total = [], [], base
+    for script in rest:
+        seconds = script_seconds(script, times)
+        if current and total + seconds > limit_seconds:
+            parts.append((smoke + current, total))
+            current, total = [], base
+        current.append(script)
+        total += seconds
+    if current or not parts:
+        parts.append((smoke + current, total))
+    return parts
+
+
+def session_command(args, scripts, part=None):
+    """The `deluge_probe.py session` command line for `scripts` with this run's options, for a part of a split set."""
+    words = ["--build", args.build] if not args.no_load else ["--no-load"]
+    owner = args.owner or ""
+    if part:
+        owner = f"{owner} (part {part})".strip()
+    if owner:
+        words += ["--owner", owner]
+    for flag, value in (("--events", args.events), ("--note", args.note)):
+        if value:
+            words += [flag, value]
+    if args.keep_writes:
+        words.append("--keep-writes")
+    inner = " ".join(
+        shlex.quote(w)
+        for w in [
+            "python3",
+            "scripts/generative/deluge_probe.py",
+            "session",
+            *words,
+            *scripts,
+        ]
+    )
+    return f'./dbt exec "{inner}"'
+
+
 class Session:
     """One run. The device-facing steps are methods, so tests can replace them."""
 
@@ -640,19 +727,28 @@ class Session:
         """The calling checkout's full HEAD."""
         return git("rev-parse", "HEAD") or "unknown"
 
-    def card_files(self, port):
-        """The entries of SONGS/ and RECIPES/ on the card, as "SONGS/NAME" ("SONGS/NAME/" for a folder), over the
-        test port's link. A missing folder has none. Raises deluge_files.CardError, or TimeoutError for no reply
-        (neither is a hang: the card can be busy with a song load or save the last script left running)."""
+    def _card(self, port):
         import deluge_files
 
-        card = deluge_files.Card(
+        return deluge_files.Card(
             port.link,
             timeout=10.0,
             blocks=deluge_files.DIN_BLOCKS
             if self.args.udp
             else deluge_files.USB_BLOCKS,
         )
+
+    def delete_card_file(self, port, path):
+        """Deletes the card file `path` ("SONGS/NAME.XML"). Raises deluge_files.CardError, or TimeoutError."""
+        self._card(port).delete("/" + path)
+
+    def card_files(self, port):
+        """The entries of SONGS/ and RECIPES/ on the card, as "SONGS/NAME" ("SONGS/NAME/" for a folder), over the
+        test port's link. A missing folder has none. Raises deluge_files.CardError, or TimeoutError for no reply
+        (neither is a hang: the card can be busy with a song load or save the last script left running)."""
+        import deluge_files
+
+        card = self._card(port)
         missing = {deluge_files.FRESULT.index(n) for n in ("FR_NO_PATH", "FR_NO_FILE")}
         files = set()
         for folder in self.dp.CARD_WATCHED:
@@ -797,6 +893,8 @@ class Session:
         refused = self.refuse_if_hung() or self.refuse_if_mismatched(warn=False)
         if refused:
             return refused
+        if self.too_long():
+            return EXIT_FAILED
         # Built before the lock, so other agents don't wait on a compile.
         if self.build == HARDWARE and self.build_firmware():
             return EXIT_FAILED
@@ -816,6 +914,72 @@ class Session:
         finally:
             self.hw.release()
             self.out("session: lock released")
+
+    def too_long(self):
+        """Whether the scripts' estimate passes --max-minutes (0: no limit). If so, prints the split: one command a
+        part, to run one after another, each its own session (#500)."""
+        limit = self.args.max_minutes * 60
+        if limit <= 0:
+            return False
+        times = self.hw.read_times()
+        parts = split_sessions(self.scripts, times, limit)
+        if len(parts) < 2:
+            return False
+        total = LOAD_SECONDS + sum(script_seconds(s, times) for s in self.scripts)
+        untimed = sum(1 for s in self.scripts if os.path.basename(s) not in times)
+        self.out(
+            f"session: these scripts take about {total / 60:.0f} min by their last times on the Deluge ({self.hw.times}"
+            + (
+                f"; {untimed} never timed count {UNTIMED_SCRIPT_SECONDS / 60:g} min each"
+                if untimed
+                else ""
+            )
+            + f"), over --max-minutes {self.args.max_minutes:g}. Nothing ran. Run them as {len(parts)} sessions, one"
+            " after another, each its own command:"
+        )
+        for n, (scripts, seconds) in enumerate(parts, 1):
+            self.out(
+                f"session: part {n} of {len(parts)}, about {seconds / 60:.0f} min:"
+            )
+            self.out("  " + session_command(self.args, scripts, f"{n} of {len(parts)}"))
+        return True
+
+    def clean_up_after(self, port, script, known):
+        """Lists SONGS/ and RECIPES/ after `script` and deletes the new files its own "# writes:" lines declare, so
+        the next script can save under the same name (#500). Returns the listing without them, or `known` and a
+        warning when the listing fails. With --keep-writes it deletes nothing."""
+        name = os.path.basename(script)
+        try:
+            now = set(self.card_files(port))
+        except (TimeoutError, self.card_error()) as exc:
+            self.out(
+                f"session: can't list SONGS/ and RECIPES/ after {name}: {exc}; what it wrote stays"
+            )
+            return known
+        return self._delete_declared(port, script, known, now)
+
+    def _delete_declared(self, port, script, known, now):
+        """Deletes the files in `now` but not `known` that `script`'s own "# writes:" lines declare. Returns `now`
+        without them. With --keep-writes it deletes nothing."""
+        if self.args.keep_writes:
+            return now
+        try:
+            globs = self.script_writes(script)
+        except (ValueError, OSError):
+            return (
+                now  # the script itself failed to read; its own result already says so
+            )
+        declared, _ = self.dp.new_card_files(known, now, globs)
+        name = os.path.basename(script)
+        for path in declared:
+            try:
+                self.delete_card_file(port, path)
+            except (TimeoutError, self.card_error()) as exc:
+                self.out(f"session: can't delete /{path}: {exc}")
+                continue
+            now.discard(path)
+            self.out(f"session: deleted /{path} ({name}'s # writes:)")
+        return now
 
     def _run_locked(self, sha):
         # Either may have changed while we waited: a hang, or someone else's load.
@@ -874,26 +1038,33 @@ class Session:
             except (TimeoutError, self.card_error()) as exc:
                 self.out(f"session: can't list SONGS/ and RECIPES/: {exc}")
                 return EXIT_FAILED
-            for script in self.scripts:
+            known = set(before)
+            for i, script in enumerate(self.scripts):
                 name = os.path.basename(script)
                 self.out(f"session: {name}")
+                started = time.monotonic()
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
+                    self.hw.record_time(name, time.monotonic() - started)
                 except self.dp.ScriptStopped as stop:
                     results.append((name, *stop.result()))
                     if NO_REPLY in str(stop.error):
                         self.summary(results)
                         return self.hung(f"{stop.error} during {name}")
                 self.out("session: " + self.dp.result_line(*results[-1]))
+                if i < len(self.scripts) - 1:
+                    known = self.clean_up_after(port, script, known)
+            # After the last script, a listing that fails fails the session: nothing checks what the run left.
             try:
-                after = self.card_files(port)
+                after = set(self.card_files(port))
             except (TimeoutError, self.card_error()) as exc:
                 self.out(
                     f"session: can't list SONGS/ and RECIPES/ after the scripts: {exc}"
                 )
                 self.summary(results)
                 return EXIT_FAILED
+            after = self._delete_declared(port, self.scripts[-1], known, after)
         finally:
             port.link.close()
         code = self.summary(results)

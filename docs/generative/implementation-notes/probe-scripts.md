@@ -92,9 +92,15 @@ otherwise.
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
-  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
-  Recipe: other Generative state a script leaves outside Perform
-  outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
+  stopped partway through a genre change can't move the next script onto another genre. Then `reset settings`
+  (`resetSettings()`, #500) puts back GLIDE and BROWSER PREVIEW (Perform settings kept until power-off, spec §13.3)
+  and clears stock's sample browser's `lastFilePathLoaded`. Other state a script leaves until power-off outlives `start_state`: add it to
+  `resetSettings()` and to `perform_start_state.txt`'s check, or put it back at the script's end. Trap: a lane
+  browser's sample preview (`AudioEngine::previewSample()`, which loads with `manuallySelected`) sets
+  `lastFilePathLoaded`, so a later OSC 1 file browser opened in that kick's folder, where a BACK tap goes up a folder
+  instead of closing it (`perform_retire.txt` after `perform_lane_browser.txt`). To find a leak between scripts, run
+  the earlier scripts and the failing one in one delugemu boot (`test_port_emu.py --script A --script B`):
+  `check_all.py` boots each script alone, so it never sees one.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
