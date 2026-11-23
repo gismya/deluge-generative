@@ -6,6 +6,7 @@ python3 scripts/generative/test_hardware_session.py
 import argparse
 import os
 import re
+import shlex
 import socket
 import sys
 import tempfile
@@ -677,6 +678,55 @@ class Times(Base):
         self.assertIn("--owner '#500 (part 1 of 2)'", commands[0])
         self.assertTrue(commands[0].rstrip('"').endswith(" a.txt"))
         self.assertTrue(commands[1].rstrip('"').endswith(" b.txt"))
+        # The parts keep this run's options: the same limit, lock wait and test-port timeout
+        for part in commands:
+            self.assertIn("--max-minutes 90", part)
+            self.assertIn("--timeout 1", part)
+            self.assertIn("--no-wait", part)
+
+    def test_the_parts_keep_every_option_that_changes_where_or_how_they_run(self):
+        # R1 of #504: a part that lost --max-minutes re-split at 90, one that lost --force-build-mismatch refused,
+        # and one that lost --udp ran on the real Deluge instead of delugemu.
+        for name in ("a.txt", "b.txt", "c.txt"):
+            self.hw.record_time(name, 3000)
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt", "c.txt"],
+            max_minutes=120,
+            force_build_mismatch=True,
+            udp="5000:5001",
+            wait=600,
+            no_wait=False,
+        )
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        commands = [line for line in s.lines if "deluge_probe.py session" in line]
+        self.assertEqual(len(commands), 2, s.lines)
+        for part in commands:
+            for option in (
+                "--no-load",
+                "--max-minutes 120",
+                "--force-build-mismatch",
+                "--udp 5000:5001",
+                "--wait 600",
+            ):
+                self.assertIn(option, part)
+            self.assertNotIn("--no-wait", part)
+
+    def test_a_part_command_survives_the_double_quotes_around_it(self):
+        # dbt exec "...": $, backticks, " and \ in an option would be read by the outer shell.
+        a = args(events='gen_mem|"x" $HOME `y` \\', note=None)
+        command = hs.session_command(a, ["a.txt"])
+        inner = command[len('./dbt exec "') : -1]
+        unescaped = re.sub(r'\\([\\"$`])', r"\1", inner)
+        words = shlex.split(unescaped)
+        i = words.index("--events")
+        self.assertEqual(words[i + 1], 'gen_mem|"x" $HOME `y` \\')
+        self.assertNotRegex(inner, r'(?<!\\)[$`"]')
+
+    def test_an_emulator_session_records_no_deluge_time(self):
+        s = FakeSession(self.hw, udp="5000:5001")
+        self.assertEqual(s.run(), 0)
+        self.assertEqual(self.hw.read_times(), {})
 
     def test_max_minutes_zero_runs_the_whole_set(self):
         self.hw.record_time("a.txt", 3000)

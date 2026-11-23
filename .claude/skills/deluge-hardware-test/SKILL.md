@@ -53,8 +53,8 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    leaves the device in a state where the next load can go silent. Each script that runs to its end records its time
    in `times.json`. A set whose estimate by those times (plus about 3 min for the load, and 3 min for a script never
    timed) passes `--max-minutes` (default 90) runs nothing: the session prints it split into parts under the limit,
-   in order with the smoke script first in each, one command a part, and exits 1. Run the parts one after another,
-   each its own session. The whole hardware set (`covers.py --hardware --full`) takes about 2.5 h, so it always
+   in order with the smoke script first in each when it's in the set, one command a part (with this run's options),
+   and exits 1. Run the parts one after another, each its own session. The whole hardware set (`covers.py --hardware --full`) takes about 2.5 h, so it always
    splits.
 
    Writing or changing a script: read [scripts.md](scripts.md) first.

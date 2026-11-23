@@ -33,7 +33,8 @@ In order:
 
 Before 2, a set whose estimate (LOAD_SECONDS plus each script's last time in times.json, UNTIMED_SCRIPT_SECONDS for
 one never timed) passes --max-minutes (default 90; 0 for no limit) runs nothing: it prints the set split into parts
-under the limit (split_sessions(), the smoke script first in each), each as its own session command, and exits 1.
+under the limit (split_sessions(), the smoke script first in each when it is in the set), each as its own session
+command with this run's options, and exits 1.
 A full hardware set takes over 2 h, past the harness's longest background limit (#500).
 
 State lives in ~/.cache/deluge-generative/hardware/ (or $DELUGE_HARDWARE_DIR): lock/ (owner inside), hung, pending.md,
@@ -662,18 +663,35 @@ def split_sessions(scripts, times, limit_seconds):
 
 
 def session_command(args, scripts, part=None):
-    """The `deluge_probe.py session` command line for `scripts` with this run's options, for a part of a split set."""
+    """The `deluge_probe.py session` command line for `scripts`, with every option of this run that changes where or
+    how a session runs (R1 of #504: a part that lost --udp ran on the Deluge), for a part of a split set. The inner
+    command sits in double quotes (`./dbt exec "..."`), so its \\, ", $ and ` are escaped for them."""
     words = ["--build", args.build] if not args.no_load else ["--no-load"]
     owner = args.owner or ""
     if part:
         owner = f"{owner} (part {part})".strip()
     if owner:
         words += ["--owner", owner]
-    for flag, value in (("--events", args.events), ("--note", args.note)):
+    for flag, value in (
+        ("--events", args.events),
+        ("--note", args.note),
+        ("--udp", args.udp),
+    ):
         if value:
             words += [flag, value]
-    if args.keep_writes:
-        words.append("--keep-writes")
+    words += [
+        "--max-minutes",
+        f"{args.max_minutes:g}",
+        "--timeout",
+        f"{args.timeout:g}",
+    ]
+    words += ["--no-wait"] if args.no_wait else ["--wait", f"{args.wait:g}"]
+    for flag, on in (
+        ("--force-build-mismatch", args.force_build_mismatch),
+        ("--keep-writes", args.keep_writes),
+    ):
+        if on:
+            words.append(flag)
     inner = " ".join(
         shlex.quote(w)
         for w in [
@@ -684,6 +702,7 @@ def session_command(args, scripts, part=None):
             *scripts,
         ]
     )
+    inner = re.sub(r'([\\"$`])', r"\\\1", inner)
     return f'./dbt exec "{inner}"'
 
 
@@ -917,7 +936,8 @@ class Session:
 
     def too_long(self):
         """Whether the scripts' estimate passes --max-minutes (0: no limit). If so, prints the split: one command a
-        part, to run one after another, each its own session (#500)."""
+        part, to run one after another, each its own session (#500). The estimate counts LOAD_SECONDS also under
+        --no-load, where nothing loads: it errs long."""
         limit = self.args.max_minutes * 60
         if limit <= 0:
             return False
@@ -1046,7 +1066,10 @@ class Session:
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
-                    self.hw.record_time(name, time.monotonic() - started)
+                    if (
+                        not self.args.udp
+                    ):  # times.json is the Deluge's: delugemu runs at its own speed
+                        self.hw.record_time(name, time.monotonic() - started)
                 except self.dp.ScriptStopped as stop:
                     results.append((name, *stop.result()))
                     if NO_REPLY in str(stop.error):
