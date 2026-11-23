@@ -26,7 +26,8 @@ const char* const kUsage =
     "usage: generator_render [--out PREFIX] [--genre NAME] [--seed N] [--bars N] [--entropy N]\n"
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
-    "                        [--pack DIR] [--card DIR] [--end-after-drop] [--midi-only] [--mute PART]...\n"
+    "                        [--pack DIR] [--card DIR] [--end-after-drop [N] | --end-at-bar BAR] [--midi-only]\n"
+    "                        [--mute PART]...\n"
     "       generator_render --list-sounds [--genre NAME] [--entropy N] [Recipe flags] [--pack DIR] [--card DIR]\n"
     "       generator_render --list-palettes\n"
     "       generator_render --list-risers\n"
@@ -37,8 +38,11 @@ const char* const kUsage =
     "(default 0). Samples come from --pack (default: the repo's pack/) and then --card (default:\n"
     "~/source/delugemu-sd/sdcard).\n"
     "--bars is the most it plays (default 16). --end-after-drop arms End on the Drop's first step, so the piece plays\n"
-    "one Arc cycle and ends after its Outro; it warns if no Drop came, and the WAV's hour limit then counts the\n"
-    "bars it played. --mute PART (a sidebar row, 1 to the genre's part count, at most 6: the part order, as gen_emu.py "
+    "one Arc cycle and ends after its Outro; with N (1 to 99), on the Nth Drop's. --end-at-bar BAR arms it on bar\n"
+    "BAR's first step (bar 0 at PLAY), as gen_emu.py capture holds the End pad from that bar line. Either warns if "
+    "End\n"
+    "was never armed in --bars, and the WAV's hour limit then counts the bars it played. --mute PART (a sidebar row, 1 "
+    "to the genre's part count, at most 6: the part order, as gen_emu.py "
     "capture --mute; "
     "repeatable)\n"
     "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"
@@ -86,6 +90,8 @@ struct RootsLister final : FolderLister {
 		return true;
 	}
 };
+
+constexpr long long kMaxEndDrops = 99;
 
 bool parseInt(std::string_view text, long long lo, long long hi, long long* out) {
 	std::string s(text);
@@ -194,7 +200,15 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			return parsed;
 		}
 		if (flag == "--end-after-drop") {
-			r.endAfterDrop = true;
+			// Its count is optional: a number right after it is the count, as no other argument is a bare number.
+			long long drops = 1;
+			if (i + 1 < argc && parseInt(argv[i + 1], 1, kMaxEndDrops, &drops)) {
+				i++;
+			}
+			else if (i + 1 < argc && argv[i + 1][0] != '-') {
+				return fail("--end-after-drop takes a Drop count, 1 to " + std::to_string(kMaxEndDrops));
+			}
+			r.endAfterDrop = static_cast<int32_t>(drops);
 			continue;
 		}
 		if (flag == "--midi-only") {
@@ -223,8 +237,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
-		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy", "--bars", "--key", "--scale",
-		                                              "--tempo", "--swing", "--pack",    "--card", "--out", "--mute"};
+		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy",   "--bars", "--key",
+		                                              "--scale", "--tempo", "--swing",     "--pack", "--card",
+		                                              "--out",   "--mute",  "--end-at-bar"};
 		if (macro < 0 && std::find(std::begin(kFlags), std::end(kFlags), flag) == std::end(kFlags)) {
 			return fail("unknown argument: " + std::string(flag));
 		}
@@ -250,6 +265,12 @@ Parsed parseArgs(int argc, const char* const* argv) {
 				return fail(std::string(flag) + " takes a 32-bit number");
 			}
 			(flag == "--seed" ? r.overrides.seed : r.overrides.entropy) = static_cast<uint32_t>(n);
+		}
+		else if (flag == "--end-at-bar") {
+			if (!parseInt(value, 0, 9999, &n)) {
+				return fail("--end-at-bar takes a bar, 0 to 9999");
+			}
+			r.endAtBar = static_cast<int32_t>(n);
 		}
 		else if (flag == "--bars") {
 			if (!parseInt(value, 1, 10000, &n)) {
@@ -304,6 +325,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		}
 		i++;
 	}
+	if (r.endAfterDrop > 0 && r.endAtBar >= 0) {
+		return fail("--end-after-drop and --end-at-bar: give one");
+	}
 	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
 	const auto parts = static_cast<int32_t>(genre->parts.size());
 	if ((r.mutedParts >> parts) != 0) {
@@ -333,8 +357,10 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 	// Each driver call decides at most one step, so the last decided step's queries are that step's. An Ornament hit
 	// due at the decision's own tick (a flam's grace leaned early) can play before this reads the buffer: it then gets
 	// no step=, and theory_review.py puts it on its main hit, a 16th or less after it.
+	int32_t drops = 0;
 	run.watch = [&](const Generator& generator) {
-		if (static_cast<int32_t>(rendering.steps.size()) < generator.nextStep()) {
+		const bool decided = static_cast<int32_t>(rendering.steps.size()) < generator.nextStep();
+		if (decided) {
 			const int32_t decided = generator.nextStep() - 1;
 			for (int32_t i = 0; i < generator.lastStepEventCount(); i++) {
 				const Event& e = generator.lastStepEvent(i);
@@ -347,7 +373,11 @@ Rendering playRolled(const Request& request, const RolledRecipe& rolled, uint32_
 			rendering.steps.push_back(
 			    {generator.chord(), generator.effectiveMacro(Macro::Energy), generator.effectiveMacro(Macro::Density)});
 		}
-		armEnd = armEnd || (request.endAfterDrop && generator.arc().dropStartsHere());
+		if (decided) {
+			drops += generator.arc().dropStartsHere() ? 1 : 0;
+			armEnd = armEnd || (request.endAfterDrop > 0 && drops == request.endAfterDrop)
+			         || (request.endAtBar >= 0 && generator.nextStep() > request.endAtBar * kStepsPerBar);
+		}
 	};
 	run.steer = [&](int32_t /*nextStep*/, SteeringQueue& queue) {
 		if (armEnd && !armed) {
@@ -434,8 +464,8 @@ Rendering playRequest(const Request& request, uint32_t* droppedEvents, bool* end
 
 Rendered render(const Request& request) {
 	const RolledRecipe rolled = rollWithOverrides(*allGenres()[0], request.overrides);
-	// Before it plays, unless --end-after-drop makes --bars only a ceiling: then the bars it played count.
-	if (!request.midiOnly && !request.endAfterDrop) {
+	// Before it plays, unless End makes --bars only a ceiling: then the bars it played count.
+	if (!request.midiOnly && !armsEnd(request)) {
 		if (std::string why = audioLengthError(request.bars, rolled.recipe.tempo); !why.empty()) {
 			return {{}, std::move(why)};
 		}
@@ -443,14 +473,19 @@ Rendered render(const Request& request) {
 	uint32_t dropped = 0;
 	bool endArmed = false;
 	Rendering rendering = playRolled(request, rolled, &dropped, &endArmed);
-	if (!request.midiOnly && request.endAfterDrop) {
+	if (!request.midiOnly && armsEnd(request)) {
 		if (std::string why = audioLengthError(rendering.bars, rolled.recipe.tempo); !why.empty()) {
 			return {{}, std::move(why)};
 		}
 	}
 	Rendered rendered;
-	if (request.endAfterDrop && !endArmed) {
-		rendered.warnings.push_back("--end-after-drop: no Drop in " + std::to_string(request.bars)
+	if (armsEnd(request) && !endArmed) {
+		const std::string what = request.endAtBar >= 0 ? "--end-at-bar: no bar " + std::to_string(request.endAtBar)
+		                         : request.endAfterDrop == 1
+		                             ? std::string("--end-after-drop: no Drop")
+		                             : "--end-after-drop " + std::to_string(request.endAfterDrop) + ": no Drop "
+		                                   + std::to_string(request.endAfterDrop);
+		rendered.warnings.push_back(what + " in " + std::to_string(request.bars)
 		                            + " bars, so End was never armed and the piece has no Outro");
 	}
 	Audio audio;

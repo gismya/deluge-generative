@@ -19,6 +19,7 @@
 // the ARC page draws from the waiting commands (spec §13.5).
 
 #include "generative/core/generator.h"
+#include "generative/core/steering_log.h"
 #include <algorithm>
 
 namespace deluge::generative {
@@ -203,6 +204,11 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		return true;
 	case CommandKind::SetHome:
 		return command.target < partCount(*genre_); // the driver moved the home: logged, nothing to apply
+	case CommandKind::SetParam:                     // the driver set the param: logged, nothing to apply
+	case CommandKind::SetSetting:                   // the driver set a non-param setting: logged, nothing to apply
+		return command.target < partCount(*genre_) || command.target == kSongParams;
+	case CommandKind::TransitionTempo: // the driver's own glide: the Recipe's tempo stays the playing one's
+		return true;
 
 	case CommandKind::SetFreeze: {
 		if (command.target >= partCount(*genre_) || (command.value != 0 && command.value != 1)) {
@@ -259,6 +265,35 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		stopAt_ = nextStep_ + transitionSteps(command);
 		return true;
 	}
+	case CommandKind::Restart:
+		// The piece decides nothing more: every note still sounding ends on this line, and the driver starts it again
+		// here (spec §13.2). Never logged: it ends the piece.
+		if (stopAt_ != kNever) {
+			return false;
+		}
+		stopAt_ = nextStep_;
+		restartLanded_ = true;
+		return false;
+	case CommandKind::SetStutter:
+		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
+	case CommandKind::SetPunch:
+		if (!punch_.set(command)) {
+			return false;
+		}
+		// The pump starts or stops on this step's line: the driver ducks the other parts from there (spec §8.9). A
+		// Pump event already in this step was the other change: the two cancel, so the step sends none, and the
+		// buffer holds one Pump a step, as stepEventsOf() counts.
+		if (punch_.on(PunchIn::Pump) != punch_.pumped) {
+			punch_.pumped = !punch_.pumped;
+			for (int32_t i = events_.stepStart(); i < events_.size(); i++) {
+				if (events_.at(i).kind == EventKind::Pump) {
+					events_.removeAt(i);
+					return true;
+				}
+			}
+			push(Event::pump(stepTick(nextStep_), punch_.pumped));
+		}
+		return true;
 	case CommandKind::SetFill: {
 		const std::span<const FillEntry> fills = genre_->fills;
 		if (command.value == kFillReleased) {
@@ -392,6 +427,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 			return true;
 		}
 		break;
+	case CommandKind::Restart:
+		// 0 cancels the one waiting; a press while one waits keeps it. Nothing once a transition or restart landed.
+		if (command.value == 0 || stopAt_ != kNever) {
+			pending_.cancel(command);
+			return true;
+		}
+		if (pending_.waiting(command) != nullptr) {
+			return true;
+		}
+		command.value = 1;
+		break;
 	case CommandKind::Transition:
 		if (command.value == kCancelTransition) {
 			pending_.cancel(command); // only while it waits: once landed it plays on (spec §9.7)
@@ -431,7 +477,8 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 	case CommandKind::SetMute:
 	case CommandKind::SetSolo:
 	case CommandKind::SetOctave:
-		return arc_.stepsToBarLine(); // spec §13.4, §7.3
+	case CommandKind::Restart:
+		return arc_.stepsToBarLine(); // spec §13.4, §7.3, §13.2
 	case CommandKind::Transition:
 		// A Build placed like a forced one; an Outro or a cut on the next phrase line (spec §9.7).
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
@@ -449,8 +496,16 @@ void Generator::landPending(SteeringLog* log) {
 		if (stepsToLine(command) != 0) {
 			return false;
 		}
-		if (apply(command) && log != nullptr) {
-			log->append(n, command);
+		if (apply(command)) {
+			if (log != nullptr) {
+				log->append(n, command);
+			}
+		}
+		else if (isArcMove(command) && log != nullptr) {
+			// Refused at its line, it still leaves its slot: replay must not keep waiting it (unreachable today).
+			log->appendWaiting(
+			    n, {command.kind == CommandKind::Transition ? CommandKind::Transition : CommandKind::ForceSection},
+			    false);
 		}
 		return true;
 	});
@@ -491,117 +546,160 @@ GEN_STEP_CODE Arc::Move Generator::waitingMove() const {
 }
 
 void Generator::planArc(ArcPlan& out) const {
-	out = ArcPlan{};
+	ArcPlanner planner;
+	planner.begin(*this);
+	planner.advance(INT32_MAX);
+	out = planner.plan();
+}
+
+void ArcPlanner::begin(const Generator& piece) {
+	genre_ = piece.genre_;
+	seed_ = piece.seed_;
+	centre_ = piece.recipe_.macros;
+	bias_ = piece.recipe_.bias;
 	const Genre& genre = *genre_;
-	const int32_t phraseSteps = genre.phraseSteps();
-	const Macros& centre = recipe_.macros;
 	const int32_t parts = partCount(genre);
 
 	// What lands on its line: each waiting command and the step it lands on, by the one line rule.
-	struct Landing {
-		Command command;
-		int32_t step;
-	};
-	Landing landings[PendingList::kCapacity];
-	const int32_t waiting = pending_.size();
-	for (int32_t i = 0; i < waiting; i++) {
-		landings[i] = {pending_.at(i), landsAt(pending_.at(i))};
+	waiting_ = piece.pending_.size();
+	for (int32_t i = 0; i < waiting_; i++) {
+		landings_[i] = {piece.pending_.at(i), piece.landsAt(piece.pending_.at(i))};
 	}
+	const Command* force = piece.waitingForce();
+	forceLands_ = force != nullptr ? piece.landsAt(*force) : -1;
 
-	// A copy of the counters the plan moves on: the Arc, the gates, mutes and solos. Nothing else of the piece.
-	Arc arc = arc_;
-	MuteSolo mutes = mutes_;
-	Gates gates[kMaxParts] = {};
+	// A copy of the counters the plan moves on: the Arc, the gates, drop-outs, mutes and solos. Nothing else of the
+	// piece.
+	arc_ = piece.arc_;
+	mutes_ = piece.mutes_;
 	for (int32_t p = 0; p < parts; p++) {
-		gates[p] = parts_[p].gates;
+		gates_[p] = piece.parts_[p].gates;
 	}
-	// The plan reads gates, keeps, the roll and mutes. The cut and the Gap never cover a whole phrase or a whole Build
-	// (cutAndGapUnderBuild()), so it leaves them out, and so does a drop-out, which never outlasts the phrase it starts
-	// in (dropOutsValid(), spec §8.8). The dim counts all three, so a part they silence on a phrase's last step shows
-	// dim there while the plan shows it playing; the cut never stops the roll lane (rollUncut()).
-	const auto lets = [&](int32_t p, const Keeps& keeps, RollStage roll) {
-		return mayPlay(genre.parts[p], gates[p], genre.arc.roll.lane, roll,
-		               [&](Lane lane) { return keeps.lets(p, lane); });
-	};
+	dropOut_ = piece.dropOut_;
+	std::fill_n(energySum_, ArcPlan::kMaxPhrases, 0);
+	std::fill_n(steps_, ArcPlan::kMaxPhrases, 0);
 
-	int32_t energySum[ArcPlan::kMaxPhrases] = {};
-	int32_t steps[ArcPlan::kMaxPhrases] = {};
-	const auto addStep = [&](int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
-		ArcPhrase& entry = out.phrase[phrase];
-		entry.kind = at.section();
-		entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
-		entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
-		entry.sounds |= sounds;
-		entry.muted = mutes.muted;
-		energySum[phrase] += energy - centre[Macro::Energy];
-		steps[phrase]++;
-	};
-
-	int32_t step = nextStep_;
-	out.first = (step > 0 ? step - 1 : 0) / phraseSteps;
-	out.count = ArcPlan::kMaxPhrases;
-	if (step > 0) {
+	plan_ = ArcPlan{};
+	step_ = piece.nextStep_;
+	plan_.first = (step_ > 0 ? step_ - 1 : 0) / genre.phraseSteps();
+	plan_.count = ArcPlan::kMaxPhrases;
+	if (step_ > 0) {
 		// The last decided step, as it played: the first of the plan's first phrase.
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= !partSilenced(p) && mutes.audible(p) ? partBit(p) : 0;
+			sounds |= !piece.partSilenced(p) && mutes_.audible(p) ? partBit(p) : 0;
 		}
-		addStep(0, arc_, sounds, effectiveMacro(Macro::Energy));
+		addStep(0, piece.arc_, sounds, piece.effectiveMacro(Macro::Energy));
 	}
-	bool ended = this->ended();
-	// Where a transition's new roster starts: the landed one's start step, or where the waiting one's would be.
-	int32_t newRoster = stopAt_;
-	if (const Command* transition = waitingTransition(); transition != nullptr) {
-		newRoster = landsAt(*transition) + transitionSteps(*transition);
+	ended_ = piece.ended();
+	newRoster_ = piece.stopAt_;
+	if (const Command* transition = piece.waitingTransition(); transition != nullptr) {
+		newRoster_ = piece.landsAt(*transition) + piece.transitionSteps(*transition);
 	}
-	for (; step / phraseSteps - out.first < ArcPlan::kMaxPhrases; step++) {
-		const int32_t phrase = step / phraseSteps - out.first;
-		if (step >= newRoster) {
-			out.phrase[phrase].next = steps[phrase] == 0;
+	planning_ = true;
+}
+
+void ArcPlanner::addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
+	ArcPhrase& entry = plan_.phrase[phrase];
+	entry.kind = at.section();
+	entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
+	entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
+	entry.sounds |= sounds;
+	entry.muted = mutes_.muted;
+	energySum_[phrase] += energy - centre_[Macro::Energy];
+	steps_[phrase]++;
+}
+
+Arc::Move ArcPlanner::waitingMove(int32_t step) const {
+	Arc::Move first;
+	for (int32_t i = 0; i < waiting_; i++) {
+		if (landings_[i].step <= step) {
+			continue; // already landed
+		}
+		Arc::Move move;
+		if (!sectionMoveOf(landings_[i].command, move)) {
 			continue;
 		}
-		if (ended) {
-			out.phrase[phrase].ended = steps[phrase] == 0;
+		move.at = landings_[i].step - step;
+		if (move.at < first.at || (move.at == first.at && !first.stops)) {
+			first = move;
+		}
+	}
+	return first;
+}
+
+bool ArcPlanner::advance(int32_t maxSteps) {
+	if (!planning_) {
+		return true;
+	}
+	const Genre& genre = *genre_;
+	const int32_t phraseSteps = genre.phraseSteps();
+	const int32_t parts = partCount(genre);
+	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut and the Gap never cover a whole phrase or a
+	// whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole phrase (or the
+	// Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The dim counts
+	// all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
+	const auto lets = [&](int32_t p, const Keeps& keeps, const PartsAndLanes& dropOut, RollStage roll) {
+		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
+		               [&](Lane lane) { return keeps.lets(p, lane) && !dropOut.has(p, lane); });
+	};
+	for (; maxSteps > 0 && step_ / phraseSteps - plan_.first < ArcPlan::kMaxPhrases; step_++, maxSteps--) {
+		const int32_t step = step_;
+		const int32_t phrase = step / phraseSteps - plan_.first;
+		if (step >= newRoster_) {
+			plan_.phrase[phrase].next = steps_[phrase] == 0;
+			continue;
+		}
+		if (ended_) {
+			plan_.phrase[phrase].ended = steps_[phrase] == 0;
 			continue;
 		}
 		// Steering lands before the Arc moves, as in decideNextStep().
-		for (int32_t i = 0; i < waiting; i++) {
-			const Command& command = landings[i].command;
-			if (landings[i].step != step) {
+		for (int32_t i = 0; i < waiting_; i++) {
+			const Command& command = landings_[i].command;
+			if (landings_[i].step != step) {
 				continue;
 			}
 			if (Arc::Move move; sectionMoveOf(command, move)) {
 				if (!move.stops) {
-					arc.force(move.section, move.buildSteps);
+					arc_.force(move.section, move.buildSteps);
 				}
 				continue;
 			}
 			if (command.kind == CommandKind::SetMute || command.kind == CommandKind::SetSolo) {
-				mutes.land(command);
+				mutes_.land(command);
 			}
 			// A key change or a take moves nothing the plan shows.
 		}
-		arc.enterStep(genre, seed_, step, centre);
-		const int32_t energy = effectiveOn(genre, arc, centre, Macro::Energy);
-		if (arc.stepInBar() == 0) {
-			const int32_t density = effectiveOn(genre, arc, centre, Macro::Density);
+		arc_.enterStep(genre, seed_, step, centre_);
+		const int32_t energy = effectiveOn(genre, arc_, centre_, Macro::Energy);
+		if (arc_.stepInBar() == 0) {
+			const int32_t density = effectiveOn(genre, arc_, centre_, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates[p].crossBar(genre.parts[p], biasedOn(p, Macro::Density, density)); // as updateGates()
+				gates_[p].crossBar(genre.parts[p], partBiased(density, bias_.of(p, Macro::Density))); // updateGates()
 			}
 		}
-		const Keeps keeps = genre.arc.keepsIn(arc.section());
-		const RollStage roll = rollStageOn(genre.arc, arc, centre[Macro::Complexity]);
+		const Keeps keeps = genre.arc.keepsIn(arc_.section());
+		const PartsAndLanes dropOut =
+		    dropOut_.step(genre, seed_, arc_, step, centre_[Macro::Motion], [&] { return waitingMove(step); });
+		const RollStage roll = rollStageOn(genre.arc, arc_, centre_[Macro::Complexity]);
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, roll) && mutes.audible(p) ? partBit(p) : 0;
+			sounds |= lets(p, keeps, dropOut, roll) && mutes_.audible(p) ? partBit(p) : 0;
 		}
-		addStep(phrase, arc, sounds, energy);
-		// The piece stops on the line where the Outro ends, unless a force lands there (spec §13.2).
-		ended = outroEndsAfter(arc, step);
+		addStep(phrase, arc_, sounds, energy);
+		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as
+		// Generator::outroEndsAfter().
+		ended_ = arc_.outroEndsHere() && forceLands_ != step + 1;
+	}
+	if (step_ / phraseSteps - plan_.first < ArcPlan::kMaxPhrases) {
+		return false;
 	}
 	for (int32_t i = 0; i < ArcPlan::kMaxPhrases; i++) {
-		out.phrase[i].energy = static_cast<int16_t>(steps[i] > 0 ? energySum[i] / steps[i] : 0);
+		plan_.phrase[i].energy = static_cast<int16_t>(steps_[i] > 0 ? energySum_[i] / steps_[i] : 0);
 	}
+	planning_ = false;
+	return true;
 }
 
 Key Generator::keyAhead() const {

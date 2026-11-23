@@ -38,16 +38,12 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 	const int32_t phraseTicks = std::max<int32_t>(in.phraseSteps, 1) * kTicksPerStep;
 	const int32_t clock = std::max<int32_t>(in.clock, 0);
 
-	Text left(out.left);
 	bool held = false;
-	if (piece == nullptr) {
-		left.add(kStatusStopped);
-	}
-	else if (!in.heard.known) {
-		left.add(kStatusStarting);
-	}
-	else {
-		// The Section's length, read while the decided side is still in it (it runs 12 ticks ahead).
+	bool lengthKnown = false;
+	int32_t phrase = 1;
+	if (piece != nullptr && in.heard.known) {
+		// The Section's length, read while the decided side is still in it (it runs 12 ticks ahead). Kept updated
+		// even while a focused part's name takes the left slot, so the count is current when it comes back.
 		const Arc& arc = piece->arc();
 		const auto section = static_cast<int32_t>(in.heard.kind);
 		if (arc.section() == in.heard.kind && arc.occurrence() == in.heard.occurrence) {
@@ -55,8 +51,31 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 			count.occurrence = in.heard.occurrence;
 			count.phrases = (arc.sectionSteps() * kTicksPerStep + phraseTicks - 1) / phraseTicks;
 		}
-		const bool lengthKnown = count.section == section && count.occurrence == in.heard.occurrence;
-		const int32_t phrase = std::max<int32_t>(clock - in.heard.tick, 0) / phraseTicks + 1;
+		lengthKnown = count.section == section && count.occurrence == in.heard.occurrence;
+		phrase = std::max<int32_t>(clock - in.heard.tick, 0) / phraseTicks + 1;
+		held = arc.held();
+	}
+
+	// On the SONG page, a held or locked part's name replaces the Section and count (or STOPPED) on the left
+	// (spec §13.5). HELD and the right side stay as they are.
+	const Genre* roster =
+	    in.rosterGenre != nullptr ? in.rosterGenre : (in.recipe != nullptr ? in.recipe->genre : nullptr);
+	const char* focusName =
+	    (in.page == GridPage::Song && in.focusedPart >= 0 && roster != nullptr && in.focusedPart < partCount(*roster))
+	        ? roster->parts[in.focusedPart].name
+	        : nullptr;
+
+	Text left(out.left);
+	if (focusName != nullptr) {
+		left.add(focusName);
+	}
+	else if (piece == nullptr) {
+		left.add(kStatusStopped);
+	}
+	else if (!in.heard.known) {
+		left.add(kStatusStarting);
+	}
+	else {
 		left.add(sectionName(in.heard.kind)).add(" ");
 		if (lengthKnown && count.phrases > 0) {
 			left.add(std::min(phrase, count.phrases)).add("/").add(count.phrases);
@@ -64,10 +83,11 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 		else {
 			left.add(phrase);
 		}
-		held = arc.held();
 	}
 
 	out.ext = in.ext;
+	out.dot = captureDot(in.capture);
+	out.dotBlinks = out.dot != CaptureDot::None && in.capture.full;
 	if (piece != nullptr) {
 		statusTag(in.arcState->queued(), in.clock, out.right);
 		out.tag = out.right[0] != '\0';
@@ -79,7 +99,8 @@ void composeStatus(const OledInput& in, SectionCount& count, OledScreen& out) {
 	}
 	if (held) {
 		// HELD in full if it fits beside the right side, or else H, or nothing rather than overlap it.
-		const int32_t rightChars = length(out.right) + (out.ext ? 4 : 0) + 1;
+		const int32_t rightChars =
+		    length(out.right) + (out.ext ? 4 : 0) + (out.dot != CaptureDot::None ? kCaptureDotChars : 0) + 1;
 		const int32_t room = kQueueLineChars - rightChars - length(out.left);
 		if (1 + length(kStatusHeld) <= room) {
 			left.add(" ").add(kStatusHeld);
@@ -142,6 +163,14 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 			Text(out.lines[0]).add(kNothingQueued);
 		}
 	}
+	else if (in.peek == OledPeek::Capture) {
+		CaptureLines capture;
+		captureLines(in.capture, capture);
+		for (int32_t i = 0; i < OledScreen::kLines; i++) {
+			Text(out.lines[i]).add(capture.label[i]);
+			Text(out.lineRight[i]).add(capture.value[i]);
+		}
+	}
 	else if (in.peek == OledPeek::Recipe) {
 		Text(out.lines[0]).add(genreName(recipe));
 		Text(out.lines[1]).add(recipe.tempo / 100).add(" BPM SW ").add(recipe.swing);
@@ -153,8 +182,8 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 		std::copy_n(in.levels, kNumSoundControls, out.controls);
 		composePartTitle(in.title, out);
 	}
-	else if (in.page == GridPage::Keyboard) {
-		// MACROS: each macro's centre, and where the Arc has it (spec §13.5).
+	else if (in.page == GridPage::Keyboard || in.page == GridPage::Performance) {
+		// MACROS: each macro's centre, and where the Arc has it, on both of KEYBOARD's pages (spec §13.5).
 		out.macros = true;
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			const auto macro = static_cast<Macro>(m);

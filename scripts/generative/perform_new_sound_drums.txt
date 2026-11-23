@@ -1,9 +1,9 @@
-# Shared by the Perform scripts (include perform_new_sound_drums.txt): NEW SOUND on the Drums part, KIT pressed with
-# DRUMS' row held (spec §10.7). The script then expects the press's gen_press sound part=0 event.
+# Shared by the Perform scripts (include perform_new_sound_drums.txt): NEW SOUND on the Drums part, SYNTH pressed with
+# DRUMS' row held (spec §10.7; plain KIT there opens the lane list, §13.5). The script then expects the press's gen_press sound part=0 event.
 pad 9 7 down
 wait 50
-button KIT down
+button SYNTH down
 wait 50
-button KIT up
+button SYNTH up
 wait 50
 pad 9 7 up

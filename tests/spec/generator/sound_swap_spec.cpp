@@ -7,6 +7,8 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
+
 #include <string>
 #include <vector>
 
@@ -322,6 +324,16 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.sounds.has("gen_sound_cancel part=1 stopped")).to_be_true();
 		});
 
+		it("is dropped at a restart's line, as at a stop (spec §13.2)", _ {
+			Playing t;
+			waitingSound(t, kAcid);
+			t.decideOne();
+			t.sounds.pieceRestarts(); // the adapter's restart, on the line
+			expect(t.sounds.waiting(kAcid)).to_be_false();
+			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+			expect(t.sounds.has("gen_sound_cancel part=1 restarted")).to_be_true();
+		});
+
 		it("is dropped at a transition's confirm, with a cancel in the core, and a preload running is cancelled", _ {
 			Playing t;
 			waitingSound(t, kAcid);
@@ -340,8 +352,10 @@ describe sound_swap("Sound swaps", $ {
 		});
 
 		it("is dropped by a confirm between its landing and its Sound event: the part plays on (decision 2, #261)", _ {
-			// The core has logged the SetSound, which never plays: M4's steering log settles this.
+			// The core has logged the SetSound, which never plays: the steering log says so after it (spec §17.2).
 			Playing t;
+			TestLog entries(64);
+			t.driver.setLog(&entries.log);
 			const int32_t phrase = t.phraseSteps();
 			waitingSound(t, kAcid);
 			t.runToStepLine(phrase, -1);
@@ -351,6 +365,19 @@ describe sound_swap("Sound swaps", $ {
 			expect(t.out->soundLanded(kAcid)).to_equal(1);
 			expect(t.sounds.playing[kAcid]).to_equal(0);
 			expect(t.sounds.unplayed == Outputs{1}).to_be_true();
+			std::vector<LogRecord> logged;
+			image(entries.log, entries.log.pieces() - 1).piece().forEachRecord([&](const LogRecord& r) { logged.push_back(r); });
+			const auto landed = std::find_if(logged.begin(), logged.end(), [](const LogRecord& r) {
+				return r.kind == RecordKind::Command && r.command.kind == CommandKind::SetSound;
+			});
+			const auto dropped = std::find_if(logged.begin(), logged.end(),
+			                                  [](const LogRecord& r) { return r.kind == RecordKind::SoundDropped; });
+			expect(landed != logged.end()).to_be_true();
+			expect(dropped != logged.end()).to_be_true();
+			expect(dropped > landed).to_be_true();
+			expect(landed->step).to_equal(phrase);
+			expect(dropped->command.target).to_equal(kAcid);
+			expect(dropped->step >= phrase).to_be_true();
 		});
 	});
 
@@ -490,11 +517,12 @@ describe sound_swap("Sound swaps", $ {
 	context("a chosen preset", _ {
 		it("preloads as a re-roll's, with its path, on a synth part with nothing pending", _ {
 			Playing t;
-			const SoundPath path = pathOf("SYNTHS/ACID.XML");
-			expect(t.sounds.canChoose(kAcid, path) == Press::Preloading).to_be_true();
-			expect(t.sounds.choose(kAcid, path) == Press::Preloading).to_be_true();
+			const SoundChoice choice{.path = pathOf("SYNTHS/ACID.XML")};
+			expect(t.sounds.canChoose(kAcid, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Preloading).to_be_true();
 			expect(t.sounds.preloads.back().source == Source::Chosen).to_be_true();
 			expect(t.sounds.preloads.back().chosen).to_equal(std::string("SYNTHS/ACID.XML"));
+			expect(t.sounds.preloads.back().lane == Lane::None).to_be_true();
 			expect(t.sounds.has("gen_sound_press part=1 source=chosen token=1")).to_be_true();
 			expect(t.sounds.canStart(kAcid) == Press::Ignored).to_be_true(); // pending
 			t.sounds.endPreload();
@@ -503,14 +531,48 @@ describe sound_swap("Sound swaps", $ {
 
 		it("is refused as canChoose() says: Ignored, then Pending, then Busy", _ {
 			Playing t;
-			const SoundPath path = pathOf("SYNTHS/ACID.XML");
-			expect(t.sounds.choose(kAcid, SoundPath{}) == Press::Ignored).to_be_true();
-			expect(t.sounds.choose(kDrums, path) == Press::Ignored).to_be_true();
+			const SoundChoice choice{.path = pathOf("SYNTHS/ACID.XML")};
+			expect(t.sounds.choose(kAcid, SoundChoice{}) == Press::Ignored).to_be_true();
+			expect(t.sounds.choose(kDrums, choice) == Press::Ignored).to_be_true();
 			t.sounds.jobAhead = true;
-			expect(t.sounds.choose(kAcid, path) == Press::Busy).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Busy).to_be_true();
 			t.sounds.held = [] { return true; };
-			expect(t.sounds.choose(kAcid, path) == Press::Pending).to_be_true();
+			expect(t.sounds.choose(kAcid, choice) == Press::Pending).to_be_true();
 			expect(t.sounds.canStart(kDrums) == Press::Pending).to_be_true();
+			expect(t.sounds.preloads.empty()).to_be_true();
+		});
+	});
+
+	context("a chosen lane sound", _ {
+		it("preloads the Kit part's whole Output as a re-roll's, with the lane and its path", _ {
+			Playing t;
+			expect(t.sounds.canStart(kDrums) == Press::Preloading).to_be_true(); // the lane list opens
+			const SoundChoice choice{.path = pathOf("SAMPLES/MINE/Kick.wav"), .lane = Lane::Kick};
+			expect(t.sounds.canChoose(kDrums, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.choose(kDrums, choice) == Press::Preloading).to_be_true();
+			expect(t.sounds.preloads.back().part).to_equal(kDrums);
+			expect(t.sounds.preloads.back().source == Source::Chosen).to_be_true();
+			expect(t.sounds.preloads.back().chosen).to_equal(std::string("SAMPLES/MINE/Kick.wav"));
+			expect(t.sounds.preloads.back().lane == Lane::Kick).to_be_true();
+			expect(t.sounds.has("gen_sound_press part=0 source=chosen token=1")).to_be_true();
+			expect(t.sounds.canStart(kDrums) == Press::Ignored).to_be_true(); // pending: KIT cancels it first
+			t.sounds.endPreload();
+			expect(t.sounds.waiting(kDrums)).to_be_true();
+		});
+
+		it("is refused for a lane its part doesn't play, and as a chosen preset is: Busy, then Pending", _ {
+			Playing t;
+			const SoundPath path = pathOf("SAMPLES/MINE/Kick.wav");
+			expect(t.sounds.choose(kAcid, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Ignored).to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Riser}) == Press::Ignored)
+			    .to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.lane = Lane::Kick}) == Press::Ignored).to_be_true();
+			t.sounds.jobAhead = true;
+			expect(t.sounds.canStart(kDrums) == Press::Busy).to_be_true();
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Busy).to_be_true();
+			t.sounds.held = [] { return true; };
+			expect(t.sounds.choose(kDrums, SoundChoice{.path = path, .lane = Lane::Kick}) == Press::Pending)
+			    .to_be_true();
 			expect(t.sounds.preloads.empty()).to_be_true();
 		});
 	});

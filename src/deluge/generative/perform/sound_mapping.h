@@ -316,4 +316,10 @@ int32_t throwDelayValue(const TargetRange& range, int32_t home, int32_t offset, 
 /// ×0, where every home plays the same, the new amount itself.
 int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset);
 
+/// A player edit's home on a delay setup's feedback (spec §11.4, §11.6). While a delay Throw plays (`percent`, its
+/// level, above 0), the Throw replaces Space's delay share, and Space's `offset` holds its spike, so the share comes
+/// from `rest`, Space's offset without the Throw: after the fall the delay plays the value the player set. With no
+/// Throw, homeFor() at `offset`.
+int32_t throwDelayHomeFor(const TargetRange& range, int32_t value, int32_t offset, int32_t rest, int32_t percent);
+
 } // namespace deluge::generative::perform

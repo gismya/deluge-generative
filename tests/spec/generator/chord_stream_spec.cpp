@@ -10,6 +10,7 @@
 
 #include "cppspec.hpp"
 
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -110,6 +111,45 @@ constexpr Genre kCadences{
     .harmony = {.graph = &kCadenceOnly},
     .arc = {.introPhrases = 2, .groovePhrases = {4, 5}, .breakPhrases = {4, 4}, .buildBars = kPhraseBuild},
 };
+
+/// A looping walk (spec §7.4): a new loop on 1 Drop in 3, half a phrase long one time in three.
+constexpr ChordGraph kLooping{.homePull = 10,
+                              .moves = kMelodicMoves,
+                              .cadenceTarget = 6,
+                              .cadencePeriod = 4,
+                              .loopChance = 333,
+                              .halfLoopChance = 333};
+constexpr Genre kLoops{.name = "looping", .parts = kRootBass, .harmony = {.graph = &kLooping}, .arc = kArc};
+
+/// The chords from one Drop to the next (the piece's start to the first): the chord on each bar line of the phrase
+/// grid, by its bar in the phrase. `periodic` is false when two bars at the same place in the phrase differ.
+struct LoopSpan {
+	int32_t chords[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+	bool periodic = true;
+	bool breakOrBuild = false;
+	[[nodiscard]] bool half() const { return std::equal(chords, chords + 4, chords + 4); }
+	[[nodiscard]] std::vector<int32_t> signature() const { return {chords, chords + 8}; }
+};
+
+std::vector<LoopSpan> loopSpans(const Walked& walked) {
+	std::vector<LoopSpan> spans(1);
+	for (const Walked::Step& step : walked.steps) {
+		if (step.drop) {
+			spans.emplace_back();
+		}
+		if (step.stepInPhrase % kStepsPerBar != 0) {
+			continue;
+		}
+		LoopSpan& span = spans.back();
+		int32_t& chord = span.chords[step.stepInPhrase / kStepsPerBar % 8];
+		span.periodic = span.periodic && (chord < 0 || chord == step.chord);
+		chord = step.chord;
+		span.breakOrBuild =
+		    span.breakOrBuild || step.section == SectionKind::Break || step.section == SectionKind::Build;
+	}
+	spans.pop_back(); // cut short by the walk's end
+	return spans;
+}
 
 Recipe recipeFor(const Genre& genre, Scale scale = Scale::Minor) {
 	Recipe recipe = acidRecipe();
@@ -393,6 +433,80 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			while (jumped.popDue(INT32_MAX, &event)) {}
 			expect(jumped.chordRoot()).to_equal(plain.steps[jumped.nextStep() - 1].chord);
 		}
+	});
+
+	context("a looping graph (spec §7.4)", _ {
+		it("plays one loop from each Drop to the next, through the Break and the Build: home on its first chord, never on its last, a phrase or half of one long", _ {
+			int32_t halves = 0;
+			int32_t wholes = 0;
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				const Walked walked = walk(recipeFor(kLoops), seed, 240 * kStepsPerBar);
+				for (const LoopSpan& span : loopSpans(walked)) {
+					expect(span.periodic).to_be_true();
+					expect(span.breakOrBuild).to_be_true();
+					expect(span.chords[0]).to_equal(kHomeChord);
+					expect(span.chords[1]).to_equal(span.chords[0]); // 2 bars a chord
+					expect(span.chords[6] != kHomeChord).to_be_true();
+					if (span.half()) {
+						halves++;
+						expect(span.chords[2] != kHomeChord).to_be_true();
+					}
+					else {
+						wholes++;
+					}
+				}
+			}
+			expect(halves).to_be_greater_than(0);
+			expect(wholes).to_be_greater_than(halves);
+		});
+
+		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before", _ {
+			int32_t drops = 0;
+			int32_t changes = 0;
+			int32_t returns = 0;
+			for (uint32_t seed = 1; seed <= 40; seed++) {
+				const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(kLoops), seed, 400 * kStepsPerBar));
+				for (size_t i = 1; i < spans.size(); i++) {
+					drops++;
+					if (spans[i].signature() == spans[i - 1].signature()) {
+						continue;
+					}
+					changes++;
+					for (size_t j = 0; j + 1 < i; j++) {
+						if (spans[j].signature() == spans[i].signature()) {
+							returns++;
+							break;
+						}
+					}
+				}
+			}
+			expect(drops).to_be_greater_than(150);
+			// A new loop can draw the chords of the one before, or of one before that: the shares are approximate.
+			expect(changes * 100 / drops).to_be_between(20, 40);
+			expect(returns * 100 / drops).to_be_less_than(5);
+		});
+
+		it("keeps one 4-bar loop for the whole piece when loopChance is 0 and halfLoopChance is 1000 (Dub, spec §7.4)", _ {
+			static constexpr ChordGraph kWholePieceLoop{.homePull = 20,
+			                                            .moves = kMelodicMoves,
+			                                            .repeatWeight = 20,
+			                                            .barsPerChord = 1,
+			                                            .loopChance = 0,
+			                                            .halfLoopChance = 1000};
+			static constexpr Genre kOneLoop{
+			    .name = "one-loop", .parts = kRootBass, .harmony = {.graph = &kWholePieceLoop}, .arc = kArc};
+			for (uint32_t seed = 1; seed <= 8; seed++) {
+				const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(kOneLoop), seed, 240 * kStepsPerBar));
+				expect(spans.size()).to_be_greater_than(size_t{2});
+				for (const LoopSpan& span : spans) {
+					expect(span.periodic).to_be_true();
+					expect(span.half()).to_be_true();
+					expect(span.chords[0]).to_equal(kHomeChord);
+					expect(span.chords[3] != kHomeChord).to_be_true();
+					expect(span.signature() == spans[0].signature()).to_be_true();
+				}
+			}
+		});
 	});
 
 	it("keeps Techno, with its empty Harmony slot, on the home chord", _ {

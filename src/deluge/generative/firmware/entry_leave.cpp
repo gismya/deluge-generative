@@ -21,10 +21,13 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
+#include "generative/firmware/capture_files.h"
+#include "generative/firmware/capture_job.h"
 #include "generative/firmware/free_memory.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/recipe_files.h"
 #include "generative/firmware/runner.h"
+#include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/ui.h"
@@ -179,8 +182,9 @@ public:
 	LeaveJob() : Job(Kind::Modal) {}
 
 	/// Before each submit, as EntryJob's.
-	void prepare(LeaveEnded ended) {
+	void prepare(LeaveEnded ended, perform::LeaveOption keep) {
 		ended_ = ended;
+		keep_ = keep;
 		submitted_ = getSystemTicks();
 	}
 
@@ -194,6 +198,12 @@ public:
 			playbackHandler.endPlayback();
 		}
 		performAdapter.dropSong();
+		// The pieces are on the card, each file closed (spec §17.2). With nothing for Capture, the folder is cleaned
+		// now: of everything for NOTHING, else of unmarked files (spec §17.4); Capture cleans after its builds.
+		cardLog.finish();
+		if (!performAdapter.logKept()) {
+			cardLog.clean(keep_ != perform::LeaveOption::Nothing);
+		}
 
 		// From here this mirrors stock ClearSong::acceptCurrentOption() (gui/context_menu/clear_song.cpp) on its
 		// stopped path, landing in session view (spec §13.8).
@@ -235,10 +245,15 @@ public:
 		if (ended_ != nullptr) {
 			ended_(outcome);
 		}
+		if (performAdapter.logKept()) {
+			// Behind the teardown, on the blank song (spec §17.7): after ended_, which closes the teardown's modal.
+			beginCapture(performAdapter.keptLog(), keep_);
+		}
 	}
 
 private:
 	LeaveEnded ended_ = nullptr;
+	perform::LeaveOption keep_ = perform::LeaveOption::Nothing;
 	uint32_t submitted_ = 0;
 #if ENABLE_SYSEX_TEST
 	/// gen_left's delete_us: from the undo log's clear, which is empty in Perform (spec §12.9), and the UIs' to the
@@ -343,6 +358,16 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+	// The steering log's buffer, in SDRAM: not the fast heap (spec §17.2, §20). Its pieces stream to the card.
+	constexpr int32_t logBytes = SteeringLog::bytesFor(kLogHeaderBytes, kLogRingBytes);
+	logBuffer_ = static_cast<uint8_t*>(GeneralMemoryAllocator::get().allocExternal(logBytes));
+	if (logBuffer_ == nullptr) {
+		freeBlocks();
+		return Error::INSUFFICIENT_RAM;
+	}
+	log_ = SteeringLog(logBuffer_, kLogHeaderBytes, kLogRingBytes);
+	driver_.setLog(&log_);
+	cardLog.enter(log_); // marked pieces from before come back; a card error shows when a piece fails to store
 #if ENABLE_SYSEX_TEST
 	// Which heap each block landed in, so a probe can compare H1 between the two.
 	auto& allocator = GeneralMemoryAllocator::get();
@@ -357,7 +382,21 @@ Error PerformAdapter::allocateBlocks() {
 	return Error::NONE;
 }
 
+void PerformAdapter::freeLog() {
+	keepLog_ = false;
+	cardLog.forget();
+	log_ = SteeringLog();
+	if (logBuffer_ != nullptr) {
+		delugeDealloc(logBuffer_);
+		logBuffer_ = nullptr;
+	}
+}
+
 void PerformAdapter::freeBlocks() {
+	driver_.setLog(nullptr);
+	if (!keepLog_) {
+		freeLog(); // a leave that keeps pieces leaves it for Capture (spec §17.7)
+	}
 	for (Generator*& block : blocks_) {
 		if (block != nullptr) {
 			block->~Generator();
@@ -380,11 +419,15 @@ void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 	sink_ = OutputSink{};
 	sink_.roster = roster;
 	song_ = song;
+	edited_ = {}; // every Output and the song as built (spec §17.2's header snapshot)
+	if (currentRecipe.recipe.genre != nullptr && song != nullptr) {
+		settingsTracker.resetAll(sink_.roster, *currentRecipe.recipe.genre, *song);
+	}
 	generator_ = blocks_[0];
 	steering_.enter(); // an empty queue, and a new Recipe: every take at 0 (spec §6.6)
 }
 
-void PerformAdapter::leave(LeaveEnded ended) {
+void PerformAdapter::leave(LeaveEnded ended, perform::LeaveOption keep) {
 	if (leaving()) {
 		return; // the teardown already queued ends with its own callback
 	}
@@ -398,11 +441,13 @@ void PerformAdapter::leave(LeaveEnded ended) {
 		playbackHandler.endPlayback(); // the view's playbackEnded() stops the piece
 	}
 	stopPiece();
+	// The piece has ended: the log says what the choice keeps (spec §17.7).
+	keepLog_ = perform::nextKept(log_, keep, -1) >= 0;
 	steering_.startLeaving(); // the tick plays nothing from here; the teardown drops the song, roster and blocks
-	teardown.prepare(ended);
+	teardown.prepare(ended, keep);
 	if (!runner.cancelAllThen(teardown)) {
 		// Only if teardown were already queued, which leaving() rules out: Perform carries on.
-		steering_.undoLeave();
+		undoLeave(); // the log stays Perform's too
 		if (ended != nullptr) {
 			ended(JobOutcome::Failed);
 		}

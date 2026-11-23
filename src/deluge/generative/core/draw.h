@@ -56,8 +56,13 @@ enum class Purpose : uint8_t {
 	ChordWalk,      ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Part kArcPart
 	VoiceJitter,    ///< position: the Sustain voicing note's VoicePlace. As DensityJitter, with no pick
 	ArpWalk,        ///< position: pick (Groove, phrase, pool entry), step within the pattern. A Random Arp's note
-	DropOut, ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether, which).
-	         ///< Part kArcPart. Never keyed on the take
+	DropOut,       ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether, which).
+	               ///< Part kArcPart. Never keyed on the take
+	HoldShared,    ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Whether an open
+	               ///< voicing holds its shared notes on this bar line (SustainSpec::holdSharedChance)
+	ChordLoop,     ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
+	               ///< length, chord). Part kArcPart. Never keyed on the take
+	AlternateLane, ///< position: held bar index. Whether a Drums lane swaps to its alternate lane for a Groove bar
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.
@@ -85,17 +90,9 @@ constexpr uint32_t mix(uint32_t x) {
 }
 } // namespace detail
 
-/// A uniform 32-bit value for `key`.
-constexpr uint32_t draw(const DrawKey& key) {
-	uint32_t h = detail::mix(key.seed ^ 0x9e3779b9U);
-	h = detail::mix(h
-	                ^ (static_cast<uint32_t>(key.part) | static_cast<uint32_t>(key.lane) << 8
-	                   | static_cast<uint32_t>(key.take) << 16 | static_cast<uint32_t>(key.purpose) << 24));
-	for (uint32_t word : key.position) {
-		h = detail::mix(h ^ word);
-	}
-	return h;
-}
+/// A uniform 32-bit value for `key`. Out-of-line in draw.cpp with GEN_STEP_CODE so GCC LTO keeps any outlined copy in
+/// `.text.generative_step` (GCC LTO drops `[[gnu::section]]` on header `constexpr`/`inline` COMDAT functions).
+uint32_t draw(const DrawKey& key);
 
 /// `value`, a uniform 32-bit value, scaled to a uniform value in [0, n), for 0 < n. Multiply-high, so no modulo bias
 /// worth hearing.
@@ -104,7 +101,7 @@ constexpr int32_t scaleBelow(uint32_t value, int32_t n) {
 }
 
 /// A uniform value in [0, n), for 0 < n.
-constexpr int32_t drawBelow(const DrawKey& key, int32_t n) {
+inline int32_t drawBelow(const DrawKey& key, int32_t n) {
 	return scaleBelow(draw(key), n);
 }
 
@@ -133,7 +130,7 @@ constexpr int32_t rollWeighted(int32_t count, Weight weight, Below below) {
 /// The index of an entry drawn by its `weight` among those `in(entry)` holds for, in their order, or -1 if it holds
 /// for none. When their weights are all 0, the first of them.
 template <typename Entry, typename In>
-constexpr int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entries, In in) {
+inline int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entries, In in) {
 	// The weight pass notes the first entry `in()` holds for, so weights of all 0 need no third pass.
 	int32_t first = -1;
 	const int32_t picked = rollWeighted(
@@ -152,7 +149,7 @@ constexpr int32_t drawWeightedIf(const DrawKey& key, std::span<const Entry> entr
 /// The index of an entry drawn by its `weight`, or -1 for an empty list. A list whose weights are all 0 gives its first
 /// entry.
 template <typename Entry>
-constexpr int32_t drawWeighted(const DrawKey& key, std::span<const Entry> entries) {
+inline int32_t drawWeighted(const DrawKey& key, std::span<const Entry> entries) {
 	return drawWeightedIf(key, entries, [](const Entry&) { return true; });
 }
 
@@ -175,7 +172,7 @@ private:
 };
 
 /// True with a chance of `perMille` / 1000.
-constexpr bool drawChance(const DrawKey& key, int32_t perMille) {
+inline bool drawChance(const DrawKey& key, int32_t perMille) {
 	return drawBelow(key, 1000) < perMille;
 }
 

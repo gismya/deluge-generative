@@ -23,7 +23,8 @@
 // The CLIP grid page shows the last part focused (spec §13.5): its takes on row 1, FREEZE and NEW SOUND on row 2, and
 // its six sound controls as faders on rows 3–8, with the OLED's PART page showing its sound, take and controls. A
 // focused part's F7 pressed again puts Thin / Drive on the gold knobs. SYNTH or KIT re-rolls the focused part's sound
-// (SHIFT: its previous one), CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
+// (SHIFT: its previous one), SYNTH on a synth part opening the preset browser and KIT on a Drums or FX part the lane
+// list instead, CROSS-SCREEN freezes it, and Y steps through its takes (Y push: key, scale and seed).
 // SELECT push opens the Perform menu and SCALE its key and scale editor (spec §13.6), stock menus over Perform; SCALE
 // blinks while a key change waits. The KEYBOARD grid page has the four macros as faders (tap = new centre, hold =
 // a value that springs back), the phrase position and FILL pads, with the OLED's MACROS page. SHIFT + a main pad, or
@@ -41,6 +42,7 @@
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/oled_page.h"
+#include "generative/perform/sound_browser.h"
 #include "gui/colour/rgb.h"
 #include "gui/ui/root_ui.h"
 #include "hid/button.h"
@@ -95,8 +97,8 @@ public:
 	void renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) override;
 	UIType getUIType() override { return UIType::GENERATIVE_PERFORM; }
 
-	/// LEAVE with nothing kept: tears Perform down as a runner job, which lands on a new blank song in session view.
-	void leave();
+	/// A leave menu choice (spec §13.8): stops, tears Perform down, and Capture builds what `keep` keeps.
+	void leave(deluge::generative::perform::LeaveOption keep);
 	UIModControllableContext getUIModControllableContext() override { return UIModControllableContext::SONG; }
 	bool getAffectEntire() override { return true; }
 
@@ -112,7 +114,12 @@ public:
 	[[nodiscard]] int32_t shownPart() const;
 	/// The preset browser's choice for `part` (spec §13.5): it preloads as a re-roll does, with the working animation,
 	/// or is refused with a popup.
-	void chooseSound(int32_t part, const deluge::generative::SoundPath& path);
+	void chooseSound(int32_t part, const deluge::generative::SoundChoice& choice);
+	/// The lane list's RE-ROLL ALL: `part`'s new sound, as NEW SOUND (spec §13.5).
+	void reRollPart(int32_t part) { soundPress(part, false); }
+	/// A lane of the lane list, or its SAMPLE / SYNTH PRESET (spec §13.5): opens the lane browser of `kind` over the
+	/// list, on `part`'s `lane`, refused with a re-roll's popups as the preset browser is.
+	void openLaneBrowser(int32_t part, deluge::generative::Lane lane, deluge::generative::perform::BrowseKind kind);
 
 private:
 	/// Opens a Perform menu over Perform (spec §13.6), stock style, as an overlay: `name` is its test-port name.
@@ -143,12 +150,39 @@ private:
 	/// LED setup), writing only LEDs that differ. The page LEDs and CROSS-SCREEN (assertPageLeds()); SCALE blinks while
 	/// a key change waits (spec §13.5), F7 while Thin / Drive is on and F8 while Complexity / Motion is.
 	void assertLeds();
+	/// The RECORD LED from the Capture marks, every frame (spec §13.5).
+	void assertRecordLed();
 	bool scaleBlinkShown_ = false; ///< The SCALE blink last reported (test builds) or started.
+	/// The RECORD LED's Capture state last reported (test builds); the marks last reported (gen_capture).
+	uint8_t recordLedShown_ = 0xFF;
+	deluge::generative::perform::CaptureStatus captureShown_{.markedPieces = -1};
 #if ENABLE_SYSEX_TEST
 	char shownPageLeds_[48] = {}; ///< The last gen_page_leds text.
 #endif
-	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it.
+	/// The grid page (spec §13.5): SONG, CLIP and KEYBOARD switch it; KEYBOARD again flips to stock Performance view.
 	using Page = deluge::generative::perform::GridPage;
+	/// A punch-in pad on the KEYBOARD page (spec §8.9, §13.5): the 300 ms rule, a tap latching and a second tap or a
+	/// hold letting go. `lane` is the Drums lane a LaneMute pad stands for.
+	void punchPadAction(deluge::generative::PunchIn punch, deluge::generative::Lane lane, bool on);
+	/// Updates the stock OLED popup for a punch-in pad press or release (spec §13.5).
+	void showPunchPopup(deluge::generative::PunchIn punch, deluge::generative::Lane lane,
+	                    deluge::generative::perform::PunchPopup action);
+	/// Clears an active punch-in popup if a general popup is still showing.
+	void cancelPunchPopup();
+	/// Dismisses punch-in popup ownership and cancels the OLED popup if one was owned (overlays, leave, new roster).
+	void dismissPunchPopup();
+	/// The Drums part's lanes in its order, as the KEYBOARD page lays its mute pads out; the count, 0 with none.
+	int32_t drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const;
+	/// KEYBOARD's second page (spec §13.5): stock PerformanceView's song FX pads, its layout and logic hosted over
+	/// Perform (perform_view_performance.cpp). Loads the layout the first time in an entry.
+	void enterPerformancePage();
+	/// A main pad on the stock Performance view page, or a release of one pressed there whatever the page is now.
+	void performancePadAction(int32_t x, int32_t y, bool on);
+	/// Whether main pad (`x`, `y`) was pressed on the stock Performance view page and not let go yet.
+	[[nodiscard]] bool performancePadHeld(int32_t x, int32_t y) const { return (stockHeld_[x] >> y & 1) != 0; }
+	/// Renders stock PerformanceView's pads into the main pad cache, redrawing the rows that changed. On a press,
+	/// and a few times a second for a knob or MIDI turn of a column's param.
+	void refreshPerformancePage();
 	/// A main pad on the KEYBOARD page (spec §13.5): a macro fader's tap sets its centre and a hold plays its value
 	/// until let go; a FILL pad holds FILL.
 	void keyboardPadAction(int32_t x, int32_t y, bool on);
@@ -176,6 +210,9 @@ private:
 	/// SYNTH on a synth part (spec §13.5): cancels its sound still preloading or waiting, as NEW SOUND does, or else
 	/// opens the preset browser on its pick, refused with a re-roll's popups.
 	void openPresetBrowser(int32_t part);
+	/// KIT on a Drums or FX part (spec §13.5): cancels its sound still preloading or waiting, as NEW SOUND does, or
+	/// else opens the lane list, refused with a re-roll's popups.
+	void openLaneList(int32_t part);
 	/// FREEZE or CROSS-SCREEN on `part`: it freezes or thaws on the next undecided step (spec §6.7).
 	void freezePress(int32_t part);
 	/// Y push: the key, scale and seed code as a popup (spec §6.5).
@@ -209,6 +246,7 @@ private:
 	char shownFaders_[deluge::generative::perform::kClipTextChars + 1] = {};       ///< The last gen_faders text.
 	char shownClip_[deluge::generative::perform::kClipTextChars + 1] = {};         ///< The last gen_clip text.
 	char shownKeyboard_[deluge::generative::perform::kKeyboardTextChars + 1] = {}; ///< The last gen_keyboard text.
+	char shownPunches_[deluge::generative::perform::kPunchTextChars + 1] = {};     ///< The last gen_punch text.
 #endif
 	/// A gold knob on the Thin / Drive set: the upper turns Thin's param, the lower Drive's, as stock knobs do.
 	void thinDriveTurn(int32_t whichModEncoder, int32_t offset);
@@ -239,9 +277,12 @@ private:
 	void assertPageLeds();
 	/// The SONG page's input as it stands.
 	[[nodiscard]] deluge::generative::perform::ArcMapInput arcMapInput() const;
-	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8). Test builds report a new plan
-	/// as gen_arcplan.
+	/// Has arc_ work the Arc plan out again if what it depends on changed (spec §2.8), kArcPlanStepsPerFrame steps a
+	/// frame. Test builds report each plan done as gen_arcplan.
 	void refreshPlan();
+	/// The Arc plan's steps a frame (#454): about 0.7 ms on the Deluge, so Psytrance's 16 phrases of 16 bars take 8
+	/// frames (120 ms), Techno's 4.
+	static constexpr int32_t kArcPlanStepsPerFrame = 512;
 	/// Every frame: has arc_ follow the clock, and when something reads the Arc map (the SONG page; in test builds
 	/// the gen_arcmap and gen_arcrow texts, on every page) composes it and asks to redraw only the pad rows whose
 	/// colours changed (spec §13.5).
@@ -312,10 +353,23 @@ private:
 	deluge::generative::perform::FillHolds fillHolds_;
 	/// The KEYBOARD page's macro faders held, and since when (audioSampleTimer).
 	deluge::generative::perform::MacroFaderHolds macroHolds_;
+	/// The KEYBOARD page's punch-in pads: which are on, latched or held (spec §13.5).
+	deluge::generative::perform::PunchHolds punchHolds_;
+	/// Per column, a bit per row (firmware y) of the stock Performance view's pads pressed and not let go: their
+	/// releases go to it on any page, as a KEYBOARD pad's do.
+	uint8_t stockHeld_[kDisplayWidth] = {};
+	/// Stock PerformanceView's layout has been loaded in this entry (enterPerformancePage()).
+	bool stockLayoutLoaded_ = false;
+	/// Stock's stutter as last logged (spec §17.2).
+	bool stutterLogged_ = false;
+	/// When the stock Performance view page was last rendered (audioSampleTimer).
+	uint32_t performanceAt_ = 0;
 	/// soundSwaps.swaps() when the view last reacted to a swap: the gold knobs follow the part's new clip.
 	uint32_t seenSwaps_ = 0;
 	/// transitions.starts() when the view last reacted to a new roster: it drops the focus.
 	uint32_t seenStarts_ = 0;
+	/// The restarts seen (PerformAdapter::restarts()): the Arc map goes back to now when one lands.
+	uint32_t seenRestarts_ = 0;
 	/// What the SONG page keeps between frames (generative/perform/arc_map.h): the Arc plan and the queue as last
 	/// worked out, the X scroll and the now column's flash window.
 	deluge::generative::perform::ArcMapState arc_;
@@ -325,6 +379,8 @@ private:
 	/// §13.5), and that phrase.
 	uint32_t mainRedraws_ = 0;
 	int32_t redrawsPhrase_ = -1;
+	int32_t planSlices_ = 0;      ///< The frames the plan under way has taken so far (gen_arcplan slices=)
+	uint32_t planSliceMaxUs_ = 0; ///< and its slowest one (gen_arcplan us=)
 
 	/// The sidebar as last asked to render, per row and column, so only changed rows redraw.
 	RGB sidebar_[kDisplayHeight][kSideBarWidth] = {};

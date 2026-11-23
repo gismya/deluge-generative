@@ -22,9 +22,14 @@ finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware 
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
 someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
 naming each covers path that matches no file, each src/ file that sends an event a script expects (or rules out)
-that its covers lines miss (a string literal whose first word is the event's kind), and each event expect that doesn't
-start with its kind (check_all.py runs it every time;
-so do the unit tests).
+that its covers lines miss (a string literal whose first word is the event's kind), each event expect that doesn't
+start with its kind, each that pins a timing figure (TIMING_FIELDS) without hardware_only, and each orphan: a
+scripts/generative/*.txt that check_all.py neither runs nor lists as not run, that no script includes, and that has no
+"# runs-via: COMMAND" line naming what runs it (golden_compose.txt: gen_emu.py golden; orphans(), #466). check_all.py
+runs --check every time; so do the unit tests.
+
+full_rule() is check_all.py's merge rule (#417): whether a change needs --full before its merge, or the covers pick
+suffices.
 """
 
 import argparse
@@ -42,12 +47,49 @@ sys.path.insert(0, HERE)
 COVERS = re.compile(r"^#\s*covers:(.*)$", re.MULTILINE)
 INCLUDE = re.compile(r"^\s*include\s+(\S.*?)\s*(?:#.*)?$", re.MULTILINE)
 START_STATE = re.compile(r"^start_state\b", re.MULTILINE)
+# "# runs-via: COMMAND": what runs a script check_all.py doesn't pick (orphans(), #466)
+RUNS_VIA = re.compile(r"^#[ \t]*runs-via:[ \t]*\S", re.MULTILINE)
 IMPORT = re.compile(r"^\s*(?:import\s+([\w, ]+)|from\s+(\w+)\s+import)", re.MULTILINE)
-# An event a script waits on, rules out or keeps to compare: expect [next] [no_]event TEXT, keep events TEXT; TEXT
-# plain or /regex/, then the line's options.
+# An event a script waits on, rules out or keeps to compare: [hardware_only] expect [next] [no_]event TEXT, keep events
+# TEXT; TEXT plain or /regex/, then the line's options.
+HARDWARE_ONLY = (
+    "hardware_only "  # deluge_probe.HARDWARE_ONLY: delugemu skips the expect
+)
 EXPECT_LINE = re.compile(
-    r"^(?:expect (?:next )?(?:no_)?event|keep events) (.*?)(?: (?:since=mark|within=\S+))*\s*$",
+    r"^(?:(?:hardware_only )?expect (?:next )?(?:no_)?event|keep events) (.*?)(?: (?:since=mark|within=\S+))*\s*$",
     re.MULTILINE,
+)
+# The fields of a test event whose value delugemu's speed decides as much as the firmware's: it renders slower than
+# real time under host load, so it culls voices, sounds fewer, measures the host's clock off its own. An expect that
+# pins one (any value but one of ANY_VALUE) must be "hardware_only expect" (unmarked_timing(), #417).
+TIMING_FIELDS = {
+    "gen_h16": ("culls", "culled", "voices", "render_max_us"),
+    "gen_h1": ("mean_ns", "max_ns"),
+    "gen_ext_tempo": ("bpm",),
+    "gen_midi_feedback": ("ms", "bytes_per_s", "peak_pass"),
+    "gen_h2": ("mean_ns", "max_ns", "render_ns"),
+    "gen_audio": ("underruns", "margin_min_us"),
+    "gen_audio_late": ("underruns", "run_max_us"),
+    "gen_audio_ui_timer": ("over_2ms", "run_max_us"),
+    # how long a step's work took
+    "gen_transition": ("us",),
+    "gen_arcplan": ("us",),
+    "gen_log_piece": ("us",),
+}
+# A field's value that any value of it matches: it pins nothing. A capture group around one, (...) or (?P<name>...),
+# pins nothing either (unpinned()).
+ANY_VALUE = (
+    "",
+    r"\d+",
+    r"\d*",
+    "[0-9]+",
+    "[0-9]*",
+    r"\S+",
+    r"\S*",
+    ".*",
+    ".+",
+    r"-?\d+",
+    "-?[0-9]+",
 )
 SMOKE = "scripts/generative/test_port_smoke.txt"
 SCRIPT_LITERAL = re.compile(r"[\"']([\w-]+\.txt)[\"']")
@@ -94,8 +136,22 @@ BUILDERS = {
     "gen_arcmap": ("src/deluge/generative/perform/arc_map.*",),
     "gen_arcpage": (*_SCREEN, "src/deluge/generative/perform/arc_map.*"),
     "gen_arcrow": ("src/deluge/generative/perform/arc_map.*",),
+    "gen_audio_late": (),  # a scheduler task's name
     "gen_browser": (),
+    "gen_browser_preview": (),  # the previewed path
+    "gen_preset_preview": (),  # built|cancelled|failed, the lane's name or -: literals beside it
+    "gen_log": (),  # at=stop or at=phrase, literals beside it
+    "gen_log_sound": (),  # the logged sound pick path
     "gen_clip": ("src/deluge/generative/perform/clip_page.*",),
+    "gen_performance_pad": (),  # down or up
+    "gen_punch": (
+        "src/deluge/generative/perform/keyboard_page.*",
+    ),  # describePunches()
+    "gen_punch_pad": (),  # down or up
+    "gen_punch_popup": (
+        "src/deluge/generative/core/lane_names.h",
+        *_L10N,
+    ),  # laneName() + MUTE, or punch-in l10n name
     "gen_compose": (),  # the outcome's name
     "gen_compose_pick": (
         *_GENRE,
@@ -127,6 +183,9 @@ BUILDERS = {
         "src/deluge/generative/perform/perform_steering.h",
     ),  # keySetName()
     "gen_keyboard": ("src/deluge/generative/perform/keyboard_page.*",),
+    "gen_lane_list": (
+        "src/deluge/generative/core/palette_file.*",
+    ),  # lanePaletteName()
     "gen_leave_menu": (),
     "gen_macropage": _SCREEN,
     "gen_mem": (  # the callers' tags: before_entry, after_leave, after_free, before_sound, before_transition
@@ -135,6 +194,7 @@ BUILDERS = {
         "src/deluge/generative/firmware/sound_swaps.cpp",
         "src/deluge/generative/firmware/transitions.cpp",
     ),
+    "gen_mark": ("src/deluge/generative/perform/capture.*",),  # the MarkOutcome's name
     "gen_menu": (),
     "gen_menu_cancel_change": (),
     "gen_octave_landed": (),
@@ -160,6 +220,20 @@ BUILDERS = {
         "src/deluge/generative/perform/clip_page.*",
         "src/deluge/generative/perform/recipe_name.*",
     ),  # quick|full, and name=<oledName> <seedCode()>[letter]
+    "gen_restart": (),  # as_it_is or as_it_began
+    "gen_restart_preload": (),  # how AS IT BEGAN's preload ended
+    "gen_capture_end": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the song it landed on: captureSongName()
+    "gen_capture_song": (
+        "src/deluge/generative/perform/capture.*",
+        "src/deluge/generative/firmware/song_file.*",
+    ),  # captureSongName(), or its clash variation
+    "gen_capture_track": (),  # the new track's unique Output name
+    "gen_record_led": (
+        "src/deluge/generative/perform/capture.*",
+    ),  # the RecordLed's name
+    "gen_restart_press": (),  # what the press did
     "gen_retire_referenced": (),
     "gen_rings": (),
     "gen_row_level": _GENRE,  # part and lane names
@@ -365,6 +439,49 @@ def pick(scripts, changed, repo=REPO):
     return [s for s in scripts if s in by_change or paths[s] is None]
 
 
+def full_rule(changed, scripts, into_generative=False, repo=REPO):
+    """Why the change needs check_all.py --full before its merge, or None when the covers pick suffices (#417 slice
+    3): a merge into generative; a changed firmware input (FIRMWARE: src/, lib/, the root CMakeLists.txt, the linker
+    script, the toolchain, ...) that no covers line of `scripts` (the probe scripts delugemu runs) names, for which
+    pick() runs only smoke and the scripts with no covers line; or a change to what the emulator checks run on or what picks them (emulator_files(): gen_emu.py,
+    test_port_emu.py, deluge_probe.py, their imports and the scripts they name, the delugemu pin, the test port,
+    check_all.py, covers.py). `changed` None (no diff) needs it too."""
+    if into_generative:
+        return "a merge into generative"
+    if changed is None:
+        return "the files changed are unknown"
+    emulator = emulator_files(os.path.join(repo, "scripts", "generative"), repo)
+    for f in sorted(changed):
+        if f in emulator:
+            return f"{f} changed: the emulator checks run on it or it picks them"
+    paths = [p for s in scripts for p in script_covers(s) or []]
+    for f in sorted(changed):
+        firmware = any(matches(d, f) for d in FIRMWARE)
+        if firmware and not any(matches(p, f) for p in paths):
+            return f"{f} is on no probe script's covers lines"
+    return None
+
+
+def orphans(here=HERE):
+    """The scripts/generative/*.txt files that check_all.py neither runs nor lists as not run (probe_scripts()), that no
+    other script includes, and that have no "# runs-via: COMMAND" line saying what runs them (#466): such a check
+    never runs, and nothing says so. The file names."""
+    scripts, not_run = probe_scripts(here)
+    declared = {os.path.basename(s) for s in scripts} | set(not_run)
+    paths = sorted(glob.glob(os.path.join(here, "*.txt")))
+    included = {
+        os.path.basename(name.strip())
+        for path in paths
+        for name in INCLUDE.findall(script_text(path))
+    }
+    return [
+        os.path.basename(p)
+        for p in paths
+        if os.path.basename(p) not in declared | included
+        and not RUNS_VIA.search(script_text(p))
+    ]
+
+
 def missing(scripts, repo=REPO):
     """(script name, covers path) for each covers path that matches no file in the repo, by matches() (what pick()
     uses): a renamed or deleted file leaves a script that never runs for the code that replaced it."""
@@ -377,8 +494,8 @@ def missing(scripts, repo=REPO):
     return out
 
 
-def expect_texts(path):
-    """(file name:line, TEXT) for each event expect in the script at `path` and its includes."""
+def expect_lines(path):
+    """(file name:line, TEXT, hardware_only) for each event expect in the script at `path` and its includes."""
     out = []
     folder = os.path.dirname(path)
     for name in sorted(own_files(path, folder)):
@@ -387,8 +504,45 @@ def expect_texts(path):
         ):
             m = EXPECT_LINE.match(line)
             if m:
-                out.append((f"{os.path.basename(name)}:{number}", m.group(1)))
+                where = f"{os.path.basename(name)}:{number}"
+                out.append((where, m.group(1), line.startswith(HARDWARE_ONLY)))
     return out
+
+
+def expect_texts(path):
+    """(file name:line, TEXT) for each event expect in the script at `path` and its includes."""
+    return [(where, text) for where, text, _ in expect_lines(path)]
+
+
+def timing_field(text):
+    """The first TIMING_FIELDS field an expect's TEXT pins to less than any value, or None."""
+    regex = len(text) > 1 and text.startswith("/") and text.endswith("/")
+    body = text[1:-1].lstrip("^") if regex else text
+    kind = re.match(r"[a-z][a-z0-9_]*", body)
+    if not kind or not body[kind.end() :].startswith(" "):
+        return None
+    for field in TIMING_FIELDS.get(kind.group(0), ()):
+        m = re.search(rf"(?<![\w]){field}=(\S*)", body)
+        if m and not unpinned(m.group(1).rstrip("$")):
+            return field
+    return None
+
+
+def unpinned(value):
+    """Whether a field's value in an expect's TEXT matches any value: one of ANY_VALUE, bare or in a capture group."""
+    group = re.fullmatch(r"\((?:\?P<\w+>)?(.*)\)", value)
+    return (group.group(1) if group else value) in ANY_VALUE
+
+
+def unmarked_timing(scripts):
+    """(where, TEXT, field) for each event expect that pins a timing field (timing_field()) without hardware_only."""
+    out = []
+    for s in scripts:
+        for where, text, hardware_only in expect_lines(s):
+            field = None if hardware_only else timing_field(text)
+            if field:
+                out.append((where, text, field))
+    return sorted(set(out))
 
 
 def expect_kinds(text, sent):
@@ -574,12 +728,24 @@ def check(scripts, repo=REPO):
         print(
             f"{where}: expect {text!r} starts with no event kind a src/ file sends: give it its kind"
         )
+    timing = unmarked_timing(scripts)
+    for where, text, field in timing:
+        print(
+            f"{where}: expect {text!r} pins {field}=, which delugemu's speed decides: make it hardware_only expect"
+        )
+    lost = orphans(os.path.join(repo, "scripts", "generative"))
+    for name in lost:
+        print(
+            f"{name}: check_all.py doesn't pick it and no script includes it: name it perform_*.txt or "
+            'compose_*.txt, or give it a "# runs-via: COMMAND" line'
+        )
     with_lines = sum(script_covers(s) is not None for s in scripts)
     print(
         f"{with_lines} of {len(scripts)} scripts have covers lines, {len(gone)} paths missing, "
-        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind, {len(gaps)} builder gaps"
+        f"{len(unseen)} event senders uncovered, {len(loose)} expects without a kind, {len(gaps)} builder gaps, "
+        f"{len(timing)} timing expects not hardware_only, {len(lost)} orphan scripts"
     )
-    return 1 if gone or unseen or loose or gaps else 0
+    return 1 if gone or unseen or loose or gaps or timing or lost else 0
 
 
 def all_scripts(here=HERE):

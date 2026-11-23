@@ -1,13 +1,18 @@
 # Recipe SAVE with no letter variation free (#138 R1, spec §16.3, §16.4) over the sysex test port: playing, quick saves
 # take the default name and then A to Z; the next quick save is refused with NO FREE NAME. SHIFT+SAVE's full save UI
 # then offers the remembered name itself (not stock's numeric `<name> 2`), and saving under it asks to overwrite.
+# The card log is off ("hold card_log_off"): a save made while it writes (its spare file, a flush) is handled inside
+# that card wait and refused BUSY (#485).
 # gen_recipe_save quick|full saved|refused|opened|overwrite? name=...
+# writes: RECIPES/ACID TECHNO *
 # covers: src/deluge/gui/ui/save/save_recipe_ui.* src/deluge/generative/firmware/recipe_files.*
 # covers: src/deluge/generative/perform/recipe_name.* src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/perform/clip_page.*
 # covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/io/midi/test_port.cpp
+# covers: src/deluge/generative/firmware/capture_files.cpp
 start_state
+hold card_log_off
 include perform_open.txt
 include perform_confirm.txt
 

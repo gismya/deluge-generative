@@ -133,11 +133,13 @@ int32_t anchorStep(const std::set<int32_t>& bar) {
 	return bar.size() == 1 ? *bar.begin() : -1;
 }
 
-/// A part or one of its lanes, with the pool it plays and the lane's own Density gate (0 for a part).
+/// A part or one of its lanes, with the pool it plays, the lane's own Density gate (0 for a part) and any alternate
+/// lane.
 struct PatternSource {
 	Lane lane = Lane::None;
 	std::span<const Pattern> pool;
 	int32_t laneGate = 0;
+	Lane alternate = Lane::None;
 };
 
 } // namespace
@@ -321,8 +323,8 @@ describe patterns("Patterns", $ {
 			Run stepped = plain;
 			// One press each: the same take pressed again would cancel it (spec §13.5).
 			stepped.steer = steerAt({{kNewTake, {CommandKind::SetTake, 0, 1}}, {kStepBack, {CommandKind::SetTake, 0, 0}}});
-			LogEntry entries[8];
-			SteeringLog log(entries, 8);
+			TestLog entries(8);
+			SteeringLog& log = entries.log;
 			stepped.log = &log;
 
 			auto drums = [](const Result& result, int32_t fromStep, int32_t toStep) {
@@ -342,9 +344,9 @@ describe patterns("Patterns", $ {
 			expect(drums(b, 5 * kPhrase, kEnd) == drums(a, 5 * kPhrase, kEnd)).to_be_true();
 
 			// Logged where each take landed, not where it was pushed.
-			expect(log.size()).to_equal(2);
-			expect(log.at(0).step).to_equal(3 * kPhrase);
-			expect(log.at(1).step).to_equal(5 * kPhrase);
+			expect(logSize(log)).to_equal(2);
+			expect(logAt(log, 0).step).to_equal(3 * kPhrase);
+			expect(logAt(log, 1).step).to_equal(5 * kPhrase);
 		}
 	});
 
@@ -381,14 +383,22 @@ describe patterns("Patterns", $ {
 					if (!part.pool.empty()) {
 						sources.push_back({Lane::None, part.pool, 0});
 					}
+					std::set<Lane> altTargets;
 					for (const LaneSpec& lane : part.lanes) {
-						sources.push_back({lane.lane, lane.pool, lane.densityGate});
+						sources.push_back({lane.lane, lane.pool, lane.densityGate, lane.alternateLane});
+						if (lane.alternateLane != Lane::None && lane.alternateChance > 0) {
+							altTargets.insert(lane.alternateLane);
+						}
 					}
-					for (const auto& [lane, pool, laneGate] : sources) {
+					for (const auto& [lane, pool, laneGate, alternate] : sources) {
 						std::set<int32_t> hits;
+						std::set<int32_t> altHits;
 						for (const Event& e : ons) {
 							if (e.part == p && e.lane == lane) {
 								hits.insert(e.tick / kTicksPerStep);
+							}
+							if (e.part == p && alternate != Lane::None && e.lane == alternate) {
+								altHits.insert(e.tick / kTicksPerStep);
 							}
 						}
 						if (part.densityGate > 0 || laneGate > 0) {
@@ -397,16 +407,28 @@ describe patterns("Patterns", $ {
 							continue;
 						}
 						if (pool.empty()) {
-							expect(hits.empty()).to_be_true(); // an FX lane: only section rules play it (spec §5.4)
+							if (!altTargets.contains(lane)) {
+								expect(hits.empty()).to_be_true(); // an FX lane: only section rules play it (spec §5.4)
+							}
 							continue;
 						}
 						for (int32_t bar = 0; bar < bars; bar++) {
+							// When a lane swaps to an alternate lane on some Groove bars (spec §5.7), each bar's
+							// anchors land wholly on one of the two lanes, never both.
+							bool barPrimary = false;
+							bool barAlt = false;
+							for (int32_t step = bar * kStepsPerBar; step < (bar + 1) * kStepsPerBar; step++) {
+								barPrimary = barPrimary || hits.contains(step);
+								barAlt = barAlt || altHits.contains(step);
+							}
+							expect(barPrimary && barAlt).to_be_false();
+							const std::set<int32_t>& active = barAlt ? altHits : hits;
 							bool matches = false;
 							for (const Pattern& pattern : pool) {
 								bool same = true;
 								for (int32_t step = bar * kStepsPerBar; step < (bar + 1) * kStepsPerBar; step++) {
 									bool anchor = pattern.importance[step % pattern.length] == kAnchor;
-									same = same && anchor == (hits.count(step) != 0);
+									same = same && anchor == active.contains(step);
 								}
 								matches = matches || same;
 							}
@@ -449,6 +471,120 @@ describe patterns("Patterns", $ {
 		for (const auto& bar : bars(play(run, 4), Lane::ClosedHat, 4)) {
 			expect(bar.size()).to_equal(size_t{kStepsPerBar});
 		}
+	});
+
+	context("alternate lane (spec §5.7)", _ {
+		static constexpr Pattern kBackbeat[] = {{"....X.......X...", "................", 0}};
+		static constexpr Pattern kKickBeats[] = {{"X...X...X...X...", "................", 0}};
+		static constexpr DropOutEntry kRimThrow[] = {
+		    {.mask = {.lanes = laneBit(Lane::Rim)}, .bars = 1, .throwTarget = {.lanes = laneBit(Lane::Rim)}}};
+		const auto makeAltGenre = [](int16_t chance, std::span<const DropOutEntry> dropOuts = {},
+		                             int16_t dropOutChance = 0) {
+			static LaneSpec lanes[3];
+			lanes[0] = {.lane = Lane::Kick, .pool = kKickBeats};
+			lanes[1] = {.lane = Lane::Snare, .expression = {.lean = {2, 2, 2, 2}}};
+			lanes[2] = {.lane = Lane::Rim, .pool = kBackbeat, .alternateLane = Lane::Snare, .alternateChance = chance};
+			static PartSpec parts[1];
+			parts[0] = {.role = Role::Drums, .name = "DRUMS", .lanes = lanes};
+			Genre genre = kGenre;
+			genre.parts = parts;
+			genre.dropOuts = dropOuts;
+			genre.dropOutChance = dropOutChance;
+			genre.arc.breakKeeps = {.lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim)};
+			return genre;
+		};
+
+		it("moves whole Groove bars to the alternate lane at alternateChance, keeping Intro/Break on the primary lane", _ {
+			// Chance 0: Snare never plays.
+			{
+				const Genre g = makeAltGenre(0);
+				const Result r = play(runAt(1, 0, 25, g), 24);
+				expect(only(r.events, EventKind::NoteOn).size()).to_be_greater_than(size_t{0});
+				for (const Event& e : only(r.events, EventKind::NoteOn)) {
+					expect(e.lane == Lane::Snare).to_be_false();
+				}
+			}
+			// Chance 1000: Snare takes every Groove bar with its own Lean (+2), Rim keeps Intro and Break.
+			{
+				const Genre g = makeAltGenre(1000);
+				const Result r = play(runAt(1, 0, 25, g), 16);
+				const auto kinds = sections(r, 16);
+				const auto rim = bars(r, Lane::Rim, 16);
+				const auto snare = bars(r, Lane::Snare, 16);
+				int32_t grooveBars = 0;
+				int32_t nonGrooveBars = 0;
+				for (int32_t bar = 0; bar < 16; bar++) {
+					if (kinds[bar] == SectionKind::Groove) {
+						grooveBars++;
+						expect(rim[bar].empty()).to_be_true();
+						expect(snare[bar] == std::set<int32_t>{4, 12}).to_be_true();
+					}
+					else if (kinds[bar] == SectionKind::Intro || kinds[bar] == SectionKind::Break) {
+						nonGrooveBars++;
+						expect(rim[bar] == std::set<int32_t>{4, 12}).to_be_true();
+						expect(snare[bar].empty()).to_be_true();
+					}
+				}
+				expect(grooveBars).to_be_greater_than(4);
+				expect(nonGrooveBars).to_be_greater_than(2);
+				// Snare hits carry Snare's own +2 Lean.
+				for (const Event& e : only(r.events, EventKind::NoteOn)) {
+					if (e.lane == Lane::Snare) {
+						expect(e.tick % kTicksPerStep).to_equal(2);
+					}
+				}
+			}
+			// Chance 200: both Rim and Snare play Groove bars, never both on the same bar, Rim the norm.
+			{
+				const Genre g = makeAltGenre(200);
+				int32_t rimBars = 0;
+				int32_t snareBars = 0;
+				for (uint32_t seed = 1; seed <= 10; seed++) {
+					Run run = runAt(seed, 0, 0, g);
+					run.skipIntro = true;
+					const Result r = play(run, 16);
+					const auto rim = bars(r, Lane::Rim, 16);
+					const auto snare = bars(r, Lane::Snare, 16);
+					for (int32_t bar = 0; bar < 16; bar++) {
+						expect(!rim[bar].empty() && !snare[bar].empty()).to_be_false();
+						expect(!rim[bar].empty() || !snare[bar].empty()).to_be_true();
+						rimBars += rim[bar].empty() ? 0 : 1;
+						snareBars += snare[bar].empty() ? 0 : 1;
+					}
+				}
+				expect(snareBars).to_be_between(15, 55);
+				expect(rimBars).to_be_greater_than(snareBars * 2);
+			}
+		});
+
+		it("keeps the primary lane on the bar before its own drop-out Throw and silences both during its drop-out", _ {
+			const Genre g = makeAltGenre(1000, kRimThrow, 1000);
+			Run run = runAt(1, 0, 25, g);
+			run.skipIntro = true;
+			const Result r = play(run, 8);
+			const auto rim = bars(r, Lane::Rim, 8);
+			const auto snare = bars(r, Lane::Snare, 8);
+			// Bar 0 draws the 1-bar Rim drop-out for bar 1: bar 0 stays on Rim so beat 4 throws; bar 1 silences both.
+			expect(rim[0] == std::set<int32_t>{4, 12}).to_be_true();
+			expect(snare[0].empty()).to_be_true();
+			expect(rim[1].empty()).to_be_true();
+			expect(snare[1].empty()).to_be_true();
+		});
+
+		it("replays the frozen phrase's exact alternate-lane bars under Freeze", _ {
+			const Genre g = makeAltGenre(500);
+			// Phrase is 2 bars (32 steps). Freeze Drums inside phrase 0 (bar 0..1), then compare phrase 1 and 2 to 0.
+			Run run = runAt(7, 0, 0, g);
+			run.skipIntro = true;
+			run.steer = at(2, {CommandKind::SetFreeze, 0, kPress});
+			const Result r = play(run, 8);
+			const auto rim = bars(r, Lane::Rim, 8);
+			const auto snare = bars(r, Lane::Snare, 8);
+			for (int32_t bar = 2; bar < 8; bar++) {
+				expect(rim[bar] == rim[bar % 2]).to_be_true();
+				expect(snare[bar] == snare[bar % 2]).to_be_true();
+			}
+		});
 	});
 });
 

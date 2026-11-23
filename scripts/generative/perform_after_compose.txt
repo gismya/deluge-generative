@@ -15,6 +15,7 @@
 # Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped,
 # the current clip a synth or kit clip.
 # Each run writes SONGS/H388 PSYTRANCE.XML on the card.
+# writes: SONGS/H388 PSYTRANCE.XML
 # needs: a Deluge for its timings, and about 5 minutes in delugemu, so check_all.py skips it
 # For figures: --events 'gen_generator_heap|gen_mem|gen_h1|gen_h16|gen_section|gen_compose'.
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/compose_job.cpp

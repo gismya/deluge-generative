@@ -22,6 +22,7 @@
 #include "dsp/timestretch/time_stretcher.h"
 #include "hid/display/display.h"
 #include "io/debug/log.h"
+#include "io/midi/test_port_render.h"
 #include "model/sample/sample.h"
 #include "model/voice/voice.h"
 #include "model/voice/voice_sample_playback_guide.h"
@@ -309,6 +310,9 @@ bool SampleLowLevelReader::assignClusters(SamplePlaybackGuide* guide, Sample* sa
 		if (l == 0) {
 
 			if (!clusters[l] || !clusters[l]->loaded) {
+#if ENABLE_SYSEX_TEST
+				TestPort::clusterMissed(false); // Generative mode (spec §19, test-port hooks)
+#endif
 				return false;
 			}
 		}
@@ -352,6 +356,9 @@ bool SampleLowLevelReader::moveOnToNextCluster(SamplePlaybackGuide* guide, Sampl
 
 	if (!clusters[0]->loaded) {
 		D_PRINTLN("late  %d  p  %d", clusters[0]->sample->filePath.get(), clusters[0]->clusterIndex);
+#if ENABLE_SYSEX_TEST
+		TestPort::clusterMissed(true); // Generative mode (spec §19, test-port hooks)
+#endif
 
 		return false;
 	}

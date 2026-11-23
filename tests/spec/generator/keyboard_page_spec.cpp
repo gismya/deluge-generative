@@ -3,6 +3,7 @@
 // the core as steering, logged where they land. The page is composed from a stepped piece as the Perform view
 // composes it, and described as the test port's gen_keyboard text from the same cells.
 
+#include "generative/core/part_bias.h"
 #include "generative/perform/arc_map.h"
 #include "generative/perform/grid_page.h"
 #include "generative/perform/keyboard_page.h"
@@ -33,6 +34,8 @@ constexpr int32_t kMotionColumn = 6;
 struct Piece : StepwisePiece<> {
 	MacroFaderHolds holds;
 	FillHolds fills;
+	PunchHolds punches;
+	Lane drumLanes[kMaxLanesPerPart] = {};
 	bool stopped = false;
 	int32_t focused = -1; ///< The part on the knobs, or -1 for the Recipe level.
 
@@ -44,9 +47,9 @@ struct Piece : StepwisePiece<> {
 	/// The SetMacros the core logged, as they landed.
 	[[nodiscard]] std::vector<LogEntry> macrosLogged() const {
 		std::vector<LogEntry> out;
-		for (int32_t i = 0; i < log.size(); i++) {
-			if (log.at(i).command.kind == CommandKind::SetMacro) {
-				out.push_back(log.at(i));
+		for (int32_t i = 0; i < logSize(log); i++) {
+			if (logAt(log, i).command.kind == CommandKind::SetMacro) {
+				out.push_back(logAt(log, i));
 			}
 		}
 		return out;
@@ -84,6 +87,18 @@ struct Piece : StepwisePiece<> {
 			fillDown = down;
 		}
 	}
+	/// A punch-in pad down or up at `now` (ms), steering the core as the view does.
+	void punchPad(int32_t x, int32_t row, bool down, uint32_t now) {
+		input(); // reads the Drums part's lanes
+		const KeyboardPadAt at = resolveKeyboardPad(x, row);
+		const Lane lane = at.kind == KeyboardPad::LaneMute ? drumLanes[at.pad] : Lane::None;
+		const int32_t key = PunchHolds::punchKey(at.punch, lane);
+		if (down ? punches.press(key, now) : punches.release(key, now, kMacroTapMs)) {
+			if (!steering.setPunch(at.punch, lane, down)) {
+				punches.refused(key, !down);
+			}
+		}
+	}
 	KeyboardPageInput input() {
 		KeyboardPageInput in;
 		in.centres = currentRecipe.macros;
@@ -98,6 +113,13 @@ struct Piece : StepwisePiece<> {
 		in.clock = driver.clock();
 		in.phraseSteps = phraseSteps();
 		in.fill = fills.held();
+		const PartSpec& drums = currentRecipe.genre->parts[0];
+		for (int32_t l = 0; l < laneCount(drums); l++) {
+			drumLanes[l] = drums.lanes[l].lane;
+		}
+		in.drumLanes = drumLanes;
+		in.drumLaneCount = laneCount(drums);
+		in.punches = &punches;
 		return in;
 	}
 	KeyboardPage page() {
@@ -108,6 +130,11 @@ struct Piece : StepwisePiece<> {
 	std::string text() {
 		char out[kKeyboardTextChars + 1];
 		describeKeyboard(page(), out);
+		return out;
+	}
+	std::string punchText() {
+		char out[kPunchTextChars + 1];
+		describePunches(page(), out);
 		return out;
 	}
 	/// A column's pads from the top as letters: A the Arc's level, # lit, . unlit, N the phrase quarter playing,
@@ -131,18 +158,125 @@ struct Piece : StepwisePiece<> {
 
 // clang-format off
 describe keyboard_page("The KEYBOARD page", $ {
-	it("lays out the faders on columns 1–8, FILL on columns 14–16 rows 5–8, and nothing else acts", _ {
+	it("lays out the faders on columns 1–8, lane mutes on 9–10, FILL on 14–16 rows 5–8, the punch-ins on 15–16 rows "
+	   "1–3, and nothing else acts", _ {
 		for (int32_t row = 0; row < 8; row++) {
 			for (int32_t x = 0; x < 8; x++) {
 				expect(keyboardPad(x, row) == KeyboardPad::Fader).to_be_true();
 			}
-			for (int32_t x = 8; x < 13; x++) {
+			// A pad for each of the 11 Drums lanes: all of column 9, then column 10's top three.
+			expect(keyboardPad(8, row) == KeyboardPad::LaneMute).to_be_true();
+			expect(keyboardPad(9, row) == (row < 3 ? KeyboardPad::LaneMute : KeyboardPad::None)).to_be_true();
+			for (int32_t x = 10; x < 13; x++) {
 				expect(keyboardPad(x, row) == KeyboardPad::None).to_be_true();
 			}
-			for (int32_t x = 13; x < 16; x++) {
-				expect(keyboardPad(x, row) == (row >= 4 ? KeyboardPad::Fill : KeyboardPad::None)).to_be_true();
-			}
+			expect(keyboardPad(13, row) == (row >= 4 ? KeyboardPad::Fill : KeyboardPad::None)).to_be_true();
+			// Five punch-ins, two to a row: rows 1–2 full, row 3's left pad.
+			const KeyboardPad top = row < 2 ? KeyboardPad::Punch : KeyboardPad::None;
+			expect(keyboardPad(14, row) == (row >= 4 ? KeyboardPad::Fill : row == 2 ? KeyboardPad::Punch : top))
+			    .to_be_true();
+			expect(keyboardPad(15, row) == (row >= 4 ? KeyboardPad::Fill : top)).to_be_true();
 		}
+	});
+
+	it("resolves the punch-in pads to their lane index and punch-in", _ {
+		expect(resolveKeyboardPad(8, 0).pad).to_equal(0);
+		expect(resolveKeyboardPad(8, 7).pad).to_equal(7);
+		expect(resolveKeyboardPad(9, 2).pad).to_equal(10);
+		expect(resolveKeyboardPad(14, 0).punch == PunchIn::HatRoll).to_be_true();
+		expect(resolveKeyboardPad(15, 0).punch == PunchIn::SnareRoll).to_be_true();
+		expect(resolveKeyboardPad(14, 1).punch == PunchIn::Flam).to_be_true();
+		expect(resolveKeyboardPad(15, 1).punch == PunchIn::DoubleKick).to_be_true();
+		expect(resolveKeyboardPad(14, 2).punch == PunchIn::Pump).to_be_true();
+	});
+
+	context("a punch-in pad (spec §13.5)", _ {
+		constexpr int32_t kKey = PunchHolds::punchKey(PunchIn::Flam, Lane::None);
+		it("turns on as it goes down, and latches on a tap", _ {
+			PunchHolds holds;
+			expect(holds.press(kKey, 0)).to_be_true();
+			expect(holds.on(kKey) && holds.held(kKey)).to_be_true();
+			expect(holds.release(kKey, kMacroTapMs - 1, kMacroTapMs)).to_be_false();
+			expect(holds.on(kKey)).to_be_true();
+			expect(holds.held(kKey)).to_be_false();
+		});
+		it("springs back off when let go after 300 ms", _ {
+			PunchHolds holds;
+			holds.press(kKey, 0);
+			expect(holds.release(kKey, kMacroTapMs, kMacroTapMs)).to_be_true();
+			expect(holds.on(kKey)).to_be_false();
+		});
+		it("turns a latched one off with a second tap, or a hold, as it is let go", _ {
+			for (uint32_t length : {uint32_t{10}, 2 * kMacroTapMs}) {
+				PunchHolds holds;
+				holds.press(kKey, 0);
+				holds.release(kKey, 10, kMacroTapMs);
+				expect(holds.press(kKey, 1000)).to_be_false(); // on already
+				expect(holds.on(kKey)).to_be_true();
+				expect(holds.release(kKey, 1000 + length, kMacroTapMs)).to_be_true();
+				expect(holds.on(kKey)).to_be_false();
+			}
+		});
+		it("keeps several on at once, lanes and effects apart", _ {
+			PunchHolds holds;
+			const int32_t kick = PunchHolds::punchKey(PunchIn::LaneMute, Lane::Kick);
+			const int32_t pump = PunchHolds::punchKey(PunchIn::Pump, Lane::None);
+			holds.press(kick, 0);
+			holds.press(pump, 0);
+			holds.release(kick, 10, kMacroTapMs);
+			expect(holds.on(kick) && holds.on(pump) && !holds.on(kKey)).to_be_true();
+			expect(kick == pump || kick == kKey).to_be_false();
+		});
+		it("stays as it was when the steering refuses, and ignores a release it never saw go down", _ {
+			PunchHolds holds;
+			holds.press(kKey, 0);
+			holds.refused(kKey, false);
+			expect(holds.on(kKey) || holds.held(kKey)).to_be_false();
+			expect(holds.release(kKey, 1000, kMacroTapMs)).to_be_false();
+		});
+		it("shows a popup while held, clears it on release, and shows briefly on a latching tap", _ {
+			PunchHolds holds;
+			// Hold past 300 ms: Hold on down, Cancel on up.
+			holds.press(kKey, 0);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, kMacroTapMs, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Cancel).to_be_true();
+			// Spurious release does nothing.
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			// Tap under 300 ms latches: Hold on down, Brief on up.
+			holds.press(kKey, 1000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 1050, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Brief).to_be_true();
+			// Second tap or hold unlatches: Hold on down, Cancel on up.
+			holds.press(kKey, 2000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 2050, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::Cancel).to_be_true();
+			// Two pads held: the newer pad owns the popup, so releasing the older one leaves it up.
+			const int32_t pump = PunchHolds::punchKey(PunchIn::Pump, Lane::None);
+			holds.press(kKey, 3000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.press(pump, 3010);
+			expect(holds.popup(pump, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 3500, kMacroTapMs);
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			holds.release(pump, 3600, kMacroTapMs);
+			expect(holds.popup(pump, false) == PunchPopup::Cancel).to_be_true();
+			// Queue full refusal clears popup ownership so a later release doesn't cancel the Queue full popup.
+			holds.press(kKey, 4000);
+			expect(holds.popup(kKey, true) == PunchPopup::Hold).to_be_true();
+			holds.release(kKey, 4500, kMacroTapMs);
+			holds.refused(kKey, true);
+			expect(holds.popup(kKey, false) == PunchPopup::None).to_be_true();
+			// Overlay dismissPopup() clears an active popup once.
+			holds.press(pump, 5000);
+			expect(holds.popup(pump, true) == PunchPopup::Hold).to_be_true();
+			expect(holds.dismissPopup()).to_be_true();
+			expect(holds.dismissPopup()).to_be_false();
+			holds.release(pump, 5500, kMacroTapMs);
+			expect(holds.popup(pump, false) == PunchPopup::None).to_be_true();
+		});
 	});
 
 	it("gives each macro two columns, in Energy, Density, Complexity, Motion order", _ {
@@ -209,13 +343,16 @@ describe keyboard_page("The KEYBOARD page", $ {
 				expect(cell.macro == static_cast<Macro>(x / 2)).to_be_true();
 				expect(cell.held).to_be_false();
 			}
-			for (int32_t x = 8; x < 13; x++) {
+			// A lane pad for each of Techno's Drums lanes (7): column 9's top seven.
+			expect(page.cell[row][8].look).to_equal(row < 7 ? Look::LaneMute : Look::Off);
+			for (int32_t x = 9; x < 13; x++) {
 				expect(page.cell[row][x].look).to_equal(Look::Off);
 			}
 			const bool top = row < 4;
 			expect(page.cell[row][13].look == (top ? row == 0 ? Look::PhraseNow : Look::Phrase : Look::Fill)).to_be_true();
-			expect(page.cell[row][14].look).to_equal(top ? Look::Off : Look::Fill);
-			expect(page.cell[row][15].look).to_equal(top ? Look::Off : Look::Fill);
+			const Look punch = row < 2 ? Look::Punch : Look::Off;
+			expect(page.cell[row][14].look).to_equal(top ? row == 2 ? Look::Punch : punch : Look::Fill);
+			expect(page.cell[row][15].look).to_equal(top ? punch : Look::Fill);
 		}
 		expect(page.section).to_equal(SectionKind::Groove);
 	});
@@ -291,7 +428,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 		for (bool shift : {false, true}) {
 			Piece piece;
 			piece.runToStepLine(4);
-			expect(piece.column(14)).to_equal(std::string("    ...."));
+			expect(piece.column(14)).to_equal(std::string("... ....")); // three punch-ins over FILL
 			piece.fillPad(14, 5, true, shift);
 			piece.decideBefore(8);
 			// SHIFT plays a fresh pick (spec §8.7); the pads show the same.
@@ -334,19 +471,21 @@ describe keyboard_page("The KEYBOARD page", $ {
 			Piece piece;
 			piece.runToStepLine(4);
 			piece.focused = 2;
-			// Row 2 from the top, level 6 of 8: 36 points. From the centre 25 that is +11, in the curve's linear middle.
+			// Row 2 from the top, level 6 of 8: 36 points. From the centre 25 that is +11, which the blend reaches with
+			// about 4/3 of it: 939 units (14.7 points).
 			piece.pressFader(kEnergyColumn, 2, 0);
 			piece.releaseFader(kEnergyColumn, 2, 100);
-			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(macroPoints(11));
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(939);
+			expect(biasFor(macroPoints(25), macroPoints(36))).to_equal(939);
 			expect(piece.text().substr(0, 6)).to_equal(std::string("E=6/5 "));
-			// The top row, 50: the knee holds a bias under +50 short of it, so only +50 puts the part there.
+			// The top row, 50: the curve holds a bias under +50 short of it, so only +50 puts the part there.
 			piece.pressFader(kEnergyColumn, 0, 200);
 			piece.releaseFader(kEnergyColumn, 0, 300);
 			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(kMacroFull);
-			// The bottom row, 0, the same way down, where the curve rounds the cut up: a unit short of -50 reaches 0.
+			// The bottom row, 0, the same way down, where the blend rounds down: 3 units short of -50 reaches 0.
 			piece.pressFader(kEnergyColumn, 7, 400);
 			piece.releaseFader(kEnergyColumn, 7, 500);
-			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(-kMacroFull + 1);
+			expect(piece.currentRecipe.bias.of(2, Macro::Energy)).to_equal(-kMacroFull + 3);
 			// The centre's row, 25 at level 5: back to 0.
 			piece.pressFader(kEnergyColumn, 3, 600);
 			piece.releaseFader(kEnergyColumn, 3, 700);
@@ -362,7 +501,7 @@ describe keyboard_page("The KEYBOARD page", $ {
 			piece.focused = 1;
 			piece.pressFader(kMotionColumn, 2, 0);
 			piece.decideMore(2);
-			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(macroPoints(11));
+			expect(piece.driver.playing()->recipe().bias.of(1, Macro::Motion)).to_equal(939); // see the tap case
 			expect(piece.currentRecipe.bias.of(1, Macro::Motion)).to_equal(0);
 			expect(piece.text().substr(18, 7)).to_equal(std::string("M=6h/5 "));
 			piece.focused = -1; // the release goes to the part the press held, whatever is focused by then
@@ -382,6 +521,38 @@ describe keyboard_page("The KEYBOARD page", $ {
 		}
 		piece.fillPad(13, 4, true);
 		expect(piece.text()).to_equal(std::string("E=8h/5 D=8h/5 C=8h/5 M=8h/5 phrase=1 fill=1"));
+	});
+
+	it("shows each punch-in on while latched, held apart, and steers the core on the next undecided step", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		expect(piece.punchText()).to_equal(std::string("lanes=....... punch=....."));
+		piece.punchPad(8, 0, true, 0);  // the Kick's mute, held
+		piece.punchPad(14, 2, true, 0); // Pump
+		expect(piece.punchText()).to_equal(std::string("lanes=M...... punch=....p"));
+		piece.punchPad(14, 2, false, 100); // a tap: latched
+		piece.decideMore(1);
+		expect(piece.generator.punchIns().muted(Lane::Kick)).to_be_true();
+		expect(piece.generator.punchIns().on(PunchIn::Pump)).to_be_true();
+		piece.punchPad(8, 0, false, 1000); // held past 300 ms: springs back
+		expect(piece.punchText()).to_equal(std::string("lanes=....... punch=....P"));
+		piece.decideMore(1);
+		expect(piece.generator.punchIns().muted(Lane::Kick)).to_be_false();
+		expect(piece.generator.punchIns().on(PunchIn::Pump)).to_be_true();
+	});
+
+	it("fits its longest punch-in text", _ {
+		Piece piece;
+		piece.runToStepLine(4);
+		for (int32_t row = 0; row < 7; row++) {
+			piece.punchPad(8, row, true, 0);
+		}
+		for (int32_t i = 0; i < kNumPunchPads; i++) {
+			piece.punchPad(14 + i % 2, i / 2, true, 0);
+		}
+		expect(piece.punchText()).to_equal(std::string("lanes=MMMMMMM punch=hsfdp"));
+		// The longest, with 11 lanes: 29 characters.
+		expect(std::string("lanes=MMMMMMMMMMM punch=hsfdp").size() <= size_t{kPunchTextChars}).to_be_true();
 	});
 
 	it("leaves the phrase column dark when the input has no phrase length", _ {
@@ -414,6 +585,14 @@ describe keyboard_page("The KEYBOARD page", $ {
 				expect(shiftOpensSoundEditor(GridPage::Song, x, row)).to_be_true();
 			}
 		}
+	});
+
+	it("opens SHIFT's param on the song on stock Performance view, and on the focused part elsewhere (spec §13.5)", _ {
+		expect(shiftEditorPart(GridPage::Performance, 2)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Performance, -1)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Keyboard, 2)).to_equal(2);
+		expect(shiftEditorPart(GridPage::Song, -1)).to_equal(-1);
+		expect(shiftEditorPart(GridPage::Clip, 0)).to_equal(0);
 	});
 
 	it("keeps a tapped value as the new centre", _ {

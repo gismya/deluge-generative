@@ -42,6 +42,9 @@ struct Piece : StepwisePiece<> {
 	bool ext = false;
 	OledPeek peek = OledPeek::None;
 	GridPage page = GridPage::Song;
+	int32_t focusedPart = -1;
+	const Genre* rosterGenre = nullptr;
+	CaptureStatus capture;
 	PartTitleInput title{
 	    .part = kAcid, .parts = partCount(genres::technoAcid), .genre = &genres::technoAcid, .preset = kAcidPreset};
 	ControlLevel levels[kNumSoundControls] = {};
@@ -63,6 +66,9 @@ struct Piece : StepwisePiece<> {
 		in.arcState = &arc;
 		in.peek = peek;
 		in.page = page;
+		in.focusedPart = focusedPart;
+		in.rosterGenre = rosterGenre;
+		in.capture = capture;
 		in.title = title;
 		std::copy_n(levels, kNumSoundControls, in.levels);
 		return in;
@@ -159,6 +165,100 @@ describe oled_page("Perform's OLED", $ {
 		piece.pushAndDecide(mute(kAcid));
 		expect(piece.right()).to_equal(std::string{">MUT2B+"});
 		expect(piece.left()).to_equal(std::string{"GROOVE 1"});
+	});
+
+	it("status line: the Capture dot, hollow or filled, blinking when the log is full; HELD leaves it its room", _ {
+		Piece piece;
+		piece.decideBefore(8);
+		expect(piece.screen().dot == CaptureDot::None).to_be_true();
+		piece.capture = {.piece = true};
+		expect(piece.screen().dot == CaptureDot::Hollow).to_be_true();
+		piece.capture.marked = true;
+		expect(piece.screen().dot == CaptureDot::Filled).to_be_true();
+		expect(piece.screen().dotBlinks).to_be_false();
+		piece.capture.full = true;
+		expect(piece.screen().dotBlinks).to_be_true();
+		// Stopped, the last piece's dot still shows.
+		piece.stopped = true;
+		expect(piece.screen().dot == CaptureDot::Filled).to_be_true();
+		piece.stopped = false;
+		// The dot takes two characters: beside "1.1 EXT", HELD no longer fits and H does; beside a tag with more
+		// queued, nothing does.
+		piece.pushAndDecide(hold());
+		piece.ext = true;
+		expect(piece.left()).to_equal(std::string{"GROOVE 1 H"});
+		piece.pushAndDecide(force(SectionKind::Break));
+		piece.pushAndDecide({CommandKind::SetKey, 2, static_cast<int32_t>(Scale::Dorian)});
+		expect(piece.right()).to_equal(std::string{">BR8+"});
+		expect(piece.left()).to_equal(std::string{"GROOVE 1"});
+	});
+
+	it("status line: on the SONG page, a focused part's name replaces the Section and count, keeping HELD and the "
+	   "right side (spec §13.5)", _ {
+		Piece piece(false); // from the Intro, so SectionCount's length matters
+		piece.runToStepLine(0);
+		const int32_t introPhrases = (piece.generator.arc().sectionSteps() + piece.phraseSteps() - 1) / piece.phraseSteps();
+		expect(piece.left()).to_equal("INTRO 1/" + std::to_string(introPhrases));
+		// Holding or locking a part replaces the Section and count with its name only (no preset).
+		piece.focusedPart = kAcid;
+		OledScreen screen = piece.screen();
+		expect(std::string{screen.left}).to_equal(std::string{"ACID"});
+		expect(std::string{screen.right}).to_equal(std::string{"1.1"});
+		expect(screen.phraseBar).to_equal(0);
+		// HELD, queue tags, EXT and the Capture dot stay, and HELD counts room after the part's name.
+		piece.decideBefore(8);
+		piece.pushAndDecide(hold());
+		piece.ext = true;
+		piece.capture = {.piece = true, .marked = true};
+		piece.pushAndDecide(force(SectionKind::Break));
+		screen = piece.screen();
+		expect(std::string{screen.left}).to_equal(std::string{"ACID HELD"});
+		expect(std::string{screen.right}).to_equal(std::string{">BR8"});
+		expect(screen.tag).to_be_true();
+		expect(screen.ext).to_be_true();
+		expect(screen.dot == CaptureDot::Filled).to_be_true();
+		// A Section change while focused still tracks SectionCount, so letting go shows the current Section with its
+		// planned length (the forced Break starts at the next phrase line).
+		piece.pushAndDecide(hold()); // unhold
+		piece.runToStepLine(piece.phraseSteps());
+		const int32_t breakPhrases = (piece.generator.arc().sectionSteps() + piece.phraseSteps() - 1) / piece.phraseSteps();
+		expect(piece.left()).to_equal(std::string{"ACID"});
+		piece.focusedPart = -1;
+		const std::string breakLabel = "BREAK 1/" + std::to_string(breakPhrases);
+		expect(piece.left()).to_equal(breakLabel);
+		// Stopped or starting on the SONG page: a focused part still shows its name, and STOPPED comes back on release.
+		piece.stopped = true;
+		piece.focusedPart = kDrums;
+		expect(piece.left()).to_equal(std::string{"DRUMS"});
+		piece.focusedPart = -1;
+		expect(piece.left()).to_equal(std::string{"STOPPED"});
+		// Other pages keep the Section (CLIP's PART page already shows the part).
+		piece.stopped = false;
+		piece.focusedPart = kAcid;
+		piece.page = GridPage::Clip;
+		expect(piece.left()).to_equal(breakLabel);
+		piece.page = GridPage::Keyboard;
+		expect(piece.left()).to_equal(breakLabel);
+		piece.page = GridPage::Performance;
+		expect(piece.left()).to_equal(breakLabel);
+		// Out-of-range part falls back to the Section; rosterGenre wins over recipe->genre.
+		piece.page = GridPage::Song;
+		piece.focusedPart = partCount(genres::technoAcid);
+		expect(piece.left()).to_equal(breakLabel);
+		piece.focusedPart = 2;
+		piece.rosterGenre = &genres::technoDetroit;
+		expect(piece.left()).to_equal(std::string{genres::technoDetroit.parts[2].name});
+	});
+
+	it("CAPTURE peek: this piece's mark, the pieces marked and a card error", _ {
+		Piece piece;
+		piece.peek = OledPeek::Capture;
+		piece.capture = {.piece = true, .marked = true, .markedPieces = 2, .cardError = true};
+		OledScreen screen = piece.screen();
+		expect(std::string{screen.lines[0]} + "|" + screen.lineRight[0]).to_equal(std::string{"THIS PIECE|MARKED"});
+		expect(std::string{screen.lines[1]} + "|" + screen.lineRight[1]).to_equal(std::string{"MARKED PIECES|2"});
+		expect(std::string{screen.lines[2]} + "|" + screen.lineRight[2]).to_equal(std::string{"LOG|CARD ERROR"});
+		expect(screen.arc).to_be_false();
 	});
 
 	it("QUEUE peek: lists what is queued with its countdown, over whichever page is on", _ {

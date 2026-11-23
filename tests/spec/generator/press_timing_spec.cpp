@@ -138,11 +138,11 @@ std::string landsOn(int64_t at, Command command, int32_t step, std::optional<Sec
 	Piece d;
 	// A press that only reaches the steering queue, as End, a force or a mute does.
 	d.runToStepLine(step + 1, 0, {d.press(at, command)});
-	if (d.log.size() != 1 || d.log.at(0).command.kind != command.kind) {
-		return "logged " + std::to_string(d.log.size()) + " times";
+	if (logSize(d.log) != 1 || logAt(d.log, 0).command.kind != command.kind) {
+		return "logged " + std::to_string(logSize(d.log)) + " times";
 	}
-	if (d.log.at(0).step != step) {
-		return "landed on step " + std::to_string(d.log.at(0).step) + ", wanted " + std::to_string(step);
+	if (logAt(d.log, 0).step != step) {
+		return "landed on step " + std::to_string(logAt(d.log, 0).step) + ", wanted " + std::to_string(step);
 	}
 	if (starts) {
 		for (auto& [event, when] : d.sink.played) {

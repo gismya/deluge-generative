@@ -87,8 +87,7 @@ int32_t expectedBars(const Recipe& recipe, int32_t targetSteps) {
 	return ceilDiv(std::max<int32_t>(targetSteps, 1), kStepsPerBar) + genre.arc.outroPhrases * genre.phraseBars;
 }
 
-int64_t estimateBytes(const Recipe& recipe, int32_t lengthSeconds) {
-	const Genre& genre = *recipe.genre;
+int64_t estimateBarsBytes(const Genre& genre, int32_t bars) {
 	int64_t bytes = kSongCosts.song;
 	for (int32_t p = 0; p < partCount(genre); p++) {
 		const PartSpec& part = genre.parts[p];
@@ -96,7 +95,11 @@ int64_t estimateBytes(const Recipe& recipe, int32_t lengthSeconds) {
 	}
 	const PerStep step = perStep(genre);
 	const int64_t perBar = int64_t{notesPerBar(genre)} * kSongCosts.note + int64_t{step.lanes} * kSongCosts.node;
-	return bytes + perBar * maxBars(recipe, targetSteps(lengthSeconds, recipe.tempo));
+	return bytes + perBar * bars;
+}
+
+int64_t estimateBytes(const Recipe& recipe, int32_t lengthSeconds) {
+	return estimateBarsBytes(*recipe.genre, maxBars(recipe, targetSteps(lengthSeconds, recipe.tempo)));
 }
 
 int32_t longestFitting(const Recipe& recipe, int64_t bytes) {

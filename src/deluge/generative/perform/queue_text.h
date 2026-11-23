@@ -39,11 +39,11 @@ struct QueuedAction {
 /// @return How many it wrote.
 int32_t queuedByTime(const Generator& generator, std::span<QueuedAction> out);
 
-/// The short tag of a queued action: MUT, SOL, KEY, TAK, SND, END, CHG (a transition), or a forced Section's two
-/// letters (GR, BR, BU).
+/// The short tag of a queued action: MUT, SOL, KEY, TAK, SND, OCT, END, CHG (a transition), RST (a restart), or a
+/// forced Section's two letters (GR, BR, BU).
 const char* queueTag(const Command& command);
 
-/// Names an action for QUEUE: "ACID MUTE", "DRUMS TAKE 2", "BREAK", "OUTRO", "KEY D DORIAN".
+/// Names an action for QUEUE: "ACID MUTE", "DRUMS TAKE 2", "BREAK", "OUTRO", "KEY D DORIAN", "RESTART".
 void queueLabel(const Command& command, const Genre& genre, std::span<char> out);
 
 /// The time left until an action lands, `ticks` Generator ticks away: whole bars rounded up, and under a bar whole

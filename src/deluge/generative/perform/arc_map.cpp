@@ -60,8 +60,8 @@ int32_t nowPhrase(const Frame& frame) {
 	return frame.clock > 0 ? frame.clock / (frame.phraseSteps * kTicksPerStep) : 0;
 }
 
-/// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End or key change) or on
-/// part `part`'s row (its mute, solo, take, sound or octave shift).
+/// Whether a queued action lands in `phrase` on a Section-row pad (`part` < 0: a force, End, key change, transition or
+/// restart) or on part `part`'s row (its mute, solo, take, sound or octave shift).
 bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 	for (const QueuedAction& action : frame.queued) {
 		if (action.landsAt / frame.phraseSteps != phrase) {
@@ -81,6 +81,7 @@ bool landsIn(const Frame& frame, int32_t phrase, int32_t part) {
 		case CommandKind::End:
 		case CommandKind::SetKey:
 		case CommandKind::Transition:
+		case CommandKind::Restart:
 			if (part < 0) {
 				return true;
 			}
@@ -143,7 +144,7 @@ ArcMapRange scrollRangeOf(const Frame& frame) {
 
 } // namespace
 
-bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
+bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters, int32_t maxSteps) {
 	PlanKey key;
 	key.rosters = rosters;
 	if (piece != nullptr) {
@@ -162,17 +163,34 @@ bool ArcMapState::refreshPlan(const Generator* piece, uint32_t rosters) {
 		key.macros = piece->recipe().macros;
 		key.bias = piece->recipe().bias;
 	}
-	if (key == key_) {
+	if (!(key == key_)) {
+		const bool restart = piece == nullptr || key.rosters != key_.rosters || key.playing != key_.playing;
+		key_ = key;
+		if (restart) {
+			plan_ = ArcPlan{}; // the old plan's phrases count from another start
+			planner_ = ArcPlanner{};
+			replan_ = false;
+		}
+		if (piece == nullptr) {
+			queuedCount_ = 0;
+			return false;
+		}
+		queuedCount_ = queuedByTime(*piece, queued_);
+		if (planner_.planning()) {
+			replan_ = true;
+		}
+		else {
+			planner_.begin(*piece);
+		}
+	}
+	if (!planner_.planning() || !planner_.advance(maxSteps)) {
 		return false;
 	}
-	key_ = key;
-	if (piece == nullptr) {
-		plan_ = ArcPlan{};
-		queuedCount_ = 0;
-		return false;
+	plan_ = planner_.plan();
+	if (replan_) {
+		replan_ = false;
+		planner_.begin(*piece);
 	}
-	piece->planArc(plan_);
-	queuedCount_ = queuedByTime(*piece, queued_);
 	return true;
 }
 

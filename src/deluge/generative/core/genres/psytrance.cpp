@@ -79,14 +79,15 @@ constexpr Pattern kShaker[] = {
 };
 
 /// The rolling bass: an onset on every 16th, the & anchored. The beat steps carry onsets too: Avoid Kick drops them,
-/// since the kick plays every beat, so the bass rolls on the e, & and a with the kick alone on the beat. Density thins
-/// the e and the a as it falls. Even levels, no ghosts: a psy bass rolls evenly (#353).
+/// since the kick plays every beat, so the bass rolls on the e, & and a with the kick alone on the beat. The e's sit
+/// under the a's so Density thins the Intro stepwise: offbeats, then K.BB, then the full roll (round 2, S8). Even
+/// levels, no ghosts: a psy bass rolls evenly (#353).
 constexpr Pattern kRollingBass[] = {
-    {"88X888X888X888X8", "................", 0, 2},
-    {"78X878X878X878X8", "................", 0},
-    {"89X889X889X889X9", "................", 1},
-    {"79X979X979X979X9", "................", 1},
-    {"99X999X999X999X9", "................", 2},
+    {"87X887X887X887X8", "................", 0, 2},
+    {"86X886X886X886X8", "................", 0},
+    {"87X987X987X987X9", "................", 1},
+    {"86X986X986X986X9", "................", 1},
+    {"97X997X997X997X9", "................", 2},
 };
 
 /// The Lead's riffs, each opening on an anchored 1: 8ths and dotted figures at tier 0, 16th runs as Complexity rises.
@@ -94,15 +95,17 @@ constexpr Pattern kLeadRiffs[] = {
     {"X..8..8...8..8..", "................", 0, 2},
     {"X.8.8.8.X.8.8.8.", "................", 0},
     {"X..8..8.X..8.88.X..8..8.X.8.8.8.", "................................", 0},
-    {"X.88.88.X.88.8.8", "...g............", 1},
+    {"X.88.88.X.88.8.8", "...g......g.....", 1},
     {"X..8.88..8.88.8.", "......g.....g...", 1},
+    {"X..8..8.X..8.88.", "................", 1},
+    {"X.8.8.88X.8.8.88", "................", 1},
+    {"X..8.88..8.88.8.X.88.88.X..8.88.", "................................", 1},
     {"X888.888X888.8.8", ".g.g...g.g.g....", 2},
     {"X8.8X8.8X8.8X889X8.8X8.8X8.89898", ".g...g...g...g...g...g...g.....g", 2},
 };
 
-/// The Arp's 16ths, the 1 anchored so the Break's dip never thins it to nothing; each entry with its own walk
-/// (kArpWalks). At the default Density the 8s and 9s play; more Density fills in the rest. Every entry has an onset on
-/// every 16th: none skips the & (#354).
+/// The Arp's 16ths, the 1 anchored so the Break's dip never thins it to nothing. At the default Density the 8s and 9s
+/// play; more Density fills in the rest. Every entry has an onset on every 16th: none skips the & (#354).
 constexpr Pattern kArpLine[] = {
     {"X787978797879787", "a.......a.......", 0, 2}, // 8ths, filling in to 16ths
     {"X878X878X878X878", "a...a...a...a...", 0},
@@ -112,17 +115,6 @@ constexpr Pattern kArpLine[] = {
     {"X998999899989998", "a...a...a...a...", 2},
 };
 // clang-format on
-
-/// Each kArpLine entry's walk (spec §4.5): Up or Up-down over one octave in the plain tier, up to two in the busier.
-constexpr ArpWalk kArpWalks[] = {
-    {.order = ArpOrder::Up, .octaves = 1},     // tier 0
-    {.order = ArpOrder::UpDown, .octaves = 1}, // tier 0
-    {.order = ArpOrder::Up, .octaves = 2},     // tier 1
-    {.order = ArpOrder::UpDown, .octaves = 1}, // tier 1
-    {.order = ArpOrder::UpDown, .octaves = 2}, // tier 2
-    {.order = ArpOrder::Up, .octaves = 2},     // tier 2
-};
-static_assert(std::size(kArpWalks) == std::size(kArpLine), "a walk for each Arp pool entry");
 
 /// The hats keep to the & steps between the kicks, less so as Complexity rises (spec §5.5).
 constexpr InterplayRule kHatsOffKick[] = {
@@ -135,7 +127,7 @@ constexpr InterplayRule kBassAvoidsKick[] = {
 };
 
 constexpr int16_t kRideShakerGate = macroPoints(35);
-constexpr int16_t kPercGate = macroPoints(30);
+constexpr int16_t kPercGate = macroPoints(29);
 
 /// In the fixed lane order (spec §5.4). Straight time and no Lean: psytrance sits on the grid. The snare plays only
 /// the Build roll and the Roll fill.
@@ -169,17 +161,19 @@ constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
 
 constexpr LineWeight kRootOnly[] = {{0, 1}};
 
-/// The root, an octave up now and then as Complexity rises, never sliding, a short gate so each 16th stands apart.
+/// The root, an octave up now and then as Complexity rises, never sliding, even and fixed per pick (round 2, S8), a
+/// short gate so each 16th stands apart.
 constexpr LoopSpec kBassLoop{
     .degrees = kRootOnly,
-    .draws = {.leap = 0, .octaveUp = {60, 200}, .octaveDown = 0, .accent = 120},
+    .draws = {.leap = 0, .octaveUp = {60, 200}, .octaveDown = 0, .accent = 0},
     .slide = 0,
-    .mutation = 60,
+    .mutation = 0,
     .gateTicks = 20,
 };
 
-/// Scale steps from the root: mostly the root and the 5th, the 2nd (Phrygian's ♭2) and the 3rd, the 7th now and then.
-constexpr LineWeight kLeadDegrees[] = {{0, 5}, {1, 2}, {2, 2}, {4, 3}, {6, 1}};
+/// Scale steps from the root: mostly the root and the 5th, the 2nd (Phrygian's ♭2) and the 3rd, the 7th and 6th under
+/// the root and the 6th and 7th over the 5th (round 2, S7).
+constexpr LineWeight kLeadDegrees[] = {{0, 5}, {1, 2}, {2, 2}, {4, 3}, {-1, 2}, {-2, 1}, {5, 1}, {6, 1}};
 constexpr Answer kLeadAnswers[] = {{AnswerKind::Octave, 2}, {AnswerKind::Reverse}, {AnswerKind::Rotate}};
 
 /// The Lead's line: short notes with a few slides, leaping wider and jumping octaves as Complexity rises.
@@ -190,6 +184,20 @@ constexpr LoopSpec kLeadLoop{
     .mutation = 100,
     .answers = kLeadAnswers,
     .answerBars = 4,
+    .gateTicks = 18,
+};
+
+/// The sequence (round 2, S1 D): the Arp's four notes (root, 3rd, 5th, 7th), root-heavy, rolled per pick and held
+/// until the next pick (mutation 0).
+constexpr LineWeight kSeqDegrees[] = {{0, 5}, {2, 2}, {4, 3}, {6, 1}};
+constexpr Answer kSeqAnswers[] = {{AnswerKind::Octave, 1}, {AnswerKind::Rotate, 2}};
+constexpr LoopSpec kSeqLoop{
+    .degrees = kSeqDegrees,
+    .draws = {.leap = 6, .octaveUp = {150, 300}, .octaveDown = 0, .accent = 200},
+    .slide = 0,
+    .mutation = 0,
+    .answers = kSeqAnswers,
+    .answerBars = 8,
     .gateTicks = 18,
 };
 
@@ -225,10 +233,10 @@ constexpr PartSpec kParts[] = {
         .reg = {.anchor = 45, .spanLow = -12, .spanHigh = 12},
         .sustain = {.pedal = true},
         .gestures = kGestures,
-        .drift = {.sweepBars = 16},
-        // 40 % of the preset's volume knob (tuning): at the preset's level the held root and fifth sat about 10 dB over
-        // the rest of the mix and clipped it (delugemu capture, seed 1, 149 Cold 5th Pad).
-        .volume = 40,
+        .drift = {.sweepBars = 32},
+        // 55 % of the preset's volume knob (round 2, H3, raised from round 1's 40 %): lifts 149 Cold 5th Pad from
+        // about -27.1 to -22.3 dBFS without clipping the full mix (h3-level55-full: -14.5 dBFS RMS, -0.48 dBFS peak).
+        .volume = 55,
     },
     {
         .role = Role::Lead,
@@ -236,9 +244,10 @@ constexpr PartSpec kParts[] = {
         .name = "LEAD",
         .pool = kLeadRiffs,
         .band = {0, 2},
-        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33. Builds leave it out
+        // Over the default Density (25), so it comes in on Drops, whose lift takes Density to 33 and decays over four
+        // phrases: it plays a Drop's first two phrases and leaves on the phrase line (round 2, S2). Builds leave it out
         // (buildKeeps), though their Density ramp passes the gate.
-        .densityGate = macroPoints(30),
+        .densityGate = macroPoints(31),
         // The Arp's anchor plus two octaves (A5): its tonic two octaves over the Arp's; only notes under the Lead's
         // root reach the Arp's top.
         .reg = {.anchor = 81, .spanLow = -5, .spanHigh = 19},
@@ -250,18 +259,17 @@ constexpr PartSpec kParts[] = {
     },
     {
         .role = Role::Lead,
-        .flavour = Flavour::Arp,
+        .flavour = Flavour::Loop,
         .name = "ARP",
         .pool = kArpLine,
         .band = {0, 2},
-        // 34 semitones (arpRange(2)): a two-octave walk from any chord root, starting between 3 below the tonic and 31
-        // over it; the tonic nearest A3, two octaves under the Lead's.
+        // 34 semitones: its tonic nearest A3, two octaves under the Lead's, with room for the Loop's octave jumps.
         .reg = {.anchor = 57, .spanLow = -3, .spanHigh = 31},
         // Short notes, so each 16th speaks on its own (tuning).
-        .arp = {.walks = kArpWalks, .gateTicks = 18},
+        .loop = kSeqLoop,
         .expression = {.spread = 8},
         .gestures = kGestures,
-        .drift = {.sweepBars = 16},
+        .drift = {.sweepBars = 8},
         .volume = 100,
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
@@ -270,7 +278,7 @@ constexpr PartSpec kParts[] = {
 static_assert(kParts[kBassPart].role == Role::Bass);
 static_assert(kParts[kDronePart].role == Role::Pad);
 static_assert(kParts[kLeadPart].role == Role::Lead && kParts[kLeadPart].flavour == Flavour::Loop);
-static_assert(kParts[kArpPart].role == Role::Lead && kParts[kArpPart].flavour == Flavour::Arp);
+static_assert(kParts[kArpPart].role == Role::Lead && kParts[kArpPart].flavour == Flavour::Loop);
 
 /// The kick drop with the bass, the held-fill entry, 1, 2 or 4 beats (weight 3 in all), and a snare Roll of 1 or 2
 /// beats (weight 2 in all) (spec §8.7).
@@ -284,9 +292,22 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Roll, .mask = kSnare, .beats = 2, .weight = 1},
 };
 
+/// Groove rests (spec §4.5, §8.8; round 2 S4, #457): the Arp rests for 8 or 16 bars, or everything but Kick and Bass
+/// rests for 8 bars, drawn on the bar before a half-phrase line (dropOutGridBars = 8). No Throw.
+constexpr PartsAndLanes kArpOnly{.parts = partBit(kArpPart)};
+constexpr PartsAndLanes kAllButKickAndBass{.parts = partBit(kArpPart) | partBit(kLeadPart) | partBit(kDronePart),
+                                           .lanes = laneBit(Lane::Clap) | laneBit(Lane::ClosedHat)
+                                                    | laneBit(Lane::OpenHat) | laneBit(Lane::Ride)
+                                                    | laneBit(Lane::Perc1) | laneBit(Lane::Perc2)};
+constexpr DropOutEntry kDropOuts[] = {
+    {.mask = kArpOnly, .bars = 8, .weight = 3},
+    {.mask = kAllButKickAndBass, .bars = 8, .weight = 2},
+    {.mask = kArpOnly, .bars = 16, .weight = 1},
+};
+
 constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor};
 
-constexpr WeightedBars kBuildBars[] = {{16, 2}, {32, 1}};
+constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 2}, {32, 1}};
 
 /// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
 /// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres). It holds the whole of
@@ -298,23 +319,30 @@ constexpr Genre kPsytranceParent{
     .facts = {.tempoLowBpm = 138, .tempoHighBpm = 146, .scales = kScales, .swing = 0},
     .phraseBars = 16,
     .parts = kParts,
+    .densityJitter = 15,
+    .repickChance = 300,
     .fills = kFills,
     .heldFill = 0,
-    .fillChance = 400,
-    // An empty slot: the home chord throughout, under the Drone's pedal (spec §7.4). The Arp walks its triad, a 7th
-    // joining as Complexity rises.
+    .fillChance = 600,
+    .sectionEndChance = 1000,
+    .dropOuts = kDropOuts,
+    .dropOutChance = 300,
+    .dropOutGapBars = 8,
+    .dropOutGridBars = 8,
+    // An empty slot: the home chord throughout, under the Drone's pedal (spec §7.4).
     .harmony = {.extensionFloor = 0, .extensionCeiling = 1},
     .palette = &psytrancePalette,
     .arc =
         {
-            .introPhrases = 1,
+            .introPhrases = 2,
             .outroPhrases = 1,
-            .groovePhrases = {3, 6},
+            .groovePhrases = {2, 4},
             .breakPhrases = {1, 1},
             .buildBars = kBuildBars,
-            .grooveToBuild = 0,
-            // The Drop's lift decays over two phrases, so the Lead (gate 30) plays all 16 bars of the first (#349).
-            .dropDecayPhrases = 2,
+            .grooveToBuild = 500,
+            // The Drop's lift decays over four phrases, so the Lead (gate 31) plays a Drop's first two phrases and
+            // leaves on the phrase line (round 2, S2; spec §9.3's named exception, #349).
+            .dropDecayPhrases = 4,
             .dropLiftEnergy = macroPoints(8),
             .offsets =
                 {
@@ -333,7 +361,7 @@ constexpr Genre kPsytranceParent{
             // on the Drop.
             .buildKeeps = kEverything.without({.parts = partBit(kLeadPart)}),
             .buildCut = kKickAndBass,
-            .buildCutBars = 2,
+            .buildCutBars = 4,
             .gap = GapLength::Beat,
             .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
             .accentLane = Lane::Crash,
@@ -347,7 +375,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 1; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 6; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),

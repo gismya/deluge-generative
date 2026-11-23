@@ -104,6 +104,26 @@ private:
 };
 extern ControlTiming controlTiming;
 
+/// Test builds: PerformView::graphicsRoutine() and SettingsTracker::poll() cost, reported every 4 bars (#448/#454).
+class GraphicsTiming {
+public:
+	void record(uint32_t totalCounts, uint32_t settingsCounts) {
+		frames_++;
+		totalCounts_ += totalCounts;
+		maxCounts_ = std::max(maxCounts_, totalCounts);
+		settingsMaxCounts_ = std::max(settingsMaxCounts_, settingsCounts);
+	}
+	void report();
+	void reset() { frames_ = totalCounts_ = maxCounts_ = settingsMaxCounts_ = 0; }
+
+private:
+	uint32_t frames_ = 0;
+	uint32_t totalCounts_ = 0;
+	uint32_t maxCounts_ = 0;
+	uint32_t settingsMaxCounts_ = 0;
+};
+extern GraphicsTiming graphicsTiming;
+
 } // namespace deluge::generative::firmware
 
 #endif // ENABLE_SYSEX_TEST

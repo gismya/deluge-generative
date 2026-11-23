@@ -23,6 +23,7 @@
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/perform/one_shot.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -56,9 +57,6 @@ namespace deluge::generative::firmware {
 
 namespace {
 
-/// Samples shorter than this play once, as the sample browser sets them (spec §10.4).
-constexpr uint32_t kOneShotMaxLengthMs = 2000;
-
 /// A private song's Kits are built while another song is current, so their constructors took sync defaults from
 /// that song. Set them as they would be for `song` (spec §10.4).
 void applySyncDefaults(ModControllableAudio* modControllable, Song* song) {
@@ -84,9 +82,44 @@ void deleteUnlinked(Song* song, Instrument* instrument) {
 	song->deleteOutput(instrument);
 }
 
+/// Gives `instrument` a name unique among `song`'s Outputs of its type and folder (spec §9.7, §17.6):
+/// Song::readFromFile() matches each clip to its Output by (type, name, dirPath), so two Kits named "DRUMS" (a lane
+/// swap or re-roll in Capture) or two Synths from the same preset would both claim the first Output and drop the
+/// second's arranger clip instance on reload.
+Error ensureUniqueInstrumentName(Song* song, Instrument* instrument) {
+	if (song->getInstrumentFromPresetSlot(instrument->type, 0, 0, instrument->name.get(), instrument->dirPath.get(),
+	                                      true)
+	    == nullptr) {
+		return Error::NONE;
+	}
+	String base;
+	base.set(&instrument->name);
+	for (int32_t n = 2;; n++) {
+		String candidate;
+		candidate.set(&base);
+		Error error = candidate.concatenate(" ");
+		if (error == Error::NONE) {
+			error = candidate.concatenateInt(n);
+		}
+		if (error != Error::NONE) {
+			return error;
+		}
+		if (song->getInstrumentFromPresetSlot(instrument->type, 0, 0, candidate.get(), instrument->dirPath.get(), true)
+		    == nullptr) {
+			instrument->name.set(&candidate);
+			return Error::NONE;
+		}
+	}
+}
+
 /// Gives `instrument` its empty, always-active, looping 1-bar session clip and links both into `song` (spec §12.8).
 /// On failure the instrument is deleted.
 Error link(Song* song, Instrument* instrument, InstrumentClip** clipOut) {
+	Error nameError = ensureUniqueInstrumentName(song, instrument);
+	if (nameError != Error::NONE) {
+		deleteUnlinked(song, instrument);
+		return nameError;
+	}
 	void* memory = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(InstrumentClip));
 	if (memory == nullptr) {
 		deleteUnlinked(song, instrument);
@@ -237,7 +270,7 @@ public:
 		}
 		auto* sample = static_cast<Sample*>(holder->audioFile);
 		sampleDrum_->sources[0].repeatMode =
-		    sample->getLengthInMSec() < kOneShotMaxLengthMs ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
+		    perform::playsOut(sample->getLengthInMSec()) ? SampleRepeatMode::ONCE : SampleRepeatMode::CUT;
 		return LoadOutcome::Loaded;
 	}
 
@@ -331,8 +364,10 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 		applySoundSettings(*drum, *song->getBackedUpParamManagerPreferablyWithClip(drum, nullptr),
 		                   laneSoundSettings(part, lane), *song);
 		// An FX lane's synth keeps its saved transpose (spec §10.6).
-		TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
-		           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
+		if (!previewBuild()) {
+			TEST_EVENT("gen_sound_transpose %s %s saved=%ld played=%ld", part.name, laneName(lane),
+			           static_cast<long>(savedTranspose), static_cast<long>(drum->transpose));
+		}
 	}
 	else {
 		applySyncDefaults(drum, song); // a sample row was built while another song was current (spec §10.4)
@@ -341,8 +376,11 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 #if ENABLE_SYSEX_TEST
 	if (part.volume != 100) { // a Kit part's volume scales each row's knob (spec §10.6)
-		TEST_EVENT("gen_row_level %s %s volume=%d played=%ld", part.name, laneName(lane), static_cast<int>(part.volume),
-		           static_cast<long>(drum->paramFinalValues[params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL]));
+		if (!previewBuild()) {
+			TEST_EVENT("gen_row_level %s %s volume=%d played=%ld", part.name, laneName(lane),
+			           static_cast<int>(part.volume),
+			           static_cast<long>(drum->paramFinalValues[params::GLOBAL_VOLUME_POST_FX - params::FIRST_GLOBAL]));
+		}
 	}
 #endif
 	kit->addDrum(drum); // the Kit owns it from here
@@ -357,9 +395,11 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 #endif
 	if (played) {
-		TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
-		           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
-		           load.source == SoundSource::Silent ? "-" : loader.lastPath());
+		if (!previewBuild()) {
+			TEST_EVENT("gen_sound %s %s %s mode=%d prio=%d %s", part.name, laneName(lane), sourceName(load.source),
+			           static_cast<int>(drum->polyphonic), static_cast<int>(drum->voicePriority),
+			           load.source == SoundSource::Silent ? "-" : loader.lastPath());
+		}
 	}
 	*rowOut = drum;
 	return Error::NONE;
@@ -493,23 +533,29 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
 	}
 	// A pitched part plays at whole-sound transpose 0 whatever its preset saved (spec §10.6, ADR 0007).
-	TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
-	           static_cast<long>(synth->transpose));
+	if (!previewBuild()) {
+		TEST_EVENT("gen_sound_transpose %s - saved=%ld played=%ld", part.name, static_cast<long>(savedTranspose),
+		           static_cast<long>(synth->transpose));
+	}
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
-	TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
-	           playedLevel < presetLevel   ? "lower"
-	           : playedLevel > presetLevel ? "higher"
-	                                       : "same",
-	           static_cast<long>(playedLevel), static_cast<long>(presetLevel));
+	if (!previewBuild()) {
+		TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
+		           playedLevel < presetLevel   ? "lower"
+		           : playedLevel > presetLevel ? "higher"
+		                                       : "same",
+		           static_cast<long>(playedLevel), static_cast<long>(presetLevel));
+	}
 #endif
-	TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
-	           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
-	           static_cast<int>(out->clip->arpSettings.mode),
-	           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
-	           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
-	                                 ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
-	                                 .getCurrentValue()),
-	           static_cast<long>(postFxVolume(out->clip->paramManager).getCurrentValue()));
+	if (!previewBuild()) {
+		TEST_EVENT("gen_sound %s - %s mode=%d prio=%d arp=%d %s porta=%ld vol=%ld", part.name, sourceName(load.source),
+		           static_cast<int>(synth->polyphonic), static_cast<int>(synth->voicePriority),
+		           static_cast<int>(out->clip->arpSettings.mode),
+		           load.source == SoundSource::DefaultSynth ? "-" : loader.lastPath(),
+		           static_cast<long>(out->clip->paramManager.getUnpatchedParamSet()
+		                                 ->params[deluge::modulation::params::UNPATCHED_PORTAMENTO]
+		                                 .getCurrentValue()),
+		           static_cast<long>(postFxVolume(out->clip->paramManager).getCurrentValue()));
+	}
 	return Error::NONE;
 }
 
@@ -555,6 +601,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	// every event lands on its exact tick (spec §12.3).
 	song->insideWorldTickMagnitude = kGeneratorTickMagnitude;
 	song->insideWorldTickMagnitudeOffsetFromBPM = 0;
+	applySyncDefaults(&song->globalEffectable, song);
 	song->setBPM(static_cast<float>(recipe.tempo) / 100.f, false);
 	song->swingAmount = recipe.swing;
 	song->swingInterval = static_cast<uint8_t>(swingSyncLevel(recipe.swingInterval));

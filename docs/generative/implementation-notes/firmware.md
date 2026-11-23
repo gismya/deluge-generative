@@ -40,6 +40,10 @@ otherwise.
   stock edit to the patching (`setupPatching`, `deletePatchCable`, a knob creating a cable) reorders `patchCables[]`, so
   a bound cable is kept as its source and destination and looked up with `getPatchCableIndex()` each use; 255 means the
   player deleted it.
+- A Space Control event's offset, under a delay Throw (level > 0), holds the Throw's reverb spike, summed and clamped
+  in the core: the driver can't take it back out. Anything that wants Space's share without the Throw (a player edit
+  to the delay feedback, `gen_throw_delay`'s `rest=`) reads `Set::restSpace`, Space's offset from its last event at
+  level 0 (#343's MUST and #344 were both this bug). `rebindPart()` carries it to the new sound's set.
 - A preset's control ranges (spec §11.1) travel with its Output: the core's loaders hand back the loaded entry's
   `ControlRanges` in `SoundLoad`, `loadSynth()`/`buildRow()` store them in `PartOutput::ranges` (a synth's at 0, an FX
   lane's synth at its row), and `SoundControls::forEachTarget()` scales each target with `scaledRange()` as it binds.
@@ -54,6 +58,12 @@ otherwise.
   (each control's first param's range, 0 if it binds none). An event line is 120 bytes with its timestamp, so keep it
   short: a param count or lane names overflowed it.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
+- A lane sample of 2 s or more loads in CUT mode (`perform/one_shot.h`, §10.4), so its note-off stops it: a lane's
+  note length is what you hear, not the file's. Before #423 the Fall's 6-tick note cut the 8 s Downers to a beat
+  while the rough render, which played every sample out, rendered all 8 s. The render now follows the same rule, so a
+  short gate on a long sample shows in the render too. The Impact's descending kicks (3-4.3 s) are still cut by its
+  6-tick gate. Lane samples near 2 s sit on either side of it by a millisecond (`GEN Ride 2`, `GEN Ping 2`, Dub's
+  `GEN Riser Short` are 2000 ms: CUT).
 - Only disk-level FatFs errors are card errors (`card_sounds.cpp`). A missing or bad folder lists nothing and falls
   back (§10.7).
 - A test hook can fault the card: "hold card_error" makes `CardFolders` and Perform's loaders fail with `SD_CARD`
@@ -105,3 +115,72 @@ otherwise.
   `perform_ringmod_sync.txt` covers it. A sound control may move a param where stock presets rarely sit, so it reaches
   stock paths nothing else exercises: suspect those before Generative code. To find the writer, give the suspect
   buffer a spare row, zero it, and after each render report (a TEST_EVENT) which call left it non-zero.
+- Restart AS IT BEGAN (`firmware/restart_began.*`): the press copies nothing from the log but the piece's index
+  (`SteeringLog::newestWithHeader()`); the line reads the header in place (`Piece::start()`, `pick()`,
+  `forEachSnapshot()`), before the restarted run's `openPiece()` throws the ended piece away, so `lands()` must run
+  inside `NoteSink::restartPiece()`, never later. Its preload builds every changed part in one live job and frees what
+  it built itself on a cancel or an error (`freePartOutput()`, task context): a later `retire()` would leave a
+  cancelled job's Outputs linked. Swaps go through `SoundSwaps::adoptRestarted()`, after `pieceRestarts()` dropped the
+  waiting sounds, so the part's incoming slot is free. The snapshot is written with `setCurrentValueBasicForSetup()`
+  only where a value differs, then the Sound is patched again (`performInitialPatching()`), as `SoundControls`
+  `writeBase()`/`repatch()` do: fine on the line after the flush, wrong under sounding voices. A swing interval that
+  changes in the tick waits for the pump (`Transitions::swingIntervalFollows()`): `changeSwingInterval()` reschedules
+  the internal clock while playing.
+
+## The steering log on the card (#448)
+
+- `firmware/capture_files.*` (`cardLog`) is the log's only consumer: a priority-30 repeating task with
+  `RESOURCE_SD`, added at Perform's entry (`cardLog.enter()`, in the entry job) and removed by `finish()` (the
+  teardown, before the swap). The tick may run inside any of its card calls (`routineForSD()`/`yield()` run the
+  playback task), never between them: so a chunk's bytes stay put until `took()`, a slot stays until `released()`,
+  and `beginPiece()` refuses to open over a kept piece's header the task hasn't taken yet.
+- `snprintf()` with a number (`%lu`) pulls newlib's stdio into the link, whose syscalls (`_write`, `_sbrk`…) the
+  firmware doesn't stub: the link fails with `undefined reference to _close` and friends. `%s`-only calls are fine
+  (GCC folds them into copies). Build numbers into strings by hand (`pathOf()`).
+- `cardLog` lives in `.sdram_bss` (its three `FIL`s are 1.7 KB): zeroed at boot, never constant-initialised, so every
+  member must read right as zero until `enter()` resets it (`taskAdded_`, not a `-1` task id).
+- A piece's file is its image: `PieceInfo` (the genre as its index in `allGenres()` and its version, the pointer
+  can't be stored; `kFormat = 2` since #448 part 3 added `kSettingPathTag = 0x85` and `kSettingsTag = 0x92`), header
+  records, records. The task rewrites the info at each flush with `bytes` = what reached the card, always a step's end,
+  which `readImage()` trusts after a power-off; past it the last step may be torn. `CardLog::enter()` holds back
+  `kAdoptReserve` (4) slots when adopting marked files so a full folder still leaves room to log the new set.
+- Non-param sound-editor settings (`core/output_settings.h`, `firmware/settings_tracker.*`): `SettingsTracker` lives in
+  `.sdram_bss` and polls at most 2 slots per frame in `PerformView::graphicsRoutine()` (the SoundEditor target or
+  focused Output, plus 1 round-robin slot) so frame time stays a few microseconds, with full sweeps at piece start/stop,
+  before `logHeader()`, and before `RestartBegan::press()` (plus a single-slot Song sweep in `RestartBegan::restore()`).
+  `OutputSetting` orders `SynthMode` and `Osc0Type`/`Osc1Type` first so applying a `0x92` block in ascending ID order
+  never lets `setSynthMode()`/`setOscType()` clobber filter modes or sample flags; `enqueueScalar()` moves updated
+  entries to the back so same-step edits drain in chronological order. `setOscTypeSafe()` saves/restores
+  `soundEditor.currentMultiRangeIndex`/`currentMultiRange` so Capture and AS IT BEGAN never clobber SoundEditor state.
+  Traps: (1) `CompThreshold` is Song-only (`Sound::render()` and `GlobalEffectableForClip::renderOutput()` overwrite
+  `compressor.setThreshold()` from `UNPATCHED_COMPRESSOR_THRESHOLD` on every render); (2) `Source::setReversed()` casts
+  `ranges` to `MultisampleRange`/`Sample`, so call it only when `oscType == SAMPLE`; (3) `applyOutputSettingPath()`
+  resets `SampleHolderForVoice` zone/loop (`startPos = 0`, `endPos = 9999999`, `loopStartPos = loopEndPos = 0`) for
+  `SAMPLE` before `loadFile(isCurrentlyReversed(), false, true, CLUSTER_ENQUEUE, nullptr, true)` so longer samples
+  aren't truncated and chunkless wavetables load; (4) while `AudioEngine::reverbSidechainVolume < 0` (AUTO mode),
+  `AudioEngine::updateReverbSidechain()` overwrites `reverbSidechain.{attack,release,syncLevel}` from the loudest
+  reverb sound, so `SettingsTracker` reads `song->reverbSidechain*` in AUTO mode (`Song::Song()` now initializes
+  `reverbSidechainAttack`/`Release`); (5) `PatchCableSet::setupPatching()` (via `finalizeSoundSettings()`) and
+  `Sound::setModFXType()`/`setOscType()`/`setNumUnison()`/`setReversed()` allocate or touch clusters, so
+  `partNeedsRebuild()` forces a `BeganJob` task-context rebuild for any part whose live or header mask includes them
+  (`SynthMode`, `Osc0Type`, `Osc1Type`, `LpfMode`, `HpfMode`, `ModFxType`, `Unison`, `Osc0/1SampleFlags`,
+  `Osc0/1SamplePath`, and `OscSync`, `Lfo0`, `Lfo2`: `Sound::maySourcePatchToParam()` reads them, so they change
+  `setupPatching()`'s result), `RestartBegan::restore()` skips `restoreSettings()` for rebuilt parts, and `restoreSettings()`
+  with `loadPaths = false` only runs `performInitialPatching()` (never `setupPatchingForAllParamManagers()`).
+
+- The preset preview (#443, `preset_preview.*`, the portable `perform/preset_preview.h`) builds with
+  `buildPartOutput()` in a live job, as `SoundJob` does, but the Output goes into no roster: it sits linked in the song
+  beside the part's own, its note goes through `OutputSink::playNote()`, and it is freed in task context with
+  `freePartOutput()` (from the UI, or in the job's `finished()` for a build the cursor has left). Putting it in the
+  roster would have needed a restore before every start step (`soundControls.begin()` reads homes from the roster),
+  restart, transition and knob bind. The runner is busy while a preview builds, so the browser's SELECT cancels it and
+  chooses once it has unwound (`chooseWhenFree_`); a choice made at once would be refused BUSY.
+  `deleteUnusedAudioFiles()` after a free runs only with the runner free (or from the preview job itself): another job
+  may be loading samples no Output holds yet. What a preview holds, on the Deluge with the pack (`gen_mem preset_preview`
+  against `preset_preview_freed`): a synth part's preset 13.7 KB of internal RAM, an FX lane's (a whole Kit, the
+  lane's row a synth) 39 KB, external RAM about 0 for both.
+- The browser services the preview every frame, also while its build runs (a build that yields at a card read or a
+  chunk boundary lets frames through). `PresetPreviewLifecycle::service()` cancels a running build only when its token
+  is no longer the newest want. It used to cancel on any frame mid-build, so a build longer than a frame
+  was cancelled and resubmitted forever (`gen_preset_preview cancelled` every ~45 ms). It showed once #488 made the FX
+  Kit's Impact pick a pack preset: on a card without the pack, the missing preset's lookup made the build span frames.

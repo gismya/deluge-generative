@@ -28,9 +28,14 @@ bool shiftOpensSoundEditor(GridPage page, int32_t x, int32_t row) {
 	case GridPage::Clip:
 		return row != kActionsRow || (x != kNewSoundPad && x != kSoundEditorPad);
 	case GridPage::Song:
+	case GridPage::Performance: // stock's own SHIFT: the printed param, on the song FX (shiftEditorPart())
 		break;
 	}
 	return true;
+}
+
+int32_t shiftEditorPart(GridPage page, int32_t focused) {
+	return page == GridPage::Performance ? -1 : focused;
 }
 
 } // namespace deluge::generative::perform

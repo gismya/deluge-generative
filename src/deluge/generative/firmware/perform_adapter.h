@@ -25,10 +25,13 @@
 #include "generative/core/generator.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/entry_source.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_song.h"
 #include "generative/firmware/transitions.h"
+#include "generative/perform/capture.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/keyboard_page.h"
 #include "generative/perform/perform_driver.h"
@@ -76,6 +79,17 @@ public:
 	void outgoingDrained() override;
 	/// A stop or jump cut its Throws short: its Space goes home (spec §11.4).
 	void outgoingThrowsCut() override;
+	/// Test builds time the piece's opening from here, with its header.
+	void pieceOpening() override;
+	/// The piece's header: the Current Recipe's picks, and the params of the song and of each part edited since they
+	/// loaded (spec §17.2).
+	void logPieceHeader(SteeringLog& log) override;
+	/// A re-roll's new picks, from its waiting sound (spec §17.2).
+	void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) override;
+	/// Non-param sound-editor setting edits queued since the step before (spec §17.2).
+	void logSettings(SteeringLog& log, int32_t step) override;
+	/// A restart reached its line (spec §13.2): the adapter starts the piece again (PerformAdapter::restartPiece()).
+	void restartPiece(Generator& generator) override;
 	/// The safety net after a flush: every voice on every part's Output released. Tails ring out (spec §12.5).
 	void allNotesOff();
 
@@ -107,6 +121,9 @@ public:
 	/// `genre`, the roster's; "outgoing" for the transition's outgoing roster, "other" for any other Sound.
 	[[nodiscard]] const char* partName(const Sound* sound, const Genre* genre) const;
 #endif
+	/// Plays `event`'s note on, or its note off, on `part`'s Output (its lane's drum on a Kit), in Perform's song.
+	/// The preset preview's audition note goes through it too, on an Output no roster holds (spec §13.3).
+	static void playNote(const PartOutput& part, const Event& event, bool on);
 
 private:
 	void note(const Roster& parts, const Event& event, bool on);
@@ -163,7 +180,10 @@ public:
 	bool beginEntry(const EntrySource& source, EntryEnded ended);
 	/// LEAVE (spec §13.8): stops the transport and the piece at once, cancels the runner's work, and tears Perform's
 	/// song and the Generator blocks down as a runner job of its own, which ends on a new blank song.
-	void leave(LeaveEnded ended);
+	///
+	/// `keep` is the leave menu's choice (spec §13.8). If it keeps a piece, the steering log outlives the teardown,
+	/// and Capture builds the kept pieces behind it (spec §17.7): beginCapture(), which frees the log when done.
+	void leave(LeaveEnded ended, perform::LeaveOption keep = perform::LeaveOption::Nothing);
 	/// The jobs beginEntry() and leave() submit, for the modal screen over them (GenerativeModalUI::open()).
 	[[nodiscard]] const Job& entryJob() const;
 	[[nodiscard]] const Job& leaveJob() const;
@@ -183,7 +203,24 @@ public:
 	/// F14: the panel's PLAY under Perform, with SHIFT as `groove`. From stop it starts the next piece, in Groove with
 	/// SHIFT, unless a transition that commits when loaded still preloads: then playback starts once it has loaded,
 	/// and PLAY again cancels that (spec §12.10). Playing, it stops, as stock PLAY does.
+	/// X held (CROSS SCREEN with accessibility shortcuts, as stock's restart shortcut) makes it pressRestart().
 	void pressPlay(bool groove);
+	/// X+PLAY, or RESTART ▸ AS IT IS (spec §13.2): playing, the piece starts again at the next bar line from the
+	/// Current Recipe as it is then (pressed again while it waits, it cancels); stopped, it is PLAY. Shows its popup:
+	/// RESTART, RESTART CANCELLED, or why it was refused (CHANGE PENDING while a transition is pending).
+	void pressRestart();
+
+	// ---- Capture marks (spec §17.4) ----
+
+	/// RECORD or MIDI RECORD (F9, F10): the current piece's mark, toggled at once, playing or stopped (the last
+	/// piece). A refusal shows its popup: LOG FULL, or NOTHING PLAYED before any piece.
+	perform::MarkOutcome pressMark();
+	/// A CAPTURE menu row: piece `piece`'s mark, toggled.
+	perform::MarkOutcome pressMark(int32_t piece);
+	[[nodiscard]] perform::CaptureStatus captureStatus() const { return perform::captureStatus(log_); }
+
+	/// Counts the restarts that reached their line: the view returns the Arc map to now when it changes.
+	[[nodiscard]] uint32_t restarts() const { return restarts_; }
 	/// A song position pointer while following an external clock: the next tick is a jump to `songTick` (spec §12.4).
 	void songPositionPointer(int32_t songTick);
 
@@ -200,11 +237,28 @@ public:
 	/// While a piece plays, a param a sound control moves gets a new home, logged at the next undecided step.
 	void playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
 
+	/// What a piece's header snapshots (spec §17.2, H13 option A): the parts whose Output was edited since it loaded,
+	/// and whether the song's params were. Set by any player edit, playing or stopped.
+	[[nodiscard]] EditedOutputs editedOutputs() const { return edited_; }
+	/// Part `part`'s Output loaded, or swapped in by a re-roll: its params and settings are its preset's.
+	void outputLoaded(int32_t part);
+	/// Replaces the edited marks with AS IT BEGAN's header snapshot marks (no stale bits survive a rebuild).
+	void outputsEdited(EditedOutputs edited) { edited_ = edited; }
+	/// Bounded per-frame poll for non-param sound-editor setting edits (from PerformView::graphicsRoutine()).
+	void pollSettings(int32_t focusedPart);
+
 	// For the Perform view.
 	[[nodiscard]] bool playing() const { return driver_.running(); }
 	/// Generator ticks since step 0's grid line, while playing.
 	[[nodiscard]] int32_t clock() const { return driver_.clock(); }
 	[[nodiscard]] const OutputSink& output() const { return sink_; }
+	/// The pieces played since Perform was entered (spec §17.2, §17.3): empty once it is left.
+	[[nodiscard]] const SteeringLog& steeringLog() const { return log_; }
+	/// Capture (spec §17.7): the log a leave that keeps pieces left alive past the teardown, until freeLog().
+	[[nodiscard]] SteeringLog& keptLog() { return log_; }
+	[[nodiscard]] bool logKept() const { return keepLog_; }
+	/// Capture is done with the log: its buffer goes.
+	void freeLog();
 	/// The phrases heard in the piece playing, for the SONG page's played columns (spec §2.8).
 	[[nodiscard]] const perform::PhraseHistory& history() const { return driver_.history(); }
 
@@ -237,24 +291,41 @@ private:
 	friend class FreeJob;
 	friend class LeaveJob;
 	friend class SoundJob;
+	friend class PresetPreview;
+	friend class PresetPreviewJob;
 	friend class SoundSwaps;
+	friend class RestartBegan;
+	friend class BeganJob;
 	friend class TransitionJob;
 	friend class OutputSink;
 
 	/// Whether the next piece starts in Groove, with no Intro: the panel's SHIFT+PLAY sets it just before playback
 	/// starts, and clears it if nothing started. A start takes it up and clears it.
 	void setStartInGroove(bool groove) { startInGroove_ = groove; }
+	/// pressPlay() without the restart shortcut.
+	void playOrStop(bool groove);
 	void startPiece(int32_t swungTick, int32_t magnitude);
+	/// What every new piece reads once its Generator has started: the controls' homes, the Section shown.
+	void pieceBegins();
+	/// A restart's line, from the sink (spec §13.2): every voice is released, the first run's sounds go home and its
+	/// waiting swaps are dropped, then `generator` starts again from the Current Recipe (AS IT IS).
+	void restartPiece(Generator& generator);
 	/// Once per bar under an external clock: the Recipe tempo tracks it, rounded to a whole BPM (spec §13.7).
 	void sampleExternalTempo();
 	void stopPiece();
+#if ENABLE_SYSEX_TEST
+	/// gen_log: the steering log's use, at a phrase line or a stop.
+	void reportLog(bool stopped) const;
+#else
+	void reportLog(bool /*stopped*/) const {}
+#endif
 	/// A Generator instance plays from its step 0, at a start or a transition's start step: the steering sends again
 	/// what the new one has cleared (a FILL or a KEYBOARD fader still held), and the step counters start again.
 	void instanceStarts();
 	/// The steps counted from the playing instance's step 0 start again: a transition's new roster counts its own.
 	void restartStepCounters();
-	/// A transition's `incoming` roster plays, and is emptied.
-	void takeRoster(Roster& incoming);
+	/// A transition's `incoming` roster plays (for `genre`), and is emptied.
+	void takeRoster(Roster& incoming, const Genre* genre);
 	/// The Generator block not playing: a transition's incoming instance starts in it (spec §12.9).
 	[[nodiscard]] Generator* idleBlock() const { return blocks_[0] == generator_ ? blocks_[1] : blocks_[0]; }
 	Error allocateBlocks();
@@ -264,7 +335,10 @@ private:
 	/// Forgets Perform's song, roster and Generator, as the teardown starts.
 	void dropSong();
 	/// The teardown's task couldn't start: Perform's song is still whole and current, and Perform carries on.
-	void undoLeave() { steering_.undoLeave(); }
+	void undoLeave() {
+		keepLog_ = false;
+		steering_.undoLeave();
+	}
 
 	/// Perform allocates two blocks on entry, because a transition overlaps two instances (spec §2.1, §12.9). They
 	/// alternate: each transition's new roster starts in the one not playing.
@@ -284,13 +358,23 @@ private:
 	/// instruction grows the step's code (see implementation-notes/core.md).
 	Steering steering_;
 	perform::PerformDriver driver_;
-	OutputSink sink_;
+	/// Before sink_, where it puts the roster an odd 4 bytes from Transitions' incoming one (the static_assert in
+	/// incomingStarts()): the driver's size moves that.
 	int32_t lastSwungTick_ = 0;
+	OutputSink sink_;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
 	int32_t positionTick_ = 0;
 	/// The next step whose decision samples the external clock's tempo: each bar line.
 	int32_t nextTempoSample_ = 0;
+	/// The steering log, over its 16 KB SDRAM buffer from entry to the teardown, its pieces on the card (spec §17.2).
+	uint8_t* logBuffer_ = nullptr;
+	SteeringLog log_;
+	uint32_t restarts_ = 0;
+	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).
+	bool keepLog_ = false;
+	/// Which Outputs' params were edited since they loaded (spec §17.2's header snapshot).
+	EditedOutputs edited_;
 #if ENABLE_SYSEX_TEST
 	/// H2 (spec §20): the next step at which the live ramps' cost is reported.
 	int32_t nextH2Report_ = 0;
@@ -304,6 +388,8 @@ private:
 	Macros macrosShown_;
 	/// The Part biases the last tick saw the Generator play, for the gen_bias_landed test event.
 	PartBiases biasShown_;
+	/// The punch-ins the last tick saw the Generator play, for the gen_punch_landed test event.
+	PunchIns punchesShown_;
 #endif
 };
 

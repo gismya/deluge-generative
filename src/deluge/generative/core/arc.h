@@ -47,6 +47,10 @@ public:
 	bool enterStep(const Genre& genre, uint32_t seed, int32_t step, const Macros& centre);
 
 	[[nodiscard]] SectionKind section() const { return kind_; }
+	/// What start() was given, read before the first step: the first Section, and whether a Drop opens it (a start
+	/// on a Drop begins as if a Build had just ended).
+	[[nodiscard]] SectionKind first() const { return first_; }
+	[[nodiscard]] bool opensOnDrop() const { return kind_ == SectionKind::Build && first_ != SectionKind::Build; }
 	/// 0 for the first Section of its kind in the piece.
 	[[nodiscard]] uint16_t occurrence() const { return occurrence_; }
 	[[nodiscard]] bool sectionStartsHere() const { return stepInSection_ == 0; }

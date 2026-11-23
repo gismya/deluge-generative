@@ -32,10 +32,20 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    Both options are needed: without `ENABLE_SYSEX_LOAD` the device ignores the next load until a power cycle, and
    without `ENABLE_SYSEX_TEST` nothing answers the scripts.
 
-   Then it waits up to 30 minutes for the lock (`--no-wait` fails at once instead), loads the build, waits for a
+   Then it waits up to 30 minutes for the lock (`--wait SECONDS` sets another limit, e.g. `--wait 3600`; `--wait`
+   alone is an argument error; `--no-wait` fails at once instead), loads the build, waits for a
    fresh boot, and runs each script. Done when every script prints `N expects, 0 failed` and the session exits 0.
    Report any failing line as printed, with the `got ...` lines under it. `--no-load` runs the scripts on the build
-   already running.
+   already running, and only if this checkout loaded it: it refuses (exit 1, naming both SHAs) when `loaded.json`
+   records another commit than `git rev-parse HEAD` (a `<sha>-dirty` load counts as `<sha>`), or no load at all.
+   `--force-build-mismatch` runs anyway with a warning; results from someone else's build say nothing about yours.
+
+   Before the first script and after the last, the session lists `SONGS/` and `RECIPES/` and prints every new file as
+   `session: new on the card, declared: /PATH` or `session: FAIL new on the card, undeclared: /PATH`. An undeclared
+   one fails the session (exit 1), and so does a listing that gets no reply (a card still busy with a song load or
+   save): that writes no hung marker. A script that saves
+   names what it writes in `# writes: GLOB` lines ([scripts.md](scripts.md)). Delete the files your run wrote, declared
+   or not, with [card-files.md](card-files.md); never files that were there before.
 
    Writing or changing a script: read [scripts.md](scripts.md) first.
 
@@ -44,8 +54,10 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. `--events .`
    prints every event.
 2. **Read the exit code.**
-   - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, or the load didn't take (the
-     build that was running still answered near the end of the wait, and no fresh one did). The output says which.
+   - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, the load didn't take (the
+     build that was running still answered near the end of the wait, and no fresh one did), `--no-load` found
+     another build on the device, or the run left an undeclared new file in `SONGS/` or `RECIPES/`. The output says
+     which.
      None of these sets the hung marker.
    - `2`: the device hung: nothing answered for the rest of the wait, whatever answered before (an old build about
      to restart into a build that hung), or a script got no reply. The session wrote the hung marker and added the
@@ -112,3 +124,14 @@ How far `summary`'s figures can be trusted (#282, from 3 runs with the same comm
   build). Read a PR's render mean as changed only past about 20%; that threshold rests on those 3 runs.
 - **Render max** is one window's outlier, mostly a window with a preload from the card; same-commit sides differed
   by -9% to +26%. It bounds the worst render and can't tell a PR from its base.
+
+## Late audio (underruns)
+
+To check that the audio never ran dry, add `gen_audio` to `--events`. Every 4 bars in Perform it reports the audio
+routine's entries, `underruns=` (entries after the 2.9 ms TX ring ran out), `margin_min_us=` (the least audio left at an
+entry, negative after an underrun), and `drift=`, the DMA's move off the timer in samples, which should stay within a
+few samples. `gen_audio_late` names the task that kept the routine away, and `gen_audio_ui_timer` the UI timers whose
+handler ran over 2 ms (TimerName's value). Don't count spans between render starts, or a render's length (`gen_h16`'s
+`render_max_us`): neither one shows the margin. `perform_audio_margin.txt` is the steering load where the margin is
+smallest: `underruns=` must stay 0 in every window, as it has since #454 (the Arc plan in slices). Spec §20 has its
+figures, before and after (#449, #454). Any work in Perform's `graphicsRoutine()` must stay under about 1 ms a frame.

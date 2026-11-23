@@ -27,7 +27,9 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
+#include "generative/core/steering.h"
 #include "generative/core/types.h"
+#include <algorithm>
 #include <cstdint>
 
 namespace deluge::generative::compose {
@@ -67,6 +69,14 @@ struct Node {
 	constexpr bool operator==(const Node&) const = default;
 };
 
+/// A node on the song's tempo automation (spec §17.6), in hundredths of a BPM, as Node is for a control.
+struct TempoNode {
+	int32_t tick = 0;
+	int32_t tempo = 0;
+	bool interpolated = false;
+	constexpr bool operator==(const TempoNode&) const = default;
+};
+
 /// Where Compose writes (spec §2.5): the firmware's adapter builds a private Song (spec §15.7), the harness records.
 /// The calls come in this order: begin(), then notes and nodes as the song plays out (a part's notes in the order they
 /// end, each lane's nodes in tick order), then a base() per automation lane the stream touched, then end().
@@ -92,6 +102,44 @@ public:
 	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length, 0 for a synth. Asked only for a
 	/// Riser in a Build, which then starts so its file ends on the Drop (spec §9.5, §10.5), as Perform's does.
 	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+
+	// ---- Capture's replay (spec §17.5, §17.6). A Compose song gets none of these. ----
+	// Ticks are from the piece's step 0. Each comes when the replay reaches it, among the notes and nodes; a note or
+	// node goes to the clip and the song its tick falls in.
+
+	/// `part`'s clip ends at `tick`, where a key or scale change lands, and its next clip runs on from there on the
+	/// same track (spec §17.6). Pitched parts only: Drums and FX clips are never cut.
+	virtual void cutClip(uint8_t /*part*/, int32_t /*tick*/) {}
+	/// One of the picks of `part`'s sound `token`, from its re-roll (spec §17.2): its slot (pickSlot()) and path,
+	/// `length` chars, not terminated, valid only during the call. Comes on the step its SetSound landed on, before
+	/// newTrack().
+	virtual void soundPick(uint8_t /*part*/, uint8_t /*token*/, int32_t /*slot*/, const char* /*path*/,
+	                       int32_t /*length*/) {}
+	/// From `tick` on, `part` plays sound `token`, from the picks soundPick() gave it: a new track, and the part's clip
+	/// on its old track ends there (spec §17.6). A swap a transition's confirm dropped never comes here: the part keeps
+	/// its old track.
+	virtual void newTrack(uint8_t /*part*/, uint8_t /*token*/, int32_t /*tick*/) {}
+	/// A node on the song's tempo automation (spec §17.6), in tick order. The song's own tempo is begin()'s Recipe's.
+	virtual void tempo(const TempoNode& /*node*/) {}
+	/// A player's param edit from `tick` on (spec §17.2, §17.6): a SetParam, automation on the song or on the part's
+	/// clip, or a SetHome, a sound control's new home.
+	virtual void paramEdit(const Command& /*edit*/, int32_t /*tick*/) {}
+	/// A player's non-param sound-editor setting edit from `tick` on (SetSetting, spec §17.2, §17.6). For a part
+	/// (target < kMaxParts), the driver ended the part's lanes at `tick` before this call when `tick` is past the
+	/// part's current clip start, so the writer starts a new track from `tick` (one sound per track); edits on the
+	/// same `tick` share that track. For the song (kSongParams), it applies directly to the song.
+	virtual void settingEdit(const Command& /*edit*/, int32_t /*tick*/) {}
+	/// A non-param setting's file path (oscillator sample or wavetable, kSettingPathTag = 0x85) from `tick` on:
+	/// `length` chars, not terminated, valid only during the call. Same track-cut rule as settingEdit().
+	virtual void settingPath(uint8_t /*part*/, Lane /*lane*/, uint16_t /*setting*/, const char* /*path*/,
+	                         int32_t /*length*/, int32_t /*tick*/) {}
+	/// Stock's stutter starts (`on`) or ends at `tick` (SetStutter, spec §17.2).
+	virtual void stutter(bool /*on*/, int32_t /*tick*/) {}
+	/// A split (spec §17.5): end() has ended one song at `tick`, and the next starts there, with that Section and the
+	/// replayed state at that step. Its notes, nodes, bases and end() follow. Only the tick comes here: the writer
+	/// rebuilds that state itself, so it keeps the picks (begin(), soundPick() and newTrack()), the homes and param
+	/// edits (paramEdit()) and the stutter (stutter()) from the calls before.
+	virtual void nextSong(int32_t /*tick*/) {}
 };
 
 /// Turns the event stream into notes and nodes for a SongWriter, as the events would play: feed it every event in
@@ -129,6 +177,95 @@ public:
 		writer_->end(tick, counts_.sounding);
 	}
 
+	/// A split (spec §17.5): the song ends at `tick`, a Section line, as finish() ends it, and the next song starts
+	/// there. A note still sounding (a Sustain's, held across the line) ends here and is struck again at `tick`, at its
+	/// velocity; each lane goes on in the next song from the value it has here.
+	template <typename Centre>
+	void split(int32_t tick, Centre centre) {
+		for (Open& open : open_) {
+			if (open.used && tick > open.noteOn.tick) {
+				const Event& on = open.noteOn;
+				writer_->note({on.tick, tick - on.tick, on.part, on.lane, on.pitch, on.velocity});
+				counts_.sounding |= partBit(on.part);
+			}
+		}
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (track.started) {
+				track.finish(*writer_, tick);
+				writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+			}
+		}
+		writer_->end(tick, counts_.sounding);
+		writer_->nextSong(tick);
+		counts_.sounding = 0;
+		std::fill(std::begin(partStart_), std::end(partStart_), tick);
+		for (Open& open : open_) {
+			open.noteOn.tick = open.used ? tick : open.noteOn.tick;
+		}
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (track.started) {
+				Track next;
+				next.id = track.id;
+				next.started = true;
+				next.value = track.value;
+				next.endTick = tick;
+				next.origin = tick;
+				track = next;
+			}
+		}
+	}
+
+	/// A cut on `part` at `tick` (spec §17.6): a key change cuts its clip, or a re-roll starts its new track. Each of
+	/// the part's lanes ends there as split() ends it, its last node and base written, and goes on from the value it
+	/// has, from `tick`. So once the writer hears of the cut, every node it gets for the part is for the clip from
+	/// `tick`. Notes aren't touched: one that started before `tick` still goes to the clip it started in.
+	template <typename Centre>
+	void cutPart(uint8_t part, int32_t tick, Centre centre) {
+		endPart(part, tick, centre, false);
+		resumePart(part, tick, false);
+	}
+	/// A home on `part` moves at `tick` (SetHome, spec §17.2): endPart() with `hold`, then the writer moves the home,
+	/// then resumePart() with `restate`. A lane that has a value but never moved gets its hold node first, so its
+	/// automation keeps the old home's value up to `tick`; each lane then writes its value again at `tick`, at the new
+	/// home.
+	template <typename Centre>
+	void endPart(uint8_t part, int32_t tick, Centre centre, bool hold) {
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (!track.started || track.id.part != part) {
+				continue;
+			}
+			if (hold && !track.moved && tick > track.origin) {
+				track.moved = true;
+				track.write(*writer_, {track.origin, track.value}, false);
+			}
+			track.finish(*writer_, tick);
+			writer_->base(track.id, track.moved ? centre(track.id) : track.value);
+		}
+	}
+	void resumePart(uint8_t part, int32_t tick, bool restate) {
+		for (int32_t i = 0; i < counts_.sets * kTracksPerSet; i++) {
+			Track& track = tracks_[i];
+			if (!track.started || track.id.part != part) {
+				continue;
+			}
+			Track next;
+			next.id = track.id;
+			next.started = true;
+			next.value = track.value;
+			next.endTick = tick;
+			next.origin = tick;
+			if (restate && track.moved) {
+				next.moved = true;
+				next.write(*writer_, {tick, track.value}, false);
+			}
+			track = next;
+		}
+		partStart_[part] = tick;
+	}
+
 	/// Notes that found no room for their note-on, or whose note-off never came by finish(): 0 unless the core broke
 	/// its note-off promise (spec §2.2). A note-off with no note-on is a muted note's and isn't counted.
 	[[nodiscard]] uint32_t unpaired() const { return counts_.unpaired; }
@@ -160,6 +297,7 @@ private:
 		bool moved = false;   ///< It has written a node: it moves.
 		int8_t value = 0;     ///< The value the curve has reached at `endTick`.
 		int32_t endTick = 0;  ///< Where the played curve ends so far.
+		int32_t origin = 0;   ///< Where its song starts: 0, or a split's line (spec §17.5).
 		// The thinning, first a bar at a time: the bar's points (ramp ends, and a ramp's start after a hold under a
 		// bar), each on a step line, from `from`, the last point the cone took, under a bar before the bar's first.
 		uint8_t barCount = 0;
@@ -182,6 +320,8 @@ private:
 		void move(SongWriter& writer, int32_t tick, int8_t value, bool snap);
 		/// The song ends at `tick`: the last node is written, a tick before it at the latest.
 		void finish(SongWriter& writer, int32_t tick);
+		/// A node at `p`, the cone's new anchor.
+		void write(SongWriter& writer, Point p, bool interpolated);
 
 	private:
 		/// A ramp's end, on a step line: buffered until its bar ends.
@@ -191,7 +331,6 @@ private:
 		void endBar(SongWriter& writer);
 		/// A point the cone's line may pass through.
 		void conePoint(SongWriter& writer, Point p);
-		void write(SongWriter& writer, Point p, bool interpolated);
 		/// The pending point gets its node, a tick before `before` at the latest.
 		void flushPending(SongWriter& writer, int32_t before);
 	};
@@ -218,6 +357,8 @@ private:
 	uint8_t setSlot_[kMaxParts][kLaneSlots] = {};
 	Track tracks_[kMaxTracks];
 	Counts counts_;
+	/// Where each part's clip starts: the song's start, or the part's last cut (cutPart()).
+	int32_t partStart_[kMaxParts] = {};
 };
 
 } // namespace deluge::generative::compose

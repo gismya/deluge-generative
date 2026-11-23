@@ -58,6 +58,14 @@ public:
 	/// read from it, and each control snaps to the offset it had on the old one. Every other part keeps its homes.
 	/// Tick-safe: no allocation, no card. Only while a piece plays: stopped, the next start binds every part.
 	void rebindPart(const Roster& roster, const Genre& genre, int32_t part);
+	/// Capture (spec §17.6): `part`'s clip was cut and the clip after the cut, `clip`, is on the same Output. Its sets
+	/// move there with their homes, and each param they move starts at its home on `clip`, where writeNode() and
+	/// writeBase() write from here. Not for a new Output: rebindPart() reads that one's homes.
+	void moveToClip(int32_t part, InstrumentClip* clip);
+	/// Capture: a SetHome (spec §17.2) moves the home of the param `key` names (paramKey()) on `part`'s set for `lane`
+	/// to `home`, for the nodes and bases written from here. @return the home it had, or nullopt if no control moves
+	/// that param.
+	std::optional<int32_t> moveHome(uint8_t part, Lane lane, uint16_t key, int32_t home);
 	/// A Control event: each param the control moves ramps to home + the offset over `rampTicks` internal ticks, or
 	/// jumps there on a snap (spec §11.7).
 	void apply(const Event& event, int32_t rampTicks);
@@ -83,6 +91,10 @@ public:
 		outgoingBoundCount_ = 0;
 	}
 
+	/// A param as the steering log keys it on its Output (SetHome's and SetParam's `length`, spec §17.2): bits 13–14
+	/// its collection's index in its ParamManager, 8–12 a patch cable's source, 0–7 its param id (a cable's
+	/// destination param).
+	static uint16_t paramKey(int32_t collection, PatchSource source, int32_t param);
 	/// A home a player edit moved (spec §11.6), as the steering log keys it.
 	struct HomeEdit {
 		uint8_t part = 0;
@@ -91,7 +103,8 @@ public:
 		int32_t home = 0;
 	};
 	/// F3: the player set the param `stack` addresses to `value`. If a control moves it in the piece playing, its home
-	/// moves by the amount turned: home = value − the control's current offset (spec §11.6).
+	/// moves by the amount turned: home = value − the control's current offset (spec §11.6). A delay setup's feedback
+	/// while a delay Throw plays takes Space's share from Space's offset without the Throw (spec §11.4).
 	std::optional<HomeEdit> playerEdited(const ModelStackWithAutoParam& stack, int32_t value);
 	/// A CLIP fader tap (spec §13.5): sets the home of the param `stack` addresses, which then plays home plus its
 	/// control's current offset, written as a player edit so F3 logs it. Stopped, or for a param no control moves in
@@ -180,6 +193,9 @@ private:
 		/// feedback is then among Space's params even with a home of 0, and a Throw lifts it.
 		uint8_t throwDepth = 0;
 		uint8_t throwDelay = 0; ///< The delay Throw's level as last applied, percent (Event::throwDelay()).
+		/// Space's offset as last applied with no delay Throw playing (level 0): the offset without the Throw's spike,
+		/// which a player edit to the delay feedback during a Throw takes Space's share from (spec §11.4).
+		int8_t restSpace = 0;
 	};
 
 	/// A set with a delay setup: binds its delay feedback among Space's params if Space's own targets didn't, with a
@@ -215,8 +231,7 @@ private:
 	};
 	/// The bound param `stack` addresses in the piece playing, if any.
 	std::optional<Match> find(const ModelStackWithAutoParam& stack);
-	/// A bound param as the steering log keys it on its Output (SetHome's `length`): bits 13–14 its collection, 8–12 a
-	/// patch cable's source, 0–7 its param id (a cable's destination param).
+	/// A bound param as the steering log keys it on its Output: paramKey() of its collection, source and param.
 	static uint16_t paramKey(const Bound& bound);
 	/// A bound param's id in its collection, as a model stack carries it: for a patch cable, its source and
 	/// destination.

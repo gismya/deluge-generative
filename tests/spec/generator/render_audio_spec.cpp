@@ -1,6 +1,7 @@
 // Rough render (spec §21.2): a WAV from our own small voices, one subtractive voice plus a sample player for kit
 // rows, reading samples from pack/ and a local card-shaped folder.
 
+#include "generative/perform/one_shot.h"
 #include "harness.h"
 #include "render/render.h"
 #include "temp_path.h"
@@ -182,6 +183,29 @@ describe render_audio("Rough render audio", $ {
 		harness::render::Audio without = harness::render::renderAudio(rendering, {{scratch("empty").string()}});
 		expect(silent(left(without.wav), 0, 2000)).to_be_false();
 		expect(mentions(without.warnings, "909 Kick")).to_be_true();
+	});
+
+	it("cuts a lane sample of 2 s or more at its note-off, as the firmware's CUT mode does, and plays a shorter one out",
+	   _ {
+		// One figure for both sides (spec §10.4): the firmware sets a lane sample's repeat mode from it.
+		static_assert(perform::kOneShotMaxLengthMs == 2000);
+		static_assert(perform::playsOut(perform::sampleLengthMs(88155, 44100)));  // 1999 ms
+		static_assert(!perform::playsOut(perform::sampleLengthMs(88200, 44100))); // 2000 ms
+		fs::path card = scratch("cut");
+		writeSample(card / "SAMPLES/FX/Long.wav", 88200, 16000);
+		writeSample(card / "SAMPLES/FX/Short.wav", 88155, 16000);
+		harness::render::Rendering rendering = silentBar();
+		rendering.bars = 2;
+		rendering.events = {Event::noteOn(0, 3, Lane::Fall, 0, 127), Event::noteOff(96, 3, Lane::Fall, 0)};
+		constexpr size_t kOff = 20671; // a beat at 128 BPM
+		rendering.sounds.lane[static_cast<int32_t>(Lane::Fall)].set("SAMPLES/FX/Long.wav");
+		std::vector<int16_t> cut = left(harness::render::renderAudio(rendering, {{card.string()}}).wav);
+		expect(silent(cut, kOff - 100, kOff)).to_be_false();
+		expect(silent(cut, kOff + 1000, 88200)).to_be_true();
+		rendering.sounds.lane[static_cast<int32_t>(Lane::Fall)].set("SAMPLES/FX/Short.wav");
+		std::vector<int16_t> out = left(harness::render::renderAudio(rendering, {{card.string()}}).wav);
+		expect(silent(out, 88000, 88150)).to_be_false();
+		expect(silent(out, 88160, 100000)).to_be_true();
 	});
 
 	it("looks in pack/ before the card folder", _ {

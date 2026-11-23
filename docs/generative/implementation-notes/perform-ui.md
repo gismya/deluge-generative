@@ -38,6 +38,15 @@ otherwise.
   (the step before and this one, sampled once per step, so a hit flashes for two 16ths). Every frame the view calls
   its `refreshPlan()`, `sampleFlash()` and `clampScroll()` and reports what they return. It composes the map only when something reads it:
   on the SONG page, and in test builds on every page for `gen_arcmap` and `gen_arcrow`.
+- Trap (#454): nothing that runs in `graphicsRoutine()` may take more than about 1 ms. The scheduler can't preempt a
+  task, and the audio TX ring holds 2.9 ms, of which 2.1-2.4 ms is left when the frame starts. The whole Arc plan
+  (`Generator::planArc()`, 2.4-6 ms) ran there after every macro turn: one underrun a turn in Psytrance and Detroit.
+  The SONG page now plans `PerformView::kArcPlanStepsPerFrame` steps a frame (`ArcPlanner`, in `generator.h`), and
+  `ArcMapState` shows the last plan until the new one is done. A change while one is under way lets it finish and
+  then plans again, so turning faster than a plan takes still moves the map. A new roster or a stop empties the plan
+  at once. `ArcPlanner::begin()` copies everything the loop reads (macros, biases, the landing steps), so the piece
+  can step on or be freed between slices. Read a new per-frame cost with `perform_audio_margin.txt` (`gen_audio`,
+  `gen_audio_ui_timer`).
 - The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
   peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
   fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it
@@ -103,12 +112,13 @@ otherwise.
   replaces a part's Output must end in `bindKnobs()` (the swap reaction and `releaseOutput()` both do).
 - Every pad press under the sound editor and Perform's menus reaches `PerformView::padAction()` (F7):
   `shiftOpensSoundEditor()` (`generative/perform/grid_page.h`) picks the SHIFT + main pad shortcuts, leaving out the
-  KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR; a Perform menu (`editorOpen_` false) closes on a
+  KEYBOARD FILL pads and the CLIP page's NEW SOUND and SOUND EDITOR, and `shiftEditorPart()` the target (the song FX on
+  stock Performance view, whatever is focused); a Perform menu (`editorOpen_` false) closes on a
   press. A SHIFT + pad that doesn't move an open editor (a param the target lacks) puts the current Clip back.
 - With no current Clip, `getCurrentOutputType()` is NONE and the other current-Clip getters return null (`song.cpp`),
   so song-level editor paths never read null. Test builds fault on any null access: run the probe scripts after
   touching what the editor reaches.
-- The preset browser (`gui/ui/browser/perform_preset_browser.*`, §13.5) is its own `SlotBrowser`, not stock's
+- The sound browser (`gui/ui/browser/perform_sound_browser.*`, §13.5: the preset browser and the lane browser) is its own `SlotBrowser`, not stock's
   `LoadInstrumentPresetUI`, whose `currentFileChanged()` loads and swaps the instrument on every scroll step. Its
   `outputTypeToLoad` is NONE, as the sample and DX browsers' are: stock otherwise adds the current song's Instruments
   to the list, and in Perform those are the parts (the default synth among them, `SYNTHS/0`, which isn't on the card).
@@ -118,6 +128,22 @@ otherwise.
   End's pad acts only while Perform is on top (`endPadActs()`), as under every overlay (§13.5). Its choice goes to
   `PerformView::chooseSound()` after it has closed, so Perform is on top again when the press's popup shows.
   SYNTH's sound rule (a synth part: `PartSpec::synth()`) is the one `buildPartOutput()` uses.
+- The lane list (`gui/menu_item/generative/perform_lanes.*`) is a Perform menu opened by `openMenu()`, and a lane's
+  browser opens over it with `openUI()` (as stock's sample browser opens over the sound editor), so the browser's
+  `close()` lands back on the list. A choice closes the list too (`soundEditor.exitCompletely()`) before
+  `chooseSound()`, so Perform is on top for the press's popup. Where a browser opens is `perform::browserStart()`
+  (`generative/perform/sound_browser.h`): the pick's folder, the palette's, then SYNTHS or SAMPLES.
+- Trap: a leaf row in the sound editor (`shouldEnterSubmenu()` false) has its `selectButtonPress()` called, and what
+  it returns is dropped (`SoundEditor::buttonAction()`). A row that leads to a submenu enters it itself with
+  `soundEditor.enterSubmenu()` (the lane list's FX rows, `perform_lanes.cpp`).
+- Trap: `Browser::arrivedInNewFolder()`'s `defaultDirToAlsoTry` is **created** (`f_mkdir`) when it is missing too.
+  Pass only a top folder (SYNTHS, SAMPLES) there: a palette folder (`SYNTHS/GENERATIVE/FX`) would be made on a card
+  without the pack. The lane browser tries the palette folder with no default first, then the top folder.
+- The lane browser previews through stock's preview voice (`AudioEngine::previewSample()`), at the lane's volume from
+  `previewVolumeFor()` (F20, shared with stock's sample browser), reading the row's NoteRow param manager and the
+  Kit clip's. `AudioEngine::stopAnyPreviewing()` on every move, folder change and close. Presets preview through
+  `firmware::presetPreview` (#443, see [firmware](firmware.md)): the browser's `graphicsRoutine()` services it and stops
+  it on a start, and `PerformView::focusRegained()` stops it too, for a close that didn't go through `closeBrowser()`.
 - TAP (F4): stock `tapTempoButtonPress()` keeps the tap count, the first tap, the LED and its reset timer; under
   Perform it hands `PerformView::tapTempo()` only the taps' mean gap in samples, where stock would set the song's
   tempo, and returns at once under an external clock.
@@ -156,3 +182,55 @@ otherwise.
 - Trap: `MacroSteering` is inside `PerformSteering`, whose size moves `PerformAdapter::sink_`: growing it by 12 B
   broke `incomingStarts()`'s modulo-8 `static_assert` in the Release build only (the harness doesn't build the
   firmware). Grow it by a multiple of 8 (the bias hold's part is an `int16_t` for that).
+- X+PLAY reaches Perform through F14's `PerformAdapter::pressPlay()`, which reads the restart shortcut itself (X, or
+  CROSS SCREEN with accessibility shortcuts, as stock's `playButtonPressed()` does) and calls `pressRestart()`;
+  `playOrStop()` is PLAY without it. RESTART ▸ comes after RESET PART BIAS, then CAPTURE ▸, and BROWSER PREVIEW is the
+  last row (`perform_lane_browser.txt` reaches it with `encoder 3 20`, so keep it last): rows are added before it, and
+  scripts that count from the top don't move. A script that leaves the menu on a low row goes back to the top before
+  closing it (`perform_restart.txt`), since the menu remembers its row.
+- Capture marks (#144, spec §17.4): RECORD and MIDI RECORD both reach `PlaybackHandler::recordButtonPressed()`
+  (the panel's on a short press's release), which under Perform calls `PerformAdapter::pressMark()`; SHIFT+RECORD
+  resamples before that and uses the press up. What a press does, the dot, the RECORD LED, the CAPTURE peek's lines
+  and the CAPTURE menu's rows are the portable `generative/perform/capture.h`, read from the `SteeringLog`
+  (`current()`, `markPiece()`, `markedPieces()`); `captureStatus()` feeds `OledInput::capture`. The LED is asserted
+  every frame in `assertRecordLed()`, except while resampling or in MIDI learn, which own it. An earlier piece
+  unmarked in CAPTURE ▸ stays in the log until the next `beginPiece()`, which only flags it dropped; the steps after
+  close its room 4 KB at a time (`compactStep()`, from `NoteSink::compactLog()`), never in one move in the tick (#439
+  R1). Offsets are logical while a move runs: read a piece's header or records only once `compacting()` is false.
+- The SELECT-turn peeks go round RECIPE, QUEUE, CAPTURE (`selectEncoderAction()`); the first turn is still QUEUE to
+  the right and RECIPE to the left, which `perform_sidebar.txt` relies on.
+- Punch-ins on the KEYBOARD page (#301, §8.9, §13.5): `perform::PunchHolds` (`keyboard_page.h`) is the pads' 300 ms
+  rule, keyed by `punchKey()` (a LaneMute by its Lane, so a latched mute follows the lane across a genre change);
+  `PerformView::punchPadAction()` calls `PerformSteering::setPunch()` and, if the queue refuses, `refused()`. The
+  steering keeps what is on (stopped too) and re-sends it in `instanceStarts()`. The pads' test text is its own event,
+  `gen_punch` (`describePunches()`): probe scripts match `gen_keyboard` exactly (`perform_part_bias.txt` ends one
+  with `$`), so a new field there breaks them. The punch-in bytes sit in the padding after `fillShift_`: the
+  steering's size is pinned (the trap below); at the struct's end they grew it by 4 and broke the Release build.
+- Stock Performance view (KEYBOARD's second press, `Page::Performance`, `perform_view_performance.cpp`) is hosted, not
+  copied: Perform stays the root UI and calls stock `performanceView.padAction()` and `renderMainPads()` (into a
+  scratch image, diffed through `showMainPads()`), with no stock edit. Stock sets a param and starts stutter only
+  through `view.activeModControllableModelStack`, which must be the song (`onSong()` moves the knobs there for the
+  call when a part is focused), and its layout load reads stutter's options there too. The layout loads once per entry
+  (`enterPerformancePage()`, a card read: `REMIND_ME_OUTSIDE_CARD_ROUTINE` in the card routine), after clearing
+  `fxPress`'s held columns, which another song's session could have left. Stock pads pressed there are tracked in
+  `stockHeld_`, so their release reaches stock on any page and `releaseLostHolds()` lets go of a swallowed one. Stock's
+  own column editing opens `performanceView` as a UI, whose buttons change the root UI: it isn't reachable from
+  Perform.
+- Logging (§17.2): `SetPunch` lands through `apply()` and logs generically; the stock page's param edits reach the log
+  through stock's `setCurrentValueInResponseToUserInput()` → F3's `playerEdited()` → a song-target `SetParam`.
+  Stutter isn't a param edit: `graphicsRoutine()` samples `UI_MODE_STUTTERING` each frame and pushes `SetStutter`
+  (logged only) on a change, so a gold knob's stutter is logged too.
+- `generative/firmware/pump.h` is the swaps' service pump, not the Pump punch-in: that is `sidechain_pump.*`.
+- Trap (#437 R1): a driver-side effect the core switches on (Pump's ducking) must be let go at every instance start,
+  not only at a stop. A release made after the last instance's final decision (12 ticks before a restart's line or a
+  transition's start step) never reaches that instance, and a restart's `pieceStarts()` empties the queue: the off is
+  lost. `PerformAdapter::instanceStarts()` calls `sidechainPump.release()` before the steering re-sends what is on, and
+  the pump remembers each ducked part's own Output and clip, so it lets go of a transition's outgoing roster too
+  (`sink_.roster` is already the incoming one there). A logged-only state (stutter's `SetStutter`) has the same
+  window: the steering keeps it (`stutterOn_`) and re-sends it at step 0.
+- RESTART ▸ has two rows, AS IT IS then AS IT BEGAN, and the submenu remembers its row too: a script that picks AS IT
+  BEGAN puts the submenu back on AS IT IS (`encoder 3 -20` inside it) before leaving, or `perform_restart.txt`'s
+  SELECT, SELECT picks AS IT BEGAN (`perform_restart_began.txt` does).
+- Trap (#413 part 2, merging #437): the restart's two flags and `stutterOn_` share the last padding byte before
+  `fillSent_`; they are 1-bit bitfields there. Another flag in that run grows the steering by 4 and breaks the pinned
+  size (Release build only): find padding elsewhere, or make it a bit beside them.

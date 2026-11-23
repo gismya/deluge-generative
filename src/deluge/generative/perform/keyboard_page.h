@@ -16,7 +16,8 @@
  */
 
 // The KEYBOARD page (spec §13.5), Perform's performance pads: the four macros as faders on columns 1–8, two columns
-// each, the phrase position on column 14's top four rows, and FILL on columns 14–16's bottom four. A fader tap sets
+// each, the Drums lanes' mutes on columns 9–10, the phrase position on column 14's top four rows, the other punch-ins
+// on columns 15–16's top rows, and FILL on columns 14–16's bottom four. A fader tap sets
 // the macro's centre; a hold plays a temporary value that springs back on release, as stock's PerformanceView pads do.
 // The page composes as portable cells: the Perform view turns them into colours, and the test port's gen_keyboard
 // text is made from the same cells.
@@ -26,6 +27,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/part_bias.h"
 #include "generative/core/recipe.h"
+#include "generative/core/steering.h"
 #include <cstdint>
 
 namespace deluge::generative::perform {
@@ -44,7 +46,20 @@ constexpr int32_t kFillColumns = 3;
 constexpr int32_t kFillFirstRow = 4;
 constexpr int32_t kFillRows = 4;
 
-enum class KeyboardPad : uint8_t { None, Fader, Fill };
+/// Columns 9–10 (counted from 0: 8 and 9), top to bottom then left to right: a mute pad per Drums lane, in the part's
+/// lane order (spec §8.9, §13.5).
+constexpr int32_t kLaneMuteColumn = 8;
+constexpr int32_t kLaneMuteColumns = 2;
+static_assert(kLaneMuteColumns * 8 >= kNumDrumLanes, "every Drums lane has a pad");
+/// Columns 15–16, rows 1–3 from the top (counted from 0): the other punch-ins, two to a row in kPunchPads' order.
+constexpr int32_t kPunchFirstColumn = 14;
+constexpr int32_t kPunchColumns = 2;
+constexpr PunchIn kPunchPads[] = {PunchIn::HatRoll, PunchIn::SnareRoll, PunchIn::Flam, PunchIn::DoubleKick,
+                                  PunchIn::Pump};
+constexpr int32_t kNumPunchPads = sizeof(kPunchPads) / sizeof(kPunchPads[0]);
+static_assert(kNumPunchPads == kNumPunchIns - 1, "a pad per punch-in but LaneMute");
+
+enum class KeyboardPad : uint8_t { None, Fader, Fill, LaneMute, Punch };
 /// What a main pad does on the KEYBOARD page, by column and row counted from the top from 0.
 KeyboardPad keyboardPad(int32_t x, int32_t row);
 /// The macro whose fader holds column `x` (0 to kMacroFaderColumns - 1).
@@ -57,12 +72,62 @@ int32_t fillPad(int32_t x, int32_t row);
 /// What a main pad on the KEYBOARD page is, worked out once for its press, its release and whether it is held.
 struct KeyboardPadAt {
 	KeyboardPad kind = KeyboardPad::None;
-	Macro macro = Macro::Energy; ///< Fader: whose fader
-	int32_t level = 0;           ///< Fader: the row's level, 0 the bottom
-	int32_t pad = 0;             ///< Fader: its pad on the fader (macroFaderPad). Fill: its FillHolds holder
+	Macro macro = Macro::Energy;       ///< Fader: whose fader
+	int32_t level = 0;                 ///< Fader: the row's level, 0 the bottom
+	int32_t pad = 0;                   ///< Fader: its pad on the fader (macroFaderPad). Fill: its FillHolds holder.
+	                                   ///< LaneMute: the lane's index in the Drums part
+	PunchIn punch = PunchIn::LaneMute; ///< LaneMute, Punch: the punch-in
 };
 /// Main pad (`x`, `row`), its row counted from the top from 0.
 KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row);
+
+/// What a punch-in pad press or release asks the OLED popup to do (spec §13.5).
+enum class PunchPopup : uint8_t {
+	None,   ///< leave any popup alone
+	Hold,   ///< show this punch-in's name persistently while the pad is held
+	Brief,  ///< a tap latched it: show its name briefly (stock popup timeout)
+	Cancel, ///< let go and off: clear the popup now
+};
+
+/// The punch-in pads' presses (spec §13.5): the faders' 300 ms rule. A press turns an off punch-in on at once; let go
+/// within kMacroTapMs it latches, held longer it springs back off. A tap on a latched one turns it off as it is let
+/// go, a hold too. Several can be on at once. A pad is keyed by punchKey().
+class PunchHolds {
+public:
+	/// The first key past the lanes': a punch-in other than LaneMute is this plus its value.
+	static constexpr int32_t kFirstPunchKey = 16;
+	static_assert(kNumDrumLanes <= kFirstPunchKey, "every Drums lane's key comes before the punch-ins'");
+	/// A LaneMute's key is its lane's (a Drums lane, 0 to kNumDrumLanes - 1), the others' kFirstPunchKey on.
+	static constexpr int32_t punchKey(PunchIn punch, Lane lane) {
+		return punch == PunchIn::LaneMute ? static_cast<int32_t>(lane) : kFirstPunchKey + static_cast<int32_t>(punch);
+	}
+
+	/// The pad keyed `key` went down at `now`. @return Whether its punch-in turns on now: it was off.
+	bool press(int32_t key, uint32_t now);
+	/// It went up at `now`. `tapTime` is kMacroTapMs in `now`'s units. @return Whether its punch-in turns off now.
+	bool release(int32_t key, uint32_t now, uint32_t tapTime);
+	/// The steering refused the change press() or release() asked for (a full queue): the pad stays as it was, on
+	/// (`on`) or off, and isn't held.
+	void refused(int32_t key, bool on);
+	/// The popup action for `key` after a press (`down` true) or release (`down` false) that was not refused.
+	PunchPopup popup(int32_t key, bool down);
+	/// Clears popup ownership when an overlay opens or Perform closes. @return Whether a punch-in popup was active.
+	bool dismissPopup();
+	/// Everything off and let go: a new entry starts with no punch-in.
+	void clear() { *this = {}; }
+
+	[[nodiscard]] bool on(int32_t key) const { return (on_ >> key & 1) != 0; }
+	[[nodiscard]] bool held(int32_t key) const { return (held_ >> key & 1) != 0; }
+
+private:
+	static constexpr int32_t kKeys = kFirstPunchKey + kNumPunchIns;
+	static_assert(kKeys <= 32, "every key fits a bit");
+	uint32_t on_ = 0;
+	uint32_t held_ = 0;
+	uint32_t wasOn_ = 0; ///< on as it went down: a release turns it off
+	uint32_t pressedAt_[kKeys] = {};
+	int8_t popupKey_ = -1; ///< key whose persistent popup is up, or -1
+};
 
 /// The macro units a fader level sets: its share of 0–50 in whole points, to the nearest.
 int32_t macroLevelUnits(int32_t level);
@@ -197,6 +262,10 @@ struct KeyboardPageInput {
 	int32_t phraseSteps = 8 * kStepsPerBar;
 	/// FILL is on: a FILL holder is down (FillHolds), or MIDI holds the song's fill mode.
 	bool fill = false;
+	/// The Drums part's lanes, in its order (none when the genre has no Drums part), and the punch-in pads.
+	const Lane* drumLanes = nullptr;
+	int32_t drumLaneCount = 0;
+	const PunchHolds* punches = nullptr;
 };
 
 struct KeyboardCell {
@@ -208,12 +277,15 @@ struct KeyboardCell {
 		Phrase,    ///< a phrase quarter: `lit` once it has passed
 		PhraseNow, ///< the phrase quarter playing
 		Fill,      ///< `lit` while FILL is on
+		LaneMute,  ///< a Drums lane's mute: `lit` while muted
+		Punch,     ///< `punch`'s pad: `lit` while on
 	};
 	Look look = Look::Off;
 	bool lit = false;
 	/// Fader cells: the fader is held, and shows its held value.
 	bool held = false;
 	Macro macro = Macro::Energy;
+	PunchIn punch = PunchIn::LaneMute; ///< Punch
 	bool operator==(const KeyboardCell&) const = default;
 };
 
@@ -236,5 +308,12 @@ constexpr int32_t kKeyboardTextChars = 63;
 /// when stopped), the phrase cell (1–4 from the top, - when stopped) and FILL.
 /// "E=5h/3 D=4/4 C=4/4 M=4/5 phrase=2 fill=0".
 void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars + 1]);
+
+/// The longest gen_punch text is 29 characters.
+constexpr int32_t kPunchTextChars = 31;
+/// The test port's gen_punch text: a character per Drums lane pad, in the part's lane order (m muted, M held, .
+/// playing), and per punch-in pad (its initial while on, lower case while held, . off: H S F D P).
+/// "lanes=m...M.. punch=H...P".
+void describePunches(const KeyboardPage& page, char (&out)[kPunchTextChars + 1]);
 
 } // namespace deluge::generative::perform

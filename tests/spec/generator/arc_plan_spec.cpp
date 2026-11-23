@@ -51,13 +51,14 @@ uint8_t notFx(const Genre& genre) {
 /// empty if every one matches. It stops at the phrase the plan marks ended, where the piece must have ended: no
 /// note-on from its line on.
 std::string unlikeHeard(Piece& piece, const ArcPlan& plan, int32_t from, int32_t to, uint8_t parts = 0b011) {
+	const int32_t phraseSteps = piece.generator.recipe().genre->phraseSteps();
 	for (int32_t phrase = from; phrase < to; phrase++) {
 		// Heard once its last step is: the history holds only the latest kPhrases phrases.
-		piece.decideBefore((phrase + 1) * kPhraseSteps + 1);
+		piece.decideBefore((phrase + 1) * phraseSteps + 1);
 		ArcPhrase heard;
 		const ArcPhrase* planned = plan.at(phrase);
 		if (planned != nullptr && planned->ended) {
-			const int32_t line = stepTick(phrase * kPhraseSteps);
+			const int32_t line = stepTick(phrase * phraseSteps);
 			const bool playedOn = std::ranges::any_of(
 			    piece.sink.events, [&](const Event& e) { return e.kind == EventKind::NoteOn && e.tick >= line; });
 			return piece.driver.ended() && !playedOn
@@ -229,6 +230,86 @@ describe arc_plan("Arc plan", $ {
 				}
 			}
 		}
+	});
+
+	it("agrees with the notes on genres with full-phrase drop-outs (Psytrance and Ambient, #457)", _ {
+		int32_t psyFullRests = 0;
+		for (uint32_t seed = 1; seed <= 12; seed++) {
+			for (int32_t motion : {macroPoints(25), macroPoints(50)}) {
+				Piece piece(true, seed, motion, &genres::psytranceClassic);
+				const ArcPlan plan = piece.plan();
+				const std::string name = caseName(genres::psytranceClassic, seed, motion, true);
+				expect(name + unlikeHeard(piece, plan, 0, ArcPlan::kMaxPhrases, notFx(genres::psytranceClassic)))
+				    .to_equal(name);
+				// Count Groove phrases where the 16-bar Arp rest cleared ARP (part 4) in the plan.
+				for (int32_t phrase = 0; phrase < ArcPlan::kMaxPhrases; phrase++) {
+					const ArcPhrase* p = plan.at(phrase);
+					if (p->kind == SectionKind::Groove && (p->sounds & partBit(4)) == 0) {
+						psyFullRests++;
+					}
+				}
+			}
+		}
+		expect(psyFullRests).to_be_greater_than(0);
+
+		int32_t ambientFullRests = 0;
+		// Check Ambient's anchored/held parts (Drums, Bass, Pad, Drone); its unanchored sparse bells (Lead, part 4)
+		// can legitimately play zero notes across an 8-bar Break even while their gate is open.
+		const uint8_t ambientParts = static_cast<uint8_t>(notFx(genres::ambient) & ~partBit(4));
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			Piece piece(true, seed, macroPoints(25), &genres::ambient);
+			const ArcPlan plan = piece.plan();
+			const std::string name = caseName(genres::ambient, seed, macroPoints(25), true);
+			expect(name + unlikeHeard(piece, plan, 0, ArcPlan::kMaxPhrases, ambientParts)).to_equal(name);
+			for (int32_t phrase = 0; phrase < ArcPlan::kMaxPhrases; phrase++) {
+				const ArcPhrase* p = plan.at(phrase);
+				if (p->kind == SectionKind::Groove && (p->sounds & partBit(1)) == 0) {
+					ambientFullRests++;
+				}
+			}
+		}
+		expect(ambientFullRests).to_be_greater_than(0);
+	});
+
+	it("plans in slices to the plan it works out at once (ArcPlanner, #454)", _ {
+		const Command presses[] = {
+		    {CommandKind::SetMute, 1, kPress},
+		    {CommandKind::SetSolo, 1, kPress},
+		    {CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0},
+		    {CommandKind::End, 0, 1},
+		    {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Energy), macroPoints(45)},
+		};
+		for (const Genre* genre : kTechnos) {
+			for (const Command& press : presses) {
+				Piece piece(true, 2, macroPoints(25), genre);
+				piece.decideBefore(kPhraseSteps + 40);
+				piece.pushAndDecide(press);
+				ArcPlanner planner;
+				planner.begin(piece.generator);
+				int32_t slices = 1;
+				while (!planner.advance(100)) {
+					slices++;
+				}
+				const std::string name = std::string(genre->name) + " command " + std::to_string(int(press.kind));
+				expect(name + (planner.plan() == piece.plan() ? "" : " differs")).to_equal(name);
+				expect(slices > 10).to_be_true();
+				expect(planner.planning()).to_be_false();
+				expect(planner.advance(100)).to_be_true(); // nothing under way
+			}
+		}
+	});
+
+	it("plans a piece as it was at begin(), while the piece steps on", _ {
+		Piece piece(true);
+		piece.decideBefore(kPhraseSteps + 5);
+		piece.pushAndDecide({CommandKind::SetMute, 1, kPress});
+		const ArcPlan atOnce = piece.plan();
+		ArcPlanner planner;
+		planner.begin(piece.generator);
+		expect(planner.advance(300)).to_be_false();
+		piece.decideBefore(kPhraseSteps + 60); // the mute lands, and the Arc moves on
+		for (int32_t i = 0; i < 100 && !planner.advance(300); i++) {}
+		expect(planner.plan() == atOnce).to_be_true();
 	});
 });
 

@@ -31,13 +31,17 @@ otherwise.
   clang `-Werror` flags reach it. To move it, change the commit and the SHA256 together and run both harness builds.
 - One harness spec on its own: `./dbt test --generator -n` builds them, then
   `./dbt exec "ctest -C Debug --test-dir build/tests -R <name>_spec --output-on-failure"`. ctest is only inside
-  `./dbt exec`, and the build is multi-config: without `-C Debug` every test shows "Not Run".
+  `./dbt exec`, and the build is multi-config: without `-C Debug` every test shows "Not Run". `-n` prints the binary it
+  built; run that one (`<binary> <name>_spec --verbose`). `check_all.py` builds only `build/tests-sanitize`, so after a
+  plain `-n` its binary there is stale (`--sanitize -n` rebuilds it): the "`--no-run` didn't rebuild" of #436.
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
   the commit hook's reformat then lands in the next `--amend`. Don't name a local `it` (CppSpec's macro). Specs reach
   `pack/` and fixtures through `GENERATOR_REPO_DIR`. Group `it`s inside the `describe` with `context(...)`: a nested
-  `describe(...)` compiles but its `it`s never run, and the run still passes.
+  `describe(...)` compiles but its `it`s never run, and the run still passes (#143). The
+  `generative-spec-no-nested-describe` pre-commit hook (`scripts/lint/generative_rules.py`) refuses one in any
+  `tests/spec/**/*_spec.cpp`.
 - Don't edit a harness header while `./dbt test --generator` builds. An object that started compiling before the edit
   and finished after it is newer than the header, so ninja keeps it, with the old layout: the specs then segfault at
   once (`generator_specs transitions_spec` printing nothing). `touch` the header and build again.
@@ -85,6 +89,10 @@ otherwise.
     first time. An update never writes a dump that lost events.
   - A retune that moves a fact spec §4.5 states (tempo range, scales, roster) also fails the subgenre's identity spec
     (`acid_techno_spec` and the like), which mirrors §4.5: edit both in the retune's commit.
+  - A version bump of techno-acid fails three delugemu scripts, not any harness spec: the Recipe-load fixtures
+    (`scripts/generative/fixtures/recipe_load/RECIPES/LOAD OK`, `MISSING`, `BROKEN`) hold its current version, and
+    `compose_recipe_load.txt`, `perform_recipe_load.txt` and `perform_generative_menu.txt` expect it
+    (`version=N`, `genre=N`). Bump them with it (#423). The identity specs of House, Dub, Psytrance and Ambient pin their versions.
   - A `kFormat` bump doesn't excuse a changed `fingerprint` line whose parenthesized text stayed the same: the
     fingerprint doesn't depend on the dump. A change to how `stream_fingerprint.h` hashes or picks its pieces edits
     that text in `goldenText()` along with the `kFormat` bump.
@@ -99,3 +107,11 @@ otherwise.
   - CppSpec keeps the `const char*` an `it` is given: a title built at run time (one per genre) must outlive the
     spec, as `kGoldenTitles` does. A name in a spec's namespace that matches its `describe` (`golden`) or CppSpec's
     own (`describe`) is ambiguous.
+
+## The harness's card (#448)
+
+- `log_store.h`: `MemoryLogStore` stands in for the card-log task. Hook and `play()` drain the driver's log after
+  every call, as the task runs between ticks; a spec that drives a `SteeringLog` itself drains (`store.drain()`) or
+  the ring fills (a stall) and a kept piece's header is never taken (the next piece doesn't open). Read pieces with
+  `harness::image(log, i)` (whole, the playing one too) or `store.stored(i)` (the file alone, through `readImage()`,
+  as Capture reads it). A `LogRecord`'s path points into its image: keep the `PieceImage` alive while reading it.

@@ -32,6 +32,7 @@ struct Genre;
 struct PartSpec;
 struct SoundPath;
 struct SoundPicks;
+struct SoundChoice;
 
 // ---- Palette data (slot 8) ----
 
@@ -110,6 +111,9 @@ struct DrumMachine {
 struct MachineWeight {
 	const DrumMachine* machine = nullptr;
 	uint8_t weight = 1;
+	/// Whether the genre's idiomatic swaps apply when this machine is rolled (spec §10.2). False: this machine always
+	/// plays pure, with no swaps (Dub's CR78).
+	bool swaps = true;
 };
 
 /// An idiomatic swap: one Drums lane plays `tag` (a tag or an exact path) instead of the kit's machine.
@@ -251,10 +255,22 @@ bool rollIncomingSounds(const Genre& incoming, const Genre& playing, const Palet
 /// (spec §13.5). False for a Kit part (Drums, FX) and a part the genre doesn't have.
 [[nodiscard]] bool synthPart(const Genre& genre, int32_t part);
 
-/// A sound pick the player chose (spec §10.1, §13.5): `path` becomes synth `part`'s pick, whether or not the
-/// palette lists it. Every other part's and lane's picks stay. False, with nothing changed, unless synthPart() and
-/// `path` isn't empty.
-bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds);
+/// Whether `part` of `genre` plays `lane`: one of a Drums or FX part's lanes, as its lane list shows them (spec
+/// §13.5). False for a synth part, Lane::None and a part the genre doesn't have.
+[[nodiscard]] bool partPlaysLane(const Genre& genre, int32_t part, Lane lane);
+
+/// Whether `lane`'s pick may be a synth preset (spec §10.5): an FX lane whose palette entry lists presets (Siren, and
+/// the Riser, Fall and Impact fallbacks). Its lane browser asks SAMPLE or SYNTH PRESET first (spec §13.5).
+[[nodiscard]] bool laneTakesPreset(const Palette& palette, Lane lane);
+
+/// Whether `choice` names something `part` has: a synth part's preset (no lane) or a lane the part plays, with a
+/// path.
+[[nodiscard]] bool choiceFits(const Genre& genre, int32_t part, const SoundChoice& choice);
+
+/// A sound the player chose (spec §10.1, §13.5): `choice`'s path becomes `part`'s pick, or its lane's, whether or not
+/// the palette lists it. Every other part's and lane's picks stay: choosing one hat leaves the other's. False, with
+/// nothing changed, unless choiceFits().
+bool chooseSound(const Genre& genre, int32_t part, const SoundChoice& choice, SoundPicks& sounds);
 
 // ---- Loading with fallback (spec §10.1, §10.2, §10.5, §10.7) ----
 
@@ -318,7 +334,9 @@ struct SoundLoad {
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader);
 
 /// Loads a lane: its pick, then the other files its tags allow (found a few per folder scan), then for FX lanes its
-/// synth presets (spec §10.2, §10.5). Returns CardError if the lister or the loader reports one.
+/// synth presets (spec §10.2, §10.5). An FX lane's pick that isn't an audio file is a preset (a chosen one, spec
+/// §13.5), loaded with its palette entry's control ranges, or the defaults where the palette doesn't list it. Returns
+/// CardError if the lister or the loader reports one.
 SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, FolderLister& lister, SoundLoader& loader);
 
 } // namespace deluge::generative

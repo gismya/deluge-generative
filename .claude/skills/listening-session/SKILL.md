@@ -48,7 +48,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
    - **Card text is short and plain.** The owner reads it while listening, so each card must say in a few seconds what changes and what to listen for:
      - **What changes:** one sentence per option, in musical terms ("the bells play half as many notes, with empty bars"), not table names, variant ids or code.
      - **Listen for:** one line, naming the part and where in the clip ("the Pad at each chord change, from 0:08").
-     - At most about 60 words of text per card, besides the clip labels. Measurements, harness results, diffs and caveats go in `variants.md`, not on the card; link it once at the top of the page.
+     - At most about 60 words of text per card, besides the clip labels (a whole-song card's timeline may need more: give it `max_words`). Line breaks in card text show on the page. Measurements, harness results, diffs and caveats go in `variants.md`, not on the card; link it once at the top of the page.
      - Clip labels name the option and what's soloed ("Proposed, Pad alone"), not file names.
    - **Answer controls on each card:** a pick per option, "keep as is", "can't tell", and a free-text note. Answers are kept in `localStorage`.
    - **An Export button:** it produces one Markdown block with a Copy button. The block opens with the line `Listening-session answers (<genre>, round <n>, <session folder>): handle them with the listening-session skill.` That line makes whoever reads the pasted block load this skill. The block then lists, per card: the ticket, the pick, the note and the clips compared. It also carries the "Later rounds" list.

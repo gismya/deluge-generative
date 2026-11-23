@@ -7,7 +7,7 @@
 # gen_transition_preload'. gen_pad_redraws main= counts a phrase's SONG-page redraws.
 # gen_entry done ms= is H9 (OK to Perform's song swapped in), gen_h16 culled= names the last culled voice's part
 # (H16), gen_left delete_us= the delete of Perform's song with Detroit's six parts and Ttt's cached samples, and
-# gen_arcplan us= planArc's time with six parts.
+# gen_arcplan us= slices= the slowest frame's slice of the plan with six parts, and the frames it took.
 # needs: SONGS/Ttt.XML on the card (the desk Deluge's; delugemu's card has no songs), so check_all.py skips it
 # covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/adapter_timing.*
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/firmware/retirements.*

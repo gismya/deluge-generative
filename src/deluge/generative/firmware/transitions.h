@@ -51,6 +51,7 @@ public:
 	using TransitionLifecycle::holdsStart;
 	using TransitionLifecycle::pending;
 	using TransitionLifecycle::phase;
+	using TransitionLifecycle::playWaits;
 	using TransitionLifecycle::preloading;
 	using TransitionLifecycle::starts;
 	using TransitionLifecycle::startWhenLoaded;
@@ -70,6 +71,9 @@ public:
 	Request load(const RecipeFile& file, const perform::RecipeName& name, TransitionStyle style);
 	/// Perform's song is going: the incoming roster goes with it.
 	void forget();
+	/// The Current Recipe's swing interval changed in the tick (a restart AS IT BEGAN): the song's follows at the
+	/// pump's next call, in task context, as after a transition's start step.
+	void swingIntervalFollows() { swingIntervalDue_ = true; }
 	/// Where the incoming roster lies in Transitions: the start step's copy (PerformAdapter::incomingStarts()) needs
 	/// it to differ, modulo 8, from where it goes.
 	[[nodiscard]] static constexpr size_t incomingOffset();

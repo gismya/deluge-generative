@@ -41,6 +41,12 @@
 
 namespace deluge::generative::perform {
 
+/// Where a restart starts the piece from (spec §13.2).
+enum class RestartFrom : uint8_t {
+	AsItIs,    ///< The Current Recipe as the player left it.
+	AsItBegan, ///< The piece's start state, from its header in the steering log (spec §17.2).
+};
+
 /// How a key change acted, for the test port.
 enum class KeySet : uint8_t { Stopped, Queued, Refused };
 
@@ -149,6 +155,39 @@ public:
 	/// A tap on End: cancels it while it waits. Nothing to do when no End is armed or queued.
 	PressOutcome cancelEnd();
 
+	// ---- Restart (spec §13.2) ----
+
+	/// X+PLAY or RESTART ▸ AS IT IS while a piece plays: the piece starts again at the next bar line, from bar 1 with
+	/// its Intro, from the Current Recipe as it is then; with `from` AsItBegan (RESTART ▸ AS IT BEGAN, its sounds
+	/// loaded), from the piece's start state (restartOnLine()). Pressed again while it waits, it cancels; BACK does
+	/// too. Refused while a transition is pending (spec §12.9). Nothing to do while stopped, where the adapter starts
+	/// the piece as PLAY does.
+	PressOutcome pressRestart(RestartFrom from = RestartFrom::AsItIs);
+	/// AS IT BEGAN's sounds preload before its restart is pressed (the adapter's): a restart is ahead meanwhile.
+	void restartPreloads(bool preloading) { restartPreloading_ = preloading; }
+	/// Whether a restart is ahead: AS IT BEGAN's sounds preloading, pressed and not yet taken from the queue, waiting
+	/// in the core's pending list, or landed and waiting for its line, where pieceStarts() empties the queue. A
+	/// transition request is refused meanwhile (TransitionLifecycle::request()).
+	[[nodiscard]] bool restartAhead() const { return restartPreloading_ || restartQueued(); }
+	/// Where the restart ahead starts the piece from: what it was pressed with.
+	[[nodiscard]] RestartFrom restartFrom() const { return restartFrom_; }
+	/// A piece starts on `generator` from the Current Recipe, in Groove with `groove` (SHIFT+PLAY), and the steering
+	/// with it (pieceStarts()): PLAY from stop, and a restart's line. The adapter follows it with its instance start
+	/// (instanceStarts()), so a FILL or KEYBOARD fader still held plays from the new piece's start.
+	void startFromCurrentRecipe(Generator& generator, bool groove);
+	/// The restart's line, from the adapter's NoteSink::restartPiece(): what landed on the line (a take, an octave
+	/// shift) goes into the Current Recipe first, as the tick's recordLanded() would after the call, then
+	/// startFromCurrentRecipe() (AS IT IS). So a call that comes past the line plays what an on-time one does.
+	void restartAsItIs(Generator& generator);
+	/// The restart's line, from the adapter's NoteSink::restartPiece(): AS IT BEGAN from `began`, the header of the
+	/// piece that played, when it was pressed so and the piece has one (else AS IT IS). The Current Recipe becomes the
+	/// header's: its Recipe (macros, octave shifts, Part biases, key, tempo and swing among them), seed and takes, as
+	/// the piece began. The adapter restores the sounds and the params (spec §13.2).
+	void restartOnLine(Generator& generator, const PieceStart* began);
+	/// AS IT BEGAN while stopped, before the start: the Current Recipe becomes `began`'s, as restartOnLine() makes
+	/// it, and the song's swing interval and key follow (the adapter's swingIntervalChanged() and keyChanged()).
+	void restoreStopped(const PieceStart& began);
+
 	// ---- The sidebar and BACK (spec §13.4, §13.5) ----
 	// Each acts while a piece plays and does nothing when stopped (mutes, solos, holds and forces are lost on stop).
 
@@ -177,6 +216,23 @@ public:
 	void dropWaitingTakes();
 	/// FREEZE or CROSS-SCREEN: the part freezes, or thaws, on the next undecided step. Nothing while stopped.
 	PressOutcome pressFreeze(uint8_t part);
+	/// A KEYBOARD punch-in pad turns `punch` on or off (spec §8.9, §13.5): the core plays it from the next undecided
+	/// step. The steering keeps what is on, stopped too, and sends it again to each instance that starts
+	/// (instanceStarts()). @return false if Perform isn't in, the command names no punch-in, or the queue was full: the
+	/// pad stays as it was.
+	bool setPunch(PunchIn punch, Lane lane, bool on);
+	/// Stock's stutter started or ended (spec §17.2): logged where it lands, for Capture, and a stutter still on is
+	/// logged again at each instance's step 0 (instanceStarts()). @return false only if the queue was full while a
+	/// piece plays: the caller tries again. While stopped there is nothing to log.
+	bool setStutter(bool on) {
+		if (entered_ && !leaving_ && playing() != nullptr && !queue_.push({CommandKind::SetStutter, 0, on ? 1 : 0})) {
+			return false;
+		}
+		stutterOn_ = on;
+		return true;
+	}
+	/// The punch-ins on, as the pads last set them.
+	[[nodiscard]] PunchIns punchIns() const { return {.lanes = punchLanes_, .effects = punchEffects_}; }
 	/// `part`'s takes as the CLIP page and the SEED + TAKES rows show them: playing, waiting and the newest made.
 	[[nodiscard, gnu::noinline]] TakeRow takeRow(int32_t part) const;
 	/// A Y turn or a SEED + TAKES turn: the take one back or forward (`direction`) from `row`'s waiting take, or else
@@ -361,6 +417,10 @@ private:
 	[[nodiscard]] int32_t newestTake(int32_t part) const;
 	/// sampleFill()'s push, when FILL went down or up.
 	void sendFill(bool down);
+	/// A restart pressed and not yet taken from the queue, waiting in the core, or landed (restartAhead()).
+	[[nodiscard]] bool restartQueued() const;
+	/// The Current Recipe becomes `began`'s (AS IT BEGAN), and the menus read their values again.
+	void beginAgainFrom(const PieceStart& began);
 
 	/// First: the firmware's adapter keeps the queue at offset 20, which is baked into Generator::decideNextStep()'s
 	/// code (see PerformAdapter::steering_, and implementation-notes/core.md).
@@ -368,10 +428,20 @@ private:
 	/// Perform's song is in, and LEAVE hasn't started its teardown.
 	bool entered_ = false;
 	bool leaving_ = false;
+	/// Stock's stutter is on (setStutter()), in what was padding: see punchEffects_.
+	bool stutterOn_ = false;
+	/// The restart ahead's (pressRestart()), and AS IT BEGAN's sounds preloading (restartPreloads()): one byte between
+	/// them, the last of the padding before fillSent_ (the steering's size is pinned, see punchEffects_).
+	RestartFrom restartFrom_ : 1 = RestartFrom::AsItIs;
+	bool restartPreloading_ : 1 = false;
 	/// The SetFill value last pushed in this instance: kFillReleased while FILL is up.
 	int32_t fillSent_ = kFillReleased;
 	/// SHIFT was held as FILL went down (latchFillShift()).
 	bool fillShift_ = false;
+	/// The punch-ins on (PunchIns' fields), in what was padding: the steering's size moves PerformAdapter::sink_,
+	/// which the start step's modulo-8 `static_assert` pins (implementation-notes/perform-ui.md).
+	uint8_t punchEffects_ = 0;
+	uint16_t punchLanes_ = 0;
 	/// What the core's macros were steered with, and the KEYBOARD faders held: a start drops the queue.
 	MacroSteering macroSteering_;
 	uint32_t pieces_ = 0;
@@ -396,6 +466,9 @@ void PerformSteering<Adapter>::enter() {
 	leaving_ = false;
 	queue_.clear();
 	macroSteering_ = MacroSteering{};
+	punchEffects_ = 0; // an entry starts with no punch-in on
+	punchLanes_ = 0;
+	stutterOn_ = false;
 	newRecipe(); // a new Recipe: every take at 0 (spec §6.6)
 }
 
@@ -424,6 +497,25 @@ void PerformSteering<Adapter>::instanceStarts(bool fillDown) {
 		if (const int32_t part = macroSteering_.biasHeldOn(macro); part != MacroSteering::kNoPart) {
 			pushBias(part, macro, macroSteering_.heldBias(macro));
 		}
+	}
+	// Each punch-in still on, as FILL is (spec §8.9). The queue has just emptied, so it takes them all.
+	for (int32_t p = 0; p < kNumPunchIns; p++) {
+		const auto punch = static_cast<PunchIn>(p);
+		if (punch != PunchIn::LaneMute && punchIns().on(punch)) {
+			queue_.push({CommandKind::SetPunch, static_cast<uint8_t>(p), 1});
+		}
+	}
+	for (int32_t l = 0; l < kNumDrumLanes; l++) {
+		if (punchIns().muted(static_cast<Lane>(l))) {
+			Command mute{CommandKind::SetPunch, static_cast<uint8_t>(PunchIn::LaneMute), 1};
+			mute.lane = static_cast<Lane>(l);
+			queue_.push(mute);
+		}
+	}
+	// A stutter still on is logged again in the new instance; one let go since the last one's final decision isn't,
+	// so the new piece's log has no stutter (spec §17.2).
+	if (stutterOn_) {
+		queue_.push({CommandKind::SetStutter, 0, 1});
 	}
 }
 
@@ -547,6 +639,75 @@ PressOutcome PerformSteering<Adapter>::forceSection(SectionKind kind) {
 }
 
 template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressRestart(RestartFrom from) {
+	if (gated(PressKind::Restart)) {
+		return PressOutcome::ChangePending;
+	}
+	if (const Generator* piece = playing(); piece != nullptr && piece->restartLanded()) {
+		return PressOutcome::NothingToDo; // landed: it can't be cancelled, and the line empties the queue
+	}
+	const bool cancels = restartQueued();
+	const PressOutcome outcome = steer({CommandKind::Restart, 0, cancels ? 0 : 1});
+	if (!cancels && outcome == PressOutcome::Accepted) {
+		restartFrom_ = from;
+	}
+	return outcome;
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::restartQueued() const {
+	if (const Command* pressed = queue_.newest(CommandKind::Restart, 0)) {
+		return pressed->value != 0;
+	}
+	const Generator* piece = playing();
+	return piece != nullptr && (piece->restartWaiting() || piece->restartLanded());
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::startFromCurrentRecipe(Generator& generator, bool groove) {
+	generator.start(adapter().recipe(), adapter().seed(), adapter().takes(), groove);
+	pieceStarts(generator.recipe().macros);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restartAsItIs(Generator& generator) {
+	recordLanded(generator);
+	startFromCurrentRecipe(generator, false);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restartOnLine(Generator& generator, const PieceStart* began) {
+	const bool asItBegan = restartFrom_ == RestartFrom::AsItBegan && began != nullptr;
+	restartFrom_ = RestartFrom::AsItIs;
+	if (!asItBegan) {
+		restartAsItIs(generator);
+		return;
+	}
+	// Nothing that landed in the first run goes into the Current Recipe: the header's replaces it. The song's key
+	// follows the new piece's step 0 KeyScale event; its swing interval is the adapter's, outside the tick.
+	beginAgainFrom(*began);
+	startFromCurrentRecipe(generator, false);
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::restoreStopped(const PieceStart& began) {
+	beginAgainFrom(began);
+	const Recipe& recipe = adapter().recipe();
+	adapter().swingIntervalChanged(recipe.swingInterval);
+	adapter().keyChanged({recipe.keyRoot, recipe.scale});
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::beginAgainFrom(const PieceStart& began) {
+	// The same Recipe: its takes made stay (an earlier take can be played again), and so does every Part bias fader
+	// held, which instanceStarts() sends again as AS IT IS does.
+	adapter().recipe() = began.recipe;
+	adapter().seed() = began.seed;
+	adapter().takes() = began.takes;
+	pieces_++; // an open menu reads its key, takes and octaves again
+}
+
+template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
 	// It may cancel a waiting key change, take or octave shift: menus showing one read it again.
 	keyPresses_++;
@@ -598,6 +759,23 @@ void PerformSteering<Adapter>::dropWaitingTakes() {
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::pressFreeze(uint8_t part) {
 	return steer({CommandKind::SetFreeze, part, kPress});
+}
+
+template <typename Adapter>
+bool PerformSteering<Adapter>::setPunch(PunchIn punch, Lane lane, bool on) {
+	Command command{CommandKind::SetPunch, static_cast<uint8_t>(punch), on ? 1 : 0};
+	command.lane = lane;
+	PunchIns next = punchIns();
+	if (!entered_ || !next.set(command)) {
+		return false;
+	}
+	// While stopped or leaving, the next start sends it (instanceStarts()).
+	if (!leaving_ && playing() != nullptr && !queue_.push(command)) {
+		return false;
+	}
+	punchEffects_ = next.effects;
+	punchLanes_ = next.lanes;
+	return true;
 }
 
 template <typename Adapter>

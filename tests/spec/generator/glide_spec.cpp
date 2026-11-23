@@ -168,13 +168,13 @@ describe glide("Tempo and swing glides", $ {
 		piece.push({CommandKind::SetSwingInterval, 0, 1});
 		const int32_t landing = piece.generator.nextStep();
 		piece.runSteps(1);
-		expect(piece.log.size()).to_equal(3);
-		for (int32_t i = 0; i < piece.log.size(); i++) {
-			expect(piece.log.at(i).step).to_equal(landing);
+		expect(logSize(piece.log)).to_equal(3);
+		for (int32_t i = 0; i < logSize(piece.log); i++) {
+			expect(logAt(piece.log, i).step).to_equal(landing);
 		}
-		expect(piece.log.at(0).command.value).to_equal(13100);
-		expect(static_cast<int32_t>(piece.log.at(0).command.length)).to_equal(384);
-		expect(static_cast<int32_t>(piece.log.at(1).command.length)).to_equal(0);
+		expect(logAt(piece.log, 0).command.value).to_equal(13100);
+		expect(static_cast<int32_t>(logAt(piece.log, 0).command.length)).to_equal(384);
+		expect(static_cast<int32_t>(logAt(piece.log, 1).command.length)).to_equal(0);
 		expect(piece.generator.recipe().tempo).to_equal(13100);
 		expect(static_cast<int32_t>(piece.generator.recipe().swing)).to_equal(12);
 		expect(static_cast<int32_t>(piece.generator.recipe().swingInterval)).to_equal(1);

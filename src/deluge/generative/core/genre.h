@@ -238,6 +238,10 @@ struct LaneSpec {
 	DelaySetup delay;
 	/// A Siren lane's held note, in bars (spec §9.5, tuning): 1 up to the phrase. 0 on every other lane.
 	uint8_t heldBars = 0;
+	/// An optional alternate lane in the same Drums part that takes this lane's hits for whole Groove bars, drawn per
+	/// bar with per-mille chance `alternateChance` (spec §5.7; Dub's Rim -> Snare). Lane::None: never swaps.
+	Lane alternateLane = Lane::None;
+	int16_t alternateChance = 0;
 };
 
 /// One value a line step may draw, with its draw weight (spec §5.2): a Loop step's scale step from the chord root, or
@@ -322,6 +326,9 @@ struct LoopSpec {
 	/// The scale steps from the chord root a step may draw.
 	std::span<const LineWeight> degrees;
 	LineDraws draws;
+	/// When set, an anchor step always plays the chord root in the line's own octave (spec §5.2; Dub's Bass).
+	/// Loop only (loopNotesValid()).
+	bool rootOnAnchors = false;
 	ByComplexity slide = 150;
 	/// Chance a non-anchor step re-rolls at each pass end, at Motion 25 (tuning).
 	int16_t mutation = 120;
@@ -362,6 +369,11 @@ struct SustainSpec {
 	/// about two octaves wide (Ambient's Pad, spec §5.2). A Sustain voicing chords only, with no doubled root
 	/// (sustainValid()).
 	bool openVoicing = false;
+	/// With an open voicing: the per-mille chance, drawn on each bar line, that of the pairings that move the voices
+	/// least the voicing takes the one holding the most of them in place, so a shared note stays put and doesn't strike
+	/// (with holdsCommonTones). Otherwise it takes the first found, which may move a shared note an octave and strike
+	/// it there (Ambient's Pad: owner, round 2's HOLD, spec §5.2). 0 to 1000; only with openVoicing (sustainValid()).
+	uint16_t holdSharedChance = 0;
 };
 
 /// How a Stab part plays its chords (spec §5.2, §8.1): the voiced chord on each onset of its pattern.
@@ -742,14 +754,15 @@ constexpr int16_t kSameAsFillChance = -1;
 
 // ---- Drop-outs (slot 6, spec §8.8) ----
 
-/// One of a genre's drop-out entries: whole parts or Drums lanes falling silent for a few bars in a Groove.
+/// One of a genre's drop-out entries: whole parts, Drums lanes or FX lanes falling silent for a few bars in a Groove.
 struct DropOutEntry {
-	/// Whole Bass, Chords, Pad or Lead parts, and Drums lanes. Never an FX lane: section rules own them.
+	/// Whole Bass, Chords, Pad or Lead parts, and Drums or FX lanes listed in the roster.
 	PartsAndLanes mask;
 	/// Its length, 1, 2, 4 or 8 bars, from a bar line.
 	uint8_t bars = 1;
 	uint8_t weight = 1;
-	/// The part or lane in the mask whose last hits before it spike Space, held while it lasts (spec §11.4), or none.
+	/// The pitched part or Drums lane in the mask whose last hits before it spike Space, held while it lasts (spec
+	/// §11.4), or none. Never an FX lane.
 	PartsAndLanes throwTarget;
 };
 
@@ -902,6 +915,10 @@ struct Genre {
 	int16_t dropOutChance = 0;
 	/// Bars after a drop-out ends before the next may start, at least 1.
 	uint8_t dropOutGapBars = 1;
+	/// Bar grid drop-outs start on within a phrase (spec §8.8): a power of two dividing `phraseBars`, default 1 (any
+	/// bar line). Drawn a bar ahead, so only on bar lines where `(barInPhrase + 1) % dropOutGridBars == 0` (8 in a
+	/// 16-bar phrase draws on bars 7 and 15, landing on half-phrase and phrase lines).
+	uint8_t dropOutGridBars = 1;
 	// Slot 7: harmony
 	HarmonySpec harmony;
 	// Slot 8: the built-in palette (spec §10.1)
@@ -921,8 +938,9 @@ constexpr bool fitsPhrase(int32_t bars, int32_t phraseBars) {
 
 /// Whether the genre's Chord graph is one the walk can play (spec §7.4): a harmonic rhythm in whole bars that fits the
 /// phrase (fitsPhrase()), so a chord never straddles a phrase line; at most kMaxChordMoves moves, each between two
-/// different degrees of the 7; and a cadence target among them, or none. An empty slot is valid. Its Extension order
-/// tries each Extension once, the 6 after the 7 (extensionOrderValid()).
+/// different degrees of the 7; and a cadence target among them, or none. A loop (`loopChance` 0 or more) needs 2 whole
+/// chords in half a phrase. An empty slot is valid. Its Extension order tries each Extension once, the 6 after the 7
+/// (extensionOrderValid()).
 constexpr bool harmonyValid(const Genre& genre) {
 	if (!extensionOrderValid(genre.harmony.extensionOrder)) {
 		return false;
@@ -932,6 +950,12 @@ constexpr bool harmonyValid(const Genre& genre) {
 		return true;
 	}
 	if (!fitsPhrase(graph->barsPerChord, genre.phraseBars)) {
+		return false;
+	}
+	// A loop half a phrase long holds 2 whole chords or more, and every chance is per-mille.
+	if (graph->loopChance >= 0
+	    && (graph->loopChance > 1000 || graph->halfLoopChance < 0 || graph->halfLoopChance > 1000
+	        || graph->barsPerChord == 0 || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
 		return false;
 	}
 	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {
@@ -1350,6 +1374,9 @@ constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 constexpr bool loopNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Loop) {
+			if (part.loop.rootOnAnchors) {
+				return false;
+			}
 			continue;
 		}
 		if (part.loop.gateTicks > kTicksPerStep && !detail::longLoopNotesFit(part)) {
@@ -1553,19 +1580,49 @@ constexpr bool registersShiftValid(const Genre& genre) {
 	return true;
 }
 
-/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4 or 8 bars long and no longer than the
-/// phrase, so it never outlasts the phrase it starts in (the Arc plan leaves it out); its mask some whole pitched parts
-/// and Drums lanes (no FX lane, no Kit as a whole), its throw target one part or lane of the mask or none, and never
-/// every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar, and a chance a
-/// per-mille.
+/// Whether every lane's alternate lane (spec §5.7) is valid: chance in 0–1000, 0 when no alternate lane is set;
+/// when set, on a Drums part, naming a different non-FX lane of the same part that has no pattern pool of its own,
+/// from a lane that has one.
+constexpr bool alternateLanesValid(const Genre& genre) {
+	for (const PartSpec& part : genre.parts) {
+		for (const LaneSpec& lane : part.lanes) {
+			if (lane.alternateChance < 0 || lane.alternateChance > 1000) {
+				return false;
+			}
+			if (lane.alternateLane == Lane::None) {
+				if (lane.alternateChance != 0) {
+					return false;
+				}
+				continue;
+			}
+			if (part.role != Role::Drums || lane.pool.empty() || lane.alternateLane == lane.lane
+			    || isFxLane(lane.alternateLane)) {
+				return false;
+			}
+			const int32_t alt = laneIndexOf(part, lane.alternateLane);
+			if (alt < 0 || !part.lanes[alt].pool.empty()) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/// Whether the genre's drop-out entries play as spec §8.8 says: each 1, 2, 4, 8 or 16 bars long and no longer than the
+/// phrase, so it never outlasts the phrase it starts in; its mask some whole pitched parts and Drums or FX lanes listed
+/// in the roster (no whole Kit), its throw target one pitched part or Drums lane of the mask or none (never an FX
+/// lane), and never every pitched part and every Drums lane with a pool, which would be a Gap; a gap of at least a bar,
+/// a bar grid that is a power of two dividing the phrase, and a chance a per-mille.
 constexpr bool dropOutsValid(const Genre& genre) {
-	if (genre.dropOutGapBars < 1 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
+	if (genre.dropOutGapBars < 1 || genre.dropOutGridBars < 1 || genre.dropOutGridBars > genre.phraseBars
+	    || !std::has_single_bit(static_cast<unsigned>(genre.dropOutGridBars))
+	    || genre.phraseBars % genre.dropOutGridBars != 0 || genre.dropOutChance < 0 || genre.dropOutChance > 1000) {
 		return false;
 	}
 	for (const DropOutEntry& entry : genre.dropOuts) {
 		const PartsAndLanes mask = entry.mask;
 		const PartsAndLanes target = entry.throwTarget;
-		if ((entry.bars != 1 && entry.bars != 2 && entry.bars != 4 && entry.bars != 8) || entry.bars > genre.phraseBars
+		if (entry.bars > 16 || !std::has_single_bit(static_cast<unsigned>(entry.bars)) || entry.bars > genre.phraseBars
 		    || mask.empty()) {
 			return false;
 		}
@@ -1575,6 +1632,7 @@ constexpr bool dropOutsValid(const Genre& genre) {
 		bool leavesSome = false;
 		uint8_t pitched = 0;
 		uint16_t drumLanes = 0;
+		uint16_t validLanes = 0;
 		for (size_t p = 0; p < genre.parts.size(); p++) {
 			const PartSpec& part = genre.parts[p];
 			const bool inMask = (mask.parts & partBit(static_cast<int32_t>(p))) != 0;
@@ -1583,15 +1641,16 @@ constexpr bool dropOutsValid(const Genre& genre) {
 				leavesSome = leavesSome || !inMask;
 				continue;
 			}
-			if (part.role != Role::Drums) {
-				continue; // FX lanes are the section rules' own
-			}
 			for (const LaneSpec& lane : part.lanes) {
-				drumLanes |= laneBit(lane.lane);
-				leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+				validLanes |= laneBit(lane.lane);
+				if (part.role == Role::Drums) {
+					drumLanes |= laneBit(lane.lane);
+					leavesSome = leavesSome || (!lane.pool.empty() && (mask.lanes & laneBit(lane.lane)) == 0);
+				}
 			}
 		}
-		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~drumLanes) != 0 || !leavesSome) {
+		if ((mask.parts & ~pitched) != 0 || (mask.lanes & ~validLanes) != 0 || (target.lanes & ~drumLanes) != 0
+		    || !leavesSome) {
 			return false;
 		}
 	}
@@ -1602,11 +1661,12 @@ constexpr bool dropOutsValid(const Genre& genre) {
 /// phrase (fitsPhrase()), and no anchored Extension or open voicing on a pedal, which voices none (pedalVoicing()).
 /// Only a Sustain holds across Section lines or holds common tones: cutSectionLine() leaves the flagged part's notes
 /// uncut, and only decideSustain() ends or extends them. Only a Sustain voices open, and doubles no root there
-/// (openVoicing()).
+/// (openVoicing()), and only an open voicing has a chance to hold its shared notes, at most 1000 per-mille.
 constexpr bool sustainValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Sustain) {
-			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing) {
+			if (part.sustain.holdsAcrossSections || part.sustain.holdsCommonTones || part.sustain.openVoicing
+			    || part.sustain.holdSharedChance != 0) {
 				return false;
 			}
 			continue;
@@ -1619,6 +1679,9 @@ constexpr bool sustainValid(const Genre& genre) {
 			return false;
 		}
 		if (sustain.openVoicing && (sustain.pedal || sustain.doubleRoot)) {
+			return false;
+		}
+		if (sustain.holdSharedChance > 1000 || (sustain.holdSharedChance != 0 && !sustain.openVoicing)) {
 			return false;
 		}
 	}
@@ -1635,6 +1698,16 @@ const Genre& defaultGenre();
 /// How many of the genre's parts the Generator plays: the roster, up to kMaxParts.
 constexpr int32_t partCount(const Genre& genre) {
 	return std::min<int32_t>(static_cast<int32_t>(genre.parts.size()), kMaxParts);
+}
+
+/// The genre's Drums part, the one the punch-ins act on and Pump leaves out (spec §8.9), or -1 with none.
+constexpr int32_t drumsPart(const Genre& genre) {
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		if (genre.parts[p].role == Role::Drums) {
+			return p;
+		}
+	}
+	return -1;
 }
 
 /// What a control set is, which decides the layers that move it (spec §11.3–§11.5).

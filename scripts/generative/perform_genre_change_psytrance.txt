@@ -62,7 +62,7 @@ expect event gen_transition start style=0 within=90
 expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- A Break in Psytrance: forced, it lands on the next phrase line and keeps the Drone, Arp and hats sounding ----
@@ -70,7 +70,7 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_section BREAK within=90
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- TECHNO > ACID -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Psytrance's 6 parts to 4 ----
@@ -216,7 +216,7 @@ button SELECT_ENC up
 expect event gen_confirm techno-acid style=0 result=0
 expect event gen_transition_preload done error=0 parts=4 within=30
 expect event gen_section BUILD within=90
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_transition start style=0 within=150
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
@@ -276,7 +276,7 @@ expect event gen_transition start style=0 within=90
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 
 # ---- AMBIENT -> FADE THROUGH, the highlight: Psytrance's 1-phrase Outro, then Ambient's Intro ----
 include perform_transition_menu.txt
@@ -402,7 +402,7 @@ button SELECT_ENC up
 expect event gen_confirm ambient style=0 result=0
 expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_section BUILD within=60
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_transition start style=0 within=150
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10

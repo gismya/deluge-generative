@@ -233,6 +233,24 @@ bool rollLane(const LaneSounds& sounds, FolderLister& lister, EntropyStream& dra
 	return true;
 }
 
+/// rollLane(), then for any FX lane left with no sample, one of its presets by weight (spec §10.5): the Impact's
+/// boom and wash, the Siren's GEN Siren, and the Fall or Riser on a card without their folders, picked per piece as a
+/// part picks its preset. With `avoid` (a
+/// re-roll), another preset when the lane lists one.
+bool rollLaneOrPreset(const LaneSounds& sounds, FolderLister& lister, EntropyStream& draws, const char* preferredTag,
+                      const char* avoid, SoundPath& out, int32_t& rolledTag) {
+	if (!rollLane(sounds, lister, draws, preferredTag, avoid, out, rolledTag)) {
+		return false;
+	}
+	if (out.empty() && isFxLane(sounds.lane) && !sounds.synths.empty()) {
+		const int32_t entry = rollEntry(sounds.synths, draws, avoid);
+		if (entry >= 0) {
+			out.set(sounds.synths[entry].path);
+		}
+	}
+	return true;
+}
+
 /// How many files the fallback chain collects per scan of a lane's folders, so a lane with many missing files
 /// rescans once per batch rather than once per file.
 constexpr int32_t kFallbackBatch = 4;
@@ -447,8 +465,10 @@ KitRoll rollKit(const DrumKits& kits, const PartSpec& part, int32_t p, uint32_t 
 		return kit;
 	}
 	kit.machine = kits.machines[machine].machine;
-	for (int32_t s = 0; s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps; s++) {
-		kit.swapped[s] = draws.below(100) < kits.swapPercent;
+	if (kits.machines[machine].swaps) {
+		for (int32_t s = 0; s < static_cast<int32_t>(kits.swaps.size()) && s < kMaxKitSwaps; s++) {
+			kit.swapped[s] = draws.below(100) < kits.swapPercent;
+		}
 	}
 	return kit;
 }
@@ -525,7 +545,7 @@ bool rollPart(const Genre& genre, const Palette& palette, int32_t p, SoundPicks&
 		}
 		int32_t tag = 0;
 		const char* preferred = lane.lane == Lane::OpenHat ? closedHatTag : nullptr;
-		if (!rollLane(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
+		if (!rollLaneOrPreset(*laneSounds, lister, laneDraws, preferred, old.c_str(), sounds.lane[index], tag)) {
 			return false;
 		}
 		if (lane.lane == Lane::ClosedHat && tag >= 0) {
@@ -588,7 +608,7 @@ bool rollLaneSound(const Genre& genre, const Palette& palette, Lane lane, SoundP
 	EntropyStream draws = partDraws(entropy, kLaneSlot + static_cast<uint32_t>(lane));
 	const SoundPath old = sounds.lane[index];
 	int32_t tag = 0;
-	return rollLane(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
+	return rollLaneOrPreset(*laneSounds, lister, draws, nullptr, old.c_str(), sounds.lane[index], tag);
 }
 
 bool rerollSounds(const Genre& genre, const Palette& palette, SoundPicks& sounds, uint32_t entropy,
@@ -654,11 +674,43 @@ bool synthPart(const Genre& genre, int32_t part) {
 	return part >= 0 && part < partCount(genre) && genre.parts[part].synth();
 }
 
-bool choosePartSound(const Genre& genre, int32_t part, const SoundPath& path, SoundPicks& sounds) {
-	if (!synthPart(genre, part) || path.empty()) {
+bool partPlaysLane(const Genre& genre, int32_t part, Lane lane) {
+	if (part < 0 || part >= partCount(genre) || lane == Lane::None) {
 		return false;
 	}
-	sounds.part[part] = path;
+	for (const LaneSpec& spec : genre.parts[part].lanes) {
+		if (spec.lane == lane) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool laneTakesPreset(const Palette& palette, Lane lane) {
+	if (!isFxLane(lane)) {
+		return false;
+	}
+	const LaneSounds* sounds = palette.laneSounds(lane);
+	return sounds != nullptr && !sounds->synths.empty();
+}
+
+bool choiceFits(const Genre& genre, int32_t part, const SoundChoice& choice) {
+	if (choice.path.empty()) {
+		return false;
+	}
+	return choice.lane == Lane::None ? synthPart(genre, part) : partPlaysLane(genre, part, choice.lane);
+}
+
+bool chooseSound(const Genre& genre, int32_t part, const SoundChoice& choice, SoundPicks& sounds) {
+	if (!choiceFits(genre, part, choice)) {
+		return false;
+	}
+	if (choice.lane == Lane::None) {
+		sounds.part[part] = choice.path;
+	}
+	else {
+		sounds.lane[static_cast<int32_t>(choice.lane)] = choice.path;
+	}
 	return true;
 }
 
@@ -694,13 +746,27 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 SoundLoad loadLaneSound(const Palette& palette, Lane lane, const char* pick, FolderLister& lister,
                         SoundLoader& loader) {
 	bool picked = pick != nullptr && pick[0] != 0;
-	if (picked) {
+	const LaneSounds* sounds = palette.laneSounds(lane);
+	if (picked && isFxLane(lane) && !isAudioFile(pick)) {
+		// A preset the player chose for the lane (spec §13.5): its palette entry's ranges if it lists it.
+		LoadOutcome outcome = loader.loadPreset(pick);
+		if (outcome != LoadOutcome::Missing) {
+			ControlRanges ranges{};
+			for (const PaletteEntry& entry : sounds != nullptr ? sounds->synths : std::span<const PaletteEntry>{}) {
+				if (equalsIgnoringCase(entry.path, pick)) {
+					ranges = entry.ranges;
+					break;
+				}
+			}
+			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError, true, ranges};
+		}
+	}
+	else if (picked) {
 		LoadOutcome outcome = loader.loadSample(pick);
 		if (outcome != LoadOutcome::Missing) {
 			return {outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError};
 		}
 	}
-	const LaneSounds* sounds = palette.laneSounds(lane);
 	if (sounds == nullptr) {
 		return {SoundSource::Silent};
 	}

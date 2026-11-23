@@ -47,6 +47,7 @@ struct ArcPhrase {
 	/// Build shorter than a phrase starts partway into the phrase before its Drop; every other Section starts on a
 	/// line.
 	int16_t kindFrom = 0;
+	constexpr bool operator==(const ArcPhrase&) const = default;
 };
 
 /// The Arc plan (spec §2.8): the phrases from the one the last decided step is in, as the Arc will play them with the
@@ -62,6 +63,7 @@ struct ArcPlan {
 		const int32_t i = index - first;
 		return i >= 0 && i < count ? &phrase[i] : nullptr;
 	}
+	constexpr bool operator==(const ArcPlan&) const = default;
 };
 
 } // namespace deluge::generative

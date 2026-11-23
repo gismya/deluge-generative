@@ -62,6 +62,10 @@ struct ComposeProgress {
 /// The popup for composeTooLong()'s `longest`: TOO LONG: MAX m:ss, or TOO LONG when no LENGTH fits (0).
 void showComposeTooLong(int32_t longest);
 
+/// Whether SDRAM still has the reserve a build leaves free (spec §15.9): Compose's and Capture's check, a bar at a
+/// time.
+[[nodiscard]] bool sdramReserveFree();
+
 /// Free memory a build may use once the player's song is gone: what an empty Deluge has free, internal and SDRAM
 /// (spec §15.9). (tuning): H19 measures it.
 constexpr int64_t kEmptyDelugeFreeBytes = 48 * 1024 * 1024;

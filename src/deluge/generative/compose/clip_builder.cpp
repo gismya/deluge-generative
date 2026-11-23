@@ -40,6 +40,7 @@ void ClipBuilder::begin(SongWriter& writer) {
 		std::fill(std::begin(slots), std::end(slots), 0);
 	}
 	counts_ = Counts{};
+	std::fill(std::begin(partStart_), std::end(partStart_), 0);
 }
 
 void ClipBuilder::take(const Event& event) {
@@ -58,6 +59,7 @@ void ClipBuilder::take(const Event& event) {
 	case EventKind::Section:  // the arranger has no markers (spec §15.2)
 	case EventKind::KeyScale: // the song's key is the Recipe's, set once (spec §15.5); Capture cuts clips on it
 	case EventKind::Sound:    // Compose plays no sound re-roll; Capture cuts clips on it (spec §15.3)
+	case EventKind::Pump:     // Compose plays no punch-ins (spec §8.9)
 		break;
 	}
 }
@@ -124,6 +126,9 @@ ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl con
 		}
 		track.started = true;
 		track.id = {part, lane, control, throwDelay};
+		// A lane that first leaves home after a split or a cut on its part starts there, not at the piece's start.
+		track.origin = partStart_[part];
+		track.endTick = partStart_[part];
 	}
 	return &track;
 }
@@ -133,13 +138,13 @@ void ClipBuilder::Track::move(SongWriter& writer, int32_t tick, int8_t to, bool 
 		return; // a Space event whose other lane moved
 	}
 	if (!moved) {
-		if (tick == 0 && snap) {
-			value = to; // the piece's first step sets it: a base, not a move
+		if (tick == origin && snap) {
+			value = to; // the song's first step sets it: a base, not a move
 			return;
 		}
 		// It moves: the lane starts from its value so far, held from the song's start.
 		moved = true;
-		write(writer, {0, value}, false);
+		write(writer, {origin, value}, false);
 	}
 	if (snap) {
 		// It holds its value up to the line, then jumps: a ramp that ended on the line has its node a tick before.

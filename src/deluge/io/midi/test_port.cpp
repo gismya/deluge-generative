@@ -24,6 +24,7 @@
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "generative/core/draw.h"
+#include "generative/firmware/capture_files.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
@@ -136,10 +137,12 @@ bool holdingCardError = false;      ///< See cardErrorHeld()
 bool holdingPreload = false;        ///< See preloadHeld()
 bool holdingCardRoutine = false;    ///< See cardRoutineHeld()
 bool holdingCommitted = false;      ///< See soundCommittedHeld()
+bool holdingPresetPreview = false;  ///< See presetPreviewHeld()
 bool holdingReactions = false;      ///< See reactionsHeld()
 bool holdingUiRelease = false;      ///< See uiReleaseHeld()
 bool holdingFree = false;           ///< See freeHeld()
 bool holdingQueueFull = false;      ///< See queueFullHeld()
+bool holdingLogFull = false;        ///< See logFullHeld()
 bool holdingDelaySetups = false;    ///< See delaySetupsHeld()
 bool holdingCompose = false;        ///< See composeHeld()
 bool holdingComposeAlone = false;   ///< See composeAloneHeld()
@@ -234,6 +237,11 @@ void holdMidiSetup(bool hold) {
 /// every row off, as start_state does (to_start_state() in deluge_probe.py), so a script that stopped mid-hold leaves
 /// nothing held for the next. A new hold is a row here and its hook, and nothing else
 /// needs it added: the probe's HOLDS_BEFORE_RELEASE_ALL is a frozen list for builds older than "release all".
+template <uint32_t Ms>
+void holdCardStall(bool on) {
+	deluge::generative::firmware::cardLog.setStall(on ? Ms : 0);
+}
+
 struct Hold {
 	const char* name;
 	void (*set)(bool on);
@@ -255,6 +263,8 @@ constexpr Hold kHolds[] = {
     {"card_routine", [](bool on) { holdingCardRoutine = on; }},
     /// Holds a sound re-roll's preload past its commit, where a cancel no longer stops it (see soundCommittedHeld())
     {"sound_committed", [](bool on) { holdingCommitted = on; }},
+    /// Holds a preset preview's build at its start until it is cancelled, or lets it go (see presetPreviewHeld())
+    {"preset_preview", [](bool on) { holdingPresetPreview = on; }},
     /// Perform's view stops reacting to a sound swap and a new roster, or reacts again (see reactionsHeld())
     {"reactions", [](bool on) { holdingReactions = on; }},
     /// Perform's pump stops asking the UI to let go of an Output it frees, or asks again (see uiReleaseHeld())
@@ -263,15 +273,17 @@ constexpr Hold kHolds[] = {
     {"free", [](bool on) { holdingFree = on; }},
     /// A waiting sound's cancel or a transition confirm finds the steering queue full, or doesn't (see queueFullHeld())
     {"queue_full", [](bool on) { holdingQueueFull = on; }},
+    /// AS IT BEGAN finds no header kept for the playing piece, or reads the log (see logFullHeld())
+    {"log_full", [](bool on) { holdingLogFull = on; }},
     /// Perform entry plays the chosen genre with delay setups, or as it is (see delaySetupsHeld())
     {"delay_setups", [](bool on) { holdingDelaySetups = on; }},
-    /// Holds a Compose build after its first bar, or lets it go (see composeHeld())
+    /// Holds a Compose or Capture build after its first bar, or lets it go (see composeHeld())
     {"compose", [](bool on) { holdingCompose = on; }},
     /// A Compose build's estimate fits only alone, or as it is (see composeAloneHeld())
     {"compose_alone", [](bool on) { holdingComposeAlone = on; }},
     /// Holds a Compose build after its genre roll, or lets it go (see composeRollHeld())
     {"compose_roll", [](bool on) { holdingComposeRoll = on; }},
-    /// A Compose build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
+    /// A Compose or Capture build finds the SDRAM reserve reached, or as it is (see composeReserveHeld())
     {"compose_reserve", [](bool on) { holdingComposeReserve = on; }},
     /// A genre roll makes the golden case and a Compose build starts in the Groove, or both as they are (see
     /// goldenHeld())
@@ -284,6 +296,14 @@ constexpr Hold kHolds[] = {
 		     currentSong->changeFillMode(on);
 	     }
      }},
+    /// The card log off: the steering log's bytes are taken and nothing goes to the card (#448's on/off comparison).
+    /// Before Perform's entry.
+    {"card_log_off", [](bool on) { deluge::generative::firmware::cardLog.setOff(on); }},
+    /// Every 2 s the card log's task holds the card for this long without touching it, as a card that stalls (#448)
+    {"card_stall_100", holdCardStall<100>},
+    {"card_stall_200", holdCardStall<200>},
+    {"card_stall_400", holdCardStall<400>},
+    {"card_stall_800", holdCardStall<800>},
     /// MIDI follow, feedback and global commands for scripts, RAM only (see MidiSetup)
     {"midi_setup", holdMidiSetup},
     /// Perform's fresh entropy (each Recipe, seed and sound roll) comes from a fixed sequence that starts again here,
@@ -845,7 +865,14 @@ void loadSong(const char* path) {
 	songLoading = false;
 	const char* name = currentSong->name.get();
 	if (strlen(name) == stemLength && strncasecmp(name, file, stemLength) == 0) {
-		event("song_loaded path=%s ms=%d", path, static_cast<int>((getSystemTime() - start) * 1000));
+		long outputs = 0;
+		long instances = 0;
+		for (Output* out = currentSong->firstOutput; out != nullptr; out = out->next) {
+			outputs++;
+			instances += out->clipInstances.getNumElements();
+		}
+		event("song_loaded path=%s ms=%d outputs=%ld instances=%ld", path,
+		      static_cast<int>((getSystemTime() - start) * 1000), outputs, instances);
 	}
 	else {
 		event("song_load_failed path=%s why=load", path);
@@ -1195,6 +1222,10 @@ bool preloadHeld() {
 	return holdingPreload;
 }
 
+bool presetPreviewHeld() {
+	return holdingPresetPreview;
+}
+
 bool cardRoutineHeld() {
 	return holdingCardRoutine;
 }
@@ -1221,6 +1252,10 @@ bool freeHeld() {
 
 bool queueFullHeld() {
 	return holdingQueueFull;
+}
+
+bool logFullHeld() {
+	return holdingLogFull;
 }
 
 bool delaySetupsHeld() {

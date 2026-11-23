@@ -1,4 +1,4 @@
-# Perform's guards on RECORD, X+PLAY and undo (#118, spec §19 F9 and F11) over the sysex test port. Runs on a Deluge
+# Perform's guards on RECORD, X+PLAY and undo (#118, #413, spec §19 F9 and F11) over the sysex test port. Runs on a Deluge
 # (deluge_probe.py run) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a
 # synth or kit clip.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
@@ -6,6 +6,9 @@
 # covers: src/deluge/gui/ui/generative_* src/deluge/hid/buttons.cpp src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/firmware/restart_began.cpp
+# covers: src/deluge/playback/playback_handler.cpp src/deluge/generative/perform/capture.*
 start_state
 include perform_open.txt
 
@@ -45,15 +48,23 @@ expect resampling=false
 expect recording=off
 expect event gen_section INTRO 0 within=20
 
-# RECORD is a no-op until Capture (M4): recording stays off, so no automation lands in Perform's clips (F9)
+# RECORD marks the piece for Capture (spec §17.4): recording stays off, so no automation lands in Perform's clips (F9).
+# Pressed again, it unmarks it.
 button RECORD down
 wait 50
 button RECORD up
+expect event gen_mark marked piece=0 current=0 marks=1 within=5
+expect recording=off
+button RECORD down
+wait 50
+button RECORD up
+expect event gen_mark unmarked piece=0 current=0 marks=0 within=5
 expect recording=off
 expect resampling=false
 expect playing=true
 
-# X+PLAY (stock restart) is blocked: still playing, and no fresh piece starts its Intro again (spec §13.2)
+# X+PLAY is Perform's restart (spec §13.2, perform_restart.txt): still playing, the piece starts again from its Intro
+# on the next bar line, rather than stock's restart of the song
 button X_ENC down
 wait 100
 button PLAY down
@@ -62,7 +73,8 @@ button PLAY up
 wait 100
 button X_ENC up
 expect playing=true
-expect no_event gen_section INTRO within=8
+expect event gen_restart as_it_is within=15
+expect event gen_section INTRO 0 clip_pos=0 bar=0 within=5
 
 # Edits that stock logs as undoable actions log nothing in Perform: a song-FX gold knob (the F1 page) and a tempo turn
 button F1 down

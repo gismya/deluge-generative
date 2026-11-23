@@ -34,6 +34,14 @@ otherwise.
   reads it. Nothing else needs a new hold added (the probe's `HOLDS_BEFORE_RELEASE_ALL` is frozen, for older builds):
   `start_state` sends `release all`, which sets every row off, so a row's `set(false)` must be safe when the hold was
   never on.
+- A timing or voice-count figure (H16 `voices=`/`culls=`, H1's ns, `gen_ext_tempo bpm=`, the MIDI feedback rate)
+  measures delugemu's speed under host load as much as the firmware: such expects failed beside other agents' runs
+  and passed alone in about 20 PRs (#417). Write them `hardware_only expect ...`; `covers.py --check` fails one that
+  pins a `covers.TIMING_FIELDS` field without it, so a new script gets told. Under delugemu a `hardware_only expect
+  event` still waits for its kind (keep it starting with the kind), so a press after it comes no sooner than on the
+  Deluge; a `hardware_only` no_event or state expect is skipped. It can't capture, and it moves the event search only
+  where it matches: a `mark` right after one keeps a different place under delugemu. A field that any value matches
+  (`voices=\d+`, `gen_h16 culls=`) pins nothing and needs no prefix.
 - An `expect event` or `expect no_event` TEXT matches as one piece of the event's text: `gen_focus locked=-1`
   never matches `gen_focus part=-1 locked=-1`, so an `expect no_event` written that way passes whatever happens. Use
   the `/regex/` form (`/gen_focus part=-?[0-9]+ locked=-1/`) for fields that aren't adjacent, and run a new no_event
@@ -126,3 +134,49 @@ otherwise.
   press read inside `routineForSD()` is: the way to put a release inside a card wait without racing a load. A handler
   that answers REMIND_ME_OUTSIDE_CARD_ROUTINE waits, queue blocked, until `release card_routine`: hold it only around
   presses whose handler refuses instead (`perform_recipe_save.txt`).
+- A preset preview's build reports none of a build's events (`gen_sound`, `gen_sound_level`, ...: each sits under
+  `if (!previewBuild())`, `card_sounds.h`), so `gen_sound ACID` expects see only the part's own loads; its own
+  `gen_preset_preview built ... path=` says what it loaded. Keep the event kind literal at the start of a
+  `TEST_EVENT` format: a `%s` prefix there hides the kind from `covers.py --check`, which fails check_all. `hold
+  preset_preview` parks every preview build at its start until it is cancelled or released.
+- Trap: a BACK hold whose press closed a browser at its top folder also closes the lane list under it (the
+  `BACK_MENU_EXIT` timer fires on the list); from a subfolder only the browser closes. Which one depends on the card
+  (with the pack, an FX lane's SYNTH PRESET browser opens in a subfolder): follow the hold with one BACK tap, which on
+  Perform with nothing queued does nothing (`perform_preset_preview.txt`).
+- Late audio (#449): the time between render starts and a render's length don't tell whether the audio ran dry. Only
+  `AudioEngine::routine()` copies rendered audio into the 2.9 ms TX ring, and a call may copy audio rendered earlier
+  without rendering. `gen_audio` measures the ring's margin at each entry, and `drift=` checks it against the DMA's own
+  position (`io/midi/output_margin.h`, its unit tests in `tests/unit/output_margin_tests.cpp`). The scheduler doesn't
+  preempt: any main-loop task over about 2.9 ms is an underrun. `gen_audio_late` blames the task the routine ran
+  inside, or else the one that finished just before it; `TaskManager::currentID` starts at 0, not -1, so it can't tell
+  a nested call apart, and the test port keeps its own caller (`TestPort::taskStarted()`).
+- A hand-written song on a card fixture: `start_state` after `load song` needs an instrument clip, so give the song
+  one (an audio-only song fails it, and the next script's too). Write each clip as the firmware does: an
+  `<instrumentClip>` with no `<soundParams>` froze in `ParamManager::getPatchCableSet()` during the load
+  (`perform_song_audio_clip_no_params.txt`'s fixture, #448), as an audio clip with no `<params>` froze with E410. Run it in
+  delugemu first; a hang there shows as `no reply to test port command`, and `test_port_emu.py --gdb PORT` plus
+  `arm-none-eabi-gdb -batch -ex "target remote :PORT" -ex bt` names the freeze.
+- Every `scripts/generative/*.txt` must be run by `check_all.py` (a `perform_*.txt` or `compose_*.txt` check, or one
+  it lists as not run for its `# needs:` line), included by another script, or carry a `# runs-via: COMMAND` line
+  (`covers.orphans()`, in `--check`, #466). A script with another prefix was never run and nothing said so:
+  `song_audio_clip_no_params.txt` (#448) became `perform_song_audio_clip_no_params.txt`; the capture measurements,
+  the power-pull pair, `golden_compose.txt` and `test_port_boot_dma.txt` got `runs-via` lines.
+- `test_port_emu.EmuRun` takes a slot from the host-wide pool of real-time emulators (`emu_slots.py`, #417) before its
+  first launch and keeps it across boot retries; qemu inherits the lock's fd (`pass_fds`), so an emulator orphaned by
+  a killed runner keeps its slot until it exits. The leak check and the firmware check boot through `EmuRun` in real
+  time (no icount), so they take slots too; only `gen_emu.py smoke` and `capture` don't. Waiting by hand for a
+  `pgrep -x qemu-system-arm` count is no longer needed: the run waits and prints `waited N s for a real-time emulator
+  slot`, which check_all's row shows.
+- An injected press is handled wherever the firmware next reads buttons, also inside another task's card wait
+  (`routineForSD()`), and Perform's card presses (SAVE, LOAD, the browsers' SELECT) refuse a press made there with
+  BUSY. In Perform the card log writes on its own: the next piece's spare file 2 s after entry or a piece's opening,
+  the piece's opening, and a flush every 10 s while it plays, so under host load a press can land in one (#485:
+  `perform_recipe_save.txt`, `_load`, `_no_free_name`). Waiting for a quiet moment doesn't cover a section longer
+  than the 10 s flush: a script whose card presses must not be refused, and that doesn't test the log, holds
+  `card_log_off` before Perform's entry (the log takes every byte and touches no card).
+- A retune (spec §21.2) reaches the probe scripts too: `fixtures/recipe_load/RECIPES/` holds Acid techno files meant
+  to be today's (`read=ok`), and the scripts expect their `version=` and the `version older ... genre=` notice. Bump
+  them with the genre; `test_recipe_fixtures.py` fails until they match the golden's version (#488). A palette change
+  moves `gen_sound` expects: since #488 an FX lane with no sample picks one of its presets per piece (`pick ...
+  SYNTHS/...`, not `fallback`), and on delugemu's factory card, which has no pack, the Impact is `silent` and counts
+  in `gen_sound_missing` as the Riser does. A script that runs on both cards matches either.

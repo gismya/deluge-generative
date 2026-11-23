@@ -1296,6 +1296,106 @@ class ExpectNextEvent(unittest.TestCase):
         )
 
 
+class HardwareOnly(unittest.TestCase):
+    """hardware_only expect ...: a timing or voice-count figure delugemu's speed decides as much as the firmware."""
+
+    def setUp(self):
+        self.link = FakeDeluge(
+            events={"button PLAY down": ["gen_h16 culls=0 culled=- voices=3"]}
+        )
+
+    def run_on(self, on_hardware, *lines):
+        port = dp.TestPort(self.link, on_hardware=on_hardware)
+        out = []
+        failed, total = dp.run_script(port, list(lines), out=out.append)
+        return failed, total, out, port
+
+    def test_on_the_deluge_it_runs_as_a_plain_expect(self):
+        failed, total, out, port = self.run_on(
+            True,
+            "button PLAY down",
+            "hardware_only expect event /^gen_h16 .* voices=[1-9]/ within=0.5",
+            "hardware_only expect event /^gen_h16 .* voices=0/ within=0.1",
+        )
+        self.assertEqual((failed, total, port.hardware_only_skipped), (1, 2, 0))
+        self.assertEqual(
+            out[0],
+            "PASS line 2: hardware_only expect event /^gen_h16 .* voices=[1-9]/ within=0.5",
+        )
+
+    def test_under_delugemu_an_event_expect_waits_for_its_kind_only(self):
+        # The figure is skipped (counted), but the wait stays: what comes after it still waits as long as on the
+        # Deluge, and the search moves past the event as it would.
+        failed, total, out, port = self.run_on(
+            False,
+            "button PLAY down",
+            "hardware_only expect event /^gen_h16 .* voices=0/ within=5",
+            "expect no_event gen_h16 within=0.1",
+        )
+        self.assertEqual((failed, total, port.hardware_only_skipped), (0, 2, 1))
+        self.assertEqual(
+            out[0],
+            "PASS line 2: hardware_only expect event /^gen_h16 .* voices=0/ within=5"
+            " (delugemu: a gen_h16 came, its figures unchecked)",
+        )
+
+    def test_under_delugemu_one_whose_kind_never_comes_fails(self):
+        failed, total, out, port = self.run_on(
+            False, "hardware_only expect event /^gen_ext_tempo bpm=120$/ within=0.1"
+        )
+        self.assertEqual((failed, total, port.hardware_only_skipped), (1, 1, 0))
+        self.assertTrue(out[0].startswith("FAIL line 1: hardware_only expect event"))
+
+    def test_under_delugemu_a_no_event_or_state_expect_is_skipped(self):
+        failed, total, out, port = self.run_on(
+            False,
+            "button PLAY down",
+            "hardware_only expect no_event /^gen_h16 .* voices=3/ within=5",
+            "hardware_only expect voices=4",
+        )
+        self.assertEqual((failed, total, port.hardware_only_skipped), (0, 0, 2))
+        self.assertEqual(
+            out,
+            [
+                "SKIP line 2: hardware_only expect no_event /^gen_h16 .* voices=3/ within=5",
+                "SKIP line 3: hardware_only expect voices=4",
+            ],
+        )
+
+    def test_an_event_expect_needs_its_kind(self):
+        with self.assertRaisesRegex(
+            dp.ScriptStopped, "must start with its event's kind"
+        ):
+            self.run_on(True, "hardware_only expect event /voices=[1-9]/")
+
+    def test_a_port_is_on_the_deluge_unless_told_otherwise(self):
+        self.assertTrue(dp.TestPort(self.link).on_hardware)
+
+    def test_it_goes_only_before_an_expect(self):
+        for on_hardware in (True, False):
+            with self.assertRaisesRegex(
+                dp.ScriptStopped, "hardware_only goes only before an expect"
+            ):
+                self.run_on(on_hardware, "hardware_only button PLAY down")
+
+    def test_it_captures_nothing_a_later_line_could_read(self):
+        # Under delugemu the capture would be missing, so the script would differ between the two.
+        for on_hardware in (True, False):
+            with self.assertRaisesRegex(
+                dp.ScriptStopped, "hardware_only expect can't capture"
+            ):
+                self.run_on(
+                    on_hardware, r"hardware_only expect event /voices=(?P<v>\d+)/"
+                )
+
+    def test_the_result_line_counts_the_skips(self):
+        self.assertEqual(
+            dp.result_line("x.txt", 0, 5, skipped=2),
+            "x.txt: 5 expects, 0 failed, 2 hardware-only skipped",
+        )
+        self.assertEqual(dp.result_line("x.txt", 0, 5), "x.txt: 5 expects, 0 failed")
+
+
 class SessionEvents(unittest.TestCase):
     """deluge_probe.py session --events PATTERN prints the matching test events after each script."""
 
@@ -1527,6 +1627,85 @@ class ScriptNeeds(unittest.TestCase):
             "# needs: card fixtures/perform_x\n# needs: a Deluge\nstart_state\n"
         )
         self.assertFalse(needs.delugemu)
+
+
+class ScriptWrites(unittest.TestCase):
+    """A script's "# writes: GLOB" lines: the new files in SONGS/ and RECIPES/ a session lets it leave (#465)."""
+
+    def writes(self, text, included=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "perform_x.txt")
+            with open(path, "w") as fh:
+                fh.write(text)
+            if included is not None:
+                with open(os.path.join(tmp, "inc.txt"), "w") as fh:
+                    fh.write(included)
+            return dp.script_writes(path)
+
+    def test_no_writes_line_declares_nothing(self):
+        self.assertEqual(self.writes("start_state\n"), [])
+
+    def test_each_line_is_one_glob_spaces_and_all(self):
+        self.assertEqual(
+            self.writes(
+                "# writes: SONGS/GEN ACID TECHNO *\n# writes: RECIPES/*.XML\nstart_state\n"
+            ),
+            ["SONGS/GEN ACID TECHNO *", "RECIPES/*.XML"],
+        )
+
+    def test_an_included_file_declares_too(self):
+        self.assertEqual(
+            self.writes("include inc.txt\n", "# writes: SONGS/H19 *\n"),
+            ["SONGS/H19 *"],
+        )
+
+    def test_the_repo_scripts_that_save_declare_it(self):
+        # Every script with a save action names what it writes (the save actions grepped for #465).
+        saves = re.compile(
+            r"^(save song |expect event .*(gen_capture_end done|song_saved|gen_recipe_save \S+ saved))",
+            re.MULTILINE,
+        )
+        for name in sorted(os.listdir(HERE)):
+            if not name.endswith(".txt"):
+                continue
+            path = os.path.join(HERE, name)
+            text = "".join(t for _, t in dp.read_script(path))
+            if saves.search(text):
+                self.assertTrue(
+                    dp.script_writes(path), f"{name} saves with no # writes: line"
+                )
+
+
+class NewCardFiles(unittest.TestCase):
+    """Sorting a session's new SONGS/ and RECIPES/ files into declared and undeclared (#465)."""
+
+    def test_only_files_that_werent_there_before_count(self):
+        before = {"SONGS/Ttt.XML", "RECIPES/A.XML"}
+        after = before | {"SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"}
+        self.assertEqual(
+            dp.new_card_files(before, after, ["SONGS/GEN ACID TECHNO *"]),
+            (["SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"], []),
+        )
+
+    def test_a_file_no_glob_matches_is_undeclared(self):
+        self.assertEqual(
+            dp.new_card_files(set(), {"SONGS/SONG001.XML"}, ["SONGS/GEN *"]),
+            ([], ["SONGS/SONG001.XML"]),
+        )
+
+    def test_globs_match_regardless_of_case_as_fat_does(self):
+        self.assertEqual(
+            dp.new_card_files(
+                set(), {"RECIPES/acid techno.xml"}, ["RECIPES/ACID*.XML"]
+            ),
+            (["RECIPES/acid techno.xml"], []),
+        )
+
+    def test_a_glob_stays_in_its_folder(self):
+        self.assertEqual(
+            dp.new_card_files(set(), {"RECIPES/GEN A.XML"}, ["SONGS/*"]),
+            ([], ["RECIPES/GEN A.XML"]),
+        )
 
 
 class SessionCommandLine(unittest.TestCase):

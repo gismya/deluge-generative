@@ -38,6 +38,7 @@
 #include "io/debug/log.h"
 #include "io/midi/midi_engine.h"
 #include "io/midi/midi_queue.h"
+#include "io/midi/output_margin.h"
 #include "io/midi/test_port_render.h"
 #include "memory/general_memory_allocator.h"
 #include "model/instrument/kit.h"
@@ -769,6 +770,9 @@ bool calledFromScheduler = false;
 		return;
 	}
 
+#if ENABLE_SYSEX_TEST
+	TestPort::recordDrained(numSamples); // Generative mode (spec §19, test-port hooks)
+#endif
 	// From here on, MIDI is due when the playhead reaches the start of this window, until a MIDI tick in the window
 	// moves that along
 	windowStartTicks = getSystemTicks();
@@ -1223,6 +1227,14 @@ void routine_task() {
 	routine();
 	calledFromScheduler = false;
 }
+#if ENABLE_SYSEX_TEST
+// Generative mode (spec §20): the audio output's margin, in frames of the TX ring
+constexpr uint32_t kTxFrameBytes = 4 * NUM_MONO_OUTPUT_CHANNELS;
+uint32_t txFrame(uint32_t address) {
+	return (address - (uint32_t)getTxBufferStart()) / kTxFrameBytes;
+}
+#endif
+
 void routine() {
 
 	logAction("AudioDriver::routine");
@@ -1237,6 +1249,9 @@ void routine() {
 
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
+#if ENABLE_SYSEX_TEST
+		TestPort::audioRoutineEntered(txFrame((uint32_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
+#endif
 		while (doSomeOutputting() && numRoutines < 2) {
 
 #ifndef USE_TASK_MANAGER
@@ -1305,6 +1320,15 @@ void routine() {
 			}
 		}
 	}
+#if ENABLE_SYSEX_TEST
+	{
+		// After an offline stem export's render too, as it writes the ring: the next entry's margin counts from here.
+		const auto dma = (uint32_t)getTxBufferCurrentPlace();
+		TestPort::audioRoutineLeft(
+		    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
+		    txFrame(dma));
+	}
+#endif
 	audioRoutineLocked = false;
 	routineBeenCalled = true;
 }

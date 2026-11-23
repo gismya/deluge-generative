@@ -31,10 +31,13 @@ namespace {
 
 /// The Pad: slow attacks and long releases. Not 127, 155 or 156: each adds a major 3rd to every note, a cluster under
 /// a chord with its Extensions. Not 140 Slow Aural Swells: its oscillators sit one and two octaves down
-/// (osc_octaves.py). The owner dropped 135 Soothing Growth Pad and 147 Resonant Filter Pad by ear (#133, round 1).
+/// (osc_octaves.py). The owner dropped 135 Soothing Growth Pad and 147 Resonant Filter Pad by ear (#133, round 1),
+/// and 118 Small Bridge Pad (round 2's I3-118).
 constexpr PaletteEntry kPad[] = {
-    {"SYNTHS/131 Warm Strings.XML", 2}, {"SYNTHS/118 Small Bridge Pad.XML", 2}, {"SYNTHS/151 Radiant FM Pad.XML", 2},
-    {"SYNTHS/157 Rich FM Pad 4.XML"},   {"SYNTHS/145 Eerie High Pad.XML"},
+    {"SYNTHS/131 Warm Strings.XML", 2},
+    {"SYNTHS/151 Radiant FM Pad.XML", 2},
+    {"SYNTHS/157 Rich FM Pad 4.XML"},
+    {"SYNTHS/145 Eerie High Pad.XML"},
 };
 /// The Drone (the key's root and fifth, held for whole Sections): the pack's three drones (owner, Ambient sounds round
 /// 1, #313: tape strings, a breathing filter, a glass fifth), then 125's ringmod drone and 148, which stacks an open

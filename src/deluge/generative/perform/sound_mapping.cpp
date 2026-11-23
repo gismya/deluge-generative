@@ -86,4 +86,8 @@ int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), INT32_MIN, INT32_MAX));
 }
 
+int32_t throwDelayHomeFor(const TargetRange& range, int32_t value, int32_t offset, int32_t rest, int32_t percent) {
+	return homeFor(range, value, percent > 0 ? rest : offset);
+}
+
 } // namespace deluge::generative::perform

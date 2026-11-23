@@ -245,6 +245,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 		Lane lane;
 		int8_t offset[kNumSoundControls];
 		uint8_t throwDelay;
+		int8_t restSpace;
 	};
 	Kept old[1 + kMaxLanesPerPart]; // a Drums part's kit-wide set and each lane's
 	int32_t oldCount = 0;
@@ -259,6 +260,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 				old[oldCount].lane = set.lane;
 				std::copy_n(set.offset, kNumSoundControls, old[oldCount].offset);
 				old[oldCount].throwDelay = set.throwDelay;
+				old[oldCount].restSpace = set.restSpace;
 				oldCount++;
 			}
 			continue;
@@ -289,10 +291,48 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 					      0);
 				}
 			}
+			sets_[i].restSpace = old[o].restSpace; // after apply(), which sets it only at level 0
 		}
 	}
 	TEST_EVENT("gen_controls rebind part=%ld sets=%ld params=%ld", static_cast<long>(part),
 	           static_cast<long>(setCount_), static_cast<long>(boundCount_));
+}
+
+void SoundControls::moveToClip(int32_t part, InstrumentClip* clip) {
+	for (int32_t i = 0; i < setCount_; i++) {
+		Set& set = sets_[i];
+		if (set.part != part) {
+			continue;
+		}
+		set.clip = clip;
+		if (set.row >= 0) {
+			set.noteRow = clip->noteRows.getElement(set.row);
+			set.paramManager = &set.noteRow->paramManager;
+		}
+		else {
+			set.paramManager = &clip->paramManager;
+		}
+		for (int32_t b = set.first[0]; b < set.first[kNumSoundControls]; b++) {
+			if (AutoParam* param = paramOf(set, bound_[b])) {
+				param->setCurrentValueBasicForSetup(bound_[b].home);
+			}
+		}
+	}
+}
+
+std::optional<int32_t> SoundControls::moveHome(uint8_t part, Lane lane, uint16_t key, int32_t home) {
+	const Set* set = setOf(part, lane);
+	if (set == nullptr) {
+		return std::nullopt;
+	}
+	for (int32_t b = set->first[0]; b < set->first[kNumSoundControls]; b++) {
+		if (paramKey(bound_[b]) == key) {
+			const int32_t old = bound_[b].home;
+			bound_[b].home = home;
+			return old;
+		}
+	}
+	return std::nullopt;
 }
 
 bool SoundControls::uses(const Set& set, Needs needs) {
@@ -642,6 +682,9 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #endif
 		if (space) {
 			set.throwDelay = event.throwDelay();
+			if (set.throwDelay == 0) {
+				set.restSpace = event.offset;
+			}
 		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
@@ -649,9 +692,11 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
-				// whatever the preset's delay); over=1 if the Throw's lift puts it above both the cap and home, which
-				// it never may. At level 0 the Throw has ended, and Space's own value may be above 23 (spec §11.4).
-				const int32_t rest = perform::targetValue(bound.range, bound.home, event.offset);
+				// whatever the preset's delay), from Space's offset as of the last event with no Throw level (so Wash
+				// or drift moving during the hold aren't in it), since the event's holds the spike until level 0;
+				// over=1 if the Throw's lift puts it above both the cap and home, which it never may. At level 0 the
+				// Throw has ended, and Space's own value may be above 23 (spec §11.4).
+				const int32_t rest = perform::targetValue(bound.range, bound.home, set.restSpace);
 				const bool over =
 				    event.throwDelay() > 0 && value > bound.home && perform::menuUnits(value) > perform::kThrowDelayCap;
 				TEST_EVENT("gen_throw_delay part=%u lane=%d level=%u feedback=%ld home=%ld rest=%ld over=%d",
@@ -713,17 +758,22 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 	}
 	if (!settingHome_) {
 		// The edit stopped any ramp, so the param stays where it was turned until the control's next change.
-		bound.home = perform::homeFor(bound.range, value, set.offset[c]);
+		bound.home = set.throwDepth > 0 && bound.range.target == Target::DelayFeedback
+		                 ? perform::throwDelayHomeFor(bound.range, value, set.offset[c], set.restSpace, set.throwDelay)
+		                 : perform::homeFor(bound.range, value, set.offset[c]);
 	}
 	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set.part),
 	           set.lane == Lane::None ? -1 : static_cast<int>(set.lane), UpperName(static_cast<SoundControl>(c)).text);
 	return HomeEdit{set.part, set.lane, paramKey(bound), bound.home};
 }
 
-uint16_t SoundControls::paramKey(const Bound& bound) {
+uint16_t SoundControls::paramKey(int32_t collection, PatchSource source, int32_t param) {
 	static_assert(static_cast<int32_t>(PatchSource::NONE) < 32, "a source fits the key's 5 bits");
-	return static_cast<uint16_t>(static_cast<int32_t>(bound.collection) << 13 | static_cast<int32_t>(bound.source) << 8
-	                             | bound.param);
+	return static_cast<uint16_t>(collection << 13 | static_cast<int32_t>(source) << 8 | (param & 0xFF));
+}
+
+uint16_t SoundControls::paramKey(const Bound& bound) {
+	return paramKey(static_cast<int32_t>(bound.collection), bound.source, bound.param);
 }
 
 void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) {

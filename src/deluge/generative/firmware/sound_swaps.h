@@ -51,6 +51,13 @@ public:
 	/// Counts the swaps: the view binds the gold knobs again when it changes, so the player's knobs follow the new
 	/// sound at once.
 	[[nodiscard]] uint32_t swaps() const { return swaps_; }
+	/// The picks of each part's sound waiting for its line, from its preload's end until it swaps in: what the
+	/// steering log keeps of a re-roll as its SetSound lands (spec §17.2).
+	[[nodiscard]] static const SoundPicks& waitingPicks();
+	/// A restart AS IT BEGAN's line, or its start while stopped (RestartBegan): `output`, built from `picks`, takes
+	/// `part`'s place as a swap's does. The old Output retires after its tail, the part's picks become `picks`, and its
+	/// old ones its previous sound. Frees, shows and allocates nothing.
+	void adoptRestarted(int32_t part, const PartOutput& output, const SoundPicks& picks);
 
 	// The adapter (perform::SoundSwapAdapter, which says what each does). Public so the concept sees them; only the
 	// lifecycle calls them.
@@ -62,12 +69,13 @@ public:
 	[[nodiscard]] bool queueHeldFull() const;
 	[[nodiscard]] bool runnerBusy() const;
 	[[nodiscard]] bool preloadRunning() const;
-	bool submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen);
+	bool submitPreload(int32_t part, Source source, uint8_t token, const SoundChoice* chosen);
 	void cancelJob();
 	[[nodiscard]] int32_t retirementRoom() const;
 	void swapIn(int32_t part);
 	void rebind(int32_t part);
 	void dropIncoming(int32_t part);
+	void swapDropped(int32_t part);
 	void showQueueFull();
 	void traced(const perform::SoundTraced& traced);
 

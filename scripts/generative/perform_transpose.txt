@@ -13,7 +13,7 @@
 # covers: src/deluge/generative/firmware/sound_swaps.* src/deluge/generative/perform/sound_swap_lifecycle.h
 # covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/core/sound_settings.h
 # covers: src/deluge/generative/core/palette.* src/deluge/generative/core/palette_file.*
-# covers: src/deluge/gui/ui/browser/perform_preset_browser.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/ui/browser/perform_sound_browser.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/generative/firmware/entry_leave.cpp scripts/generative/fixtures/perform_transpose/
 # covers: src/deluge/generative/core/genres/techno.cpp
@@ -29,7 +29,7 @@ expect event gen_sound_transpose ACID - saved=-24 played=0 within=20
 expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/047 Basic Dirty Bass.XML within=20
 expect event /gen_sound_transpose DRONE - saved=-?\d+ played=0/ within=20
 expect event gen_sound_transpose FX IMPACT saved=-12 played=-12 within=20
-expect event gen_sound FX IMPACT fallback mode= within=20
+expect event gen_sound FX IMPACT pick mode=0 prio=0 SYNTHS/GENERATIVE/FX/GEN Impact.XML within=20
 expect event gen_perform_entered within=20
 expect root_ui=generative_perform within=10
 expect playing=false

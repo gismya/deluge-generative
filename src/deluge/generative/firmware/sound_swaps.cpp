@@ -24,6 +24,7 @@
 #include "generative/firmware/compose_edits.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/restart_began.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/runner.h"
 #include "generative/firmware/sound_controls.h"
@@ -48,8 +49,8 @@ namespace {
 PLACE_SDRAM_BSS SoundPicks stagedPicks;
 PLACE_SDRAM_BSS SoundPicks incomingPicks;
 PLACE_SDRAM_BSS SoundPicks previousPicks;
-/// The path the preset browser chose, for the preload it submits (spec §13.5).
-PLACE_SDRAM_BSS SoundPath chosenPath;
+/// The sound a Perform browser chose, for the preload it submits (spec §13.5).
+PLACE_SDRAM_BSS SoundChoice chosenSound;
 
 /// Copies `part`'s picks, its preset and its lanes' samples, from `from` to `to`.
 void copyPartPicks(const Genre& genre, int32_t part, const SoundPicks& from, SoundPicks& to) {
@@ -67,7 +68,7 @@ class SoundJob final : public Job {
 public:
 	SoundJob() : Job(Kind::Live) {}
 
-	/// Before each submit. A Chosen source's path is in `chosenPath`.
+	/// Before each submit. A Chosen source's choice is in `chosenSound`.
 	void prepare(int32_t part, SoundSwaps::Source source, uint8_t token) {
 		part_ = part;
 		source_ = source;
@@ -97,8 +98,9 @@ public:
 			copyPartPicks(*genre, part_, previousPicks, stagedPicks);
 		}
 		else if (source_ == SoundSwaps::Source::Chosen) {
-			// The browser's preset, whether or not the palette lists it.
-			if (!choosePartSound(*genre, part_, chosenPath, stagedPicks)) {
+			// The browser's preset or lane file, whether or not the palette lists it. The Kit's other lanes keep
+			// theirs.
+			if (!chooseSound(*genre, part_, chosenSound, stagedPicks)) {
 				return JobOutcome::Failed;
 			}
 		}
@@ -197,6 +199,14 @@ void SoundSwaps::forgetSong() {
 	}
 }
 
+void SoundSwaps::swapDropped(int32_t part) {
+	performAdapter.driver().logSoundDropped(static_cast<uint8_t>(part));
+}
+
+const SoundPicks& SoundSwaps::waitingPicks() {
+	return incomingPicks;
+}
+
 bool SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& output, const SoundPicks& picks) {
 	// One preload runs at a time, for a part with nothing waiting (a press on a waiting part cancels it), so the
 	// part's incoming slot is free.
@@ -204,6 +214,15 @@ bool SoundSwaps::preloadDone(int32_t part, uint8_t token, const PartOutput& outp
 		incoming_[part] = output;
 		copyPartPicks(*genre(), part, picks, incomingPicks);
 	});
+}
+
+void SoundSwaps::adoptRestarted(int32_t part, const PartOutput& output, const SoundPicks& picks) {
+	// The restart's line dropped every sound waiting for its line (pieceRestarts()), and while stopped a preload swaps
+	// in as it ends: the part's incoming slot is free.
+	incoming_[part] = output;
+	copyPartPicks(*genre(), part, picks, incomingPicks);
+	swapIn(part);
+	swappedByRestart(part);
 }
 
 void SoundSwaps::retire(const PartOutput& output, Retirements::When when) {
@@ -243,16 +262,16 @@ bool SoundSwaps::queueHeldFull() const {
 }
 
 bool SoundSwaps::runnerBusy() const {
-	return runner.busy();
+	return runner.busy() || restartBegan.holdsSounds();
 }
 
 bool SoundSwaps::preloadRunning() const {
 	return runner.active() == &soundJob;
 }
 
-bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundPath* chosen) {
+bool SoundSwaps::submitPreload(int32_t part, Source source, uint8_t token, const SoundChoice* chosen) {
 	if (chosen != nullptr) {
-		chosenPath = *chosen;
+		chosenSound = *chosen;
 	}
 	soundJob.prepare(part, source, token);
 	return runner.submit(soundJob);
@@ -273,6 +292,7 @@ void SoundSwaps::swapIn(int32_t part) {
 	retire(roster.parts[part], Retirements::When::AfterTail);
 	roster.parts[part] = incoming_[part];
 	incoming_[part] = PartOutput{};
+	performAdapter.outputLoaded(part); // its params are its preset's (spec §17.2's header snapshot)
 	// The Current Recipe keeps the new picks, and the old ones are the part's previous sound (spec §13.4).
 	copyPartPicks(current, part, currentRecipe.sounds, previousPicks);
 	copyPartPicks(current, part, incomingPicks, currentRecipe.sounds);

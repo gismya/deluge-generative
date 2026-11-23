@@ -28,17 +28,23 @@ otherwise.
   lane's pick in `decideKit()`), after its targets have picked. `interplayRulesValid()` rejects a Respond rule whose
   target lists one or reads one at any depth. A source's notes sounding into its against half aren't the rule's
   business (§5.5), so `avoided()` stays Avoid's.
-- **Replay (M4):** `Generator::ended()` reads the pending list, which replay doesn't have (comment on `ended()`).
+- **Replay (M4, #145):** `ComposeDriver::beginReplay()` doesn't stop on `Generator::ended()`, which reads the pending list; it runs the piece's span.
   Glides log their length in `Command::length`. Jumps aren't logged. At a transition's start step the incoming
   instance's `carryOver()` (the live macros and the hold, `PerformDriver::switchToIncoming()`) isn't a logged
   command: the start entry (§17) has to carry both, or replay starts the new piece on the pending Recipe's macros.
   A transition's confirm in the 12 ticks between a sound's SetSound landing and its Sound event drops the swap in
-  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token), but the core has logged the SetSound:
-  the log says a sound changed that never played (#261 decision 2, pinned in `sound_swap_spec`). M4 settles what the
-  steering log says there. It also needs the new pick's path for each landed token: tokens wrap at 255.
-- **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` becomes the Capture
-  mark. Before it saves Perform's song, its Outputs need unique names (§9.7): an incoming roster's, and a sound
-  re-roll's new Output, can share a preset name and folder with one still playing or retiring.
+  firmware (`SoundSwapLifecycle::cancelAll()`, then `swap()` finds no token); the core has logged the SetSound, and
+  `swapDropped()` logs a SoundDropped record after it (#143): Capture keeps the part's old track. Each landed token
+  has its picks as SoundPath records on its step (tokens wrap at 255).
+  The header's opening (`PieceStart`) holds the incoming instance's carried-over macros and hold, read at its step 0.
+  Jumps (SPP, a clock scale change) still aren't logged: a replay doesn't skip to the next bar line.
+- **The steering log's lifetime (#146):** `PerformAdapter::freeBlocks()` frees the log's buffer with the Generator
+  blocks at the teardown. Capture's builds run after it, so #146 keeps the buffer (and `log_`) past the teardown
+  until the last build. Marks (#144): `SteeringLog::mark()` marks the newest piece, `full()` refuses a new mark.
+- **Capture (M4):** the early return under Perform in `PlaybackHandler::recordButtonPressed()` is the Capture mark.
+  `perform_song.cpp`'s `link()` gives every linked Output a name unique in its song (`ensureUniqueInstrumentName()`,
+  `DRUMS`, `DRUMS 2`, …), so two Kits or two Synths from the same preset never collide in `InstrumentClip::claimOutput()`
+  on reload.
 - **Long sample Risers:** a Riser longer than its Build starts with it (`riserStart()` returns the note's own tick), so
   its end overshoots the Drop and the Drop's note-off cuts it. M2 doesn't build a start offset (a Compose note can't
   start a sample partway, and the offset would differ per Build length and tempo): each genre's Riser lane lists only
@@ -80,10 +86,9 @@ otherwise.
 - **Capture's builds (M4):** the runner has one next slot ([runner.md](runner.md)), and the leave job can wait in it
   (`Runner::cancelAllThen()`). A Capture build queued behind `LeaveJob` would replace it there: chain it from the leave
   job's `finished()`, or give the runner a larger next slot.
-- **Capture's clips (M4):** `ClipBuilder::take()` drops Section, KeyScale and Sound events today (spec §15.2, §15.5).
-  Capture cuts clips on Sound and KeyScale and splits songs on Section (§17.5, §17.6): those cases are where it starts
-  a new clip or song. Its replay feeds the steering log to `ComposeDriver` instead of the LENGTH rule's End
-  (`endsHere()`), and its muted notes are already dropped there.
+- **Capture's clips (#146):** the portable replay (#145) calls the SongWriter's Capture hooks (`cutClip`, `soundPick`,
+  `newTrack`, `tempo`, `paramEdit`, `stutter`, `nextSong`); the firmware's `ComposeSong` implements none yet. A split
+  song's opening state (picks, snapshot, homes) is the writer's to rebuild from begin(), newTrack() and paramEdit().
 - The Generative menu's lists (#140): a new source row is a `MenuItem` in `SourceMenu`'s list
   (`gui/menu_item/generative/source_rows.h`), in PERFORM FROM (`perform_from.cpp`), COMPOSE FROM and the screen's
   FROM (`compose_screen.cpp`). Perform entry from a new kind of source is an `EntrySource`
@@ -92,3 +97,11 @@ otherwise.
 - What a file chosen in `LoadRecipeUI` does is `loadChosen()` (`gui/ui/load/load_recipe_ui.cpp`): PERFORM FROM under
   it (`performFromShowing()`) asks DISCARD SONG?; Perform as root UI makes it a transition; otherwise the Compose
   load (`loadComposeRecipe()`), which shows the screen. A new place to open the browser from adds a branch there.
+- **Restart AS IT BEGAN (#413 part 2).** A restart is the core's `CommandKind::Restart` (lands on the next bar line,
+  stops the instance as a hard cut does), then `PerformDriver::restartOnLine()`, which ends the first run and calls
+  `NoteSink::restartPiece(generator)`. The firmware's is `PerformAdapter::restartPiece()`, which starts the Generator
+  through `PerformSteering::restartAsItIs()` (the Current Recipe). AS IT BEGAN is a second mode chosen at the press
+  (beside `pressRestart()`): its preload of the swapped sounds runs first, as a sound re-roll's does, and pushes the
+  Restart command once loaded; at the line `restartPiece()` puts the piece header's Recipe, takes and param snapshot
+  back before `Generator::start()`. #143's `openPiece()` (set by `begin()` and `switchToIncoming()`) also needs
+  setting in `restartOnLine()`, so the new piece gets its header.

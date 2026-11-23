@@ -160,7 +160,12 @@ otherwise.
   way to pick a sound is a `Source`, not a second job or swap path. The preload links the new Output into Perform's song
   while it plays (`buildPartOutput`, which re-syncs the clip to the session), and `chunks.commit()`s once linked, so a
   cancel after that is a free, not an unwind. The swap happens in the tick, on the core's Sound event; freeing (stock
-  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job.
+  `removeSessionClipLowLevel` + `deleteClipObject(DELETE)`, `freePartOutput`) only in a job. One exception: the preset
+  preview (#443) frees its own Output from the browser's frame (`PresetPreview::freeShown()`). That Output was never in
+  a roster, so nothing but the preview points at it, and `freePartOutput()`'s waits per Kit row run only the audio
+  routine and cluster loading (`routineWithClusterLoading()`), never another job's task, so no job sees the song's
+  lists half changed. Only the `deleteUnusedAudioFiles()` after it waits for a free runner: a job may be loading
+  samples that no Output holds yet.
 - `SoundSwapAdapter` is a concept, and the lifecycle is a CRTP base: a concept can't see private members, so the
   adapter's members are public (the firmware's say "only the lifecycle calls them"), and the concept is checked in
   `adapter()` and by a `static_assert` after each adapter, where the type is complete (not in the template's
@@ -195,3 +200,13 @@ otherwise.
   `gen_retire_referenced by=...`, that Output isn't freed, and nothing more is handed to the free job until Perform
   is left. `pump.h` also says when the pump doesn't run (under the sample browser's preview or QWERTY keyboard, the
   Slicer and the sample marker editor).
+- A restart (spec §13.2) lands like a hard cut but on one instance: `Generator::apply(Restart)` sets `stopAt_` and
+  `restartLanded_`, `decideNextStep()` runs `endAtStop()`, and the driver waits for the line itself (`nextWait()`
+  asks for `stepTick()` of the stop step, not its decision tick, else it is called every tick until the line). On the
+  line `restartOnLine()` plays the first run's last events, flushes the rest, rebases the clock by the line (a whole
+  number of bars, so the master's bar lines stay) and calls `NoteSink::restartPiece()`; step 0 is then decided late,
+  on the line, as a Start from 0 decides it, which is why the restarted stream equals a fresh start's. `restartAsItIs()` records what landed on
+  the line (`recordLanded()`) before it starts the Generator: a call past the line runs the restart before the
+  tick's own `recordLanded()` would (review R1). The adapter's `restartPiece()` (all notes off first, as every flush)
+  runs inside `advance()`, in the tick: it frees nothing (`SoundSwapLifecycle::pieceRestarts()` only
+  retires) and leaves a running sound preload alone.

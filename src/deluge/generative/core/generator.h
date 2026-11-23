@@ -35,9 +35,11 @@
 #include "generative/core/event_buffer.h"
 #include "generative/core/genre.h"
 #include "generative/core/part_bias.h"
+#include "generative/core/punch_ins.h"
 #include "generative/core/recipe.h"
 #include "generative/core/sounding_notes.h"
 #include "generative/core/steering.h"
+#include "generative/core/steering_log.h"
 #include "generative/core/types.h"
 #include "generative/core/voicing.h"
 #include <array>
@@ -165,6 +167,37 @@ struct Gates {
 	void crossBar(const PartSpec& spec, int32_t density);
 };
 
+/// Drop-out state (spec §8.8): the drop-out last drawn (entry index, or -1), when it plays ([from, to())), and when
+/// the next may start (after). Generator::dropOutRules() advances the playing state, and ArcPlanner steps a copy so
+/// the Arc plan agrees with the notes. Packed into 12 B (`length` is at most 16 bars = 256 steps).
+struct DropOutState {
+	int32_t from = 0;
+	int32_t after = 0;
+	int16_t length = 0;
+	int8_t entry = -1;
+
+	[[nodiscard]] constexpr int32_t to() const { return from + length; }
+
+	/// Advances to `stepIndex` on `arc` at `motion` and returns the drop-out mask active on this step (empty when none
+	/// plays). `waiting()` is called only when a draw succeeds and needs the next Section start ahead.
+	template <typename Waiting>
+	GEN_STEP_CODE PartsAndLanes step(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
+	                                 int32_t motion, Waiting waiting) {
+		PartsAndLanes mask;
+		DrawKey key;
+		if (stepOrDraw(genre, seed, arc, stepIndex, motion, mask, key)) {
+			pick(genre, arc, stepIndex, motion, waiting(), key);
+		}
+		return mask;
+	}
+
+private:
+	bool stepOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t motion,
+	                PartsAndLanes& outMask, DrawKey& outKey);
+	void pick(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting,
+	          const DrawKey& key);
+};
+
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
 template <typename Test>
 constexpr bool anyLane(const PartSpec& spec, Test test) {
@@ -233,6 +266,8 @@ struct PartState {
 	} sustain;
 };
 
+class ArcPlanner;
+
 class Generator {
 public:
 	/// Begins a piece: every counter and the Arc reset, and nothing pending (every start is fresh, spec §13.2). The
@@ -250,6 +285,29 @@ public:
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
 	void decideNextStep(SteeringQueue& queue, SteeringLog* log);
+
+	// ---- Replay (spec §2.6, §17.1): Capture's Compose driver plays a piece's steering log ----
+
+	/// Begins a piece as its log's header opened it (spec §17.2, §17.3): its Recipe at step 0 (a transition's carried
+	/// macros and Part biases already in it), seed and takes, entering its first Section (a Drop's Groove with
+	/// `onDrop`), with the Arc held if the hold was carried over.
+	void startPiece(const PieceStart& start);
+	/// As decideNextStep(), from the log's records stamped on nextStep(), in order (spec §2.6): each command applied
+	/// there as it landed, through apply(), with no press to resolve and no quantisation. The pending list holds only
+	/// the Arc moves the log says wait (RecordKind::Waiting), because the Arc's look-ahead reads them; each leaves it
+	/// as its command lands. `next(LogRecord&)` hands the records on one at a time and returns false after the last.
+	template <typename Next>
+	void decideReplayed(Next next) {
+		if (stoppedDeciding()) {
+			return;
+		}
+		beginDecision();
+		LogRecord record;
+		while (next(record)) {
+			replay(record);
+		}
+		decideLanded();
+	}
 
 	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
 	/// without deciding it. A force that lands on the end line then cancels the ending (spec §13.2). Everything else
@@ -269,8 +327,17 @@ public:
 	[[nodiscard]] bool transitionWaiting() const { return pending_.has(CommandKind::Transition); }
 	/// The waiting transition's command, or nullptr.
 	[[nodiscard]] const Command* waitingTransition() const { return pending_.waiting({CommandKind::Transition}); }
-	/// Once the transition has landed, its start step: the Drop, the seam or the cut line. Otherwise -1.
+	/// Once the transition has landed, its start step: the Drop, the seam or the cut line; or a restart's line.
+	/// Otherwise -1.
 	[[nodiscard]] int32_t transitionStart() const { return stopAt_ == kNever ? -1 : stopAt_; }
+
+	// ---- A restart (spec §13.2) ----
+
+	/// Whether a restart waits in the pending list for its bar line: it can still be cancelled.
+	[[nodiscard]] bool restartWaiting() const { return pending_.has(CommandKind::Restart); }
+	/// Whether a restart has landed: the instance stopped deciding on its line (transitionStart()), and every note
+	/// still sounding ends there. The driver starts the piece again on that line.
+	[[nodiscard]] bool restartLanded() const { return restartLanded_; }
 	/// Whether the instance decides nothing more: it has reached its transition's start step. Its buffered events still
 	/// play (note-offs, hits leaning late) until isDrained().
 	[[nodiscard]] bool stoppedDeciding() const { return nextStep_ >= stopAt_; }
@@ -302,6 +369,8 @@ public:
 
 	[[nodiscard]] const Recipe& recipe() const { return recipe_; }
 	[[nodiscard]] const Arc& arc() const { return arc_; }
+	[[nodiscard]] uint32_t seed() const { return seed_; }
+	[[nodiscard]] const Takes& takes() const { return takes_; }
 	/// The Drop's tick for a Riser note-on just placed, or -1 if it plays as placed: the core places a Build's Riser on
 	/// its first step, decided just now, to run to the Drop (spec §9.5). Perform and Compose both time a sample Riser
 	/// from here (perform/riser_timing.h).
@@ -345,6 +414,8 @@ public:
 	[[nodiscard]] bool partMuted(int32_t part) const { return (mutes_.muted & partBit(part)) != 0; }
 	[[nodiscard]] bool partSoloed(int32_t part) const { return (mutes_.soloed & partBit(part)) != 0; }
 	[[nodiscard]] bool anySoloed() const { return mutes_.soloed != 0; }
+	/// The tier 2 punch-ins on as of the last decided step (spec §8.9).
+	[[nodiscard]] const PunchIns& punchIns() const { return punch_; }
 	/// Whether a part is frozen (its CROSS-SCREEN LED, spec §13.5).
 	[[nodiscard]] bool partFrozen(int32_t part) const { return (frozen_ & partBit(part)) != 0; }
 	/// A part's take on the last decided step (spec §6.6).
@@ -394,17 +465,17 @@ public:
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
-	/// M4: replay has no pending list (spec §2.6), so it can't see that waiting force. A replaying driver must not stop
-	/// on ended() when the log holds a force stamped on the end line; it applies the force there and goes on.
+	/// Capture's replay never stops on it: it runs the piece's span (ComposeDriver::beginReplay()).
 	/// A transition's Outro ends where the new roster starts, so it never ends the piece, and nor does an Outro while a
-	/// transition waits.
+	/// transition or a restart waits: a restart lands on the end line at the latest, and the piece starts again there.
 	[[nodiscard]] bool ended() const {
-		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting();
+		return outroEndsAfter(arc_, nextStep_ - 1) && stopAt_ == kNever && !transitionWaiting() && !restartWaiting();
 	}
 	/// The Arc plan (spec §2.8): from the phrase the last decided step is in, up to ArcPlan::kMaxPhrases phrases as
 	/// the Arc will play them, with the pending list landed where it waits and the Recipe as it is now. Worked out on
 	/// demand from a copy of the Arc's counters and its keyed draws: no cache. Costs a step of Arc arithmetic per step
-	/// planned, so the SONG page asks only when a phrase line passes or the queue changes.
+	/// planned (2-7 ms on the Deluge, #454), so the SONG page asks only when a phrase line passes or the steering
+	/// changes, and spreads the work over frames with an ArcPlanner.
 	void planArc(ArcPlan& out) const;
 	/// Events a full event buffer has dropped. A harness spec fails on any.
 	[[nodiscard]] uint32_t droppedEvents() const { return dropped_; }
@@ -487,6 +558,10 @@ private:
 	/// One step of a roll on a lane, at `roll`'s stage and from its base velocity: the Build roll's (spec §8.3) or a
 	/// Roll fill's (§8.7).
 	void playRoll(int32_t partIndex, int32_t laneIndex, const Step& step, RollStep roll);
+	/// Whether the punch-ins act on `part`: the Drums part (spec §8.9).
+	[[nodiscard]] bool punchesPart(int32_t part) const { return part == drumsPart(*genre_); }
+	/// The roll a punch-in plays on the Drums part's `lane`, or one with no stage (spec §8.9).
+	[[nodiscard]] RollStep punchRoll(int32_t partIndex, Lane lane) const;
 	/// Whether the Build roll rolls on `lane` on `step` (spec §8.3): it wins there over a fill and a Replace pair.
 	[[nodiscard]] bool buildRollsOn(const Step& step, Lane lane) const {
 		return step.buildRoll.stage != RollStage::None && lane != Lane::None && lane == genre_->arc.roll.lane;
@@ -541,7 +616,7 @@ private:
 	};
 	[[nodiscard]] ThrowLine throwLine() const;
 	/// Whether a Siren note that sounded on the last decided step has ended by `step`, however it ended: its length,
-	/// a Section line, its gate or a new sound. Updates sirenSounding_.
+	/// a Section line, its gate, a new sound or a drop-out masking it. Updates sirenSounding_.
 	[[nodiscard]] bool sirenReleases(const Step& step);
 	/// Close and Wash's level on `step`, and Rise's on the Arc's step, per-mille (spec §11.4).
 	[[nodiscard]] int32_t closeWashLevel(int32_t step) const;
@@ -609,6 +684,22 @@ private:
 	[[nodiscard]] Arc::Move waitingMove() const;
 	/// Pending commands whose line is the next step land on it, each applied and logged there.
 	void landPending(SteeringLog* log);
+	/// A decision's start, before the steering lands on `nextStep()`.
+	void beginDecision();
+	/// Whether `command` waits in an Arc move's slot: a force or End, or a transition (Arc::Move).
+	static bool isArcMove(const Command& command) {
+		return command.kind == CommandKind::ForceSection || command.kind == CommandKind::End
+		       || command.kind == CommandKind::Transition;
+	}
+	/// Logs each Arc move slot that changed on `nextStep()` since the last decision (RecordKind::Waiting, NotWaiting),
+	/// so replay can wait it as this decision does.
+	void logWaitingMoves(SteeringLog* log);
+	/// Notes what waits in the Arc move slots now, as logged: after the landings, which leave their slots logged.
+	void noteWaitingMoves();
+	/// One replayed record (decideReplayed()).
+	void replay(const LogRecord& record);
+	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide.
+	void decideLanded();
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
 	/// keeps its own note-off (spec §12.9). The new roster plays from here.
 	void endAtStop();
@@ -623,6 +714,7 @@ private:
 	/// Ends part `partIndex`'s notes sounding into `step` when Avoid keeps it off the step (avoided(), spec §5.5): a
 	/// Loop note at its plain gate or the line, any other on the line. @return Whether it did.
 	bool endAvoided(int32_t partIndex, const Step& step);
+	friend class ArcPlanner; // copies what planArc() moves on
 #ifdef GENERATOR_TEST_SEAMS
 	/// Harness only (spec §21.2): stands in for the flavours the core has no code for yet. decidePart() hands it a part
 	/// whose flavour it can't play, in that flavour's place in the step; nullptr leaves the part silent. TestFlavour,
@@ -664,6 +756,9 @@ private:
 	/// Whether a note gets an Ornament, and which (spec §8.2).
 	[[nodiscard]] OrnamentKind ornamentFor(int32_t partIndex, const Ornaments& ornaments, const PatternState& pick,
 	                                       int32_t patternStep, Lane lane) const;
+	/// The Ornament a Drums hit on `lane` plays while a Flam or Double kick punch-in is on, in place of `drawn` (spec
+	/// §8.9).
+	[[nodiscard]] OrnamentKind punchOrnament(int32_t partIndex, Lane lane, OrnamentKind drawn) const;
 	void decideLoop(int32_t partIndex, const Step& step);
 	/// A Sustain part (spec §5.2, §8.1): on each bar line, its voicing thinned by Density. A note that still plays
 	/// holds on to the next bar line; the whole voicing re-strikes at a chord change, a retrigger line, a Section line,
@@ -803,6 +898,9 @@ private:
 	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
 	/// @return The playing chord's degree from this step on.
 	int32_t walkChord(int32_t step);
+	/// walkChord() for a looping graph (spec §7.4), on the chord lines of its grid and on a Drop: moves to a new loop
+	/// on a Drop, and draws each chord keyed on the loop and the bar in it, so every pass plays the same chords.
+	int32_t walkLoop(const ChordGraph& graph, int32_t step, int32_t current);
 	/// Voices the chord on `root` at the Extension level the Recipe's Complexity gives, within the genre's floor and
 	/// ceiling: on bar lines, and as a piece starts.
 	void voiceChordAt(int32_t root);
@@ -856,14 +954,19 @@ private:
 	Arc arc_;
 	/// Quantised steering waiting for its line. A stop cancels it: every start is fresh (spec §2.6, §13.2).
 	PendingList pending_;
+	/// The Arc move slots as the log last had them (logWaitingMoves()): the force or End, then the transition;
+	/// CancelNewest (never pending) for an empty slot.
+	Command waitingMoves_[2] = {{CommandKind::CancelNewest}, {CommandKind::CancelNewest}};
 	uint32_t refused_ = 0;
 	/// The roster's mutes and solos. Performance state (spec §12.5, §13.1).
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
-	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, the cut, the Gap), unless the
-	/// Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
+	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
+	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
+	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
+	PunchIns punch_;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
 	uint8_t landedSound_[kMaxParts] = {};
 	/// Fills (spec §8.7). Each an entry of the genre's fills, or -1: the phrase's automatic fill, drawn on its first
@@ -872,20 +975,17 @@ private:
 	int8_t heldFill_ = -1;
 	/// Steps the held fill has played since FILL went down, up to a beat: a held Roll's first beat (spec §8.7).
 	uint8_t heldSteps_ = 0;
-	/// The drop-out last drawn, by its index in the genre's drop-outs, or -1 (spec §8.8): it waits before
-	/// dropOutFrom_, plays up to dropOutTo_ and has ended from there. Performance state, lost on stop.
-	int8_t dropOut_ = -1;
 	/// A Siren note sounded on the last decided step: one that has ended since is its release (spec §9.5, §11.4).
 	bool sirenSounding_ = false;
 	/// Bit p: pitched part p was in a Rest on the last decided step, so its notes have been ended.
 	uint8_t rested_ = 0;
+	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
+	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
+	uint8_t cutParts_ = 0;
 	/// Respond's counts (spec §5.5), by half of the bar: the targets (respondMask()) whose planned onsets make that
 	/// half against, as counted at its first step this bar (the second half: the last bar's until step 8 is counted).
 	/// Step state derived from the targets' plans, so takes and freeze replay it as they do the draws it reads.
 	PartsAndLanes busyHalves_[2];
-	/// Bit p: a new sound or a key change landed for part p on the step being decided, ending its notes on the line.
-	/// Its notes there start on the line, as on a Section's first step (spec §8.5, §10.7, §7.6).
-	uint8_t cutParts_ = 0;
 	/// A fill covered the last decided step: a phrase line after it gets a Phrase accent (spec §9.5).
 	bool filled_ = false;
 	SectionKind closeWashBy_ = SectionKind::Break; ///< See closeWashFrom_.
@@ -895,6 +995,9 @@ private:
 	/// crosses, so a jump leaves the walk where it is.
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
+	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255). Moved only
+	/// on a Drop's chord line.
+	uint8_t chordLoop_ = 0;
 	/// The playing chord, voiced on the last bar line (spec §7.4): the walk's degree is its root, `steps[0]`, and its
 	/// Extension level the Recipe's Complexity then, within the genre's floor and ceiling. Chords, Extensions and keys
 	/// change only on bar lines (a key change lands on a phrase line), so every part that plays chord tones reads it
@@ -906,17 +1009,16 @@ private:
 	static_assert(kMaxControlSets <= UINT8_MAX, "controlCount_ counts the control sets in a byte");
 	/// The genre has a Siren lane on an FX part, so sirenReleases() has notes to look for: set at begin().
 	bool hasSiren_ = false;
+	/// A restart landed on stopAt_ (spec §13.2), rather than a transition. Beside the other byte fields.
+	bool restartLanded_ = false;
 	PartState parts_[kMaxParts];
 	ControlSet controls_[kMaxControlSets];
 	/// Close and Wash (spec §11.4): the step they began easing in on, entering a Break or an Outro, or kNever. They
 	/// hold until a Reset. `closeWashBy_` (beside the other byte fields, so no padding) is the Section kind whose
 	/// moment switches them.
 	int32_t closeWashFrom_ = kNever;
-	/// The drop-out's steps (spec §8.8): it plays from dropOutFrom_ up to dropOutTo_, and the next may start from
-	/// dropOutAfter_, its gap after the last that played.
-	int32_t dropOutFrom_ = 0;
-	int32_t dropOutTo_ = 0;
-	int32_t dropOutAfter_ = 0;
+	/// The drop-out state (spec §8.8): plays on [from, to), next may start from after. Performance state, lost on stop.
+	DropOutState dropOut_;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
@@ -930,11 +1032,57 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 3 + 5 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, and a take, a mute, a solo, a sound and an "
-              "octave shift per part at once");
+static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
+              "the pending list holds a key change, a force, a transition, a restart, and a take, a mute, a solo, a "
+              "sound and an octave shift per part at once");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");
+
+/// Generator::planArc() in slices (#454): begin() copies everything the plan reads from a piece, so advance() can go
+/// on in later frames while the piece steps on or is replaced, and ends with the plan planArc() gave at begin(). The
+/// SONG page plans a slice a frame: a whole planArc() at once kept the audio routine waiting past the output buffer.
+class ArcPlanner {
+public:
+	/// Starts planning `piece` as it is now; any plan under way is dropped.
+	void begin(const Generator& piece);
+	/// Plans up to `maxSteps` more steps. @return Whether the plan is done (plan() holds it); true at once if nothing
+	/// is under way.
+	bool advance(int32_t maxSteps);
+	[[nodiscard]] bool planning() const { return planning_; }
+	/// The plan: complete once advance() returned true.
+	[[nodiscard]] const ArcPlan& plan() const { return plan_; }
+
+private:
+	/// One step of the plan, into phrase `phrase` (counted from plan_.first).
+	void addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy);
+	/// The earliest waiting Arc move after `step`, as Generator::waitingMove() computes it.
+	[[nodiscard]] Arc::Move waitingMove(int32_t step) const;
+
+	struct Landing {
+		Command command;
+		int32_t step;
+	};
+	const Genre* genre_ = nullptr;
+	uint32_t seed_ = 0;
+	Macros centre_;
+	PartBiases bias_;
+	Landing landings_[PendingList::kCapacity];
+	int32_t waiting_ = 0;
+	/// The step a waiting force or End lands on, or -1: an Outro ends the piece unless one lands on the step after.
+	int32_t forceLands_ = -1;
+	/// The step a transition's new roster starts on: the landed one's, or where the waiting one's would be.
+	int32_t newRoster_ = 0;
+	int32_t step_ = 0;
+	bool ended_ = false;
+	bool planning_ = false;
+	Arc arc_;
+	MuteSolo mutes_;
+	Gates gates_[kMaxParts] = {};
+	DropOutState dropOut_;
+	int32_t energySum_[ArcPlan::kMaxPhrases] = {};
+	int32_t steps_[ArcPlan::kMaxPhrases] = {};
+	ArcPlan plan_;
+};
 
 } // namespace deluge::generative

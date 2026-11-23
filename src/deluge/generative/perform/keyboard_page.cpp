@@ -38,6 +38,27 @@ int32_t faderLevel(int32_t units) {
 	return std::clamp<int32_t>(macroLevel(units), 0, kTopLevel);
 }
 
+/// A main pad's place: its row from the top and its column, from 0.
+struct PadAt {
+	int32_t row;
+	int32_t x;
+};
+constexpr int32_t kRows = KeyboardPage::kRows;
+/// Drums lane pad `l`'s place, down column 9, then column 10, and back.
+constexpr PadAt laneMuteCell(int32_t l) {
+	return {l % kRows, kLaneMuteColumn + l / kRows};
+}
+constexpr int32_t laneMuteIndex(int32_t x, int32_t row) {
+	return (x - kLaneMuteColumn) * kRows + row;
+}
+/// Punch-in pad `i`'s place (kPunchPads' order), two to a row, and back.
+constexpr PadAt punchCell(int32_t i) {
+	return {i / kPunchColumns, kPunchFirstColumn + i % kPunchColumns};
+}
+constexpr int32_t punchIndex(int32_t x, int32_t row) {
+	return row * kPunchColumns + (x - kPunchFirstColumn);
+}
+
 } // namespace
 
 KeyboardPad keyboardPad(int32_t x, int32_t row) {
@@ -47,6 +68,14 @@ KeyboardPad keyboardPad(int32_t x, int32_t row) {
 	if (x >= kFillFirstColumn && x < kFillFirstColumn + kFillColumns && row >= kFillFirstRow
 	    && row < kFillFirstRow + kFillRows) {
 		return KeyboardPad::Fill;
+	}
+	if (x >= kLaneMuteColumn && x < kLaneMuteColumn + kLaneMuteColumns && row >= 0 && row < kRows
+	    && laneMuteIndex(x, row) < kNumDrumLanes) {
+		return KeyboardPad::LaneMute;
+	}
+	if (x >= kPunchFirstColumn && x < kPunchFirstColumn + kPunchColumns && row >= 0
+	    && punchIndex(x, row) < kNumPunchPads) {
+		return KeyboardPad::Punch;
 	}
 	return KeyboardPad::None;
 }
@@ -74,6 +103,12 @@ KeyboardPadAt resolveKeyboardPad(int32_t x, int32_t row) {
 		break;
 	case KeyboardPad::Fill:
 		at.pad = FillHolds::padHolder(fillPad(x, row));
+		break;
+	case KeyboardPad::LaneMute:
+		at.pad = laneMuteIndex(x, row);
+		break;
+	case KeyboardPad::Punch:
+		at.punch = kPunchPads[punchIndex(x, row)];
 		break;
 	case KeyboardPad::None:
 		break;
@@ -127,6 +162,26 @@ void composeKeyboardPage(const KeyboardPageInput& in, KeyboardPage& out) {
 			out.cell[row][x] = {.look = Look::Fill, .lit = in.fill};
 		}
 	}
+	// A pad per lane the Drums part has; the rest of the two columns stay dark.
+	for (int32_t l = 0; l < std::min(in.drumLaneCount, kNumDrumLanes); l++) {
+		const int32_t key = PunchHolds::punchKey(PunchIn::LaneMute, in.drumLanes[l]);
+		const PadAt at = laneMuteCell(l);
+		out.cell[at.row][at.x] = {
+		    .look = Look::LaneMute,
+		    .lit = in.punches != nullptr && in.punches->on(key),
+		    .held = in.punches != nullptr && in.punches->held(key),
+		};
+	}
+	for (int32_t i = 0; i < kNumPunchPads; i++) {
+		const int32_t key = PunchHolds::punchKey(kPunchPads[i], Lane::None);
+		const PadAt at = punchCell(i);
+		out.cell[at.row][at.x] = {
+		    .look = Look::Punch,
+		    .lit = in.punches != nullptr && in.punches->on(key),
+		    .held = in.punches != nullptr && in.punches->held(key),
+		    .punch = kPunchPads[i],
+		};
+	}
 }
 
 void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars + 1]) {
@@ -166,6 +221,86 @@ void describeKeyboard(const KeyboardPage& page, char (&out)[kKeyboardTextChars +
 	if (page.focused >= 0) {
 		text.add(" part=").add(static_cast<int32_t>(page.focused));
 	}
+}
+
+void describePunches(const KeyboardPage& page, char (&out)[kPunchTextChars + 1]) {
+	Text text(out);
+	text.add("lanes=");
+	for (int32_t l = 0; l < kNumDrumLanes; l++) {
+		const PadAt at = laneMuteCell(l);
+		const KeyboardCell& cell = page.cell[at.row][at.x];
+		if (cell.look == Look::LaneMute) {
+			text.add(cell.held ? "M" : cell.lit ? "m" : ".");
+		}
+	}
+	text.add(" punch=");
+	for (int32_t i = 0; i < kNumPunchPads; i++) {
+		constexpr const char* kOn[] = {"H", "S", "F", "D", "P"}; // kPunchPads' order
+		constexpr const char* kHeld[] = {"h", "s", "f", "d", "p"};
+		static_assert(sizeof(kOn) / sizeof(kOn[0]) == kNumPunchPads && sizeof(kHeld) == sizeof(kOn));
+		const PadAt at = punchCell(i);
+		const KeyboardCell& cell = page.cell[at.row][at.x];
+		text.add(cell.held ? kHeld[i] : cell.lit ? kOn[i] : ".");
+	}
+}
+
+bool PunchHolds::press(int32_t key, uint32_t now) {
+	const uint32_t bit = 1U << key;
+	if ((held_ & bit) != 0) {
+		return false;
+	}
+	held_ |= bit;
+	pressedAt_[key] = now;
+	wasOn_ = (on_ & bit) != 0 ? wasOn_ | bit : wasOn_ & ~bit;
+	if ((on_ & bit) != 0) {
+		return false;
+	}
+	on_ |= bit;
+	return true;
+}
+
+bool PunchHolds::release(int32_t key, uint32_t now, uint32_t tapTime) {
+	const uint32_t bit = 1U << key;
+	if ((held_ & bit) == 0) {
+		return false;
+	}
+	held_ &= ~bit;
+	// A tap on one that was off latches it; any other release lets it go.
+	if ((wasOn_ & bit) == 0 && now - pressedAt_[key] < tapTime) {
+		return false;
+	}
+	on_ &= ~bit;
+	return true;
+}
+
+void PunchHolds::refused(int32_t key, bool on) {
+	const uint32_t bit = 1U << key;
+	held_ &= ~bit;
+	on_ = on ? on_ | bit : on_ & ~bit;
+	popupKey_ = -1; // the refusal popup replaces any punch-in popup
+}
+
+PunchPopup PunchHolds::popup(int32_t key, bool down) {
+	if (down) {
+		if (!held(key)) {
+			return PunchPopup::None;
+		}
+		popupKey_ = static_cast<int8_t>(key);
+		return PunchPopup::Hold;
+	}
+	if (popupKey_ != key) {
+		return PunchPopup::None;
+	}
+	popupKey_ = -1;
+	return on(key) ? PunchPopup::Brief : PunchPopup::Cancel;
+}
+
+bool PunchHolds::dismissPopup() {
+	if (popupKey_ < 0) {
+		return false;
+	}
+	popupKey_ = -1;
+	return true;
 }
 
 void MacroFaderHolds::press(Macro macro, int32_t pad, int32_t units, uint32_t now, int32_t part) {

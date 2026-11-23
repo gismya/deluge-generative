@@ -15,8 +15,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// PerformView's KEYBOARD page (spec §13.5): the macro faders, FILL, the key pads.
+// PerformView's KEYBOARD page (spec §13.5): the macro faders, FILL, the punch-in pads.
 
+#include "generative/core/lane_names.h"
 #include "gui/views/perform_view_internal.h"
 
 using deluge::generative::Macro;
@@ -35,11 +36,38 @@ constexpr RGB kMacroColours[] = {RGB(255, 70, 30), RGB(255, 200, 0), RGB(0, 180,
 constexpr RGB kFillColour = RGB::monochrome(70);
 
 /// A KEYBOARD fader press let go sooner than this is a tap, a new centre; held longer, it springs back (spec §13.5).
+/// The punch-in pads share it.
 constexpr uint32_t kMacroTapSamples = kSampleRate * deluge::generative::perform::kMacroTapMs / 1000;
+
+/// A Drums lane's mute pad while its lane plays, and while muted: stock's mute colours (spec §13.5).
+constexpr RGB kLanePlays = RGB(0, 160, 0);
+constexpr RGB kLaneMuted = RGB(255, 0, 0);
+/// Each punch-in pad's colour, indexed by PunchIn: LaneMute (its pads use kLanePlays and kLaneMuted), Hat roll, Snare
+/// roll, Flam, Double kick, Pump (tuning).
+constexpr RGB kPunchColours[] = {RGB(0, 0, 0),      RGB(0, 200, 255), RGB(255, 140, 0),
+                                 RGB(255, 60, 160), RGB(255, 30, 0),  RGB(120, 255, 60)};
+static_assert(sizeof(kPunchColours) / sizeof(kPunchColours[0]) == deluge::generative::kNumPunchIns);
 
 /// What the Recipe keeps for a fader let go: the macro's centre, or `part`'s bias on it (test events).
 [[maybe_unused]] int32_t keptByFader(Macro macro, int32_t part) {
 	return part >= 0 ? currentRecipe.recipe.bias.of(part, macro) : currentRecipe.recipe.macros[macro];
+}
+
+/// The punch-in pad's OLED popup label (spec §13.5): `<LANE> MUTE` for a Drums lane mute, or the punch-in's name.
+void punchPopupText(deluge::generative::PunchIn punch, deluge::generative::Lane lane, char (&out)[24]) {
+	using deluge::generative::PunchIn;
+	if (punch == PunchIn::LaneMute) {
+		snprintf(out, sizeof(out), "%s %s", deluge::generative::laneName(lane),
+		         deluge::l10n::get(deluge::l10n::String::STRING_FOR_MUTE));
+		return;
+	}
+	constexpr deluge::l10n::String kNames[] = {
+	    deluge::l10n::String::STRING_FOR_MUTE,        deluge::l10n::String::STRING_FOR_HAT_ROLL,
+	    deluge::l10n::String::STRING_FOR_SNARE_ROLL,  deluge::l10n::String::STRING_FOR_FLAM,
+	    deluge::l10n::String::STRING_FOR_DOUBLE_KICK, deluge::l10n::String::STRING_FOR_PUMP,
+	};
+	static_assert(sizeof(kNames) / sizeof(kNames[0]) == deluge::generative::kNumPunchIns);
+	snprintf(out, sizeof(out), "%s", deluge::l10n::get(kNames[static_cast<int32_t>(punch)]));
 }
 
 } // namespace
@@ -60,8 +88,14 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 		performAdapter.steering().holdFader(part, at.macro, units);
 		TEST_EVENT("gen_macro_pad macro=%d hold units=%ld part=%ld", static_cast<int>(at.macro),
 		           static_cast<long>(units), static_cast<long>(part));
+		punchHolds_.dismissPopup(); // the macro/bias popup replaces any held punch-in popup
 		if (part >= 0) {
-			const int32_t bias = performAdapter.steering().heldBias(at.macro);
+			// The bias the press sets, clamped as the Recipe's: worked out here, not read back from the hold, which a
+			// full queue leaves stale.
+			deluge::generative::PartBiases pressed;
+			pressed.set(part, at.macro,
+			            deluge::generative::perform::faderBias(currentRecipe.recipe.macros[at.macro], units));
+			const int32_t bias = pressed.of(part, at.macro);
 			showBiasPopup(at.macro, deluge::generative::partBiased(currentRecipe.recipe.macros[at.macro], bias), bias);
 		}
 		else {
@@ -72,11 +106,97 @@ void PerformView::keyboardPadAction(int32_t x, int32_t y, bool on) {
 	case KeyboardPad::Fill:
 		holdFill(at.pad, on);
 		break;
+	case KeyboardPad::LaneMute: {
+		deluge::generative::Lane lanes[deluge::generative::kMaxLanesPerPart];
+		if (at.pad < drumLanes(lanes)) {
+			punchPadAction(at.punch, lanes[at.pad], on);
+		}
+		break;
+	}
+	case KeyboardPad::Punch:
+		punchPadAction(at.punch, deluge::generative::Lane::None, on);
+		break;
 	case KeyboardPad::None:
 		break;
 	}
 	refreshKeyboardPage();
 	refreshScreen();
+}
+
+void PerformView::punchPadAction(deluge::generative::PunchIn punch, deluge::generative::Lane lane, bool on) {
+	using deluge::generative::perform::PunchHolds;
+	const int32_t key = PunchHolds::punchKey(punch, lane);
+	const bool wasHeld = punchHolds_.held(key);
+	// A press turns an off punch-in on at once; a tap latches it, a hold or a tap on a latched one lets it go (spec
+	// §13.5). The core plays each change from the next undecided step (§8.9).
+	const bool changes = on ? punchHolds_.press(key, AudioEngine::audioSampleTimer)
+	                        : punchHolds_.release(key, AudioEngine::audioSampleTimer, kMacroTapSamples);
+	if (changes && !performAdapter.steering().setPunch(punch, lane, on)) {
+		punchHolds_.refused(key, !on);
+		display->displayPopup(l10n::get(l10n::String::STRING_FOR_QUEUE_FULL));
+	}
+	else if (on != wasHeld) {
+		showPunchPopup(punch, lane, punchHolds_.popup(key, on));
+	}
+	TEST_EVENT("gen_punch_pad punch=%d lane=%d %s on=%d", static_cast<int>(punch), static_cast<int>(lane),
+	           on ? "down" : "up", punchHolds_.on(key) ? 1 : 0);
+}
+
+void PerformView::showPunchPopup(deluge::generative::PunchIn punch, deluge::generative::Lane lane,
+                                 deluge::generative::perform::PunchPopup action) {
+	using deluge::generative::perform::PunchPopup;
+	switch (action) {
+	case PunchPopup::Hold: {
+		char text[24];
+		punchPopupText(punch, lane, text);
+		display->popupText(text);
+		TEST_EVENT("gen_punch_popup hold %s present=%d", text, display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+		break;
+	}
+	case PunchPopup::Brief: {
+		char text[24];
+		punchPopupText(punch, lane, text);
+		display->displayPopup(text);
+		TEST_EVENT("gen_punch_popup brief %s present=%d", text, display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+		break;
+	}
+	case PunchPopup::Cancel:
+		cancelPunchPopup();
+		break;
+	case PunchPopup::None:
+		break;
+	}
+}
+
+void PerformView::cancelPunchPopup() {
+	if (display->hasPopupOfType(PopupType::GENERAL)) {
+		display->cancelPopup();
+	}
+	TEST_EVENT("gen_punch_popup off present=%d", display->hasPopupOfType(PopupType::GENERAL) ? 1 : 0);
+}
+
+void PerformView::dismissPunchPopup() {
+	if (punchHolds_.dismissPopup()) {
+		cancelPunchPopup();
+	}
+}
+
+int32_t PerformView::drumLanes(deluge::generative::Lane (&lanes)[deluge::generative::kMaxLanesPerPart]) const {
+	using namespace deluge::generative;
+	const Genre* genre = currentRecipe.recipe.genre;
+	if (genre == nullptr) {
+		return 0;
+	}
+	const int32_t drums = drumsPart(*genre);
+	if (drums < 0) {
+		return 0;
+	}
+	const PartSpec& part = genre->parts[drums];
+	const int32_t count = std::min<int32_t>(laneCount(part), kMaxLanesPerPart);
+	for (int32_t l = 0; l < count; l++) {
+		lanes[l] = part.lanes[l].lane;
+	}
+	return count;
 }
 
 void PerformView::releaseMacroPad(Macro macro, int32_t pad) {
@@ -109,6 +229,12 @@ bool PerformView::keyboardPadHeld(int32_t x, int32_t y) const {
 		return macroHolds_.held(at.macro, at.pad);
 	case KeyboardPad::Fill:
 		return fillHolds_.held(at.pad);
+	case KeyboardPad::LaneMute: {
+		deluge::generative::Lane lanes[deluge::generative::kMaxLanesPerPart];
+		return at.pad < drumLanes(lanes) && punchHolds_.held(PunchHolds::punchKey(at.punch, lanes[at.pad]));
+	}
+	case KeyboardPad::Punch:
+		return punchHolds_.held(PunchHolds::punchKey(at.punch, deluge::generative::Lane::None));
 	case KeyboardPad::None:
 		break;
 	}
@@ -124,6 +250,9 @@ void PerformView::releaseLostHolds() {
 		for (int32_t x = 0; x < kDisplayWidth; x++) {
 			if (keyboardPadHeld(x, y) && !matrixDriver.isPadPressed(x, y)) {
 				keyboardPadAction(x, y, false);
+			}
+			if (performancePadHeld(x, y) && !matrixDriver.isPadPressed(x, y)) {
+				performancePadAction(x, y, false); // stock Performance view's, a stutter's included
 			}
 		}
 	}
@@ -146,6 +275,12 @@ RGB keyboardColour(const deluge::generative::perform::KeyboardCell& cell, Sectio
 		return sectionColour(section, true).dim(cell.lit ? 1 : 4);
 	case Look::Fill:
 		return cell.lit ? RGB(255, 255, 255) : kFillColour;
+	case Look::LaneMute:
+		return cell.lit ? kLaneMuted : kLanePlays.dim(cell.held ? 0 : 2);
+	case Look::Punch: {
+		const RGB colour = kPunchColours[static_cast<int32_t>(cell.punch)];
+		return cell.lit ? colour : colour.dim(4); // bright while on, faint while off
+	}
 	case Look::Off:
 		break;
 	}
@@ -171,6 +306,10 @@ void PerformView::refreshKeyboardPage() {
 	in.clock = performAdapter.clock();
 	in.phraseSteps = performAdapter.steering().phraseSteps();
 	in.fill = currentSong->isFillModeActive(); // MIDI FILL too
+	deluge::generative::Lane lanes[deluge::generative::kMaxLanesPerPart];
+	in.drumLaneCount = drumLanes(lanes);
+	in.drumLanes = lanes;
+	in.punches = &punchHolds_;
 	KeyboardPage composed;
 	composeKeyboardPage(in, composed);
 #if ENABLE_SYSEX_TEST
@@ -181,6 +320,13 @@ void PerformView::refreshKeyboardPage() {
 		if (strcmp(text, shownKeyboard_) != 0) {
 			strcpy(shownKeyboard_, text);
 			TEST_EVENT("gen_keyboard %s", text);
+		}
+		char punches[kPunchTextChars + 1];
+		static_assert(sizeof(punches) == sizeof(shownPunches_));
+		describePunches(composed, punches);
+		if (strcmp(punches, shownPunches_) != 0) {
+			strcpy(shownPunches_, punches);
+			TEST_EVENT("gen_punch %s", punches);
 		}
 	}
 #endif

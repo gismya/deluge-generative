@@ -4,7 +4,8 @@
 # refused and the browser stays. Stopped, a file loads at once: LOAD MISSING's two missing sounds are re-rolled (2
 # sounds replaced, so it no longer matches its file but for the sounds), LOAD OK matches its file. Playing, LOAD OLDER
 # shows its version notice and asks the transition confirm; the confirm's default plays through, and the new piece
-# has the file's Recipe, seed, takes and macros ("check recipe *").
+# has the file's Recipe, seed, takes and macros ("check recipe *"). The card log is off ("hold card_log_off"): a press
+# made while it writes (its spare file, a flush) is handled inside that card wait and refused BUSY (#485).
 # gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|refused why=|stopped result= working=|replaced
 # sounds=|version older|closed; gen_recipe_check name= read= error= match= recipe= seed= takes= sounds=.
 # needs: card fixtures/recipe_load (its own card; test_port_emu.py builds it)
@@ -17,9 +18,10 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/io/midi/test_port.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/menu_item/generative/compose_screen.*
 # covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
-# covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/capture_files.cpp
 # covers: scripts/generative/fixtures/recipe_load/card.txt
 start_state
+hold card_log_off
 include perform_open.txt
 include perform_confirm.txt
 
@@ -71,7 +73,7 @@ expect event gen_recipe_load at=LOAD MISSING.XML within=5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=2 within=5
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=4 within=5
 expect event gen_recipe_load stopped result=0 working=1
 expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
 expect event gen_recipe_load replaced sounds=2 within=5
@@ -90,7 +92,7 @@ expect event gen_recipe_load at=LOAD OK.XML within=5
 button LOAD down
 wait 50
 button LOAD up
-expect event gen_recipe_load chose name=LOAD OK genre=techno-acid version=2 within=5
+expect event gen_recipe_load chose name=LOAD OK genre=techno-acid version=4 within=5
 expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
 expect no_event gen_recipe_load replaced within=2
 check recipe *
@@ -124,7 +126,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
-expect event gen_recipe_load version older file=1 genre=2
+expect event gen_recipe_load version older file=1 genre=4
 expect ui=context_menu
 button SELECT_ENC down
 wait 50

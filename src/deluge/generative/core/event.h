@@ -27,8 +27,9 @@ namespace deluge::generative {
 
 /// Event kinds, in play order for events on the same tick: a Section line comes first, then key changes, controls,
 /// note-offs, sound swaps and last note-ons (spec §12.6), so a part's old sound gets its note-offs and its new one the
-/// note-ons.
-enum class EventKind : uint8_t { Section, KeyScale, Control, NoteOff, Sound, NoteOn };
+/// note-ons. A pump change (spec §8.9) comes after them: it was appended, so the other kinds keep their values, which
+/// the goldens' fingerprints hash.
+enum class EventKind : uint8_t { Section, KeyScale, Control, NoteOff, Sound, NoteOn, Pump };
 
 struct Event {
 	/// Generator ticks (24 per 16th) from step 0's grid line.
@@ -116,10 +117,22 @@ struct Event {
 		return e;
 	}
 
+	/// The Pump punch-in starts (`on`) or stops here: the driver ducks every part but the Drums under the Kick through
+	/// its sidechain, or lets them go (spec §8.9).
+	static constexpr Event pump(int32_t tick, bool on) {
+		Event e;
+		e.tick = tick;
+		e.kind = EventKind::Pump;
+		e.velocity = on ? 1 : 0;
+		return e;
+	}
+
 	/// KeyScale: the key's root pitch class, 0 = C.
 	[[nodiscard]] constexpr uint8_t keyRoot() const { return pitch; }
 	/// Sound: the driver's token for the sound it preloaded.
 	[[nodiscard]] constexpr uint8_t soundToken() const { return pitch; }
+	/// Pump: whether the pump starts.
+	[[nodiscard]] constexpr bool pumps() const { return velocity != 0; }
 	/// Control, on Space: how far the delay Throw lifts delay feedback, in percent of its spike (spec §11.4): 100 while
 	/// it holds, falling to 0 over its beat. 0 where no Throw plays, and on a set with no delay setup.
 	[[nodiscard]] constexpr uint8_t throwDelay() const { return velocity; }

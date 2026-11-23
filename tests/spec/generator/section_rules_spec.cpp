@@ -7,6 +7,7 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <vector>
 
 using namespace harness;
@@ -266,9 +267,169 @@ describe section_rules("Section rules", $ {
 		auto falls = ons(result, kFxPart, Lane::Fall, 0, end);
 		expect(falls.size()).to_equal(size_t{1});
 		expect(falls[0].tick).to_equal(stepTick(kBreak));
+		int32_t fallOff = -1;
+		for (const Event& e : only(result.events, EventKind::NoteOff)) {
+			if (e.lane == Lane::Fall && fallOff < 0) {
+				fallOff = e.tick;
+			}
+		}
+		expect(fallOff).to_equal(stepTick(kBuild8)); // it spans the Break (#423)
 		auto impacts = ons(result, kFxPart, Lane::Impact, 0, end);
 		expect(impacts.size()).to_equal(size_t{1});
 		expect(impacts[0].tick).to_equal(stepTick(kDrop8));
+	});
+
+	it("hold the Fall from a Break's first step to the Break's end in every genre with a Fall lane (#423)", _ {
+		// A Fall sample of 2 s or more loads in CUT mode (spec §10.4), so a short note would cut it.
+		int32_t genresChecked = 0;
+		for (const Genre* genre : allGenres()) {
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				if (genre->parts[p].role == Role::FX && laneIndexOf(genre->parts[p], Lane::Fall) >= 0) {
+					fxPart = p;
+				}
+			}
+			if (fxPart < 0) {
+				continue;
+			}
+			Run run;
+			run.recipe = newRecipe(*genre, 0);
+			run.recipe.macros.set(Macro::Density, macroPoints(100)); // every Fall gate open
+			Result result = play(run, 256);
+			const int32_t breakTick = sectionStart(result, SectionKind::Break);
+			int32_t breakEnd = -1;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				if (breakTick >= 0 && e.tick > breakTick) {
+					breakEnd = e.tick;
+					break;
+				}
+			}
+			if (breakTick < 0 || breakEnd < 0) {
+				std::printf("%s: no whole Break in 256 bars\n", genre->name);
+			}
+			expect(breakEnd > breakTick && breakTick >= 0).to_be_true();
+			// Paired by lane: a Siren can start on the same tick at the same pitch.
+			std::vector<Held> falls;
+			for (const Event& e : result.events) {
+				if (e.part != fxPart || e.lane != Lane::Fall) {
+					continue;
+				}
+				if (e.kind == EventKind::NoteOn && e.tick >= breakTick && e.tick < breakEnd) {
+					falls.push_back({e.tick, INT32_MAX, e.pitch});
+				}
+				else if (e.kind == EventKind::NoteOff && !falls.empty() && falls.back().off == INT32_MAX) {
+					falls.back().off = e.tick;
+				}
+			}
+			if (falls.size() != 1 || falls[0].on != breakTick || falls[0].off != breakEnd) {
+				std::printf("%s: Break %d-%d, %zu Falls, first %d-%d\n", genre->name, breakTick, breakEnd, falls.size(),
+				            falls.empty() ? -1 : falls[0].on, falls.empty() ? -1 : falls[0].off);
+			}
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].on).to_equal(breakTick);
+				expect(falls[0].off).to_equal(breakEnd);
+			}
+			genresChecked++;
+		}
+		expect(genresChecked >= 5).to_be_true(); // Techno's subgenres, House, Psytrance, Dub and Ambient
+	});
+
+	it("hold the Impact from a Drop's first step to the phrase's end or the next Section line in every genre (#472)", _ {
+		// An Impact sample of 2 s or more loads in CUT mode (spec §10.4), and a preset's tail ends at its note-off, so
+		// the gate's short note would cut it.
+		int32_t genresChecked = 0;
+		for (const Genre* genre : allGenres()) {
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*genre); p++) {
+				if (genre->parts[p].role == Role::FX && laneIndexOf(genre->parts[p], Lane::Impact) >= 0) {
+					fxPart = p;
+				}
+			}
+			if (fxPart < 0) {
+				continue;
+			}
+			Run run;
+			run.recipe = newRecipe(*genre, 0);
+			run.recipe.macros.set(Macro::Density, macroPoints(100)); // every Impact gate open
+			Result result = play(run, 256);
+			const int32_t buildTick = sectionStart(result, SectionKind::Build);
+			const int32_t dropTick = buildTick >= 0 ? sectionStart(result, SectionKind::Groove, buildTick + 1) : -1;
+			int32_t nextLine = -1;
+			for (const Event& e : only(result.events, EventKind::Section)) {
+				if (dropTick >= 0 && e.tick > dropTick && nextLine < 0) {
+					nextLine = e.tick;
+				}
+			}
+			expect(dropTick >= 0).to_be_true();
+			const int32_t phraseEnd = dropTick + genre->phraseSteps() * kTicksPerStep;
+			const int32_t end = nextLine >= 0 && nextLine < phraseEnd ? nextLine : phraseEnd;
+			std::vector<Held> impacts;
+			for (const Event& e : result.events) {
+				if (e.part != fxPart || e.lane != Lane::Impact) {
+					continue;
+				}
+				if (e.kind == EventKind::NoteOn && e.tick == dropTick) {
+					impacts.push_back({e.tick, INT32_MAX, e.pitch});
+				}
+				else if (e.kind == EventKind::NoteOff && !impacts.empty() && impacts.back().off == INT32_MAX) {
+					impacts.back().off = e.tick;
+				}
+			}
+			if (impacts.size() != 1 || impacts[0].off != end) {
+				std::printf("%s: Drop %d, end %d, %zu Impacts, first off %d\n", genre->name, dropTick, end,
+				            impacts.size(), impacts.empty() ? -1 : impacts[0].off);
+			}
+			expect(impacts.size()).to_equal(size_t{1});
+			if (!impacts.empty()) {
+				expect(impacts[0].off).to_equal(end);
+			}
+			genresChecked++;
+		}
+		expect(genresChecked >= 5).to_be_true(); // Techno's subgenres, House, Psytrance and Dub
+	});
+
+	it("never bring an Impact in late, even when its gate opens after the Drop's first step (#472)", _ {
+		static constexpr LaneSpec kGatedImpact[] = {
+		    {.lane = Lane::Riser},
+		    {.lane = Lane::Fall},
+		    {.lane = Lane::Impact, .densityGate = macroPoints(40)},
+		};
+		static constexpr PartSpec kGatedParts[] = {kParts[0], kParts[1], {.role = Role::FX, .lanes = kGatedImpact}};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<8>::genre();
+			genre.parts = kGatedParts;
+			return genre;
+		}();
+		// Shut on the Drop's first step, open from its next bar: no Impact in the Drop's phrase.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.steer = steerAt({{kDrop8 + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(run, 6 * 8);
+			expect(ons(result, kFxPart, Lane::Impact, kDrop8, kDrop8 + kPhraseSteps).empty()).to_be_true();
+		}
+		// Open on the Drop's first step, shut on bar 1, open again on bar 2: cut on bar 1, never struck again.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.recipe.macros.set(Macro::Density, kMacroFull);
+			run.steer = steerAt({
+			    {kDrop8 + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), 0}},
+			    {kDrop8 + kStepsPerBar + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}},
+			});
+			Result result = play(run, 6 * 8);
+			auto impacts = ons(result, kFxPart, Lane::Impact, kDrop8, kDrop8 + kPhraseSteps);
+			expect(impacts.size()).to_equal(size_t{1});
+			int32_t off = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Impact && e.tick >= stepTick(kDrop8)) {
+					off = e.tick;
+					break;
+				}
+			}
+			expect(off).to_equal(stepTick(kDrop8 + kStepsPerBar));
+		}
 	});
 
 	it("gate FX lanes by Density like any lane", _ {
@@ -307,6 +468,121 @@ describe section_rules("Section rules", $ {
 		expect(sectionTick(result, SectionKind::Groove, 1)).to_equal(stepTick(kDrop8));
 		expect(ons(result, kFxPart, Lane::Riser, 0, 6 * kPhraseSteps).empty()).to_be_true();
 		expect(ons(result, kDrumsPart, Lane::ClosedHat, kDrop8, kDrop8 + 1).size()).to_equal(size_t{1});
+	});
+
+	it("never bring a Fall in late during a Break, even when its gate opens mid-Break (#471)", _ {
+		// Fall gated at 40 alongside a ClosedHat gated at 40 (proving the gate really opens on bar 1 of the Break).
+		static constexpr LaneSpec kGatedDrums[] = {
+		    {.lane = Lane::Kick, .pool = kFourOnTheFloor},
+		    {.lane = Lane::Snare, .densityGate = macroPoints(30)},
+		    {.lane = Lane::ClosedHat, .pool = kEveryStep, .densityGate = macroPoints(40)},
+		    {.lane = Lane::Crash},
+		};
+		static constexpr LaneSpec kGatedFall[] = {
+		    {.lane = Lane::Riser},
+		    {.lane = Lane::Fall, .densityGate = macroPoints(40)},
+		    {.lane = Lane::Impact},
+		};
+		static constexpr PartSpec kGatedParts[] = {
+		    {.role = Role::Drums, .name = "DRUMS", .lanes = kGatedDrums},
+		    kParts[1],
+		    {.role = Role::FX, .name = "FX", .lanes = kGatedFall},
+		};
+		static constexpr Genre kGenre = [] {
+			Genre genre = Rules<8>::genre();
+			genre.parts = kGatedParts;
+			return genre;
+		}();
+
+		// 1) Gate shut on Break's first step, then Density rises past 40 mid-Break: Fall stays silent the whole Break,
+		// while the gated ClosedHat comes in on bar 1 of the Break.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.steer = steerAt({{kBreak + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(run, 6 * 8);
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, kBreak, kBreak + kStepsPerBar).empty()).to_be_true();
+			expect(ons(result, kDrumsPart, Lane::ClosedHat, kBreak + kStepsPerBar, kBuild8).empty()).to_be_false();
+			expect(ons(result, kFxPart, Lane::Fall, kBreak, kBuild8).empty()).to_be_true();
+		}
+
+		// 2) Gate open on Break's first step: Fall plays across the whole Break as now.
+		{
+			Result result = playRules(kGenre, 6 * 8, macroPoints(25), kMacroFull);
+			auto falls = ons(result, kFxPart, Lane::Fall, kBreak, kBuild8);
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].tick).to_equal(stepTick(kBreak));
+			}
+			int32_t fallOff = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Fall && e.tick >= stepTick(kBreak)) {
+					fallOff = e.tick;
+					break;
+				}
+			}
+			expect(fallOff).to_equal(stepTick(kBuild8));
+		}
+
+		// 3) Gate open on Break's first step, closes on bar 1, then reopens on bar 2: Fall is cut on bar 1 and never
+		// re-enters late on bar 2.
+		{
+			Run run;
+			run.recipe = newRecipe(kGenre, 0);
+			run.recipe.macros.set(Macro::Density, kMacroFull);
+			run.steer = steerAt({
+			    {kBreak + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), 0}},
+			    {kBreak + kStepsPerBar + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}},
+			});
+			Result result = play(run, 6 * 8);
+			auto falls = ons(result, kFxPart, Lane::Fall, kBreak, kBuild8);
+			expect(falls.size()).to_equal(size_t{1});
+			if (!falls.empty()) {
+				expect(falls[0].tick).to_equal(stepTick(kBreak));
+			}
+			int32_t fallOff = -1;
+			for (const Event& e : only(result.events, EventKind::NoteOff)) {
+				if (e.part == kFxPart && e.lane == Lane::Fall && e.tick >= stepTick(kBreak)) {
+					fallOff = e.tick;
+					break;
+				}
+			}
+			expect(fallOff).to_equal(stepTick(kBreak + kStepsPerBar));
+		}
+
+		// 4) Real genre: Ambient's Fall is gated at 35 (default Density 25, Break offset -15). Raising Density to 50
+		// mid-Break opens the gate (effective Density 35) without bringing the Fall in late.
+		{
+			const Genre* amb = findGenre("ambient");
+			expect(amb != nullptr).to_be_true();
+			int32_t fxPart = -1;
+			for (int32_t p = 0; p < partCount(*amb); p++) {
+				if (amb->parts[p].role == Role::FX && laneIndexOf(amb->parts[p], Lane::Fall) >= 0) {
+					fxPart = p;
+				}
+			}
+			expect(fxPart >= 0).to_be_true();
+			Run baseRun;
+			baseRun.recipe = newRecipe(*amb, 0);
+			Result base = play(baseRun, 256);
+			const int32_t breakTick = sectionStart(base, SectionKind::Break);
+			int32_t breakEnd = -1;
+			for (const Event& e : only(base.events, EventKind::Section)) {
+				if (breakTick >= 0 && e.tick > breakTick) {
+					breakEnd = e.tick;
+					break;
+				}
+			}
+			expect(breakTick >= 0 && breakEnd > breakTick + kBarTicks).to_be_true();
+			const int32_t breakStep = breakTick / kTicksPerStep;
+			const int32_t breakEndStep = breakEnd / kTicksPerStep;
+			Run steered;
+			steered.recipe = newRecipe(*amb, 0);
+			steered.steer =
+			    steerAt({{breakStep + 4, {CommandKind::SetMacro, static_cast<uint8_t>(Macro::Density), kMacroFull}}});
+			Result result = play(steered, 256);
+			expect(ons(result, static_cast<uint8_t>(fxPart), Lane::Fall, breakStep, breakEndStep).empty()).to_be_true();
+		}
 	});
 
 	context("the Siren (spec §9.5)", _ {

@@ -1,0 +1,256 @@
+# Punch-ins and stock Performance view (#301, spec §8.9, §13.5) over the sysex test port: the KEYBOARD page's
+# punch-in pads (a Drums lane mute per lane on columns 9–10, HAT ROLL, SNARE ROLL, FLAM, DOUBLE KICK and PUMP on
+# columns 15–16's top three rows) with the faders' 300 ms rule, then KEYBOARD again: stock Performance view's song FX
+# pads hosted over Perform, with the sidebar still live, and KEYBOARD back. Runs on a Deluge (deluge_probe.py session)
+# or in delugemu (test_port_emu.py). Start as after boot.
+#
+# Pads: x 0–15 from the left, y 0 the bottom row (spec rows count from the top: row 1 is y 7). The Kick's mute is
+# x 8 y 7 (Techno's Drums lanes: Kick, Snare, Rim, Closed hat, Open hat, Crash, Tom down column 9). HAT ROLL is x 14
+# y 7, SNARE ROLL x 15 y 7, FLAM x 14 y 6, DOUBLE KICK x 15 y 6, PUMP x 14 y 5.
+# gen_punch lanes=<a char per lane: m muted, M held, . playing> punch=<H S F D P on, lower case held, . off>: the
+# pads. gen_punch_pad punch=<PunchIn> lane=<Lane> down|up on=0|1: a press or release and the pad's state after it.
+# gen_punch_landed lanes=<hex laneBit()s> effects=<hex, bit per PunchIn> step=: what the core plays from that step.
+# gen_pump on=0|1: the sidechain pump ducks the other parts or lets them go. gen_performance layout: stock's layout
+# loaded. gen_performance_pad x= y= down|up value=<knob pos> held=0|1: a stock pad, held=1 once latched. gen_stutter
+# on=0|1: stock's stutter started or ended, logged as SetStutter.
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_keyboard.cpp src/deluge/gui/views/perform_view_performance.cpp
+# covers: src/deluge/generative/perform/keyboard_page.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/generative/perform/grid_page.* src/deluge/generative/core/punch_ins.h
+# covers: src/deluge/generative/firmware/sidechain_pump.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/generative/core/lane_names.h src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/generative/perform/sidebar.*
+# covers: src/deluge/generative/firmware/restart_began.cpp
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- KEYBOARD, stopped: every punch-in off ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+expect event gen_punch lanes=....... punch=.....
+
+# ---- SHIFT+PLAY: a Groove from the first bar ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 clip_pos=0 within=5
+
+# ---- A tap on the Kick's mute latches it: the core mutes the Kick from the next undecided step. The landing can
+# come before or after the release (since=mark: either order). Popup holds on down and stays briefly on latch ----
+mark
+pad 8 7 down
+wait 50
+pad 8 7 up
+expect event gen_punch_popup hold KICK MUTE present=1 since=mark
+expect event gen_punch_pad punch=0 lane=0 down on=1 since=mark
+expect event gen_punch_landed lanes=1 effects=0 step= since=mark
+expect event gen_punch_popup brief KICK MUTE present=1 since=mark
+expect event gen_punch_pad punch=0 lane=0 up on=1 since=mark
+expect event gen_punch lanes=m...... punch=..... since=mark
+
+# ---- HAT ROLL held 1.5 s: on while held, off on release; popup clears on release ----
+mark
+pad 14 7 down
+expect event gen_punch_popup hold HAT ROLL present=1 since=mark
+expect event gen_punch lanes=m...... punch=h.... since=mark
+expect event gen_punch_landed lanes=1 effects=2 step= since=mark
+wait 1500
+mark
+pad 14 7 up
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_punch_pad punch=1 lane=255 up on=0 since=mark
+expect event gen_punch lanes=m...... punch=..... since=mark
+expect event gen_punch_landed lanes=1 effects=0 step= since=mark
+
+# ---- PUMP tapped on, with FLAM and DOUBLE KICK: several at once; a second tap lets each go ----
+mark
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_punch_popup hold PUMP present=1 since=mark
+expect event gen_punch_popup brief PUMP present=1 since=mark
+expect event gen_pump on=1 within=5
+mark
+pad 14 6 down
+wait 50
+pad 14 6 up
+expect event gen_punch_popup hold FLAM present=1 since=mark
+expect event gen_punch_popup brief FLAM present=1 since=mark
+mark
+pad 15 6 down
+wait 50
+pad 15 6 up
+expect event gen_punch_popup hold DOUBLE KICK present=1 since=mark
+expect event gen_punch_popup brief DOUBLE KICK present=1 since=mark
+expect event gen_punch_landed lanes=1 effects=38 step= since=mark
+expect event gen_punch lanes=m...... punch=..FDP since=mark
+wait 400
+mark
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_punch_popup hold PUMP present=1 since=mark
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_pump on=0 within=5
+pad 14 6 down
+wait 50
+pad 14 6 up
+pad 15 6 down
+wait 50
+pad 15 6 up
+pad 8 7 down
+wait 50
+pad 8 7 up
+expect event gen_punch lanes=....... punch=.....
+expect event gen_punch_landed lanes=0 effects=0 step=
+
+# ---- SNARE ROLL and CLOSED HAT MUTE held and let go; macro faders and FILL send no punch-in popup ----
+mark
+pad 15 7 down
+expect event gen_punch_popup hold SNARE ROLL present=1 since=mark
+wait 400
+pad 15 7 up
+expect event gen_punch_popup off present=0
+mark
+pad 8 4 down
+expect event gen_punch_popup hold CLOSED HAT MUTE present=1 since=mark
+wait 400
+pad 8 4 up
+expect event gen_punch_popup off present=0
+mark
+pad 0 5 down
+wait 400
+pad 0 5 up
+pad 14 2 down
+wait 100
+pad 14 2 up
+expect no_event gen_punch_popup since=mark within=1
+
+# ---- KEYBOARD again: stock Performance view, its layout loaded; KEYBOARD's LED blinks ----
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_performance layout
+expect event gen_page PERFORMANCE
+
+# ---- A tap on the LPF column (x 0) latches its row's value; a second tap lets it go, as stock ----
+pad 0 3 down
+wait 50
+pad 0 3 up
+expect event gen_performance_pad x=0 y=3 down value=
+expect event /^gen_performance_pad x=0 y=3 up value=-?[0-9]+ held=1/
+wait 400
+pad 0 3 down
+wait 50
+pad 0 3 up
+expect event /^gen_performance_pad x=0 y=3 up value=-?[0-9]+ held=0/
+
+# ---- Stutter (x 15) held, then let go: hold only ----
+mark
+pad 15 4 down
+expect event gen_performance_pad x=15 y=4 down value= since=mark
+expect event gen_stutter on=1 since=mark
+wait 800
+pad 15 4 up
+expect event /^gen_performance_pad x=15 y=4 up value=-?[0-9]+ held=0/
+expect event gen_stutter on=0
+
+# ---- The sidebar stays live over it: a mute on the Bass row ----
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_press mute part=1 now=0
+expect event gen_sidebar mute=am within=10
+pad 16 6 down
+wait 50
+pad 16 6 up
+expect event gen_sidebar mute=aa within=10
+
+# ---- A stock pad pressed here lets go after KEYBOARD flips back ----
+pad 2 5 down
+expect event gen_performance_pad x=2 y=5 down value=
+wait 800
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+pad 2 5 up
+expect event /^gen_performance_pad x=2 y=5 up value=-?[0-9]+ held=0/
+
+# ---- A punch-in pad held across KEYBOARD -> stock Performance view still lets go and clears its popup ----
+mark
+pad 14 7 down
+expect event gen_punch_popup hold HAT ROLL present=1 since=mark
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page PERFORMANCE
+wait 400
+mark
+pad 14 7 up
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_punch_pad punch=1 lane=255 up on=0 since=mark
+button KEYBOARD down
+wait 50
+button KEYBOARD up
+expect event gen_page KEYBOARD
+
+# ---- Opening an overlay (Perform menu) over a held punch-in pad dismisses its persistent popup ----
+mark
+pad 14 7 down
+expect event gen_punch_popup hold HAT ROLL present=1 since=mark
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_punch_popup off present=0 since=mark
+expect event gen_menu PERFORM since=mark
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform
+wait 400
+mark
+pad 14 7 up
+expect event gen_punch_pad punch=1 lane=255 up on=0 since=mark
+expect no_event gen_punch_popup since=mark within=1
+
+# ---- A restart lets the pump go and ducks again from its step 0 while PUMP is still on (R1 M1): a release made after
+# the last decision before the line never reaches the old instance, and the restart drops it from the queue, so the
+# instance start itself lets go. Then the release ----
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_pump on=1 within=5
+mark
+button X_ENC down
+wait 100
+button PLAY down
+wait 50
+button PLAY up
+wait 100
+button X_ENC up
+expect event gen_restart_press queued
+expect event gen_restart as_it_is within=15
+expect event gen_pump on=0 since=mark
+expect event gen_pump on=1 within=5
+pad 14 5 down
+wait 50
+pad 14 5 up
+expect event gen_pump on=0 within=5
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

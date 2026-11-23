@@ -212,15 +212,23 @@ bool PerformView::screenShows() {
 }
 
 void PerformView::selectEncoderAction(int8_t offset) {
-	// QUEUE, RECIPE, round and round; each turn shows the peek for 4 s more (spec §13.5).
+	// RECIPE, QUEUE, CAPTURE, round and round: right goes forward, left back. The first turn shows QUEUE to the right
+	// and RECIPE to the left. Each turn shows the peek for 4 s more (spec §13.5).
+	static constexpr Peek kOrder[] = {Peek::Recipe, Peek::Queue, Peek::Capture};
+	constexpr int32_t kPeeks = sizeof(kOrder) / sizeof(kOrder[0]);
 	if (peek_ == Peek::None) {
 		peek_ = offset > 0 ? Peek::Queue : Peek::Recipe;
 	}
 	else {
-		peek_ = peek_ == Peek::Queue ? Peek::Recipe : Peek::Queue;
+		int32_t at = 0;
+		while (kOrder[at] != peek_) {
+			at++;
+		}
+		peek_ = kOrder[(at + (offset > 0 ? 1 : kPeeks - 1)) % kPeeks];
 	}
 	peekUntil_ = AudioEngine::audioSampleTimer + kPeekSamples;
-	TEST_EVENT("gen_peek_page %s", peek_ == Peek::Queue ? "QUEUE" : "RECIPE");
+	static constexpr const char* kNames[] = {"", "QUEUE", "RECIPE", "CAPTURE"};
+	TEST_EVENT("gen_peek_page %s", kNames[static_cast<int32_t>(peek_)]);
 	refreshScreen();
 }
 
@@ -244,6 +252,8 @@ void PerformView::compose(Screen& screen) {
 	in.ext = playbackHandler.isExternalClockActive();
 	in.peek = peek_;
 	in.page = page_;
+	in.focusedPart = focusedPart();
+	in.rosterGenre = performAdapter.steering().rosterGenre();
 	if (page_ == Page::Clip) {
 		// PART reads the CLIP page's part, and its controls as refreshFaders() read them.
 		const int32_t part = shownPart(); // the Recipe has sound picks for the roster's parts only
@@ -259,7 +269,11 @@ void PerformView::compose(Screen& screen) {
 	}
 	in.history = &performAdapter.history();
 	in.arcState = &arc_;
+	in.capture = performAdapter.captureStatus();
 	perform::composeOled(in, sectionCount_, screen);
+	if (screen.dotBlinks && (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0) {
+		screen.dot = perform::CaptureDot::None; // the blink's off phase: the log is full
+	}
 	if (screen.arc) {
 		// Queued boxes blink: the screen changes with the phase, so it redraws.
 		const bool blinkOff = (AudioEngine::audioSampleTimer / kBlinkSamples) % 2 != 0;
@@ -273,6 +287,15 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 	// The status line (spec §13.5): left the Section, right a tag or bar.beat, then EXT; the phrase bar under it.
 	canvas.drawString(screen_.left, 0, kStatusY, kTextSpacingX, kTextSpacingY);
 	int32_t right = OLED_MAIN_WIDTH_PIXELS;
+	// The Capture dot at the right end (spec §13.5): filled = marked, hollow = not, blinking while the log is full.
+	// Its cell is kCaptureDotChars wide, the space before it included, even on the blink's off phase.
+	if (screen_.dotBlinks || screen_.dot != deluge::generative::perform::CaptureDot::None) {
+		if (screen_.dot != deluge::generative::perform::CaptureDot::None) {
+			canvas.drawCircle(right - kTextSpacingX / 2 - 1, kStatusY + 3, 2,
+			                  screen_.dot == deluge::generative::perform::CaptureDot::Filled);
+		}
+		right -= deluge::generative::perform::kCaptureDotChars * kTextSpacingX;
+	}
 	if (screen_.ext) {
 		const char* tag = deluge::l10n::get(deluge::l10n::String::STRING_FOR_EXTERNAL_CLOCK_TAG);
 		canvas.drawStringAlignRight(tag, kStatusY, kTextSpacingX, kTextSpacingY, right);

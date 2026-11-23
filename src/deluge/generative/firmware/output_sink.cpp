@@ -19,7 +19,10 @@
 // transition's points from the tick (spec §12.5, §12.9).
 
 #include "generative/firmware/adapter_timing.h"
+#include "generative/firmware/log_header.h"
 #include "generative/firmware/perform_adapter.h"
+#include "generative/firmware/settings_tracker.h"
+#include "generative/firmware/sidechain_pump.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/riser_timing.h"
@@ -146,6 +149,17 @@ void OutputSink::play(const Event& event) {
 	case EventKind::Sound:
 		// After the part's note-offs on this line, before its note-ons: the new sound plays them (spec §10.7).
 		soundSwaps.swap(event);
+		if (sidechainPump.on()) {
+			sidechainPump.duck(roster); // the part's new Output ducks too (spec §8.9)
+		}
+		break;
+	case EventKind::Pump:
+		if (event.pumps()) {
+			sidechainPump.duck(roster);
+		}
+		else {
+			sidechainPump.release();
+		}
 		break;
 	}
 }
@@ -241,6 +255,44 @@ void OutputSink::outgoingThrowsCut() {
 	TEST_EVENT("gen_outgoing_throws_cut");
 }
 
+#if ENABLE_SYSEX_TEST
+namespace {
+/// When the piece being opened began opening: gen_log_piece's us= counts from here.
+uint32_t pieceOpeningTicks = 0;
+} // namespace
+#endif
+
+void OutputSink::pieceOpening() {
+#if ENABLE_SYSEX_TEST
+	pieceOpeningTicks = getSystemTicks();
+#endif
+}
+
+void OutputSink::logPieceHeader(SteeringLog& log) {
+	const Generator* playing = performAdapter.driver().playing();
+	if (playing == nullptr || performAdapter.song_ == nullptr) {
+		return;
+	}
+	firmware::logPieceHeader(log, currentRecipe.sounds, roster, *playing->recipe().genre, *performAdapter.song_,
+	                         performAdapter.editedOutputs());
+	// header: the newest piece's opening and header records, in bytes; used: the ring's bytes not yet on the card;
+	// us: what opening the piece and its header cost in the tick.
+	TEST_EVENT("gen_log_piece pieces=%ld header=%ld used=%ld full=%d us=%lu", static_cast<long>(log.pieces()),
+	           static_cast<long>(log.pieces() > 0 ? log.piece(log.pieces() - 1).headerBytes() : 0),
+	           static_cast<long>(log.used()), log.full() ? 1 : 0,
+	           ticksToNs(getSystemTicks() - pieceOpeningTicks) / 1000);
+}
+
+void OutputSink::logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token) {
+	if (const Generator* playing = performAdapter.driver().playing()) {
+		firmware::logSoundPaths(log, step, part, token, SoundSwaps::waitingPicks(), *playing->recipe().genre);
+	}
+}
+
+void OutputSink::logSettings(SteeringLog& log, int32_t step) {
+	settingsTracker.drainToLog(log, step);
+}
+
 void OutputSink::outgoingDrained() {
 	allNotesOff(outgoing); // the safety net, as after a flush (spec §12.5); tails ring out
 	soundControls.forgetOutgoing();
@@ -255,7 +307,10 @@ void OutputSink::note(const Roster& parts, const Event& event, bool on) {
 	if (event.part >= kMaxParts) {
 		return;
 	}
-	const PartOutput& part = parts.parts[event.part];
+	playNote(parts.parts[event.part], event, on);
+}
+
+void OutputSink::playNote(const PartOutput& part, const Event& event, bool on) {
 	if (part.output == nullptr || part.clip == nullptr) {
 		return;
 	}

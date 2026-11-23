@@ -15,7 +15,10 @@ otherwise.
   (`partKey()`, `onPhrase()`, `withField()`) in `core/draw.h`, `onPick()` beside `PatternState`, the Arc's rules
   (`effectiveOn()`, `rollStageOn()`, `rollHits()`) in `core/arc.h` and the keeps in `ArcSpec::keepsIn()`; a helper
   only one area uses stays file-local in that area's file. A step callee defined in another file than its caller is
-  marked `GEN_STEP_CODE` even when it is inlined today: LTO's choice can change with any edit.
+  marked `GEN_STEP_CODE` even when it is inlined today: LTO's choice can change with any edit. Trap: GCC LTO drops
+  `GEN_STEP_CODE` (`[[gnu::section(".text.generative_step")]]`) on a header `constexpr`/`inline` (COMDAT) function when
+  it emits an out-of-line copy — define any step callee LTO may outline out-of-line in a `.cpp` file (`draw()` lives in
+  `core/draw.cpp` beside `partKey()`, `onPhrase()` and `withField()`).
 - `snprintf` and friends in portable code break the firmware link: newlib's stdio pulls in `_close`, `_sbrk` and the
   rest. Build text with `Text` (`perform/text.h`). Firmware code may use `snprintf`: it gets the
   non-allocating `lib/printf.h` through `io/debug/log.h`.
@@ -27,10 +30,25 @@ otherwise.
   at offset 20, which is baked into `Generator::decideNextStep()`'s code: it addresses the queue from a constant
   (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
   bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
+  `PerformDriver`'s size also moves `PerformAdapter::sink_`, and with it the roster copy's mod-8 `static_assert` in
+  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back.
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
+- The steering log (`core/steering_log.*`, spec §17.2) holds pieces in one buffer: a `PieceInfo`, header records
+  (picks, snapshot blocks), then packed records (`encodeCommand()`). The core only calls `append()`; the Perform driver
+  opens a piece at its step 0's decision (`openPiece()`, outside H1's timer), ends it in `finish()` and at a
+  transition's start step (`switchToIncoming()`), logs re-roll paths by comparing `soundLanded()` around each decision
+  (`logLandedSounds()`: a new token always differs from the last), and `logSoundDropped()`. What only the firmware
+  knows comes through `NoteSink::logPieceHeader()` and `logSoundPaths()` (`firmware/log_header.*`). A new steering
+  command is logged with no log change: append its `CommandKind`, move `kLastCommandKind`, and have `apply()` return
+  true where it lands (`steering_log_spec` round-trips every kind). Recipe state it changes reaches the header through
+  the `Recipe` copy in `PieceStart`. An unmarked piece is thrown away only when the next begins. A restart's line ends the piece and sets `pieceDue_`,
+  so the restarted run opens its own piece at its step 0 (spec §17.3); the sink's `restartPiece()` runs between the two,
+  where the ended piece's header is still the newest (AS IT BEGAN reads it there).
 - Every land-time effect of a command goes in `Generator::apply()`. Replay feeds logged commands to `apply()`
-  (ADR 0005), so an effect done anywhere else is lost on replay.
+  (ADR 0005), so an effect done anywhere else is lost on replay. A decision that reads the pending list breaks replay
+  unless the log says when that command waits: only Arc moves do today (`waitingMove()`, `lastGroovePhrase()`), and
+  `logWaitingMoves()` logs their slots (RecordKind::Waiting/NotWaiting). A new reader of another slot needs the same.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
@@ -94,11 +112,12 @@ otherwise.
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
   `core/palette.h`; `pitchClass()` in `core/types.h` (specs had their own copies: a helper moved into a header can
   clash with a spec's file-local one of the same name). The Arc plan (`Generator::planArc()`) shares the play path's
-  rules: `effectiveOn()`, `Gates::crossBar()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()` with its lane test (the
-  dim's is `!silenced()`, the plan's `Keeps::lets()`; it adds `rollsIn()` to `maySound()`), `rollStageOn()`, and
-  `outroEndsAfter()` (with `ended()`). A change to how a gate, a mute, the roll or the Outro's end works goes there, not
-  into a copy. The plan leaves out the cut and the Gap, which the dim counts (spec §13.5): `cutAndGapUnderBuild()` in
-  `genreValid()` keeps each shorter than a phrase and than the shortest Build (Dub's is 1 bar).
+  rules: `effectiveOn()`, `Gates::crossBar()`, `DropOutState::step()`, `MuteSolo` (`audible()`, `land()`), `mayPlay()`
+  with its lane test (the dim's is `!silenced()`, the plan's `Keeps::lets() && !dropOut.has()`; it adds `rollsIn()` to
+  `maySound()`), `rollStageOn()`, and `outroEndsAfter()` (with `ended()`). A change to how a gate, a drop-out, a mute,
+  the roll or the Outro's end works goes there, not into a copy. The plan leaves out the cut and the Gap, which the dim
+  counts (spec §13.5): `cutAndGapUnderBuild()` in `genreValid()` keeps each shorter than a phrase and than the shortest
+  Build (Dub's is 1 bar).
 - Trap: a Sustain holds its voicing over bar and phrase lines with no new note-on, so a history that counts note-ons
   shows a phrase a held Drone or Pad plays through as unheard. The Perform driver's `PhraseHistory` hears a part in
   every phrase a note of it rings into: it keeps the keys of the unmuted notes it was sent (`Event::noteKey()`, the
@@ -177,8 +196,8 @@ otherwise.
 - A gated part leaves a Drop phrase early when the Drop's lift decays under its gate (Psytrance's Lead left after bar
   10 at a 1-phrase decay). A longer `dropDecayPhrases` keeps it in, but `genre_data_spec` checks the decay fits the
   shortest Groove at Motion 50; Psytrance is its named exception (spec §9.3), and `psytrance_spec` shows the cut-off.
-- A Chord graph holds at most `kMaxChordMoves` (8) moves (`harmonyValid()`): "each move both ways" over five moves is
-  ten, so let the home pull carry the moves back to i, as Detroit's and House's graphs do.
+- A Chord graph holds at most `kMaxChordMoves` (16, 8 before Ambient's round 2 took 12) moves (`harmonyValid()`).
+  It bounds only data: the walk loops over the moves once a chord change, and nothing is sized by it.
 - A Respond source whose patterns plan nothing in the half its target makes against shows no effect at all: a spec
   checking "no note in the against half" then passes with the rule's strength at 0. House's Lead has lead-ins in each
   bar's first half for Respond to thin; check a spec like that bites by running it once with the strength at 0.
@@ -197,6 +216,15 @@ otherwise.
   a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
   the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
   rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
+- An FX lane whose roll finds no sample rolls one of its `synths` by weight from the lane's own draws
+  (`rollLaneOrPreset()`, `palette.cpp`), and that preset path is its pick: the Siren's pick is `GEN Siren` and the
+  Impact's one of its presets (#472). A lane listing both folders and presets still rolls a file whenever one
+  matches, so its presets stay fallbacks. Give an Impact-style lane no folders and no tags, or a factory file that
+  matches would win. Its default folder `SAMPLES/FX/<lane>` is empty in the pack, and lists of a lane's picks
+  (`lanePicks`) now hold the preset paths.
+- The Fall and the Impact span their Section's start (the Break, the Drop's phrase), so they never enter late
+  (`entersLate()`, `core/types.h`, used where `updateGates()` and `express()` hold notes back). A new FX lane with a
+  long note should join it.
 - A level mark ('g' or 'a') over a '.' step is a compile-time error (the `Pattern` constructor): it did nothing, and it
   usually meant the mark had slid one step off the hit it was for.
 - Registers of the role defaults overlap (Chords and Pad share anchor C4; the Lead's span reaches down into the
@@ -212,3 +240,19 @@ otherwise.
   caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
   per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
   macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.
+- Punch-ins (§8.9, #301): `PunchIns` (`core/punch_ins.h`) in `Generator::punch_`, set by `SetPunch` in `apply()`.
+  Their effects act at output, after the plan: a LaneMute in `noteOn()`'s muted flag, the rolls in `decideKit()` after
+  the Replace pairs (`punchRoll()`), Flam and Double kick in `express()` after `ornamentFor()` (`punchOrnament()`),
+  so no draw moves and the piece after a release is the one with none. Pump is the core's one event the driver acts
+  on for a punch-in (`EventKind::Pump`, appended after NoteOn so the other kinds keep their values, which the goldens'
+  fingerprints hash); `stepEventsOf()` counts one a step. The harness driver drops a muted note-on, so a spec of a
+  LaneMute reads the lane's notes as gone, not flagged (`punch_in_spec`).
+  Flam's lanes are `flams()` (`punch_ins.h`, shared with the spec). Pump changes in `apply()` push at most one Pump a
+  step: a second change in the same drain removes the first (they cancel), as `stepEventsOf()` counts one.
+- Trap: a `PartsAndLanes` keep set with the Drums part's bit keeps every Drums lane, the kick too: to keep all but a
+  lane, list the lanes (the pitched parts kept by bit, the lanes `0x7FFF & ~laneBit(Lane::Kick)`; bit 15 is
+  `kSameAsBreakKeeps`' marker). `kEverything.without({.lanes = laneBit(Lane::Kick)})` still keeps the kick.
+- Trap: Respond never thins an anchor (§5.5), so a spec of "no note in an against half" holds only while the target is
+  never busier where the source anchors. House's #368 Bass line makes the second half busier, where the Lead anchors;
+  its specs allow the anchor steps. A gated source (House's Lead at 30) plays little at the default Density: run
+  interplay specs above the gate.

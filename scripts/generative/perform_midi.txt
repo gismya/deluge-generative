@@ -123,7 +123,8 @@ expect event gen_focus part=1 locked=1
 midi bf 4a 10
 expect event gen_edit part=1 lane=-1 control=BRIGHTNESS
 # The live values go out as feedback while it plays (H17): every one-second window under 1000 B (a third of DIN's
-# 3125 B/s link; hardware measured 361-600, delugemu 431-568), checked once the stress and focus windows are in too
+# 3125 B/s link; hardware measured 361-600, delugemu 431-568), checked once the stress and focus windows are in too.
+# The rate is checked on the Deluge only (hardware_only, #417): a slowed delugemu sends its windows in bursts
 mark
 expect event /^gen_midi_feedback ccs=[1-9]\d* / within=5
 # ...and at their worst, every sound-control param ramping every step
@@ -151,7 +152,7 @@ wait 50
 pad 9 6 up
 expect event gen_focus part=1 locked=1
 expect event /^gen_midi_feedback ccs=[1-9]\d* / within=5
-expect no_event /^gen_midi_feedback .* bytes_per_s=\d{4,} / since=mark within=1
+hardware_only expect no_event /^gen_midi_feedback .* bytes_per_s=\d{4,} / since=mark within=1
 sleep 3
 midi bf 4a 50
 expect event gen_edit part=1 lane=-1 control=BRIGHTNESS

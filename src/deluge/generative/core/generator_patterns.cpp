@@ -296,11 +296,14 @@ GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 		PartState& part = parts_[p];
 		part.gates.crossBar(genre_->parts[p], biasedOn(p, Macro::Density, step.density)); // its own (spec §3.3)
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
-		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway. An opening gate lets what
-		// it held back enter late, after the parts (lateEntries).
+		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway, and the Fall and the
+		// Impact never enter late (spec §9.5). An opening gate lets what it held back enter late, after the parts
+		// (lateEntries).
 		sounding_.forEach(p, [&](SoundingNote& note) {
 			if (!gateOpen(p, note.lane) && note.offTick > step.tick) {
-				held_.hold(p, note);
+				if (entersLate(note.lane)) {
+					held_.hold(p, note);
+				}
 				SoundingNotes::cutAt(note, step.tick);
 			}
 		});
@@ -437,6 +440,39 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			note.on = false;
 		}
 	}
+	// Alternate lane (spec §5.7): a Drums lane may hand whole Groove bars over to a pool-less lane in the same kit
+	// (Dub's Rim -> Snare). Skipped while a fill or Build roll touches either lane, when either lane is gated out or
+	// silenced, or on the bar before a drop-out whose Throw targets the primary lane.
+	if (arc_.section() == SectionKind::Groove) {
+		for (int32_t l = 0; l < lanes; l++) {
+			const LaneSpec& lane = spec.lanes[l];
+			if (lane.alternateLane == Lane::None || lane.alternateChance <= 0 || !notes[l].on) {
+				continue;
+			}
+			const int32_t alt = laneIndexOf(spec, lane.alternateLane);
+			if (alt < 0 || notes[alt].on || rolls[alt].stage != RollStage::None || !gateOpen(partIndex, lane.lane)
+			    || !gateOpen(partIndex, lane.alternateLane) || silenced(step, partIndex, lane.alternateLane)
+			    || step.rest.has(partIndex, lane.alternateLane) || step.swap.has(partIndex, lane.lane)
+			    || step.swap.has(partIndex, lane.alternateLane) || step.roll.has(partIndex, lane.lane)
+			    || step.roll.has(partIndex, lane.alternateLane) || buildRollsOn(step, lane.lane)
+			    || buildRollsOn(step, lane.alternateLane)) {
+				continue;
+			}
+			if (dropOut_.entry >= 0 && step.index < dropOut_.from
+			    && genre_->dropOuts[dropOut_.entry].throwTarget.has(partIndex, lane.lane)) {
+				continue;
+			}
+			DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), lane.lane, takes_.take[partIndex],
+			                      Purpose::AlternateLane);
+			key.position[0] =
+			    static_cast<uint32_t>(heldStep(partIndex, step.index)) / static_cast<uint32_t>(kStepsPerBar);
+			if (drawChance(key, lane.alternateChance)) {
+				notes[alt] = notes[l];
+				notes[alt].length = spec.lanes[alt].gateTicks;
+				notes[l].on = false;
+			}
+		}
+	}
 	// Replace pairs come after the plan that interplay rules read, before any voice starts (spec §5.7). A lane that
 	// doesn't land (gated out or silenced) replaces nothing; a rolling lane lands where it hits, the Build roll's
 	// whatever its gate. Nothing replaces the Build roll: the roll lane always plays (spec §9.5).
@@ -450,6 +486,15 @@ GEN_STEP_CODE void Generator::decideKit(int32_t partIndex, const Step& step) {
 			// A Roll fill's hits are the lane's own, so they give way as a Swap's do; the Build roll's never do.
 			if (!buildRollsOn(step, pair.replaced)) {
 				rolls[replaced] = {};
+			}
+		}
+	}
+	// A punch-in's roll replaces the lane's hits whatever gates, section rules, fills and Replace pairs say: the
+	// player's (spec §8.9). A LaneMute still flags it.
+	if (punch_.effects != 0 && punchesPart(partIndex)) {
+		for (int32_t l = 0; l < lanes; l++) {
+			if (const RollStep roll = punchRoll(partIndex, spec.lanes[l].lane); roll.stage != RollStage::None) {
+				rolls[l] = roll;
 			}
 		}
 	}
@@ -511,17 +556,23 @@ GEN_STEP_CODE int32_t Generator::express(int32_t partIndex, const Expression& ex
 	Note note{decided.lane, decided.pitch,         static_cast<int16_t>(base), velocity(base, step.energy),
 	          start,        start + decided.length};
 	if (!gateOpen(partIndex, decided.lane)) {
-		// Gated out: held back plain, for late entry (spec §5.6).
-		held_.hold(partIndex, {.onTick = note.onTick,
-		                       .offTick = note.offTick,
-		                       .baseVelocity = note.baseVelocity,
-		                       .lane = note.lane,
-		                       .pitch = note.pitch,
-		                       .used = true});
+		// Gated out: held back plain, for late entry (spec §5.6). The Fall plays only on a Break's first step and the
+		// Impact only on a Drop's, and neither enters late (spec §9.5).
+		if (entersLate(decided.lane)) {
+			held_.hold(partIndex, {.onTick = note.onTick,
+			                       .offTick = note.offTick,
+			                       .baseVelocity = note.baseVelocity,
+			                       .lane = note.lane,
+			                       .pitch = note.pitch,
+			                       .used = true});
+		}
 		return start;
 	}
 
-	const OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	OrnamentKind ornament = ornamentFor(partIndex, expression.ornaments, pick, patternStep, decided.lane);
+	if (punch_.effects != 0 && punchesPart(partIndex)) {
+		ornament = punchOrnament(partIndex, decided.lane, ornament);
+	}
 	if (decided.tie && ornament == OrnamentKind::None
 	    && sounding_.extend(partIndex, note.lane, note.pitch, note.onTick, note.offTick)) {
 		return start; // a slide onto the same note ties
@@ -600,6 +651,15 @@ Generator::OrnamentKind Generator::ornamentFor(int32_t partIndex, const Ornament
 	int32_t which =
 	    drawWeighted(onPick(key, pick, 1, static_cast<uint32_t>(patternStep)), std::span<const Choice>(choices));
 	return static_cast<OrnamentKind>(static_cast<int32_t>(OrnamentKind::Ratchet2) + which);
+}
+
+GEN_STEP_CODE Generator::OrnamentKind Generator::punchOrnament(int32_t partIndex, Lane lane, OrnamentKind drawn) const {
+	// Each a fixed amount (spec §8.9): a 32nd double on the Kick, a flam on the lanes flams() names. They replace the
+	// hit's own Ornament, whose draw stays as it was, so letting go plays the piece's own again.
+	if (lane == Lane::Kick) {
+		return punch_.on(PunchIn::DoubleKick) ? OrnamentKind::Ratchet2 : drawn;
+	}
+	return punch_.on(PunchIn::Flam) && flams(genre_->parts[partIndex], lane) ? OrnamentKind::Flam : drawn;
 }
 
 } // namespace deluge::generative

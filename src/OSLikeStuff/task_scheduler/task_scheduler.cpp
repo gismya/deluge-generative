@@ -18,6 +18,7 @@
 #include "OSLikeStuff/task_scheduler/task_scheduler.h"
 
 #include "io/debug/log.h"
+#include "io/midi/test_port_render.h"
 #include "resource_checker.h"
 #include <algorithm>
 #if !IN_UNIT_TESTS
@@ -242,6 +243,10 @@ void TaskManager::runTask(TaskID id) {
 		current_task->lastCallTime = timeNow;
 		current_task->yielded = false;
 	}
+#if ENABLE_SYSEX_TEST
+	const uint32_t startTicks = getSystemTicks();
+	const char* testCaller = TestPort::taskStarted(current_task->name);
+#endif
 	current_task->handle();
 
 	{
@@ -249,6 +254,10 @@ void TaskManager::runTask(TaskID id) {
 		Time timeNow = getSecondsFromStart();
 		Time runtime = (timeNow - start_time);
 		cpuTime += runtime;
+#if ENABLE_SYSEX_TEST
+		TestPort::taskRan(current_task->name, getSystemTicks() - startTicks, // Generative mode: underrun culprits
+		                  testCaller);
+#endif
 		if (current_task->removeAfterUse) {
 			removeTask(id);
 		}

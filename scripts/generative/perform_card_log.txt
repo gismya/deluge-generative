@@ -1,0 +1,185 @@
+# The steering log on the card (#448, spec §17.2, §17.4, §17.7) over the sysex test port: each piece streams to its
+# own file in GENERATIVE/CAPTURE/, written by a main-loop task (4 KB at a time, a flush every 10 s, the file closed at
+# the piece's end), and the next piece's file is made ahead, away from the piece change. A leave's Capture reads each
+# kept piece back from its file and deletes it once saved; the leave cleans the folder of unmarked files. A marked piece
+# whose Capture failed stays on the card and comes back as a marked piece at the next entry; a leave keeping NOTHING
+# cleans everything. Writes two songs to SONGS/ (GEN ACID TECHNO <seed> LIVE and LIVE B, of a fresh seed: no hold
+# entropy, so perform_capture_leave.txt's pinned names stay free; a run on a Deluge deletes them after). Runs on a
+# Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
+# current clip a synth or kit clip.
+#
+# gen_card_log enter adopted= deleted= next= error= kept=: Perform's entry scanned the folder (kept=: marked files
+# the table had no room for, left on the card). gen_card_log open piece= spare=0|1: a piece's file opened (spare=1:
+# made ahead). gen_card_log flush piece= bytes=: a timed flush.
+# gen_card_log closed piece= bytes= dropped=: a piece's file closed at its end. gen_card_log removed piece= result=:
+# Capture saved its songs. gen_card_log clean keep_marked= deleted=: a leave or a Capture cleaned the folder.
+# writes: SONGS/GEN ACID TECHNO *
+# covers: src/deluge/generative/firmware/capture_files.* src/deluge/generative/core/steering_log.*
+# covers: src/deluge/generative/firmware/capture_job.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/perform/capture.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/views/perform_view.cpp
+start_state
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=0 deleted=[0-9]+ next=[0-9]+ error=0 kept=0$/ since=mark
+mark now
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+# Its file opens as soon as its header is whole (at its first steps)
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ within=15 since=mark
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+# The piece plays on: its bytes so far reach the card at the next timed flush
+expect event /^gen_card_log flush piece=[0-9]+ bytes=[1-9][0-9]*$/ within=15
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+expect event /^gen_card_log closed piece=[0-9]+ bytes=[1-9][0-9]* dropped=0$/ within=5
+# A Start after the stop begins a new piece, whose file was made ahead while the first one played
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 / within=10
+expect event /^gen_card_log open piece=[0-9]+ spare=1$/ within=15
+wait 4000
+
+# ---- KEEP: MARKED + LAST: Capture reads both back from their files and deletes each once saved ----
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_left within=15 since=mark
+expect event gen_capture_begin keep=0 within=10 since=mark
+expect event /^gen_card_log removed piece=[0-9]+ result=0$/ within=120 since=mark
+expect event /^gen_card_log removed piece=[0-9]+ result=0$/ within=120
+expect event /^gen_capture_end done songs=2 saved=2 / within=60 since=mark
+expect event /^gen_card_log clean keep_marked=1 deleted=0$/ within=10 since=mark
+
+# ---- A marked piece of a second: its header reaches the card at once, so the next piece opens (#448 R1) ----
+start_state
+include perform_open.txt
+include perform_confirm.txt
+mark now
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+wait 1000
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=2 / within=10 since=mark
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ within=15 since=mark
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ within=15
+mark now
+include perform_leave.txt
+expect event /^gen_card_log clean keep_marked=0 deleted=[0-9]+$/ within=10 since=mark
+
+# ---- A marked piece whose Capture failed stays on the card, and comes back marked at the next entry ----
+start_state
+hold compose_reserve
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=0 / since=mark
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+wait 2000
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+# KEEP: 1 MARKED: MARKED first (the last piece is the marked one)
+button 4 3 down
+wait 50
+button 4 3 up
+expect event gen_capture_begin keep=2 within=20 since=mark
+expect event /^gen_capture_end failed songs=1 saved=0 .* error=1 / within=60 since=mark
+expect event /^gen_card_log clean keep_marked=1 deleted=0$/ within=10 since=mark
+release compose_reserve
+start_state
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=1 deleted=0 / since=mark
+# It is the current marks' only piece: RECORD has no current piece to mark before a piece plays
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark no_piece / within=5
+# Unmarked in CAPTURE ▸ (its only row), its file says so (spec §17.4): the leave's clean deletes it, and the next
+# entry finds nothing to take back (#448 R1)
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 8
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_mark unmarked piece=0 current=-1 marks=0 within=5
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+encoder 3 -20
+button BACK down
+wait 30
+button BACK up
+expect ui=generative_perform
+mark now
+include perform_leave.txt
+expect event /^gen_card_log clean keep_marked=1 deleted=1$/ within=10 since=mark
+start_state
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=0 deleted=0 / since=mark
+# A leave keeping NOTHING cleans everything, a marked piece's file too
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+wait 2000
+mark now
+include perform_leave.txt
+expect event /^gen_card_log clean keep_marked=0 deleted=[1-9][0-9]*$/ within=10 since=mark

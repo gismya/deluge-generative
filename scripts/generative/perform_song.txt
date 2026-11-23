@@ -8,7 +8,8 @@
 # gen_arcmap s=<16 columns> q=<16 columns>: the Section row (I G B U O, D for a Drop, . for nothing; column 4 is now)
 # and where a queued action blinks (x). gen_arcrow <part> <16 columns>: . off, h heard, n now, p planned, m muted,
 # f focused. gen_arcpage: the ARC page's eight boxes (tag, * on a Drop, -- after a stop) | the next change.
-# gen_arcplan us=: how long working the plan out took. gen_pad_redraws phrase= main=: main-pad redraws in a phrase.
+# gen_arcplan us= slices=: the slowest frame's slice of the plan, and the frames it took (#454).
+# gen_pad_redraws phrase= main=: main-pad redraws in a phrase.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
 # covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_song.cpp
 # covers: src/deluge/gui/views/perform_view_screen.cpp src/deluge/generative/perform/arc_map.*
@@ -23,11 +24,13 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
-# ---- Stopped: part focus works, the map is dark ----
+# ---- Stopped: part focus works, the map is dark; status line shows the held part's name ----
 pad 3 6 down
 expect event gen_focus part=1 locked=-1
+expect event gen_status ACID|
 pad 3 6 up
 expect event gen_focus part=-1 locked=-1
+expect event gen_status STOPPED|
 
 # ---- SHIFT+PLAY: Groove from the first bar. Column 4 is now; the three to its left are before step 0 ----
 # A frame reports the Section row and then each part row, each only when it changes, so part 0's row can come in an
@@ -77,12 +80,14 @@ wait 50
 pad 16 6 up
 expect event gen_arcrow 1 ...npp
 
-# ---- Part focus: hold a part's row; double tap locks; AFFECT ENTIRE unlocks ----
+# ---- Part focus: hold a part's row; double tap locks; AFFECT ENTIRE unlocks; status line shows the focused part ----
 pad 9 6 down
 expect event gen_focus part=1 locked=-1
 expect event gen_arcrow 1 ...f
+expect event /^gen_status ACID\|[0-9]+\.[0-9]+$/
 pad 9 6 up
 expect event gen_focus part=-1 locked=-1
+expect event /^gen_status GROOVE [0-9]+\|[0-9]+\.[0-9]+$/
 pad 9 7 down
 wait 50
 pad 9 7 up
@@ -91,10 +96,50 @@ pad 9 7 down
 wait 50
 pad 9 7 up
 expect event gen_focus part=0 locked=0
+expect event /^gen_status DRUMS\|[0-9]+\.[0-9]+$/
+# While locked on SONG: HELD and queue tags stay on the status line beside the part's name
+pad 17 3 down
+wait 50
+pad 17 3 up
+expect event gen_press hold
+expect event /^gen_status DRUMS HELD\|/
+pad 17 6 down
+wait 50
+pad 17 6 up
+expect event gen_press force BREAK
+expect event /^gen_status DRUMS HELD\|>BR/
+button BACK down
+wait 50
+button BACK up
+expect event gen_back_tap
+pad 17 3 down
+wait 50
+pad 17 3 up
+expect event gen_press hold
+expect event /^gen_status DRUMS\|[0-9]+\.[0-9]+$/
+# Holding another part shows its name while held, then returns to the locked part
+pad 9 6 down
+expect event gen_focus part=1 locked=0
+expect event /^gen_status ACID\|/
+pad 9 6 up
+expect event gen_focus part=0 locked=0
+expect event /^gen_status DRUMS\|/
+# On CLIP, the status line returns to the Section (PART already names the part); back on SONG, DRUMS returns
+button CLIP_VIEW down
+wait 50
+button CLIP_VIEW up
+expect event gen_page CLIP
+expect event /^gen_status GROOVE [0-9]+\|/
+button SESSION_VIEW down
+wait 50
+button SESSION_VIEW up
+expect event gen_page SONG
+expect event /^gen_status DRUMS\|/
 button AFFECT_ENTIRE down
 wait 50
 button AFFECT_ENTIRE up
 expect event gen_focus part=-1 locked=-1
+expect event /^gen_status GROOVE [0-9]+\|/
 
 # ---- X turn scrolls over the plan, no further than it goes; tapping X returns to now ----
 encoder 1 5

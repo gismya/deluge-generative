@@ -81,10 +81,11 @@ void event(const char* format, ...) __attribute__((format(printf, 1, 2)));
 bool entryHeld();
 void releaseEntry();
 /// Test hooks for the Compose build (spec §14.5, §15.9), each from a "hold <name>" line until "release <name>":
-/// "compose" makes the build wait after its first bar, so a script can press BACK on a private song with notes in it;
+/// "compose" makes the build (a Compose build, or Capture's on leave) wait after its first bar, so a script can press
+/// BACK on a private song with notes in it;
 /// "compose_alone" makes the size estimate fit only alone, so the build frees the player's song first;
-/// "compose_reserve" makes the build find the SDRAM reserve reached after its first bar; "compose_roll" makes it wait
-/// after a genre roll, so a script can press BACK there.
+/// "compose_reserve" makes the build (Compose's or Capture's) find the SDRAM reserve reached after its first bar;
+/// "compose_roll" makes it wait after a genre roll, so a script can press BACK there.
 bool composeHeld();
 bool composeAloneHeld();
 bool composeRollHeld();
@@ -103,6 +104,10 @@ bool rampsStressed();
 /// sound loads (CardFolders and its loaders) then fail with Error::SD_CARD, as with a card pulled mid-load. delugemu
 /// can't fault its card, and on the Deluge pulling it would end the session.
 bool cardErrorHeld();
+/// Test hook for the preset preview (spec §13.3): true from a "hold preset_preview" line until "release
+/// preset_preview". Each preview build waits at its start, yielding, until it is cancelled or the hold is released, so
+/// a script's SELECT lands while one builds.
+bool presetPreviewHeld();
 /// Test hook for sound re-rolls, transitions and the Compose screen's card edits: true from a "hold preload" line until
 /// "release preload" or releasePreload(). The job waits at its start, yielding, so a script can press BACK while it
 /// runs instead of racing it.
@@ -152,6 +157,10 @@ bool freeHeld();
 /// for its presses (refused with QUEUE FULL, whatever the phase). A script can't fill the queue itself: it holds 64
 /// presses, and every step decision takes them.
 bool queueFullHeld();
+/// Test hook for a steering log too full to keep the playing piece's header (spec §13.2, §17.2): true from a "hold
+/// log_full" line until "release log_full". AS IT BEGAN, playing, then finds no header to restart from. A script can't
+/// fill the log quickly: it takes about 45 minutes of busy steering (capture_h13.txt).
+bool logFullHeld();
 /// Test hook for delay setups (spec §10.6, §11.4): true from a "hold delay_setups" line until "release delay_setups".
 /// Perform entry then plays a test copy of the chosen genre that gives its Bass, its Drums kit (kit level) and the
 /// Snare row a delay setup, a dotted half on the Bass so that at 60 BPM the render fills the largest delay buffers

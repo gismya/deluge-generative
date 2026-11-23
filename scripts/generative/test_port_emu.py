@@ -11,6 +11,9 @@ host input to the firmware.
 The firmware: --build (re)builds the test-port build in build-testport/ (Release, -DENABLE_SYSEX_TEST=ON; its own
 build directory, so build/ keeps the default options), incrementally. --elf runs another ELF.
 
+Each run first takes a real-time emulator slot from the host-wide pool (emu_slots.py, DELUGE_EMU_SLOTS, default 6),
+waiting while every checkout's runs together hold them all, and keeps it until its emulator has stopped.
+
 Boots are checked and retried: a boot whose test port never answers (one boot in three can come up blank, spec
 §21.3) or whose emulator exits (a held UDP port) is relaunched on fresh ports and a fresh card clone, and the first
 inject after boot is retried (a "no reply to test port command 0x10" right after boot is a known flake).
@@ -39,6 +42,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import deluge_probe
+import emu_slots
 import fat_image
 import hardware_session
 
@@ -159,6 +163,7 @@ class EmuRun:
         gdb_port=None,
         gdb_wait=False,
         card_overlay=None,
+        take_slot=None,
     ):
         self.elf, self.out, self.delugemu, self.qemu = (
             os.path.abspath(elf),
@@ -176,9 +181,23 @@ class EmuRun:
         self.proc = None
         self.port = None
         self.log_file = None
+        # a real-time emulator slot from the host-wide pool (emu_slots.take, #417): held from before the first launch
+        # until the emulator has stopped, across boot retries; the emulator inherits its lock (Slot.fd)
+        self.take_slot = take_slot or (lambda out: emu_slots.take(out=out))
+        self._slot_hold = None
+        self.slot = None
 
     def __enter__(self):
         os.makedirs(self.out, exist_ok=True)
+        self._slot_hold = self.take_slot(log)
+        self.slot = self._slot_hold.__enter__()
+        try:
+            return self._boot()
+        except BaseException:
+            self._release_slot()
+            raise
+
+    def _boot(self):
         for attempt in range(1, BOOT_TRIES + 1):
             try:
                 self._launch(attempt)
@@ -200,8 +219,14 @@ class EmuRun:
                 pass
             self.save_log()
         self._stop()
+        self._release_slot()
         if not self.keep_card and os.path.exists(self.card):
             os.unlink(self.card)
+
+    def _release_slot(self):
+        if self._slot_hold is not None:
+            hold, self._slot_hold, self.slot = self._slot_hold, None, None
+            hold.__exit__(None, None, None)
 
     def _launch(self, attempt):
         if os.path.exists(self.card):
@@ -219,7 +244,9 @@ class EmuRun:
         listen = link.sock.getsockname()[1]
         send = free_udp_port()
         link.addr = ("127.0.0.1", send)
-        self.port = deluge_probe.TestPort(link)
+        self.port = deluge_probe.TestPort(
+            link, on_hardware=False
+        )  # skips hardware_only expects
         self.run_log = os.path.join(self.out, f"{self.tag}-boot{attempt}.log")
         cmd = [
             os.path.join(self.delugemu, "scripts", "run.sh"),
@@ -245,6 +272,8 @@ class EmuRun:
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            # the slot's lock: an emulator that outlives this run (a killed runner) keeps its slot until it exits
+            pass_fds=[self.slot.fd] if self.slot is not None else [],
             env=dict(os.environ, DELUGEMU_QEMU_BIN=self.qemu),
         )
 
@@ -343,7 +372,8 @@ def protocol_checks(port, check):
 
 def run_scripts(emu, scripts, out=log, events=None):
     """Runs each script on the booted emulator, in order (deluge_probe.run_one_script(), as hardware_session.py
-    does). Returns [(script, failed, total, error)].
+    does). Returns [(script, failed, total, error, skipped)]: `skipped` counts its hardware_only expects, which the
+    emulator skips.
 
     A script error (a bad line, or no reply from the test port) counts as one more failed expect, after those the
     script ran (deluge_probe.ScriptStopped), and prints the script's last events of any kind. After no reply, the
@@ -354,6 +384,7 @@ def run_scripts(emu, scripts, out=log, events=None):
     pattern = deluge_probe.events_pattern(events)
     for i, script in enumerate(scripts):
         name = os.path.basename(script)
+        skipped_before = emu.port.hardware_only_skipped
         try:
             failed, total = deluge_probe.run_one_script(
                 emu.port,
@@ -361,16 +392,18 @@ def run_scripts(emu, scripts, out=log, events=None):
                 out=lambda line, n=name: out(f"{n}: {line}"),
                 events=pattern,
             )
-            results.append((script, failed, total, None))
+            result, gone = (script, failed, total, None), False
         except deluge_probe.ScriptStopped as stop:
-            results.append((script, *stop.result()))
+            result = (script, *stop.result())
             out(f"{name}: ERROR {stop.error}")
-            if deluge_probe.link_failed(stop.error) or not emu.alive():
-                results += [
-                    (s, 1, 0, "skipped: the emulator stopped answering")
-                    for s in scripts[i + 1 :]
-                ]
-                break
+            gone = deluge_probe.link_failed(stop.error) or not emu.alive()
+        results.append((*result, emu.port.hardware_only_skipped - skipped_before))
+        if gone:
+            results += [
+                (s, 1, 0, "skipped: the emulator stopped answering", 0)
+                for s in scripts[i + 1 :]
+            ]
+            break
         out(deluge_probe.result_line(name, *results[-1][1:]))
     return results
 
@@ -494,14 +527,18 @@ def main():
         log(f"ERROR {exc}")
         return 1
     log("summary:")
-    for script, f, t, e in results:
-        log(
-            f"  {os.path.basename(script)}: {t} expects, {f} failed"
-            + (f" ({e})" if e else "")
-        )
+    skipped = 0
+    for script, f, t, e, k in results:
+        log("  " + deluge_probe.result_line(os.path.basename(script), f, t, e, k))
         failed += f
         total += t
-    log(f"{total} checks, {failed} failed; logs in {out}")
+        skipped += k
+    # check_all.py's table note is this line's "N checks, M failed[, K hardware-only skipped]"
+    log(
+        f"{total} checks, {failed} failed"
+        + (f", {skipped} hardware-only skipped" if skipped else "")
+        + f"; logs in {out}"
+    )
     return 1 if failed else 0
 
 

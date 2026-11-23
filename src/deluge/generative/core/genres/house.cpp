@@ -48,20 +48,23 @@ constexpr Pattern kRim[] = {
     {"...5...6...5...7", "...g...g...g....", 1},
 };
 
-/// The & on every beat, the a ghosted behind it; 16ths as Complexity rises. The e and the a lean late (kHatLean).
+/// The & on every beat, the a ghosted behind it; from tier 1 an a after every & (#373), or the e and the a around it.
+/// The e and the a lean late (kHatLean).
 constexpr Pattern kClosedHat[] = {
     {"..85..85..85..85", "...g...g...g...g", 0, 2},
     {"..8...8...8...86", "...............g", 0},
-    {"3485348534853485", "gg.ggg.ggg.ggg.g", 1, 2},
-    {"..8.4.85..8.4.85", "....g..g....g..g", 1},
+    {"..87..87..87..87", "...g...g...g...g", 1, 2},
+    {".687.687.687.687", ".g.g.g.g.g.g.g.g", 1},
     {"4596459645964597", "gg.ggg.ggg.ggg.g", 2},
 };
 
-/// An open hat on the & of 4, then on more &s from tier 1: each replaces the closed hat there (spec §5.7).
+/// An open hat on the & of 4, or the & of 2 and 4, then on all four &s from tier 1: each replaces the closed hat there
+/// (spec §5.7).
 constexpr Pattern kOpenHat[] = {
-    {"..............7.", "................", 0, 2},
-    {"......6.......7.", "................", 1},
-    {"..6...7...6...7.", "..g.......g.....", 1},
+    {"..............7.", "................", 0},
+    {"......7.......7.", "................", 0},
+    {"..7...7...7...7.", "................", 1, 3},
+    {"......7.......7.", "................", 1},
 };
 
 /// The ride on the &s, behind its gate.
@@ -92,23 +95,29 @@ constexpr Pattern kClapFill[] = {
     {"....X...7.8.X8XX", "........g....g..", 1},
 };
 
-/// The offbeat bass: the & of every beat, anchored, never a beat (the kick's). 16th pickups as Complexity rises, all in
-/// the bar's first half, so the second half is never the busier: the Lead's Respond rule leaves it free for answers.
+/// The offbeat bass: the & of every beat, anchored, never a beat (the kick's). 16th pickups as Complexity rises, each
+/// line's in one half: the first, so the Lead's Respond rule leaves the second free for answers, except one tier-1
+/// line's in the second, which moves the answers to the first half (#368).
 constexpr Pattern kOffbeatBass[] = {
     {"..X...X...X...X.", "................", 0, 3},
     {"..X..7X...X...X.", ".....g..........", 0},
     {"..X..7X7..X...X.", ".....g.g........", 1},
     {"..X7..X...X...X.", "...g............", 1},
+    {"..X...X..7X7..X.", ".........g.g....", 1},
     {".7X7.7X...X...X.", ".g.g.g..........", 2},
 };
 
-/// The stab: anchored on the a of 1, then the & of 2 or 3 and later a's, more of them as Complexity rises. Never on a
-/// beat (the kick's and the clap's) or an e.
+/// The stab: anchored on the a of 1, then &s and a's, more of them as Complexity rises, two 2-bar lines whose second bar
+/// answers the first. Never on a beat (the kick's and the clap's) or an e.
 constexpr Pattern kStab[] = {
     {"...X......8.....", "................", 0, 2},
     {"...X..8........8", "................", 0},
     {"...X..8...8....7", "...............g", 1, 2},
     {"...X...7..8....8", ".......g........", 1},
+    {"...X..8...8...7.", "..............g.", 1},
+    {"..7X..8.......8.", "..g.............", 1},
+    {"...X..8...8....7" "...X......8...7.", "...............g..............g.", 1, 2},
+    {"...X...7..8....." "...X..8........8", ".......g........................", 1},
     {"...X..87..87...8", ".......g...g....", 2},
 };
 
@@ -165,7 +174,7 @@ constexpr LineWeight kBassDegrees[] = {{0, 8}, {4, 2}};
 /// Short offbeat notes, rare slides, a line that changes slowly.
 constexpr LoopSpec kBassLoop{
     .degrees = kBassDegrees,
-    .draws = {.leap = {0, 6}, .octaveUp = 0, .octaveDown = 0, .accent = 120},
+    .draws = {.leap = {3, 6}, .octaveUp = 0, .octaveDown = 0, .accent = 120},
     .slide = {0, 30},
     .mutation = 60,
     .gateTicks = 20,
@@ -187,11 +196,12 @@ constexpr InterplayRule kLeadRespondsBass[] = {
 
 // Registers, stacked so no two pitched parts meet in any key: each anchor is an octave over the one below, so the
 // tonics are octaves apart in every key, and the spans don't overlap (tonic T, the Bass's): Bass T−5..T+7, Strings
-// T+8..T+22, Stab T+23..T+36, Lead T+37..T+53.
-constexpr Register kBassRegister{36, -5, 7};
-constexpr Register kStringsRegister{48, -4, 10};
-constexpr Register kStabRegister{60, -1, 12};
-constexpr Register kLeadRegister{72, 1, 17};
+// T+8..T+22, Stab T+23..T+36, Lead T+37..T+53. Anchored on D♯, so the Bass's tonic runs A1 to G♯2: F♯, G and G♯ keys
+// sit an octave over where a C anchor put them (#370), and C to F and A to B where they were.
+constexpr Register kBassRegister{39, -5, 7};
+constexpr Register kStringsRegister{51, -4, 10};
+constexpr Register kStabRegister{63, -1, 12};
+constexpr Register kLeadRegister{75, 1, 17};
 
 /// Drums, an offbeat bass, the Stab, Strings, the Lead and FX (spec §4.5): Detroit's shape.
 constexpr PartSpec kParts[] = {
@@ -202,6 +212,7 @@ constexpr PartSpec kParts[] = {
         .name = "BASS",
         .pool = kOffbeatBass,
         .band = {0, 2},
+        .densityGate = macroPoints(9),
         .reg = kBassRegister,
         .loop = kBassLoop,
         .expression = {.spread = 6},
@@ -213,11 +224,13 @@ constexpr PartSpec kParts[] = {
         .name = "STAB",
         .pool = kStab,
         .band = {0, 2},
+        .densityGate = macroPoints(12),
         .reg = kStabRegister,
         // Short, each stab on its own (tuning).
         .stab = {.gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
+        .drift = {.sweepBars = 32},
         // 80 % of the preset's volume knob (tuning): about 6.5 dB under the rest of the mix (delugemu captures of each
         // part alone, seed 1, a card with the pack).
         .volume = 80,
@@ -226,6 +239,7 @@ constexpr PartSpec kParts[] = {
         .role = Role::Pad,
         .flavour = Flavour::Sustain,
         .name = "STRINGS",
+        .densityGate = macroPoints(6),
         .reg = kStringsRegister,
         // Every chord with its Extension: the 7th, or the 9th, plays with the root at any Density.
         .sustain = {.anchorExtension = true},
@@ -243,10 +257,11 @@ constexpr PartSpec kParts[] = {
         .pool = kAnswers,
         .band = {0, 2},
         .rules = kLeadRespondsBass,
+        .densityGate = macroPoints(30),
         .reg = kLeadRegister,
         .motif = {.positions = kAnswerPositions,
                   .draws = {.leap = {2, 3}, .octaveUp = 0, .accent = 150},
-                  .reroll = 100,
+                  .reroll = 20,
                   .gateTicks = 30},
         .expression = {.spread = 8},
         .gestures = kGestures,
@@ -267,24 +282,31 @@ constexpr FillEntry kFills[] = {
     {.kind = FillKind::Swap, .mask = {.lanes = laneBit(Lane::Clap) | laneBit(Lane::Snare)}, .beats = 2, .weight = 2},
     {.kind = FillKind::Roll, .mask = kSnareMask, .beats = 1, .weight = 1},
     {.kind = FillKind::Roll, .mask = kSnareMask, .beats = 2, .weight = 1},
+    {.kind = FillKind::Rest,
+     .mask = {.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)},
+     .beats = 2,
+     .weight = 2},
+    {.kind = FillKind::Rest, .mask = {.lanes = laneBit(Lane::Kick)}, .beats = 4, .weight = 1},
 };
 
-/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves is 8), so
+/// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves was 8), so
 /// every chord the walk reaches has a way on that isn't home. Dorian adds i–IV through its colour move; in Major the
-/// same degrees read I–IV and so on. Weights in the colour moves' units (20).
+/// same degrees read I–IV and so on in Mixolydian. Weights in the colour moves' units (20): i–♭VII and ♭VI–♭VII at half
+/// the others', so ♭VII doesn't take a third of minor bars (#371).
 constexpr ChordMove kHouseMoves[] = {
     {kI, kIV, 30},   // i–iv
-    {kI, kVII, 25},  // i–♭VII
+    {kI, kVII, 12},  // i–♭VII
     {kIV, kVII, 25}, // iv–♭VII
     {kVII, kIV, 15}, // ♭VII–iv
     {kI, kVI, 20},   // i–♭VI
-    {kVI, kVII, 30}, // ♭VI–♭VII
+    {kVI, kVII, 15}, // ♭VI–♭VII
     {kVII, kVI, 15}, // ♭VII–♭VI
 };
 
 /// 2 bars a chord, a repeat now and then so some last 4 and a few longer, the cadence on ♭VII every 4 chords (spec
 /// §4.5). The repeat weight has no cap and weighs most where the guard thins the other ways on: at 15 one bar in 7
-/// sat in a hold of 6 bars or more, at 8 one in 16.
+/// sat in a hold of 6 bars or more, at 8 one in 16. The chords loop (spec §7.4, round 2's S1): a 2- or 4-chord loop
+/// held through the Break and the Build, a new one on 1 Drop in 3.
 constexpr ChordGraph kHouseGraph{
     .homePull = 20,
     .moves = kHouseMoves,
@@ -292,9 +314,11 @@ constexpr ChordGraph kHouseGraph{
     .cadenceTarget = kVII,
     .cadencePeriod = 4,
     .barsPerChord = 2,
+    .loopChance = 333,
+    .halfLoopChance = 333,
 };
 
-constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Major};
+constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Mixolydian};
 
 /// 4 bars once in three, 8 bars twice (spec §4.5).
 constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
@@ -302,22 +326,23 @@ constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 1, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swing = 15},
     .phraseBars = 8,
     .parts = kParts,
     .fills = kFills,
     .heldFill = 0,
     .fillChance = 350,
+    .sectionEndChance = 1000,
     // Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
-    .harmony = {.graph = &kHouseGraph, .extensionFloor = 1, .extensionCeiling = 2},
+    .harmony = {.graph = &kHouseGraph, .extensionFloor = 1, .extensionCeiling = 2, .guard = {.factor = 0}},
     .palette = &housePalette,
     .arc =
         {
-            .introPhrases = 1,
+            .introPhrases = 2,
             .outroPhrases = 1,
             .groovePhrases = {4, 8},
-            .breakPhrases = {1, 1},
+            .breakPhrases = {1, 2},
             .buildBars = kBuildBars,
             .grooveToBuild = 0,
             .dropDecayPhrases = 1,

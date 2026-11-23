@@ -274,6 +274,31 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.lifecycle.soundDrops).to_equal(1);
 		});
 
+		it("is refused while a restart waits for its line, and accepted once BACK cancelled it", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			expect(t.steering.pressRestart() == perform::PressOutcome::Accepted).to_be_true();
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Refused).to_be_true(); // still in the queue
+			t.decideOne();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Refused).to_be_true(); // waiting in the core
+			expect(t.lifecycle.has("request style=1 refused restart")).to_be_true();
+			expect(t.lifecycle.preloads.empty()).to_be_true();
+			t.steering.cancelNewest();
+			t.decideOne();
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+		});
+
+		it("is refused while AS IT BEGAN's sounds preload, and accepted once the preload ended", _ {
+			TransitionPiece t;
+			t.decideBefore(3);
+			t.steering.restartPreloads(true);
+			expect(t.lifecycle.request(TransitionStyle::Cut) == Request::Refused).to_be_true();
+			expect(t.lifecycle.has("request style=2 refused restart")).to_be_true();
+			expect(t.lifecycle.preloads.empty()).to_be_true();
+			t.steering.restartPreloads(false); // cancelled
+			expect(t.lifecycle.request(TransitionStyle::Fade) == Request::Started).to_be_true();
+		});
+
 		it("is refused with QUEUE FULL when the Queued one's cancel has no room, and that one plays on", _ {
 			TransitionPiece t;
 			t.confirmAt(3, TransitionStyle::BuildIntoDrop);

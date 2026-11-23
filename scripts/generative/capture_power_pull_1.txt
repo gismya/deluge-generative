@@ -1,0 +1,33 @@
+# #448's power-off check, part 1 of 2 (a human check: the owner pulls the power; no perform_ prefix, so check_all.py
+# doesn't run it). Enters Perform (Acid techno), starts a piece, marks it, steers it for 30 s and waits for a timed
+# flush of the card log (spec §17.2), then leaves the piece PLAYING. When the session ends: PULL THE DELUGE'S POWER
+# now, without stopping or leaving, then power it on again. Part 2 (capture_power_pull_2.txt) runs after the reboot.
+# Run with --events 'gen_card_log|gen_log_piece|gen_mark'.
+# runs-via: deluge_probe.py session (a human check: the owner pulls the power after it)
+# covers: src/deluge/generative/firmware/capture_files.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/perform_adapter.cpp src/deluge/generative/perform/capture.cpp
+# covers: src/deluge/generative/perform/capture.h src/deluge/gui/context_menu/generative.cpp
+start_state
+hold entropy
+mark now
+include perform_open.txt
+include perform_confirm.txt
+expect event /^gen_card_log enter adopted=0 / since=mark
+button F8 down
+wait 50
+button F8 up
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event /^gen_log_piece pieces=1 / within=10
+button RECORD down
+wait 50
+button RECORD up
+expect event /^gen_mark marked / within=5
+expect event /^gen_card_log open piece=[0-9]+ spare=[01]$/ since=mark
+include capture_h13_minute.txt
+expect event /^gen_card_log flush piece=[0-9]+ bytes=[1-9][0-9]*$/ within=15
+expect playing=true
+# PULL THE POWER NOW (the piece still plays; up to 10 s after the flush above is what a power-off may lose)

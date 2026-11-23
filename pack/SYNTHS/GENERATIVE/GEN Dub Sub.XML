@@ -18,7 +18,7 @@
 		<oscAVolume>0x7FFFFFFF</oscAVolume>
 		<oscBVolume>0xDC28F5B2</oscBVolume>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x7FFFFFD2</volume>
+		<volume>0x7FFFFFFF</volume>
 		<pan>0x00000000</pan>
 		<lpfFrequency>0x1999997E</lpfFrequency>
 		<lpfResonance>0x80000000</lpfResonance>
@@ -32,7 +32,7 @@
 		<envelope2>
 			<attack>0x80000000</attack>
 			<decay>0xE6666654</decay>
-			<sustain>0x7FFFFFD2</sustain>
+			<sustain>0x7FFFFFFF</sustain>
 			<release>0xC7AE146E</release>
 		</envelope2>
 		<delayFeedback>0x80000000</delayFeedback>

@@ -1,0 +1,12 @@
+# #448: the card log ON for the on/off comparison (capture_card_onoff_body.txt; capture_card_off.txt is the other
+# side). A measurement, not a check (no perform_ prefix).
+# runs-via: deluge_probe.py session (on the Deluge: a measurement for the on/off comparison, its figures from --events)
+# covers: src/deluge/generative/firmware/capture_files.*
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/firmware/transitions.cpp src/deluge/generative/perform/capture.cpp
+# covers: src/deluge/generative/perform/capture.h src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
+start_state
+hold entropy
+include capture_card_onoff_body.txt

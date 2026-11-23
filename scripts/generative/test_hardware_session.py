@@ -16,6 +16,7 @@ from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import deluge_files
 import deluge_probe
 import hardware_session as hs
 
@@ -35,6 +36,7 @@ def args(**kw):
         "events": None,
         "key": None,
         "key_file": None,
+        "force_build_mismatch": False,
     }
     base.update(kw)
     return argparse.Namespace(**base)
@@ -49,15 +51,33 @@ class FakePort:
     link = FakeLink()
 
 
-class FakeSession(hs.Session):
-    """The device steps scripted: ready gives a port or None, each script returns or raises."""
+HEAD = "abc123def4567890abc123def4567890abc123de"  # the checkout's HEAD in FakeSession; Base loads its build
 
-    def __init__(self, hw, ready=True, scripts=None, **kw):
+
+class FakeSession(hs.Session):
+    """The device steps scripted: ready gives a port or None, each script returns or raises. `listings` are the
+    SONGS/ and RECIPES/ files card_files() returns, one set a call (none: empty), or an exception it raises; `writes`
+    maps a script to its "# writes:" globs."""
+
+    def __init__(self, hw, ready=True, scripts=None, listings=None, writes=None, **kw):
         a = args(**kw)
         super().__init__(deluge_probe, a, hw, out=self.lines.append)
         self.ready, self.results, self.loads = ready, scripts or {}, 0
+        self.listings, self.writes = list(listings or []), writes or {}
 
     lines: ClassVar[list]
+
+    def checkout_sha(self):
+        return HEAD
+
+    def card_files(self, port):
+        listing = self.listings.pop(0) if self.listings else set()
+        if isinstance(listing, Exception):
+            raise listing
+        return listing
+
+    def script_writes(self, script):
+        return self.writes.get(script, [])
 
     def wait_ready(self, fresh, before=None):
         return FakePort() if self.ready else None
@@ -73,6 +93,13 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.hw = hs.Hardware(self.tmp.name)
+        # Every session runs on the build of its checkout's HEAD, with nothing in SONGS/ or RECIPES/, unless a test
+        # says otherwise.
+        self.hw.write_loaded({"build": "hardware", "sha": HEAD[:9], "when": "earlier"})
+        for name, value in (("checkout_sha", HEAD), ("card_files", set())):
+            patcher = mock.patch.object(hs.Session, name, lambda *a, v=value: v)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         FakeSession.lines = []
 
     def tearDown(self):
@@ -356,6 +383,139 @@ class Rules(Base):
         with self.assertRaises(KeyError):
             s.run()
         self.assertFalse(os.path.exists(self.hw.lock))
+
+
+class NoLoadBuild(Base):
+    """--no-load runs only on the build this checkout loaded (#464)."""
+
+    def test_the_build_of_head_runs(self):
+        self.assertEqual(FakeSession(self.hw).run(), 0)
+
+    def test_a_dirty_build_of_head_matches_head(self):
+        self.hw.write_loaded({"build": "hardware", "sha": HEAD[:9] + "-dirty"})
+        self.assertEqual(FakeSession(self.hw).run(), 0)
+
+    def test_another_build_refuses_naming_both_shas_before_the_lock(self):
+        self.hw.write_loaded({"build": "hardware", "sha": "fff000111", "when": "then"})
+        s = FakeSession(self.hw)
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        refusal = next(line for line in s.lines if "fff000111" in line)
+        self.assertIn(HEAD[:9], refusal)
+        self.assertTrue(any("--force-build-mismatch" in line for line in s.lines))
+        self.assertEqual(self.released(), [])  # the lock was never taken
+        self.assertFalse(any("a.txt" in line for line in s.lines))
+
+    def test_no_record_of_a_load_refuses(self):
+        os.remove(self.hw.loaded)
+        s = FakeSession(self.hw)
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertTrue(any(self.hw.loaded in line for line in s.lines))
+
+    def test_a_load_while_it_waited_for_the_lock_refuses(self):
+        acquire = self.hw.acquire
+
+        def loaded_meanwhile(*a, **kw):
+            self.hw.write_loaded({"build": "hardware", "sha": "fff000111"})
+            return acquire(*a, **kw)
+
+        self.hw.acquire = loaded_meanwhile
+        s = FakeSession(self.hw)
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertTrue(any("fff000111" in line for line in s.lines))
+        self.assertFalse(any("a.txt:" in line for line in s.lines))
+        self.assertFalse(os.path.exists(self.hw.lock))
+
+    def test_the_force_flag_warns_and_runs(self):
+        self.hw.write_loaded({"build": "hardware", "sha": "fff000111"})
+        s = FakeSession(self.hw, force_build_mismatch=True)
+        self.assertEqual(s.run(), 0)
+        warning = next(line for line in s.lines if "fff000111" in line)
+        self.assertIn("warning", warning)
+        self.assertIn("  a.txt: 3 expects, 0 failed", s.lines)
+
+    def test_delugemu_isnt_checked(self):
+        os.remove(self.hw.loaded)
+        self.assertEqual(FakeSession(self.hw, udp="1:2").run(), 0)
+
+    def test_matching_takes_a_short_sha_as_a_prefix_of_head(self):
+        self.assertIsNone(hs.build_mismatch({"sha": HEAD[:9]}, HEAD, "loaded.json"))
+        self.assertIsNotNone(hs.build_mismatch({"sha": "unknown"}, HEAD, "loaded.json"))
+        self.assertIsNotNone(hs.build_mismatch({"sha": "-dirty"}, HEAD, "loaded.json"))
+
+
+class CardWrites(Base):
+    """New files in SONGS/ and RECIPES/ after a session fail it unless a script declares them (#465)."""
+
+    NEW = "SONGS/GEN ACID TECHNO 3E9D8DZ LIVE.XML"
+
+    def test_a_declared_new_file_passes_and_is_named(self):
+        s = FakeSession(
+            self.hw,
+            listings=[{"SONGS/Ttt.XML"}, {"SONGS/Ttt.XML", self.NEW}],
+            writes={"a.txt": ["SONGS/GEN ACID TECHNO *"]},
+        )
+        self.assertEqual(s.run(), 0)
+        self.assertTrue(any(self.NEW in line for line in s.lines))
+
+    def test_an_undeclared_new_file_fails_and_is_named(self):
+        s = FakeSession(self.hw, listings=[set(), {"SONGS/SONG001.XML"}])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        failure = next(line for line in s.lines if "SONG001" in line)
+        self.assertIn("undeclared", failure)
+        self.assertIn("  a.txt: 3 expects, 0 failed", s.lines)
+
+    def test_another_scripts_declaration_covers_it(self):
+        s = FakeSession(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), {"RECIPES/ACID TECHNO 1234567.XML"}],
+            writes={"b.txt": ["RECIPES/ACID TECHNO *"]},
+        )
+        self.assertEqual(s.run(), 0)
+
+    def test_an_unreadable_script_still_lets_the_others_be_checked(self):
+        class Unreadable(FakeSession):
+            def script_writes(self, script):
+                if script == "a.txt":
+                    raise ValueError("include missing.txt: not found")
+                return super().script_writes(script)
+
+        s = Unreadable(
+            self.hw,
+            args=["a.txt", "b.txt"],
+            listings=[set(), {"RECIPES/ACID TECHNO 1234567.XML", "SONGS/X.XML"}],
+            writes={"b.txt": ["/RECIPES/ACID TECHNO *"]},
+        )
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertTrue(
+            any(
+                "declared: /RECIPES/ACID TECHNO 1234567.XML" in line for line in s.lines
+            )
+        )
+        self.assertTrue(any("undeclared: /SONGS/X.XML" in line for line in s.lines))
+
+    def test_a_failed_script_still_gets_the_check(self):
+        s = FakeSession(
+            self.hw, scripts={"a.txt": (1, 3)}, listings=[set(), {"SONGS/X.XML"}]
+        )
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertTrue(any("SONGS/X.XML" in line for line in s.lines))
+
+    def test_no_reply_to_the_listing_fails_without_a_hung_marker(self):
+        s = FakeSession(self.hw, listings=[TimeoutError("no reply to dir within 10 s")])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertIsNone(self.hw.hung_text())
+        self.assertTrue(any("no reply to dir" in line for line in s.lines))
+        self.assertFalse(any("a.txt:" in line for line in s.lines))
+
+    def test_a_listing_error_fails_before_any_script(self):
+        error = deluge_files.CardError(
+            "ls", "/SONGS", deluge_files.FRESULT.index("FR_DISK_ERR")
+        )
+        s = FakeSession(self.hw, listings=[error])
+        self.assertEqual(s.run(), hs.EXIT_FAILED)
+        self.assertFalse(any("a.txt:" in line for line in s.lines))
+        self.assertIsNone(self.hw.hung_text())
 
 
 class StopsReplying(Base):
@@ -712,9 +872,23 @@ class MainArgs(Base):
         self.assertEqual(code, hs.EXIT_FAILED)
         self.assertTrue(any("--timeout" in line for line in lines), lines)
 
+    def test_the_force_flag_goes_with_no_load(self):
+        lines = []
+        code = hs.main(
+            deluge_probe,
+            args(no_load=False, build="release", force_build_mismatch=True),
+            out=lines.append,
+        )
+        self.assertEqual(code, hs.EXIT_FAILED)
+        self.assertTrue(any("--force-build-mismatch" in line for line in lines), lines)
+
 
 class FailedLoad(FastPoll):
     """A load that loadfw reports as done but that didn't take: the old build still runs."""
+
+    def setUp(self):
+        super().setUp()
+        os.remove(self.hw.loaded)  # no load before this one: no RAM-loaded note
 
     def run_load(self, probe, uptime_before=600.0, timeout=1, still_answers=None):
         """Session.run() after a load that loadfw reports as done. `still_answers` overrides

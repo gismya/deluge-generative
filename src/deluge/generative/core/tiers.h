@@ -29,7 +29,7 @@ namespace deluge::generative {
 
 /// The tier effective Complexity reaches in `band`: linear in integer math, with the remainder a keyed chance, drawn
 /// with `chanceKey`, of the next tier up. The draw holds while its key does, so a slow turn moves one part at a time.
-constexpr int32_t bandTier(TierBand band, int32_t complexity, const DrawKey& chanceKey) {
+inline int32_t bandTier(TierBand band, int32_t complexity, const DrawKey& chanceKey) {
 	const int32_t width = band.high > band.low ? band.high - band.low : 0;
 	const int32_t position = complexity * width;
 	const int32_t remainder = position % kMacroFull;
@@ -53,7 +53,7 @@ constexpr int32_t playingTier(std::span<const Entry> entries, int32_t tier) {
 
 /// A weighted keyed pick among the entries of `tier`, in their order: an index into `entries`, or -1 if none has it.
 template <typename Entry>
-constexpr int32_t drawInTier(const DrawKey& key, std::span<const Entry> entries, int32_t tier) {
+inline int32_t drawInTier(const DrawKey& key, std::span<const Entry> entries, int32_t tier) {
 	return drawWeightedIf(key, entries, [tier](const Entry& entry) { return entry.tier == tier; });
 }
 

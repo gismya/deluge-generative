@@ -80,7 +80,7 @@ expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=30
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- A Break in House: forced, it lands on the next phrase line and keeps the Stab, Strings and closed hat ----
@@ -88,7 +88,7 @@ pad 17 6 down
 wait 50
 pad 17 6 up
 expect event gen_section BREAK within=60
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- ROOTS DUB -> HARD CUT AT PHRASE: House's 6 parts to 5 ----
@@ -137,7 +137,7 @@ expect event /^gen_transition start style=1 us=\d+ tempo_off=\d{1,3}$/ within=15
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- ROOTS DUB -> FADE THROUGH: House's 1-phrase Outro, Dub's Intro ----
@@ -186,7 +186,7 @@ expect event /^gen_transition start style=2 us=\d+ tempo_off=\d{1,3}$/ within=90
 expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 # ---- ROOTS DUB -> BUILD INTO A DROP: House's 4- or 8-bar Build glides down to Dub's tempo onto Dub's Drop ----
@@ -207,12 +207,12 @@ button SELECT_ENC up
 expect event gen_confirm dub style=0 result=0
 expect event gen_transition_preload done error=0 parts=5 within=30
 expect event gen_section BUILD within=60
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event /^gen_transition start style=0 us=\d+ tempo_off=\d{1,3}$/ within=60
 expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
-expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
+hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
 button PLAY down

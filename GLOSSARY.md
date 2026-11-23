@@ -33,8 +33,16 @@ A built-in style definition. It gives a new Recipe its starting values and sets 
 _Avoid_: Style, preset, piece, template
 
 **Subgenre**:
-A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu.
-_Avoid_: Variant, sub-style, flavour, family
+A genre written as overrides of a parent genre, such as Acid techno under Techno. It plays like any other genre, and moving from one subgenre to a sibling is a genre change. The parent is never played itself: it holds what its subgenres share and groups them in the GENRE menu. A subgenre changes the roster or palette; a variant changes one rule within a genre.
+_Avoid_: Sub-style, flavour, family
+
+**Variant set**:
+A rule a genre offers several ways of playing, each with a weight. Each piece draws one of them, and the player can narrow the draw or fix it to one.
+_Avoid_: Option set, alternatives, mode
+
+**Variant**:
+One way of playing a variant set's rule, such as rockers or steppers for Dub's drums. It is a Recipe value: Regenerate draws it again, a new seed keeps it.
+_Avoid_: Option, alternative, subgenre
 
 **Macro**:
 A single 0–50 Recipe control that moves many musical features at once, in the same direction for every genre and part. There are four: Energy, Density, Complexity and Motion. The Recipe value is the one centre every part follows; a part's Part bias only moves where it sits around that centre.
@@ -97,7 +105,7 @@ Starting a fresh piece in the same genre: new musical facts where the genre roll
 _Avoid_: Reset, re-roll, new song, shuffle
 
 **Piece**:
-What Perform plays from a Start, a Regenerate, a genre change or a Recipe file loaded mid-set, until the transport stops or the next of those. Starting again after a stop begins a new piece.
+What Perform plays from a Start, a Restart, a Regenerate, a genre change or a Recipe file loaded mid-set, until the transport stops or the next of those. Starting again after a stop begins a new piece, and so does a Restart: the same Recipe from bar 1, AS IT IS (X+PLAY) or AS IT BEGAN (from the piece's start state).
 _Avoid_: Song, set, take, session
 
 **Steering**:
@@ -183,6 +191,10 @@ _Avoid_: Break, turnaround, mute, drop-out, Ornament
 **Drop-out**:
 Whole parts or drum lanes falling silent for one to four bars in a Groove, often with the last hit thrown into an echo, such as the skank dropping out of a dub mix. A genre lists the drop-outs it may play, and the Generator plays them more often with more Motion. Unlike a fill, the notes already sounding ring on.
 _Avoid_: Rest, mute, Break, Fill, cut
+
+**Punch-in**:
+A player's effect on the KEYBOARD page, on while its pad is held or latched with a tap, at a fixed amount: a Drums lane muted, a hat or snare roll, flams, a doubled kick, or a pump (every other part ducking under the kick). It steers the Generator, so it starts and stops on step lines and Capture replays it. Stock Performance view's song FX pads, on KEYBOARD's second page, aren't punch-ins: they move song params.
+_Avoid_: Gesture, Fill, Throw, effect pad
 
 **Phrase accent**:
 A single hit on a genre's accent lane, usually the crash, that marks the start of a phrase: always on a Drop and after a fill, and sometimes on other Groove phrase starts.
