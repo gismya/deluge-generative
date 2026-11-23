@@ -665,7 +665,8 @@ def split_sessions(scripts, times, limit_seconds):
 def session_command(args, scripts, part=None):
     """The `deluge_probe.py session` command line for `scripts`, with every option of this run that changes where or
     how a session runs (R1 of #504: a part that lost --udp ran on the Deluge), for a part of a split set. The inner
-    command sits in double quotes (`./dbt exec "..."`), so its \\, ", $ and ` are escaped for them."""
+    command sits in double quotes (`./dbt exec "..."`), so its \\, ", $ and ` are escaped for them. The
+    printed command is for bash (the harness shell); fish reads backticks in double quotes differently."""
     words = ["--build", args.build] if not args.no_load else ["--no-load"]
     owner = args.owner or ""
     if part:
@@ -676,6 +677,8 @@ def session_command(args, scripts, part=None):
         ("--events", args.events),
         ("--note", args.note),
         ("--udp", args.udp),
+        ("--key", args.key),
+        ("--key-file", args.key_file),
     ):
         if value:
             words += [flag, value]
@@ -1066,9 +1069,8 @@ class Session:
                 try:
                     failed, total = self.run_one(port, script)
                     results.append((name, failed, total, None))
-                    if (
-                        not self.args.udp
-                    ):  # times.json is the Deluge's: delugemu runs at its own speed
+                    # times.json is the Deluge's: delugemu runs at its own speed
+                    if not self.args.udp:
                         self.hw.record_time(name, time.monotonic() - started)
                 except self.dp.ScriptStopped as stop:
                     results.append((name, *stop.result()))

@@ -697,6 +697,7 @@ class Times(Base):
             udp="5000:5001",
             wait=600,
             no_wait=False,
+            key_file=".deluge_hex_key",
         )
         self.assertEqual(s.run(), hs.EXIT_FAILED)
         commands = [line for line in s.lines if "deluge_probe.py session" in line]
@@ -708,6 +709,7 @@ class Times(Base):
                 "--force-build-mismatch",
                 "--udp 5000:5001",
                 "--wait 600",
+                "--key-file .deluge_hex_key",
             ):
                 self.assertIn(option, part)
             self.assertNotIn("--no-wait", part)
