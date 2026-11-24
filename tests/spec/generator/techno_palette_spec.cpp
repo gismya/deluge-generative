@@ -42,9 +42,10 @@ describe techno_palette("Acid techno's palette", $ {
 				   }
 			   }
 		   }
-		   // The owner's picks (#472): the boom or the wash, a piece each (spec §10.5).
+		   // The owner's picks (#472): the boom or the wash, a piece each (spec §10.5); Acid's own boom, 1 dB under the
+		   // others', so its Drop's mix doesn't clip (impact round 3).
 		   expect(picks[Lane::Impact].size()).to_equal(size_t{2});
-		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML")).to_be_true();
+		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML")).to_be_true();
 		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML")).to_be_true();
 	   });
 

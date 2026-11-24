@@ -37,7 +37,7 @@
 			<sustain>0x7FFFFFFF</sustain>
 			<release>0x7FFFFFFF</release>
 		</envelope1>
-		<delayFeedback>0x051EB83A</delayFeedback>
+		<delayFeedback>0xE6666654</delayFeedback>
 		<reverbAmount>0xFAE14798</reverbAmount>
 		<patchCables>
 			<patchCable>

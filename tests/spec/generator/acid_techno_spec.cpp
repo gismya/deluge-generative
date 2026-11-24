@@ -243,11 +243,26 @@ describe acid_techno("Acid techno", $ {
 			expect(drones.count("SYNTHS/148 Warm 5th Pad.XML")).to_equal(size_t{1});
 		});
 
-		it("takes its drum and FX lanes from the parent's palette, which lists no synth part", _ {
+		it("takes its drum and FX lanes from the parent's palette, which lists no synth part, but its own boom", _ {
 			const Palette& parent = *acid.parent->palette;
 			expect(parent.parts.empty()).to_be_true();
-			expect(acid.palette->lanes.data() == parent.lanes.data()).to_be_true();
 			expect(genres::technoMelodic.palette->lanes.data() == parent.lanes.data()).to_be_true();
+			expect(acid.palette->lanes.size()).to_equal(parent.lanes.size());
+			for (size_t i = 0; i < parent.lanes.size(); i++) {
+				const LaneSounds& own = acid.palette->lanes[i];
+				const LaneSounds& theirs = parent.lanes[i];
+				expect(own.lane == theirs.lane).to_be_true();
+				expect(own.folders.data() == theirs.folders.data()).to_be_true();
+				expect(own.tags.data() == theirs.tags.data()).to_be_true();
+				if (own.lane != Lane::Impact) {
+					expect(own.synths.data() == theirs.synths.data()).to_be_true();
+				}
+			}
+			// Acid's boom is 1 dB under the others' (#472 impact round 3): at their +3 dB its Drop's mix clipped.
+			const LaneSounds& impact = *acid.palette->laneSounds(Lane::Impact);
+			expect(impact.synths.size()).to_equal(size_t{2});
+			expect(std::string(impact.synths[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML"));
+			expect(std::string(impact.synths[1].path)).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML"));
 		});
 	});
 });

@@ -328,6 +328,26 @@ def cable(value):
     return f"0x{(value * 21474836) & 0xFFFFFFFF:08X}"
 
 
+def delay_feedbacks(xml):
+    """Every delay feedback a preset's XML saves, in 0–50 menu units (knob()'s inverse, rounded)."""
+    values = []
+    for raw in re.findall(r"<delayFeedback>(0x[0-9A-Fa-f]{8})</delayFeedback>", xml):
+        param = int(raw, 16)
+        param -= 2**32 if param >= 2**31 else 0
+        values.append(round((param + 2**31) / 85899345))
+    return values
+
+
+# Each repeat's gain is the menu value / 25 (dsp/delay/delay.cpp): at 25 or more an echo never dies in Perform, where
+# the firmware's 15/16 clamp doesn't apply (spec §11.4).
+RUNAWAY_DELAY_FEEDBACK = 25
+
+
+def runaway_delay(xml):
+    """Whether a preset saves a delay feedback whose echo never dies in Perform."""
+    return any(value >= RUNAWAY_DELAY_FEEDBACK for value in delay_feedbacks(xml))
+
+
 def preset(
     osc1,
     osc2,
@@ -622,6 +642,14 @@ PRESETS = {
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         velocity=30,
     ),
+    # Acid techno's boom: the same at a velocity cable of 22 (+2.0 dB over round 2's build, peak, the FX part alone).
+    # At the others' +3 dB, Acid's Drop mix reached full scale (8 samples clipped, seed 1, entropy 5); at 22 it peaks at
+    # -0.1 dBFS, at 18 (+1.4 dB) -0.3 (impact round 3, delugemu).
+    "SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML": lambda: sample_preset(
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        velocity=22,
+    ),
     # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
     # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
     # 8th analog ping-pong echo. Saturation 4: +6.1 dB on its first beat.
@@ -649,8 +677,10 @@ PRESETS = {
         delay=Delay(**DOTTED_EIGHTH, feedback=24),
         clipping=4,
     ),
-    # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo (feedback 26:
-    # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
+    # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo and some
+    # reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8, about -1.9 dB), so the echo dies within
+    # about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4); its first build's 26 held the echo
+    # at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators are taken, so a velocity cable of 50
     # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
     # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
     # Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
@@ -660,7 +690,7 @@ PRESETS = {
         osc1_volume=48,
         osc2_volume=44,
         reverb=24,
-        delay=Delay(**DOTTED_EIGHTH, feedback=26),
+        delay=Delay(**DOTTED_EIGHTH, feedback=20),
         velocity=50,
         volume=42,
     ),

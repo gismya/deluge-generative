@@ -326,7 +326,7 @@ constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 5, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 20},
     .phraseBars = 8,
     .parts = kParts,

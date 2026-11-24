@@ -226,6 +226,12 @@ otherwise.
   matches, so its presets stay fallbacks. Give an Impact-style lane no folders and no tags, or a factory file that
   matches would win. Its default folder `SAMPLES/FX/<lane>` is empty in the pack, and lists of a lane's picks
   (`lanePicks`) now hold the preset paths.
+- A lane's pick (its path) is not in the event stream: the goldens, `kPinned` and `generator_render`'s dump and MIDI
+  don't see a palette change that only swaps what a lane plays (#472 round 3: House's Impact from files to a preset,
+  Acid's own boom). It needs no version bump. A subgenre that wants one lane's sound of its own copies Techno's
+  `kLanes` and swaps that entry (`kDubLanes`, `kAcidLanes` in `techno_palette.cpp`).
+- A pack preset's delay feedback stays under 25 (`test_make_pack.py`): an FX row's saved feedback is what plays (a
+  kit row's Space is reverb only), and from 25 the echo never dies in Perform (spec §11.4).
 - The Fall and the Impact span their Section's start (the Break, the Drop's phrase), so they never enter late
   (`entersLate()`, `core/types.h`, used where `updateGates()` and `express()` hold notes back). A new FX lane with a
   long note should join it.
