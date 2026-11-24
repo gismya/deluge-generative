@@ -16,25 +16,44 @@
  */
 
 // A value right-aligned after a row's name in a Generative submenu (spec §13.6, §14.4), as stock draws a submenu
-// row's arrow.
+// row's arrow, and a menu title that side-scrolls when it's too wide.
 
 #pragma once
 
-#include "generative/perform/regenerate_page.h"
+#include "generative/perform/menu_rows.h"
 #include "gui/menu_item/menu_item.h"
 #include "hid/display/oled.h"
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 
 namespace deluge::gui::menu_item::generative {
 
-/// Pixels between the row's name and its value, and after it: the portable row layout's (perform/regenerate_page.h),
-/// which regenerate_page_spec checks the OLED names against.
+/// Pixels between the row's name and its value, and after it: the portable row layout's (perform/menu_rows.h), which
+/// regenerate_page_spec checks the OLED names against. The asserts keep that layout the stock one.
 constexpr int32_t kValueGap = deluge::generative::perform::kRowValueGap;
 constexpr int32_t kValueRightMargin = deluge::generative::perform::kRowValueRightMargin;
-static_assert(deluge::generative::perform::kMenuCharPixels == kTextSpacingX, "the spec's menu font is the menu's");
-static_assert(deluge::generative::perform::kMenuIconPixels == kSubmenuIconSpacingX);
-static_assert(deluge::generative::perform::kMenuWidthPixels == OLED_MAIN_WIDTH_PIXELS);
+static_assert(deluge::generative::perform::kMenuCharPixels == kTextSpacingX,
+              "menu_rows.h's character advance is the stock menu font's");
+static_assert(deluge::generative::perform::kMenuIconPixels == kSubmenuIconSpacingX,
+              "menu_rows.h's icon width is the stock submenu arrow's");
+static_assert(deluge::generative::perform::kMenuWidthPixels == OLED_MAIN_WIDTH_PIXELS,
+              "menu_rows.h's row width is the OLED's");
+
+/// Draws a menu screen's `title` in the bold title font with its separator, as MenuItem::renderOLED() does, but
+/// side-scrolling when it's wider than the screen, as a long song name does in the stock session view.
+inline void drawScrollingTitle(std::string_view title) {
+	deluge::hid::display::oled_canvas::Canvas& canvas = deluge::hid::display::OLED::main;
+	constexpr int32_t kTitleY = OLED_MAIN_TOPMOST_PIXEL + 1;
+	canvas.drawString(title, 0, kTitleY, kTextTitleSpacingX, kTextTitleSizeY);
+	canvas.drawHorizontalLine(kScreenTitleSeparatorY, 0, OLED_MAIN_WIDTH_PIXELS - 1);
+	if (canvas.getStringWidthInPixels(title.data(), kTextTitleSizeY) > OLED_MAIN_WIDTH_PIXELS) {
+		deluge::hid::display::OLED::setupSideScroller(1, title, 0, OLED_MAIN_WIDTH_PIXELS, kTitleY,
+		                                              kTitleY + kTextTitleSizeY, kTextTitleSpacingX, kTextTitleSizeY,
+		                                              false);
+	}
+	deluge::hid::display::OLED::markChanged();
+}
 
 /// The pixels a row's `value` takes at its right, gap and margin included.
 inline int32_t valueRenderLength(const char* value) {

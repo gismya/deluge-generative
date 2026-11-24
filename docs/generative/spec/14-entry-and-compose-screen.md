@@ -51,7 +51,7 @@ A stock-style menu that edits the Current Recipe before building. The Recipe sta
 | SWING | amount | stock big-number editor |
 | KEY | root | |
 | SCALE | name | the short name Perform's queue shows (HARM MINOR, HUNG MINOR) when the full one doesn't fit |
-| VARIANTS | ▸ | shown only when the genre has variant sets ([§3.6](03-recipe.md#36-variant-sets)): the Regenerate page's per-set rows ([§13.6](13-perform.md#136-perform-menu)), RANDOM, a variant's name or `n OF m`, each a stock multi-select. It edits the Current Recipe's allowed variants, which REGENERATE then draws within; the variant playing stays until then |
+| VARIANTS | ▸ | shown only when the genre has variant sets ([§3.6](03-recipe.md#36-variant-sets)): the Regenerate page's per-set rows ([§13.6](13-perform.md#136-perform-menu)), RANDOM, a variant's name or `n OF m`, each a stock multi-select. It edits the Current Recipe's allowed variants, which REGENERATE then draws within. The variant playing stays while it's allowed; one you untick is drawn again at once within the ticks, so the Recipe never builds or saves a pick its mask leaves out |
 | ENERGY, DENSITY, COMPLEXITY, MOTION | 0–50 | stock continuous number editor (number and bar) |
 | SOUNDS | n PARTS ▸ | one row per part with its pick (`BASS 017 ACID LINE`). Push re-rolls from the palette, SHIFT+push goes back to the previous pick. Drums and FX rows (`DRUMS: 8 LANES` ▸) open a lane list that works the same way |
 | LENGTH | m:ss | target length, 1:00–20:00 in 30 s steps, default 4:00, stock big-number editor. Kept until power-off, never saved |

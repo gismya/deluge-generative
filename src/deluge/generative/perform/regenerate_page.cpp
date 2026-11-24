@@ -71,6 +71,30 @@ void picksText(const Genre& genre, const VariantPicks& picks, std::span<char> ou
 	}
 }
 
+bool narrowSet(Recipe& recipe, int32_t set, uint8_t allowed, uint32_t entropy) {
+	if (recipe.genre == nullptr || set < 0 || set >= static_cast<int32_t>(recipe.genre->variantSets.size())) {
+		return false;
+	}
+	const uint8_t before = recipe.variants.pick[set];
+	recipe.variants.allowed[set] = allowedIn(recipe.genre->variantSets[set], allowed);
+	drawUnsetVariants(recipe, entropy); // draws only the picks outside their masks: this one, if it now is
+	return recipe.variants.pick[set] != before;
+}
+
+void masksText(const Genre& genre, const VariantPicks& picks, std::span<char> out) {
+	if (out.empty()) {
+		return;
+	}
+	Text text(out);
+	if (genre.variantSets.empty()) {
+		text.add("-");
+		return;
+	}
+	for (size_t s = 0; s < genre.variantSets.size(); s++) {
+		text.add(s > 0 ? " " : "").add(genre.variantSets[s].name).add(":").add(picks.allowed[s]);
+	}
+}
+
 void RegeneratePage::open(const Genre& incoming, bool load) {
 	genre_ = &incoming;
 	load_ = load;

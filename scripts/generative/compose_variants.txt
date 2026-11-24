@@ -1,7 +1,9 @@
 # The Compose screen's VARIANTS ▸ row (#494, spec §14.4, ADR 0008 "The menus") over the sysex test port: a Recipe of
 # Acid techno (no variant sets) shows no VARIANTS row; ROOTS DUB's shows it after SCALE, with SKANK on RANDOM; unticking
-# 7THS leaves PLAIN, which the Current Recipe keeps, and REGENERATE? → OK draws only within it.
-# gen_compose_variants <why> <set>=<variant>:<allowed> ...: the Current Recipe's picks after an edit (- for none).
+# 7THS leaves PLAIN, which the Current Recipe keeps (a 7THS pick is drawn again within the ticks: PLAIN), and
+# REGENERATE? → OK draws only within it.
+# gen_compose_variants <why> <set>=<variant>:<allowed> ...: the Current Recipe's picks after an edit (- for none);
+# why toggled: a VARIANTS tick turned.
 # gen_variants_menu open sets=N, gen_variants_row <SET> <shows>, gen_variants set= allowed= shows=: as in
 # perform_regen_page.txt. Rows are chosen from the top (encoder 3 -20): FROM, REGENERATE, SEED + TAKES, TEMPO, SWING,
 # KEY, SCALE, VARIANTS (only for a genre with sets), ENERGY, ...
@@ -52,6 +54,8 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_variants set=skank allowed=2 shows=PLAIN
+# The variant playing is kept while it's ticked, and drawn again within the ticks when it isn't: PLAIN either way
+expect event gen_compose_variants toggled skank=plain:2
 button BACK down
 wait 50
 button BACK up

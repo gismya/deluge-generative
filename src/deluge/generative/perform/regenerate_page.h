@@ -16,8 +16,8 @@
  */
 
 // The Regenerate and genre-change page (spec §13.6, ADR 0008 "The menus"), and the VARIANTS rows it shares with the
-// Compose screen (§14.4): what the page holds while open, what GO commits, what a set's row shows, and the menu
-// font's row layout the OLED names must fit. The firmware's stock submenus (gui/menu_item/generative/
+// Compose screen (§14.4): what the page holds while open, what GO commits, and what a set's row shows. The row
+// layout the OLED names must fit is perform/menu_rows.h. The firmware's stock submenus (gui/menu_item/generative/
 // regenerate_page.*) draw it; this decides it, so the harness checks it.
 
 #pragma once
@@ -25,6 +25,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include <cstddef>
 #include <cstdint>
 #include <span>
 
@@ -55,9 +56,20 @@ uint8_t toggledAllowed(const VariantSet& set, uint8_t allowed, int32_t v);
 /// Every set of `genre` on RANDOM: each allows all its variants. Picks 0.
 VariantPicks allRandom(const Genre& genre);
 
+/// Set `set` of `recipe` now allows `allowed` (the Compose screen's VARIANTS rows, spec §14.4). The variant playing
+/// stays while it's allowed; one no longer allowed is drawn again within the ticks from `entropy`, as a Recipe file's
+/// reader draws a pick outside its mask (drawUnsetVariants()), so the Recipe never plays or saves a pick its mask
+/// leaves out. @return whether the pick changed.
+bool narrowSet(Recipe& recipe, int32_t set, uint8_t allowed, uint32_t entropy);
+
 /// A Recipe's picks as test events show them: `<set>=<variant>:<allowed mask>` per set of `genre` by stable names,
 /// space-separated (`skank=plain:2`), or `-` for a genre with no sets. Cut short to fit `out`.
 void picksText(const Genre& genre, const VariantPicks& picks, std::span<char> out);
+/// Each set's allowed mask as test events show them: `<set>:<mask>` per set of `genre`, space-separated
+/// (`skank:2`), or `-` for a genre with no sets. Cut short to fit `out`.
+void masksText(const Genre& genre, const VariantPicks& picks, std::span<char> out);
+/// Room for picksText() or masksText() on a genre with a few sets, the NUL included.
+constexpr size_t kPicksTextChars = 64;
 
 // ---- The page ----
 
@@ -95,32 +107,5 @@ private:
 	TransitionStyle style_ = TransitionStyle::BuildIntoDrop;
 	VariantPicks narrowed_;
 };
-
-// ---- The menu font's rows ----
-
-/// The stock menu rows' font (the OLED's 7 px Apple ][ font, monospaced): a character's advance, its gap included.
-/// The firmware asserts it is kTextSpacingX.
-constexpr int32_t kMenuCharPixels = 6;
-constexpr int32_t kMenuWidthPixels = 128;
-/// A row's name starts one character in (Submenu::drawSubmenuItemsForOled()).
-constexpr int32_t kMenuNameInset = kMenuCharPixels;
-/// Pixels between a row's name and its value, and after the value (gui/menu_item/generative/row_value.h).
-constexpr int32_t kRowValueGap = 4;
-constexpr int32_t kRowValueRightMargin = 3;
-/// The stock submenu arrow's and checkbox's width (kSubmenuIconSpacingX), drawn 3 px from the right edge.
-constexpr int32_t kMenuIconPixels = 7;
-
-/// Whether a row whose name has `nameChars` characters and whose value `valueChars` fits a 128 px row without being
-/// cut off: with `icon` the stock arrow (or a toggle's checkbox) at its right too, after the value's gap.
-constexpr bool menuRowFits(int32_t nameChars, int32_t valueChars, bool icon) {
-	int32_t right = 0;
-	if (valueChars > 0) {
-		right += kRowValueGap + valueChars * kMenuCharPixels + kRowValueRightMargin;
-	}
-	if (icon) {
-		right += valueChars > 0 ? kMenuIconPixels + kRowValueGap : kRowValueGap + kMenuIconPixels + 3;
-	}
-	return kMenuNameInset + nameChars * kMenuCharPixels <= kMenuWidthPixels - right;
-}
 
 } // namespace deluge::generative::perform

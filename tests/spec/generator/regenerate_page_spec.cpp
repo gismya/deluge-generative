@@ -23,6 +23,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/variants.h"
 #include "generative/perform/genre_menu.h"
+#include "generative/perform/menu_rows.h"
 #include "generative/perform/regenerate_page.h"
 #include "gui/fonts/fonts.h"
 
@@ -111,6 +112,41 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			expect(std::string(text)).to_equal(std::string("skank=plain:2"));
 			picksText(genres::technoAcid, VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
+		});
+
+		it("name each set's allowed mask for GO's event, or - for a genre with no sets", _ {
+			VariantPicks picks = allRandom(genres::dub);
+			char text[kPicksTextChars];
+			masksText(genres::dub, picks, text);
+			expect(std::string(text)).to_equal(std::string("skank:3"));
+			masksText(genres::technoAcid, VariantPicks{}, text);
+			expect(std::string(text)).to_equal(std::string("-"));
+		});
+	});
+
+	context("the Compose screen's VARIANTS rows on the Current Recipe", _ {
+		const VariantSet& skank = genres::dub.variantSets[0];
+		const auto sevenths = static_cast<uint8_t>(findVariant(skank, "sevenths"));
+		const auto plain = static_cast<uint8_t>(findVariant(skank, "plain"));
+
+		it("redraw the variant playing within the ticks when it's unticked", _ {
+			for (uint32_t entropy = 0; entropy < 20; entropy++) {
+				Recipe recipe = newRecipe(genres::dub, 7);
+				recipe.variants.pick[0] = sevenths;
+				expect(narrowSet(recipe, 0, static_cast<uint8_t>(1U << plain), entropy)).to_be_true();
+				expect(static_cast<int>(recipe.variants.pick[0])).to_equal(plain);
+				expect(static_cast<int>(recipe.variants.allowed[0])).to_equal(1 << plain);
+			}
+		});
+
+		it("keep the variant playing while it's still ticked", _ {
+			Recipe recipe = newRecipe(genres::dub, 7);
+			recipe.variants.pick[0] = plain;
+			const Recipe before = recipe;
+			expect(narrowSet(recipe, 0, static_cast<uint8_t>(1U << plain), 3)).to_be_false();
+			expect(static_cast<int>(recipe.variants.pick[0])).to_equal(plain);
+			recipe.variants.allowed[0] = before.variants.allowed[0];
+			expect(recipe == before).to_be_true(); // nothing but the mask moved
 		});
 	});
 

@@ -178,7 +178,7 @@ public:
 				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
 				           static_cast<int>(pendingRecipe.recipe.keyRoot),
 				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
-				char picks[64];
+				char picks[perform::kPicksTextChars];
 				perform::picksText(*pendingRecipe.recipe.genre, pendingRecipe.recipe.variants, picks);
 				TEST_EVENT("gen_pending_variants %s", picks);
 			}

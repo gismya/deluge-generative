@@ -51,18 +51,31 @@ namespace {
 // ---- What the page and the VARIANTS rows edit ----
 
 PLACE_SDRAM_BSS gen::perform::RegeneratePage page;
-/// A LOAD's file and name while its page is open, or nullptr.
-const gen::RecipeFile* loadFile = nullptr;
-const gen::perform::RecipeName* loadName = nullptr;
-/// The page was just opened: its next session starts on GO. A session begun again later (a popup over it closing)
-/// keeps the row it was on.
-bool freshOpen = false;
+
+/// What the firmware keeps beside the page while it's open. Whether it's a LOAD is the page's (page.load()).
+struct PageOpening {
+	/// A LOAD's file and name, or nullptr.
+	const gen::RecipeFile* file = nullptr;
+	const gen::perform::RecipeName* name = nullptr;
+	/// Opened on the genre playing: a Regenerate, titled REGENERATE. Decided as it opens, so a pending change to the
+	/// same genre landing meanwhile leaves the title, and what GO reports, as the player saw them.
+	bool regenerate = false;
+	/// Just opened: its next session starts on GO. A session begun again later (a popup over it closing) keeps the
+	/// row it was on.
+	bool fresh = false;
+};
+PageOpening opening;
+
+/// What a row's value text needs: RANDOM's l10n text, a variant's OLED name or `n OF m`, and the NUL.
+constexpr size_t kAllowedTextChars = 12;
 
 /// The sets the VARIANTS rows show, and the mask per set they edit: the page's, or the Current Recipe's on the Compose
 /// screen. A VARIANTS menu points it at its own as it begins.
 struct VariantsTarget {
 	const gen::Genre* genre = nullptr;
-	uint8_t* allowed = nullptr; ///< kMaxVariantSets masks
+	uint8_t* allowed = nullptr;    ///< kMaxVariantSets masks
+	gen::Recipe* recipe = nullptr; ///< The Recipe whose masks they are (the Compose screen's), with picks to keep in
+	                               ///< them; nullptr for the page's, which has none
 };
 VariantsTarget target;
 /// The set whose multi-select is open.
@@ -73,7 +86,7 @@ int32_t openSet = 0;
 }
 
 /// What set `s`'s row shows (spec §13.6): RANDOM, the one variant's name, or `n OF m`.
-const char* allowedText(const gen::VariantSet& set, uint8_t allowed, char (&text)[12]) {
+const char* allowedText(const gen::VariantSet& set, uint8_t allowed, char (&text)[kAllowedTextChars]) {
 	const AllowedShown shown = gen::perform::allowedShown(set, allowed);
 	switch (shown.kind) {
 	case AllowedShown::Kind::Random:
@@ -85,11 +98,6 @@ const char* allowedText(const gen::VariantSet& set, uint8_t allowed, char (&text
 		return text;
 	}
 	return "";
-}
-
-/// Whether the page opened on the genre playing: a Regenerate.
-[[nodiscard]] bool regenerates() {
-	return loadFile == nullptr && page.genre() == currentRecipe.recipe.genre;
 }
 
 // ---- TRANSITION ----
@@ -141,11 +149,23 @@ public:
 		if (getValue() == gen::perform::allows(mask(), variant_)) {
 			return;
 		}
-		target.allowed[openSet] = gen::perform::toggledAllowed(set(), mask(), variant_);
+		const uint8_t allowed = gen::perform::toggledAllowed(set(), mask(), variant_);
+		if (target.recipe != nullptr) {
+			// The Compose screen's: a pick no longer allowed is drawn again within the ticks (spec §14.4).
+			gen::perform::narrowSet(*target.recipe, openSet, allowed, gen::firmware::freshEntropy());
+		}
+		else {
+			target.allowed[openSet] = allowed;
+		}
 		setValue(gen::perform::allows(mask(), variant_)); // the last tick stays
-		char text[12];
+		char text[kAllowedTextChars];
 		TEST_EVENT("gen_variants set=%s allowed=%u shows=%s", set().name, static_cast<unsigned>(mask()),
 		           allowedText(set(), mask(), text));
+		if (target.recipe != nullptr) {
+			char picks[gen::perform::kPicksTextChars];
+			gen::perform::picksText(*target.genre, target.recipe->variants, picks);
+			TEST_EVENT("gen_compose_variants toggled %s", picks);
+		}
 	}
 
 private:
@@ -180,7 +200,7 @@ public:
 private:
 	const char* shown() { return allowedText(target.genre->variantSets[set_], target.allowed[set_], text_); }
 	int32_t set_;
-	char text_[12] = {};
+	char text_[kAllowedTextChars] = {};
 };
 
 /// VARIANTS ▸: a row per set of `target_()`'s genre. The page's and the Compose screen's are two of these over the
@@ -197,7 +217,7 @@ public:
 		if (navigatedBackwardFrom == nullptr) {
 			TEST_EVENT("gen_variants_menu open sets=%ld", static_cast<long>(setCount()));
 			for (int32_t s = 0; s < setCount(); s++) {
-				char text[12];
+				char text[kAllowedTextChars];
 				const gen::VariantSet& set = target.genre->variantSets[s];
 				TEST_EVENT("gen_variants_row %s %s", set.oledName, allowedText(set, target.allowed[s], text));
 			}
@@ -225,21 +245,22 @@ public:
 		using gen::firmware::Transitions;
 		const gen::perform::RegeneratePage::Choice choice = page.go();
 		const gen::Genre* genre = page.genre();
-		const gen::RecipeFile* file = loadFile;
-		const gen::perform::RecipeName* name = loadName;
-		const bool regenerate = regenerates();
+		const PageOpening opened = opening;
+		const bool load = page.load();
 		soundEditor.exitCompletely();
 		const Transitions::Request request = gen::firmware::pressShowingWork([&] {
-			return file != nullptr ? gen::firmware::transitions.load(*file, *name, choice.style)
-			                       : gen::firmware::transitions.change(*genre, choice.style, choice.narrowed);
+			return load ? gen::firmware::transitions.load(*opened.file, *opened.name, choice.style)
+			            : gen::firmware::transitions.change(*genre, choice.style, choice.narrowed);
 		});
 		refusedWithPopup(gen::perform::pressOutcome(request));
-		TEST_EVENT("gen_confirm %s style=%d result=%d working=%d allowed=%u",
-		           file != nullptr ? "load"
-		           : regenerate    ? "regenerate"
-		                           : genre->name,
+		char masks[gen::perform::kPicksTextChars];
+		gen::perform::masksText(*genre, choice.narrowed, masks);
+		TEST_EVENT("gen_confirm %s style=%d result=%d working=%d allowed=%s",
+		           load                ? "load"
+		           : opened.regenerate ? "regenerate"
+		                               : genre->name,
 		           static_cast<int>(choice.style), static_cast<int>(request),
-		           gen::firmware::workingAnimationShown() ? 1 : 0, static_cast<unsigned>(choice.narrowed.allowed[0]));
+		           gen::firmware::workingAnimationShown() ? 1 : 0, masks);
 		return NO_NAVIGATION;
 	}
 };
@@ -253,12 +274,12 @@ class PageMenu final : public Submenu {
 public:
 	PageMenu(l10n::String name, std::initializer_list<MenuItem*> items, MenuItem* go) : Submenu(name, items), go_(go) {}
 	[[nodiscard]] std::string_view getTitle() const override {
-		if (regenerates()) {
+		if (opening.regenerate) {
 			return l10n::getView(l10n::String::STRING_FOR_REGENERATE);
 		}
 		// The `?` is punctuation, as in STRING_FOR_REGENERATE_QMARK's text: no language this firmware ships puts the
 		// name anywhere else.
-		const char* name = loadFile != nullptr && !loadName->empty() ? loadName->text : page.genre()->oledName;
+		const char* name = page.load() && !opening.name->empty() ? opening.name->text : page.genre()->oledName;
 		const size_t length = std::min(std::strlen(name), sizeof(title_) - 2);
 		std::memcpy(title_, name, length);
 		title_[length] = '?';
@@ -266,8 +287,8 @@ public:
 		return title_;
 	}
 	void beginSession(MenuItem* navigatedBackwardFrom) override {
-		if (navigatedBackwardFrom == nullptr && freshOpen) {
-			freshOpen = false;
+		if (navigatedBackwardFrom == nullptr && opening.fresh) {
+			opening.fresh = false;
 			navigatedBackwardFrom = go_; // SELECT, SELECT is as quick as the old confirm
 			const std::string_view title = getTitle();
 			TEST_EVENT("gen_regen_page open title=%.*s style=%d variants=%d", static_cast<int>(title.size()),
@@ -276,17 +297,7 @@ public:
 		Submenu::beginSession(navigatedBackwardFrom);
 	}
 	void renderOLED() override {
-		hid::display::oled_canvas::Canvas& canvas = hid::display::OLED::main;
-		const std::string_view title = getTitle();
-		constexpr int32_t kTitleY = OLED_MAIN_TOPMOST_PIXEL + 1;
-		canvas.drawString(title, 0, kTitleY, kTextTitleSpacingX, kTextTitleSizeY);
-		canvas.drawHorizontalLine(kScreenTitleSeparatorY, 0, OLED_MAIN_WIDTH_PIXELS - 1);
-		if (canvas.getStringWidthInPixels(title.data(), kTextTitleSizeY) > OLED_MAIN_WIDTH_PIXELS) {
-			hid::display::OLED::setupSideScroller(1, title, 0, OLED_MAIN_WIDTH_PIXELS, kTitleY,
-			                                      kTitleY + kTextTitleSizeY, kTextTitleSpacingX, kTextTitleSizeY,
-			                                      false);
-		}
-		hid::display::OLED::markChanged();
+		drawScrollingTitle(getTitle());
 		drawPixelsForOled();
 	}
 
@@ -297,13 +308,15 @@ private:
 };
 
 VariantsTarget pageTarget() {
-	return {page.genre(), page.narrowed().allowed};
+	return {.genre = page.genre(), .allowed = page.narrowed().allowed};
 }
 bool pageShowsVariants() {
 	return page.showsVariants();
 }
 VariantsTarget composeTarget() {
-	return {currentRecipe.recipe.genre, currentRecipe.recipe.variants.allowed};
+	return {.genre = currentRecipe.recipe.genre,
+	        .allowed = currentRecipe.recipe.variants.allowed,
+	        .recipe = &currentRecipe.recipe};
 }
 bool composeShowsVariants() {
 	return currentRecipe.exists && currentRecipe.recipe.genre != nullptr
@@ -338,18 +351,14 @@ PLACE_SDRAM_BSS PageMenu pageMenu{l10n::String::STRING_FOR_REGENERATE, {&transit
 MenuItem& composeVariantsMenu = composeVariants;
 
 void openRegeneratePage(const gen::Genre& genre) {
-	loadFile = nullptr;
-	loadName = nullptr;
 	page.open(genre, false);
-	freshOpen = true;
+	opening = {.regenerate = &genre == currentRecipe.recipe.genre, .fresh = true};
 	soundEditor.enterSubmenu(&pageMenu);
 }
 
 void openLoadPage(const gen::RecipeFile& file, const gen::perform::RecipeName& name) {
-	loadFile = &file;
-	loadName = &name;
 	page.open(*file.recipe.genre, true);
-	freshOpen = true;
+	opening = {.file = &file, .name = &name, .fresh = true};
 	if (soundEditor.setup(nullptr, &pageMenu)) {
 		display->setNextTransitionDirection(1);
 		openUI(&soundEditor);

@@ -81,7 +81,7 @@ All of them are stock submenus and editors in the stock fonts (§13.5).
   BACK cancels. The page always opens with every set on RANDOM: drawing between variants is the point, and narrowing a set is for that one Regenerate. A mid-set LOAD shows the same page with only TRANSITION (and later OPTIONS), because the file brings its own variants.
 - **The Perform menu** gets **VARIANTS ▸**, with one row per set showing the variant playing now. Pushing a live set's row opens a plain list of its variants (no RANDOM, no subset). A pick queues for the next Drop, shows as `VARIANT DROP` in QUEUE, and BACK cancels it like other queued actions. A set that isn't live shows `AT REGEN` when pushed.
 - **The Compose screen** gets a single **VARIANTS ▸** row after SCALE, shown only when the genre has sets. It opens the same per-set submenu, with the multi-select. REGENERATE there draws within each set's allowed variants, which the Recipe keeps.
-- **Names.** A set's OLED name is at most 8 characters and a variant's at most 9, so a row fits 128 px in the menu font. A harness spec checks every genre's names against the font metrics `oled_page_spec` already uses.
+- **Names.** A set's OLED name is at most 8 characters and a variant's at most 9, so a row fits 128 px in the menu font. `regenerate_page_spec` checks every genre's names, and the page's titles, against the stock fonts' metrics (`src/deluge/gui/fonts/fonts.c`, linked into the harness).
 
 ## Costs
 

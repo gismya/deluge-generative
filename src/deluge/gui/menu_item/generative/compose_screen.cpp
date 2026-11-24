@@ -92,7 +92,7 @@ void reportRecipe(const char* why) {
 	           static_cast<long>(gen::macroToPoints(r.macros.value[3])));
 	TEST_EVENT("gen_compose_seed %s seed=%s takes=%d,%d,%d,%d,%d,%d length=%ld", why, code, t.take[0], t.take[1],
 	           t.take[2], t.take[3], t.take[4], t.take[5], static_cast<long>(gen::firmware::composeLength()));
-	char picks[64];
+	char picks[gen::perform::kPicksTextChars];
 	gen::perform::picksText(*r.genre, r.variants, picks);
 	TEST_EVENT("gen_compose_variants %s %s", why, picks);
 #endif
@@ -146,20 +146,9 @@ public:
 		}
 		Submenu::beginSession(navigatedBackwardFrom);
 	}
-	/// As MenuItem::renderOLED(), with the title side-scrolling when it's wider than the screen, as a long song name
-	/// does in the stock session view.
+	/// As MenuItem::renderOLED(), with the title side-scrolling when it's wider than the screen.
 	void renderOLED() override {
-		hid::display::oled_canvas::Canvas& canvas = hid::display::OLED::main;
-		const std::string_view title = getTitle();
-		constexpr int32_t kTitleY = OLED_MAIN_TOPMOST_PIXEL + 1;
-		canvas.drawString(title, 0, kTitleY, kTextTitleSpacingX, kTextTitleSizeY);
-		canvas.drawHorizontalLine(kScreenTitleSeparatorY, 0, OLED_MAIN_WIDTH_PIXELS - 1);
-		if (canvas.getStringWidthInPixels(title.data(), kTextTitleSizeY) > OLED_MAIN_WIDTH_PIXELS) {
-			hid::display::OLED::setupSideScroller(1, title, 0, OLED_MAIN_WIDTH_PIXELS, kTitleY,
-			                                      kTitleY + kTextTitleSizeY, kTextTitleSpacingX, kTextTitleSizeY,
-			                                      false);
-		}
-		hid::display::OLED::markChanged();
+		drawScrollingTitle(getTitle());
 		drawPixelsForOled();
 	}
 
