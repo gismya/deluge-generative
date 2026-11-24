@@ -40,7 +40,6 @@
 #include "gui/views/perform_view.h"
 #include "hid/display/oled.h"
 #include "io/midi/test_port.h"
-#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -366,87 +365,6 @@ private:
 	char text_[4] = {};
 };
 
-// ---- VARIANTS (spec §3.6, §13.6) ----
-
-/// The variant sets of the genre playing (the Current Recipe's while stopped): VARIANTS ▸'s rows.
-int32_t variantSetCount() {
-	const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
-	return genre != nullptr ? static_cast<int32_t>(genre->variantSets.size()) : 0;
-}
-
-/// A variant set's row in Perform's VARIANTS ▸: its OLED name and the variant playing now (a Drop may have moved it). A
-/// live set's row opens a plain list of its variants, on the one going on (variantAhead()): a pick queues for the next
-/// Drop, `VARIANT DROP` in QUEUE, and the variant playing cancels it, as BACK does. A set that isn't live shows
-/// AT REGEN when pushed: a Regenerate draws it.
-class PerformVariantRow final : public Selection {
-public:
-	explicit PerformVariantRow(int32_t set) : Selection(l10n::String::STRING_FOR_VARIANTS), set_(set) {}
-	[[nodiscard]] std::string_view getName() const override { return relevant() ? set().oledName : ""; }
-	[[nodiscard]] std::string_view getTitle() const override { return getName(); }
-	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return relevant();
-	}
-	deluge::vector<std::string_view> getOptions(OptType /*optType*/) override {
-		deluge::vector<std::string_view> options;
-		if (relevant()) {
-			for (const deluge::generative::Variant& variant : set().variants) {
-				options.push_back(variant.oledName);
-			}
-		}
-		return options;
-	}
-	bool shouldEnterSubmenu() override { return relevant() && set().live; }
-	MenuItem* selectButtonPress() override {
-		if (relevant() && !set().live) {
-			display->displayPopup(l10n::get(l10n::String::STRING_FOR_AT_REGEN));
-			TEST_EVENT("gen_variants_live set=%s at_regen", set().name);
-			return NO_NAVIGATION;
-		}
-		return Selection::selectButtonPress();
-	}
-	void readCurrentValue() override { setValue(std::max<int32_t>(performAdapter.steering().variantAhead(set_), 0)); }
-	void writeCurrentValue() override {
-		const PressOutcome outcome = performAdapter.steering().pressVariant(set_, getValue());
-		refusedWithPopup(outcome);
-		TEST_EVENT("gen_press variant set=%s variant=%s outcome=%d", set().name, set().variants[getValue()].name,
-		           static_cast<int>(outcome));
-	}
-	int32_t getSubmenuItemTypeRenderLength() override {
-		return set().live ? valueAndArrowRenderLength(shown()) : valueRenderLength(shown());
-	}
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
-		if (set().live) {
-			drawRowValueAndArrow(*this, shown(), yPixel);
-		}
-		else {
-			drawRowValue(shown(), yPixel);
-		}
-	}
-	/// The row's set and what it shows, for VARIANTS ▸'s open event.
-	[[nodiscard]] const char* shownName() const { return shown(); }
-
-private:
-	[[nodiscard]] bool relevant() const { return set_ < variantSetCount(); }
-	[[nodiscard]] const deluge::generative::VariantSet& set() const {
-		return performAdapter.steering().rosterGenre()->variantSets[set_];
-	}
-	[[nodiscard]] const char* shown() const {
-		const int32_t playing = performAdapter.steering().variantPlaying(set_);
-		return playing >= 0 ? set().variants[playing].oledName : "";
-	}
-	int32_t set_;
-};
-
-/// VARIANTS ▸: a row per variant set of the genre playing, shown only when it has sets.
-class PerformVariantsMenu final : public Submenu {
-public:
-	using Submenu::Submenu;
-	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		return variantSetCount() > 0;
-	}
-	void beginSession(MenuItem* navigatedBackwardFrom) override;
-};
-
 // ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
 
 /// Opens the Regenerate and genre-change page over the menu (spec §13.6): TRANSITION, VARIANTS ▸ and GO. On
@@ -635,29 +553,6 @@ PLACE_SDRAM_BSS SeedTakesSubmenu seedTakesMenu{
     {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5]},
 };
 
-static_assert(deluge::generative::kMaxVariantSets == 8, "one PerformVariantRow per set slot below");
-PLACE_SDRAM_BSS PerformVariantRow variantRows[deluge::generative::kMaxVariantSets] = {
-    PerformVariantRow{0}, PerformVariantRow{1}, PerformVariantRow{2}, PerformVariantRow{3},
-    PerformVariantRow{4}, PerformVariantRow{5}, PerformVariantRow{6}, PerformVariantRow{7}};
-PLACE_SDRAM_BSS PerformVariantsMenu variantsMenu{
-    l10n::String::STRING_FOR_VARIANTS,
-    {&variantRows[0], &variantRows[1], &variantRows[2], &variantRows[3], &variantRows[4], &variantRows[5],
-     &variantRows[6], &variantRows[7]},
-};
-
-void PerformVariantsMenu::beginSession(MenuItem* navigatedBackwardFrom) {
-	if (navigatedBackwardFrom == nullptr) {
-		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
-		const int32_t sets = variantSetCount();
-		TEST_EVENT("gen_perform_variants open sets=%ld", static_cast<long>(sets));
-		for (int32_t s = 0; s < sets; s++) {
-			TEST_EVENT("gen_perform_variants_row %s %s live=%d", genre->variantSets[s].oledName,
-			           variantRows[s].shownName(), genre->variantSets[s].live ? 1 : 0);
-		}
-	}
-	Submenu::beginSession(navigatedBackwardFrom);
-}
-
 static_assert(deluge::generative::kMaxParts == 6, "one OctaveItem per part slot below");
 PLACE_SDRAM_BSS OctaveItem octaveItems[deluge::generative::kMaxParts] = {OctaveItem{0}, OctaveItem{1}, OctaveItem{2},
                                                                          OctaveItem{3}, OctaveItem{4}, OctaveItem{5}};
@@ -684,7 +579,7 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
-    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &variantsMenu, &keyScaleMenuItem, &glideItem,
+    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &performVariantsMenu, &keyScaleMenuItem, &glideItem,
      &seedTakesMenu, &octavesMenu, &resetPartBiasItem, &restartMenu, &captureMenu, &browserPreviewItem},
 };
 
@@ -694,13 +589,7 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.steering().takePresses(part);
 	}
-	presses += performAdapter.steering().listPresses();
-	// VARIANTS' rows move with the variant playing, which a Drop may change: 4 bits a set, -1 (none) as 0.
-	static_assert(deluge::generative::kMaxVariants < 16 && deluge::generative::kMaxVariantSets * 4 <= 32);
-	uint32_t playing = 0;
-	for (int32_t set = 0; set < deluge::generative::kMaxVariantSets; set++) {
-		playing |= static_cast<uint32_t>(performAdapter.steering().variantPlaying(set) + 1) << (4 * set);
-	}
+	presses += performAdapter.steering().listPresses(); // octave shifts, and VARIANTS' ticks
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
 	// CAPTURE's rows move with the marks (RECORD under the menu), the pieces and each piece opened.
@@ -708,24 +597,19 @@ void refreshPerformMenu() {
 	presses += static_cast<uint32_t>(log.markedPieces()) << 8 | static_cast<uint32_t>(log.pieces()) << 16;
 	presses += log.opened() << 20; // a new piece can drop one and add one, keeping both counts
 	static Basis shownBasis;
-	static uint32_t shownPlaying = 0;
-	if (shownBasis == basisNow(presses) && shownPlaying == playing) {
+	if (shownBasis == basisNow(presses)) {
 		return;
 	}
 	shownBasis = basisNow(presses);
-	shownPlaying = playing;
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
 	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu || item == &octavesMenu
-	            || item == &captureMenu || item == &variantsMenu;
+	            || item == &captureMenu || showsVariants(item);
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
 	}
 	for (OctaveItem& octave : octaveItems) {
 		ours = ours || item == &octave;
-	}
-	for (PerformVariantRow& row : variantRows) {
-		ours = ours || item == &row;
 	}
 	for (GenreGroup& group : transitionGenres.groups()) {
 		ours = ours || item == &group; // its `= REGEN` row moves when a genre change starts

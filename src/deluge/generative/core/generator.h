@@ -431,8 +431,8 @@ public:
 	/// The variant each set plays, and the variants each allows, as of the last decided step (spec §3.6): the Recipe's,
 	/// moved by the Drops' changes and the live switches landed since the start.
 	[[nodiscard]] const VariantPicks& variants() const { return recipe_.variants; }
-	/// The variant a live switch waits to play in set `set` at the next Drop, or -1.
-	[[nodiscard]] int32_t variantWaiting(int32_t set) const { return waitingValue(CommandKind::SetVariant, set); }
+	/// The variants a live switch waits to allow in set `set` from the next Drop (a bit each), or -1.
+	[[nodiscard]] int32_t maskWaiting(int32_t set) const { return waitingValue(CommandKind::SetVariantMask, set); }
 	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
 	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
 		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
@@ -979,7 +979,8 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
-	/// Variant sets a live switch landed on since the last Drop's changes: that Drop draws no change for them.
+	/// Variant sets a live switch landed on since the last Drop's changes: that Drop lands their ticks (landMask())
+	/// instead of drawing a change.
 	uint8_t switchedSets_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
 	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.

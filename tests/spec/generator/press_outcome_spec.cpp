@@ -49,7 +49,7 @@ std::vector<Press> everyPress() {
 	    {"End tap", false, [](TransitionPiece& t) { return t.steering.cancelEnd(); }},
 	    {"BACK", false, [](TransitionPiece& t) { return t.steering.cancelNewest(); }},
 	    // Acid has no variant sets: nothing to do when nothing is pending, refused like the rest when it is.
-	    {"variant", true, [](TransitionPiece& t) { return t.steering.pressVariant(0, 1); }},
+	    {"variant", true, [](TransitionPiece& t) { return t.steering.pressVariantMask(0, 0b10); }},
 	};
 }
 

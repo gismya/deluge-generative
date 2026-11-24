@@ -87,7 +87,7 @@ const char* queueTag(const Command& command) {
 		return "CHG";
 	case CommandKind::Restart:
 		return "RST";
-	case CommandKind::SetVariant:
+	case CommandKind::SetVariantMask:
 		return "VAR";
 	case CommandKind::ForceSection:
 		return command.target < kNumSectionKinds ? kSectionTags[command.target] : "??";
@@ -133,7 +133,7 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 	case CommandKind::Restart:
 		text.add("RESTART");
 		break;
-	case CommandKind::SetVariant:
+	case CommandKind::SetVariantMask:
 		text.add("VARIANT DROP"); // a live variant switch, at the next Drop (spec §13.6)
 		break;
 	default:

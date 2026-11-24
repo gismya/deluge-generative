@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -249,23 +250,23 @@ describe drop_changes("Drop changes and live variant switches", $ {
 		});
 	});
 
-	context("a live switch (spec §13.6, ADR 0005)", _ {
-		it("waits for the next Drop, lands there, is logged there, and the Recipe keeps the variant playing", _ {
+	context("a live switch: VARIANTS ▸'s ticks (spec §13.6, ADR 0005)", _ {
+		it("waits for the next Drop, lands there as the set's ticks, is logged there, and the Recipe keeps them", _ {
 			DubPiece piece(dubWith({"skank=sevenths", "drums=onedrop"}));
 			piece.runToStepLine(4);
-			expect(piece.steering.pressVariant(kDrums, kSteppers) == PressOutcome::Accepted).to_be_true();
-			expect(piece.steering.variantAhead(kDrums)).to_equal(kSteppers);
+			expect(piece.steering.pressVariantMask(kDrums, 0b100) == PressOutcome::Accepted).to_be_true();
+			expect(static_cast<int>(piece.steering.maskAhead(kDrums))).to_equal(0b100);
 			expect(piece.steering.variantPlaying(kDrums)).to_equal(kOneDrop);
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(kDrums)).to_equal(kSteppers);
-			// QUEUE names it, counting down to the Drop once the Build is on.
+			expect(piece.generator.maskWaiting(kDrums)).to_equal(0b100);
+			// QUEUE counts down to the Drop once the Build is on.
 			int32_t countedTo = -1;
 			int32_t before = kOneDrop;
 			const int32_t last = piece.generator.nextStep() + 200 * kStepsPerBar;
 			while (piece.generator.nextStep() < last && !piece.generator.arc().dropStartsHere()) {
 				before = piece.generator.variants().pick[kDrums];
 				if (piece.generator.arc().section() == SectionKind::Build) {
-					countedTo = piece.generator.landsAt({CommandKind::SetVariant, kDrums, kSteppers});
+					countedTo = piece.generator.landsAt({CommandKind::SetVariantMask, kDrums, 0b100});
 				}
 				piece.decideBefore(piece.generator.nextStep() + 1);
 			}
@@ -274,22 +275,23 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			expect(before).to_equal(kOneDrop);
 			expect(countedTo).to_equal(drop);
 			expect(static_cast<int32_t>(piece.generator.variants().pick[kDrums])).to_equal(kSteppers);
-			expect(piece.generator.variantWaiting(kDrums)).to_equal(-1);
+			expect(static_cast<int>(piece.generator.variants().allowed[kDrums])).to_equal(0b100);
+			expect(piece.generator.maskWaiting(kDrums)).to_equal(-1);
 			bool logged = false;
 			for (int32_t i = 0; i < logSize(piece.log); i++) {
 				const LogEntry entry = logAt(piece.log, i);
-				if (entry.command.kind == CommandKind::SetVariant) {
-					logged = entry.step == drop && entry.command.target == kDrums && entry.command.value == kSteppers;
+				if (entry.command.kind == CommandKind::SetVariantMask) {
+					logged = entry.step == drop && entry.command.target == kDrums && entry.command.value == 0b100;
 				}
 			}
 			expect(logged).to_be_true();
-			// The tick after the decision records it: SAVE stores the variant playing, which the set now allows.
+			// The tick after the decision records them: SAVE stores the pick playing and the ticks.
 			piece.runToStepLine(drop + 1);
 			expect(static_cast<int32_t>(piece.currentRecipe.variants.pick[kDrums])).to_equal(kSteppers);
-			expect(static_cast<int32_t>(piece.currentRecipe.variants.allowed[kDrums])).to_equal(0b101);
+			expect(static_cast<int>(piece.currentRecipe.variants.allowed[kDrums])).to_equal(0b100);
 		});
 		it("shows as VARIANT DROP in QUEUE, with no countdown while no Drop is ahead", _ {
-			const Command command{CommandKind::SetVariant, kDrums, kRockers};
+			const Command command{CommandKind::SetVariantMask, kDrums, 0b010};
 			char label[24];
 			perform::queueLabel(command, genres::dub, label);
 			expect(std::string(label)).to_equal(std::string("VARIANT DROP"));
@@ -302,9 +304,39 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			perform::statusTag(waiting, 0, tag);
 			expect(std::string(tag)).to_equal(std::string(">VAR--"));
 		});
-		it("replaces the Drop's own draw for its set: a Drop that would change the drums plays the switch instead", _ {
-			// A seed whose first Drop changes the drums with every style allowed, then the same piece switched to the
-			// third style: the Drop plays the switch, and nothing else moves there.
+		it("keeps the variant playing when it is ticked, and draws one within the ticks, keyed, when it isn't", _ {
+			std::set<int32_t> drawn;
+			for (uint32_t seed = 1; seed <= 16; seed++) {
+				for (const uint8_t mask : {uint8_t{0b011}, uint8_t{0b110}}) {
+					const Stepped run = stepThrough(dubWith({"skank=sevenths", "drums=onedrop"}), seed,
+					                                120 * kStepsPerBar, [&](int32_t step, SteeringQueue& queue) {
+						                                if (step == 4) {
+							                                queue.push({CommandKind::SetVariantMask, kDrums, mask});
+						                                }
+					                                });
+					expect(run.drops.empty()).to_be_false();
+					const VariantPicks& at = run.picks[run.drops[0]];
+					expect(static_cast<int>(at.allowed[kDrums])).to_equal(mask);
+					if (mask == 0b011) {
+						expect(static_cast<int32_t>(at.pick[kDrums])).to_equal(kOneDrop); // ticked: plays on
+					}
+					else {
+						expect((mask >> at.pick[kDrums]) & 1).to_equal(1);
+						drawn.insert(at.pick[kDrums]);
+						// Keyed on the seed: the same piece draws the same.
+						const Stepped again = stepThrough(dubWith({"skank=sevenths", "drums=onedrop"}), seed,
+						                                  run.drops[0] + 1, [&](int32_t step, SteeringQueue& queue) {
+							                                  if (step == 4) {
+								                                  queue.push({CommandKind::SetVariantMask, kDrums, mask});
+							                                  }
+						                                  });
+						expect(again.picks[run.drops[0]].pick[kDrums]).to_equal(at.pick[kDrums]);
+					}
+				}
+			}
+			expect(drawn == std::set<int32_t>{kRockers, kSteppers}).to_be_true();
+		});
+		it("replaces the Drop's own draw for its set: ticks that keep the one drop hold it where the Drop would change it", _ {
 			bool found = false;
 			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
 				Recipe recipe = dubWith({"skank=sevenths", "drums=onedrop"});
@@ -315,62 +347,89 @@ describe drop_changes("Drop changes and live variant switches", $ {
 				}
 				found = true;
 				const int32_t drop = drawn.drops[0];
-				const int32_t drawnStyle = drawn.picks[drop].pick[kDrums];
-				const int32_t other = drawnStyle == kRockers ? kSteppers : kRockers;
+				// One drop and the style the Drop drew: the one drop is ticked, so it plays on.
+				const auto mask = static_cast<uint8_t>(0b001 | 1U << drawn.picks[drop].pick[kDrums]);
 				const Stepped switched = stepThrough(recipe, seed, drop + 1, [&](int32_t step, SteeringQueue& queue) {
 					if (step == 4) {
-						queue.push({CommandKind::SetVariant, kDrums, other});
+						queue.push({CommandKind::SetVariantMask, kDrums, mask});
 					}
 				});
-				expect(static_cast<int32_t>(switched.picks[drop - 1].pick[kDrums])).to_equal(kOneDrop);
-				expect(static_cast<int32_t>(switched.picks[drop].pick[kDrums])).to_equal(other);
+				expect(static_cast<int32_t>(switched.picks[drop].pick[kDrums])).to_equal(kOneDrop);
+				expect(static_cast<int>(switched.picks[drop].allowed[kDrums])).to_equal(mask);
 			}
 			expect(found).to_be_true();
 		});
-
-		it("is cancelled by picking the variant playing, and by BACK", _ {
+		it("with one tick, plays that variant from the Drop on and never changes it at a later Drop", _ {
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				Recipe recipe = dubWith({"skank=sevenths", "drums=onedrop"});
+				recipe.variants.allowed[kDrums] = 0b111;
+				const Stepped run = stepThrough(recipe, seed, 200 * kStepsPerBar, [](int32_t step, SteeringQueue& queue) {
+					if (step == 4) {
+						queue.push({CommandKind::SetVariantMask, kDrums, 0b010});
+					}
+				});
+				expect(run.drops.size()).to_be_greater_than(1U);
+				for (size_t step = run.drops[0]; step < run.picks.size(); step++) {
+					expect(static_cast<int32_t>(run.picks[step].pick[kDrums])).to_equal(kRockers);
+				}
+			}
+		});
+		it("lets the ticks decide what the skank, which never changes at a Drop, plays from that Drop on", _ {
+			const Stepped run = stepThrough(dubWith({"skank=sevenths", "drums=onedrop"}), 3, 200 * kStepsPerBar,
+			                                [](int32_t step, SteeringQueue& queue) {
+				                                if (step == 4) {
+					                                queue.push({CommandKind::SetVariantMask, kSkank, 0b10});
+				                                }
+			                                });
+			expect(run.drops.size()).to_be_greater_than(1U);
+			expect(static_cast<int32_t>(run.picks[run.drops[0] - 1].pick[kSkank])).to_equal(0);
+			for (size_t step = run.drops[0]; step < run.picks.size(); step++) {
+				expect(static_cast<int32_t>(run.picks[step].pick[kSkank])).to_equal(1);
+			}
+		});
+		it("is cancelled by the ticks the set allows now, and by BACK", _ {
 			DubPiece piece(dubWith({"skank=sevenths", "drums=onedrop"}));
 			piece.runToStepLine(4);
-			piece.steering.pressVariant(kDrums, kRockers);
+			piece.steering.pressVariantMask(kDrums, 0b011);
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(kDrums)).to_equal(kRockers);
-			piece.steering.pressVariant(kDrums, kOneDrop);
+			expect(piece.generator.maskWaiting(kDrums)).to_equal(0b011);
+			piece.steering.pressVariantMask(kDrums, 0b001); // the ticks as they were
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(kDrums)).to_equal(-1);
-			expect(piece.steering.variantAhead(kDrums)).to_equal(kOneDrop);
-			piece.steering.pressVariant(kSkank, 1);
+			expect(piece.generator.maskWaiting(kDrums)).to_equal(-1);
+			expect(static_cast<int>(piece.steering.maskAhead(kDrums))).to_equal(0b001);
+			piece.steering.pressVariantMask(kSkank, 0b10);
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(kSkank)).to_equal(1);
+			expect(piece.generator.maskWaiting(kSkank)).to_equal(0b10);
 			piece.steering.cancelNewest();
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(kSkank)).to_equal(-1);
+			expect(piece.generator.maskWaiting(kSkank)).to_equal(-1);
 			expect(piece.decideToDrop()).to_be_true();
 			expect(static_cast<int32_t>(piece.generator.variants().pick[kSkank])).to_equal(0);
-			expect(static_cast<int32_t>(piece.generator.variants().pick[kDrums])).to_equal(kOneDrop);
+			expect(static_cast<int>(piece.generator.variants().allowed[kDrums])).to_equal(0b001);
 		});
-		it("does nothing for a set that isn't live, or a variant past the set's", _ {
+		it("does nothing for a set that isn't live, no tick, or a tick past the set's variants", _ {
 			static constexpr VariantSet kNotLive[] = {{.name = "s", .oledName = "S", .variants = kFour}};
 			static const Genre notLive = dubWithSets(kNotLive);
-			Recipe recipe = newRecipe(notLive, 0);
-			DubPiece piece(recipe);
+			DubPiece piece(newRecipe(notLive, 0));
 			piece.runToStepLine(4);
-			expect(piece.steering.pressVariant(0, 1) == PressOutcome::NothingToDo).to_be_true();
-			expect(piece.steering.pressVariant(1, 0) == PressOutcome::NothingToDo).to_be_true();
+			expect(piece.steering.pressVariantMask(0, 0b10) == PressOutcome::NothingToDo).to_be_true();
+			expect(piece.steering.pressVariantMask(1, 0b1) == PressOutcome::NothingToDo).to_be_true();
 			// Pushed past the steering, the core drops it.
-			piece.push({CommandKind::SetVariant, 0, 1});
+			piece.push({CommandKind::SetVariantMask, 0, 0b10});
 			piece.decideMore(2);
-			expect(piece.generator.variantWaiting(0)).to_equal(-1);
+			expect(piece.generator.maskWaiting(0)).to_equal(-1);
 			DubPiece dub(dubWith({"drums=onedrop"}));
 			dub.runToStepLine(4);
-			expect(dub.steering.pressVariant(kDrums, 3) == PressOutcome::NothingToDo).to_be_true();
+			expect(dub.steering.pressVariantMask(kDrums, 0) == PressOutcome::NothingToDo).to_be_true();
+			expect(dub.steering.pressVariantMask(kDrums, 0b1001) == PressOutcome::NothingToDo).to_be_true();
 		});
-		it("stopped, is the Recipe's at once, joining the allowed variants, and the next start plays it", _ {
+		it("stopped, is the Recipe's at once, the pick drawn within the ticks, and the next start plays it", _ {
 			DubPiece piece(dubWith({"skank=sevenths", "drums=onedrop"}));
 			piece.runToStepLine(4);
 			piece.driver.stop(piece.sink);
-			expect(piece.steering.pressVariant(kDrums, kRockers) == PressOutcome::Accepted).to_be_true();
+			expect(piece.steering.pressVariantMask(kDrums, 0b010) == PressOutcome::Accepted).to_be_true();
 			expect(static_cast<int32_t>(piece.currentRecipe.variants.pick[kDrums])).to_equal(kRockers);
-			expect(static_cast<int32_t>(piece.currentRecipe.variants.allowed[kDrums])).to_equal(0b011);
+			expect(static_cast<int>(piece.currentRecipe.variants.allowed[kDrums])).to_equal(0b010);
 			piece.playFromRecipe(true);
 			expect(piece.steering.variantPlaying(kDrums)).to_equal(kRockers);
 		});

@@ -21,6 +21,7 @@
 #include "generative/core/recipe_file.h"
 #include "generative/core/variants.h"
 #include "generative/firmware/current_recipe.h"
+#include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/transitions.h"
 #include "generative/firmware/working_animation.h"
 #include "generative/perform/recipe_name.h"
@@ -73,9 +74,12 @@ constexpr size_t kAllowedTextChars = 12;
 /// screen. A VARIANTS menu points it at its own as it begins.
 struct VariantsTarget {
 	const gen::Genre* genre = nullptr;
-	uint8_t* allowed = nullptr;    ///< kMaxVariantSets masks
+	uint8_t* allowed = nullptr;    ///< kMaxVariantSets masks; nullptr for Perform's
 	gen::Recipe* recipe = nullptr; ///< The Recipe whose masks they are (the Compose screen's), with picks to keep in
 	                               ///< them; nullptr for the page's, which has none
+	/// Perform's VARIANTS ▸ (spec §13.6): the ticks are the playing piece's as they go on (maskAhead()), a tick turned
+	/// queues them for the next Drop, and a set that isn't live opens nothing (AT REGEN).
+	bool perform = false;
 };
 VariantsTarget target;
 /// The set whose multi-select is open.
@@ -83,6 +87,12 @@ int32_t openSet = 0;
 
 [[nodiscard]] int32_t setCount() {
 	return target.genre != nullptr ? static_cast<int32_t>(target.genre->variantSets.size()) : 0;
+}
+
+/// Set `s`'s ticks as its row and toggles show them.
+[[nodiscard]] uint8_t maskOf(int32_t s) {
+	return target.perform ? gen::firmware::performAdapter.steering().maskAhead(s)
+	                      : gen::allowedIn(target.genre->variantSets[s], target.allowed[s]);
 }
 
 /// What set `s`'s row shows (spec §13.6): RANDOM, the one variant's name, or `n OF m`.
@@ -150,7 +160,18 @@ public:
 			return;
 		}
 		const uint8_t allowed = gen::perform::toggledAllowed(set(), mask(), variant_);
-		if (target.recipe != nullptr) {
+		if (target.perform) {
+			// Queued for the next Drop (VARIANT DROP); refused while a transition is pending, the ticks stay. The last
+			// tick, which stays, queues nothing.
+			if (allowed != mask()) {
+				const gen::perform::PressOutcome outcome =
+				    gen::firmware::performAdapter.steering().pressVariantMask(openSet, allowed);
+				refusedWithPopup(outcome);
+				TEST_EVENT("gen_variants_press set=%s allowed=%u outcome=%d", set().name,
+				           static_cast<unsigned>(allowed), static_cast<int>(outcome));
+			}
+		}
+		else if (target.recipe != nullptr) {
 			// The Compose screen's: a pick no longer allowed is drawn again within the ticks (spec §14.4).
 			gen::perform::narrowSet(*target.recipe, openSet, allowed, gen::firmware::freshEntropy());
 		}
@@ -173,7 +194,7 @@ private:
 		return openSet < setCount() && variant_ < static_cast<int32_t>(set().variants.size());
 	}
 	static const gen::VariantSet& set() { return target.genre->variantSets[openSet]; }
-	static uint8_t mask() { return gen::allowedIn(set(), target.allowed[openSet]); }
+	static uint8_t mask() { return maskOf(openSet); }
 	int32_t variant_;
 };
 
@@ -194,11 +215,33 @@ public:
 		openSet = set_;
 		Submenu::beginSession(navigatedBackwardFrom);
 	}
-	int32_t getSubmenuItemTypeRenderLength() override { return valueAndArrowRenderLength(shown()); }
-	void renderSubmenuItemTypeForOled(int32_t yPixel) override { drawRowValueAndArrow(*this, shown(), yPixel); }
+	// A set that isn't live opens nothing in Perform (Submenu::selectButtonPress() is final): the sound editor asks
+	// this before it enters the row, and the popup says why.
+	MenuPermission checkPermissionToBeginSession(ModControllableAudio* modControllable, int32_t whichThing,
+	                                             MultiRange** currentRange) override {
+		if (!opens()) {
+			display->displayPopup(l10n::get(l10n::String::STRING_FOR_AT_REGEN));
+			TEST_EVENT("gen_variants_live set=%s at_regen", target.genre->variantSets[set_].name);
+			return MenuPermission::NO;
+		}
+		return Submenu::checkPermissionToBeginSession(modControllable, whichThing, currentRange);
+	}
+	int32_t getSubmenuItemTypeRenderLength() override {
+		return opens() ? valueAndArrowRenderLength(shown()) : valueRenderLength(shown());
+	}
+	void renderSubmenuItemTypeForOled(int32_t yPixel) override {
+		if (opens()) {
+			drawRowValueAndArrow(*this, shown(), yPixel);
+		}
+		else {
+			drawRowValue(shown(), yPixel);
+		}
+	}
 
 private:
-	const char* shown() { return allowedText(target.genre->variantSets[set_], target.allowed[set_], text_); }
+	/// Whether its multi-select opens: always, but in Perform only for a live set (spec §13.6).
+	[[nodiscard]] bool opens() const { return !target.perform || target.genre->variantSets[set_].live; }
+	const char* shown() { return allowedText(target.genre->variantSets[set_], maskOf(set_), text_); }
 	int32_t set_;
 	char text_[kAllowedTextChars] = {};
 };
@@ -219,7 +262,7 @@ public:
 			for (int32_t s = 0; s < setCount(); s++) {
 				char text[kAllowedTextChars];
 				const gen::VariantSet& set = target.genre->variantSets[s];
-				TEST_EVENT("gen_variants_row %s %s", set.oledName, allowedText(set, target.allowed[s], text));
+				TEST_EVENT("gen_variants_row %s %s", set.oledName, allowedText(set, maskOf(s), text));
 			}
 		}
 		Submenu::beginSession(navigatedBackwardFrom);
@@ -318,6 +361,13 @@ VariantsTarget composeTarget() {
 	        .allowed = currentRecipe.recipe.variants.allowed,
 	        .recipe = &currentRecipe.recipe};
 }
+VariantsTarget performTarget() {
+	return {.genre = gen::firmware::performAdapter.steering().rosterGenre(), .perform = true};
+}
+bool performShowsVariants() {
+	const gen::Genre* genre = gen::firmware::performAdapter.steering().rosterGenre();
+	return genre != nullptr && !genre->variantSets.empty();
+}
 bool composeShowsVariants() {
 	return currentRecipe.exists && currentRecipe.recipe.genre != nullptr
 	       && !currentRecipe.recipe.genre->variantSets.empty();
@@ -342,6 +392,8 @@ PLACE_SDRAM_BSS TransitionRow transitionRow{l10n::String::STRING_FOR_TRANSITION}
 PLACE_SDRAM_BSS VariantsMenu pageVariants{l10n::String::STRING_FOR_VARIANTS, setRowList, pageTarget, pageShowsVariants};
 PLACE_SDRAM_BSS VariantsMenu composeVariants{l10n::String::STRING_FOR_VARIANTS, setRowList, composeTarget,
                                              composeShowsVariants};
+PLACE_SDRAM_BSS VariantsMenu performVariants{l10n::String::STRING_FOR_VARIANTS, setRowList, performTarget,
+                                             performShowsVariants};
 PLACE_SDRAM_BSS GoRow goRow{l10n::String::STRING_FOR_GO};
 // OPTIONS ▸ (keeping MIDI instruments, the reload wait) goes between VARIANTS and GO when it's built (ADR 0008).
 PLACE_SDRAM_BSS PageMenu pageMenu{l10n::String::STRING_FOR_REGENERATE, {&transitionRow, &pageVariants, &goRow}, &goRow};
@@ -349,6 +401,18 @@ PLACE_SDRAM_BSS PageMenu pageMenu{l10n::String::STRING_FOR_REGENERATE, {&transit
 } // namespace
 
 MenuItem& composeVariantsMenu = composeVariants;
+MenuItem& performVariantsMenu = performVariants;
+
+bool showsVariants(const MenuItem* item) {
+	bool ours = item == &pageVariants || item == &composeVariants || item == &performVariants;
+	for (const VariantSetRow& row : setRows) {
+		ours = ours || item == &row;
+	}
+	for (const VariantToggle& toggle : variantToggles) {
+		ours = ours || item == &toggle;
+	}
+	return ours;
+}
 
 void openRegeneratePage(const gen::Genre& genre) {
 	page.open(genre, false);

@@ -273,10 +273,10 @@ otherwise.
   `resolved_[2]` first went beside `blocks_` and moved `steering_` to 28. New adapter members go after `sink_`.
 - **Variant changes at a Drop (#495).** `Generator::dropVariants()` runs in `decideLanded()` right after
   `arc_.enterStep()` on a Drop's first step (`dropStartsHere()`, not step 0: a transition's roster opening on a Drop
-  keeps its picks), before `walkChord()` and the pattern picks read the genre. A live `SetVariant` waits in the
+  keeps its picks), before `walkChord()` and the pattern picks read the genre. A live `SetVariantMask` waits in the
   pending list but `landPending()` never lands it (it runs before the Arc enters the step, so it can't know the step
   is a Drop): `dropVariants()` lands it, logging it there, which is why `decideLanded()` takes the log. In replay the
   record's `apply()` runs before `decideLanded()`; `switchedSets_` carries "this set was switched" to the Drop's draws
-  either way. `stepsToLine()` for a `SetVariant` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
+  either way. `stepsToLine()` for a `SetVariantMask` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
   Drop ahead, which `landsAt()` passes on as `Generator::kNoLine`. Re-resolving writes the copy in place, so a
   patched pool must keep its entry count and lengths: a frozen part's `PatternState::entry` indexes the new pool.

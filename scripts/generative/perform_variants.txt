@@ -1,17 +1,18 @@
 # Perform's VARIANTS ▸ and a live variant switch landing on a Drop (#495, spec §3.6, §13.6, ADR 0008 "Drop changes and
 # live steering") over the sysex test port: Acid techno shows no VARIANTS row; Acid cuts to ROOTS DUB, whose Perform
-# menu has VARIANTS ▸ after REGENERATE, a row per set with the variant playing (SKANK, DRUMS, both live). DRUMS opens
-# its list: a pick queues a switch for the next Drop (VAR in the status line), and a forced 1-bar Build lands it on the
-# Drop, where the instance applies its genre copy again. gen_h1 reports around that Drop (H1, spec §20). Runs on a
-# Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the
-# current clip a synth or kit clip.
+# menu has VARIANTS ▸ after REGENERATE, the Regenerate page's rows on the playing piece's ticks (SKANK and DRUMS on
+# RANDOM). DRUMS opens its multi-select: unticking ONE DROP, then ROCKERS, queues the ticks for the next Drop (VAR in
+# the status line), and a forced 1-bar Build lands them on the Drop: ONE DROP isn't ticked, so the Drop draws within
+# the ticks, STEPPERS, and the instance applies its genre copy again. gen_h1 reports around that Drop (H1, spec §20).
+# Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped,
+# the current clip a synth or kit clip.
 #
-# gen_perform_variants open sets=N, then gen_perform_variants_row <SET> <playing> live=<0|1> per set, as VARIANTS ▸
-# opens. gen_press variant set=<name> variant=<name> outcome=<0 accepted>: a turn in a set's list.
-# gen_variants_landed step=N drop=<1 on a Drop's first step> <set>=<variant>:<allowed> ...: the picks the piece plays
-# moved on step N (a Drop change or a live switch). Pinned rolls (hold entropy): the Dub Recipe plays ONE DROP and
-# 7THS, so a turn to STEPPERS is a switch.
-# For figures: --events 'gen_perform_variants|gen_press variant|gen_variants_landed|gen_section|gen_h1|gen_h16'.
+# gen_variants_menu open sets=N, then gen_variants_row <SET> <shows> per set (Random, a variant's OLED name, n of m), as
+# VARIANTS ▸ opens. gen_variants_press set=<name> allowed=<mask> outcome=<0 accepted>: a tick turned, queued;
+# gen_variants set=<name> allowed=<mask> shows=<text>: the row's ticks after it. gen_variants_landed step=N drop=<1 on a
+# Drop's first step> <set>=<variant>:<allowed> ...: the picks the piece plays moved on step N. Pinned rolls (hold
+# entropy): the Dub Recipe plays ONE DROP.
+# For figures: --events 'gen_variants|gen_variants_press|gen_variants_landed|gen_section|gen_h1|gen_h16'.
 # covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/generative/perform/perform_steering.h
 # covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/core/variants.*
 # covers: src/deluge/generative/core/generator_steering.cpp src/deluge/generative/core/genres/dub.cpp
@@ -43,7 +44,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-expect no_event gen_perform_variants within=1
+expect no_event gen_variants_menu within=1
 button BACK down
 wait 50
 button BACK up
@@ -76,28 +77,44 @@ expect event gen_transition_preload done error=0 parts=5 within=30
 expect event gen_transition start style=2 within=90
 expect event gen_transition phase=idle within=60
 
-# ---- VARIANTS ▸ after REGENERATE: SKANK and DRUMS, live, on what plays ----
+# ---- VARIANTS ▸ after REGENERATE: SKANK and DRUMS on RANDOM ----
 include perform_transition_menu.txt
 encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_perform_variants open sets=2
-expect event gen_perform_variants_row SKANK 7THS live=1
-expect event gen_perform_variants_row DRUMS ONE DROP live=1
-# DRUMS' list, on ONE DROP: two detents down are ROCKERS, then STEPPERS, each a press; the last one waits
+expect event gen_variants_menu open sets=2
+expect event gen_variants_row SKANK Random
+expect event gen_variants_row DRUMS Random
+# DRUMS' multi-select, from the top (a list remembers its row) on ONE DROP: untick it, then ROCKERS; each turn queues
+mark now
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 100
-encoder 3 1
-expect event gen_press variant set=drums variant=rockers outcome=0
-encoder 3 1
-expect event gen_press variant set=drums variant=steppers outcome=0
+encoder 3 -5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
+expect event gen_variants_press set=drums allowed=6 outcome=0
+expect event gen_variants set=drums allowed=6 shows=2 of 3
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_press set=drums allowed=4 outcome=0
+expect event gen_variants set=drums allowed=4 shows=STEPPERS
+# STEPPERS' tick is the last: it stays, and queues nothing
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=drums allowed=4 shows=STEPPERS
+expect no_event gen_variants_press within=1
+button BACK down
+wait 50
+button BACK up
 wait 100
 button BACK down
 wait 50
@@ -107,11 +124,11 @@ button BACK down
 wait 50
 button BACK up
 wait 200
-expect event /^gen_status .*\|>VAR/ within=5
+expect event /^gen_status .*\|>VAR/ since=mark within=5
 # No Drop yet: it waits
 expect no_event gen_variants_landed within=4
 
-# ---- A forced 1-bar Build: the switch lands on its Drop ----
+# ---- A forced 1-bar Build: the ticks land on its Drop, which draws STEPPERS, the one ticked ----
 mark now
 pad 17 5 down
 wait 50
@@ -119,17 +136,17 @@ pad 17 5 up
 expect event gen_press force BUILD
 expect event gen_section BUILD within=40
 expect event gen_section GROOVE within=10
-expect event /^gen_variants_landed step=\d+ drop=1 skank=sevenths:\d+ drums=steppers:\d+$/ since=mark within=5
+expect event /^gen_variants_landed step=\d+ drop=1 skank=sevenths:\d+ drums=steppers:4$/ since=mark within=5
 expect event gen_h1 steps= within=20
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
-# The row shows STEPPERS now
+# The row shows the tick
 include perform_transition_menu.txt
 encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_perform_variants_row DRUMS STEPPERS live=1
+expect event gen_variants_row DRUMS STEPPERS
 button BACK down
 wait 50
 button BACK up

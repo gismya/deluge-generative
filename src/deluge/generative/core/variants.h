@@ -69,12 +69,15 @@ void drawVariants(const Genre& genre, const VariantPicks& narrowed, EntropyStrea
 /// left out or a pick it didn't know, spec §16.1), from `entropy`. The others keep their picks.
 void drawUnsetVariants(Recipe& recipe, uint32_t entropy);
 
-/// Whether `genre` has a live set `set` with a variant `variant`: what a live switch may name (spec §3.6, §13.6).
-bool switchable(const Genre& genre, int32_t set, int32_t variant);
+/// Whether `genre` has a live set `set` and `allowed` ticks one or more of its variants and nothing past them: what a
+/// live switch may name (spec §3.6, §13.6).
+bool switchable(const Genre& genre, int32_t set, uint8_t allowed);
 
-/// A live switch lands: set `set` plays `variant`, which joins the set's allowed variants, so a Drop change, SAVE and
-/// the file keep it (spec §3.6). The one place that rule lives.
-void switchVariant(VariantPicks& picks, int32_t set, int32_t variant);
+/// A live switch lands on set `s` of `genre` at the Drop that opens Groove `groove` (spec §3.6): its allowed variants
+/// become `allowed`; the variant playing stays if `allowed` ticks it, else a keyed draw `(seed, kArcPart,
+/// VariantChange, groove, s)` picks by weight within them. The one place that rule lives: the core at the Drop, and
+/// Perform's press while stopped (groove 0).
+void landMask(const Genre& genre, VariantPicks& picks, int32_t s, uint8_t allowed, uint32_t seed, uint16_t groove);
 
 /// The variant set `s` plays after the Drop that opens Groove `groove` (spec §3.6), for a ChangeAt::Drop `set` playing
 /// `pick` within `allowed`: a keyed draw (seed, kArcPart, VariantChange, the Groove, the set) against its

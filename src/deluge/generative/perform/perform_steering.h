@@ -270,20 +270,21 @@ public:
 
 	// ---- Live variant switches (spec §3.6, §13.6) ----
 
-	/// VARIANTS ▸: live set `set` plays `variant` from the next Drop; the variant playing pressed again cancels the one
-	/// waiting. Stopped, it is the Recipe's at once (joining the set's allowed variants), and the next start plays it.
-	/// Refused while a transition is pending (spec §12.9). Nothing to do for a set that isn't live, one past the
-	/// genre's, or a variant past the set's.
-	[[gnu::noinline]] PressOutcome pressVariant(int32_t set, int32_t variant);
+	/// VARIANTS ▸'s ticks: live set `set` allows `allowed` (a bit per variant) from the next Drop, where landMask()
+	/// keeps the variant playing if ticked or draws one within the ticks; the ticks the set allows now cancel the one
+	/// waiting. Stopped, they are the Recipe's at once (landMask() at Groove 0), and the next start plays them. Refused
+	/// while a transition is pending (spec §12.9). Nothing to do for a set that isn't live, one past the genre's, or
+	/// no tick or one past the set's variants.
+	[[gnu::noinline]] PressOutcome pressVariantMask(int32_t set, uint8_t allowed);
 	/// Sets with a live switch waiting for the Drop, in the playing core or still in the steering queue.
 	/// dropWaitingVariants() takes a place in the queue for each.
 	[[nodiscard]] int32_t waitingVariants() const;
-	/// A transition's confirm (spec §12.9): each switch waiting is dropped, as a press of the variant that plays drops
-	/// it. The caller has checked that the queue has room for waitingVariants() presses.
+	/// A transition's confirm (spec §12.9): each switch waiting is dropped, as a press of the ticks the set allows now
+	/// drops it. The caller has checked that the queue has room for waitingVariants() presses.
 	void dropWaitingVariants();
-	/// Set `set`'s variant as it goes on: its newest switch still in the steering queue, else the one waiting in the
-	/// core for the Drop, else the one playing. -1 past the roster genre's sets.
-	[[nodiscard, gnu::noinline]] int32_t variantAhead(int32_t set) const;
+	/// Set `set`'s ticks as they go on: its newest switch still in the steering queue, else the one waiting in the core
+	/// for the Drop, else the variants it allows now. 0 past the roster genre's sets.
+	[[nodiscard, gnu::noinline]] uint8_t maskAhead(int32_t set) const;
 	/// The variant set `set` plays now: the playing piece's (a Drop may have moved it), or the Recipe's while stopped.
 	/// -1 past the roster genre's sets.
 	[[nodiscard]] int32_t variantPlaying(int32_t set) const;
@@ -433,15 +434,15 @@ private:
 			}
 		}
 	}
-	/// Calls `visit(set, variant)` for each set with a live switch waiting, in the playing piece or in the queue, with
-	/// the variant it plays: what waitingVariants() counts is what dropWaitingVariants() drops.
+	/// Calls `visit(set, allowed)` for each set with a live switch waiting, in the playing piece or in the queue, with
+	/// the variants it allows now: what waitingVariants() counts is what dropWaitingVariants() drops.
 	template <typename Visit>
 	void forEachWaitingVariant(Visit visit) const {
 		const Generator* piece = playing();
 		for (int32_t s = 0; piece != nullptr && s < kMaxVariantSets; s++) {
 			const auto set = static_cast<uint8_t>(s);
-			if (piece->variantWaiting(s) >= 0 || queue_.holdsFor(CommandKind::SetVariant, set)) {
-				visit(set, piece->variants().pick[s]);
+			if (piece->maskWaiting(s) >= 0 || queue_.holdsFor(CommandKind::SetVariantMask, set)) {
+				visit(set, allowedIn(piece->recipe().genre->variantSets[s], piece->variants().allowed[s]));
 			}
 		}
 	}
@@ -587,7 +588,7 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	// An octave shift or a variant switch still queued names the outgoing roster's part or set: it goes with it, so
 	// the incoming instance never lands it on its own (spec §12.9).
 	queue_.removeIf([](const Command& command) {
-		return command.kind == CommandKind::SetOctave || command.kind == CommandKind::SetVariant;
+		return command.kind == CommandKind::SetOctave || command.kind == CommandKind::SetVariantMask;
 	});
 	newRecipe();
 }
@@ -919,55 +920,57 @@ int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
 }
 
 template <typename Adapter>
-PressOutcome PerformSteering<Adapter>::pressVariant(int32_t set, int32_t variant) {
+PressOutcome PerformSteering<Adapter>::pressVariantMask(int32_t set, uint8_t allowed) {
 	if (gated(PressKind::Variant)) {
 		return PressOutcome::ChangePending; // it would wait for a Drop the outgoing piece never plays
 	}
 	const Genre* genre = rosterGenre();
-	if (leaving_ || !entered_ || genre == nullptr || !switchable(*genre, set, variant)) {
+	if (leaving_ || !entered_ || genre == nullptr || !switchable(*genre, set, allowed)) {
 		return PressOutcome::NothingToDo;
 	}
 	listPresses_++;
 	if (playing() != nullptr) {
-		return queued(queue_.push({CommandKind::SetVariant, static_cast<uint8_t>(set), variant}));
+		return queued(queue_.push({CommandKind::SetVariantMask, static_cast<uint8_t>(set), allowed}));
 	}
-	// Stopped: no Drop to wait for. The variant is the Recipe's, as a live switch landing makes it
-	// (Generator::apply()).
-	switchVariant(adapter().recipe().variants, set, variant);
+	// Stopped: no Drop to wait for. The ticks are the Recipe's, as a switch landing makes them (spec §3.6).
+	landMask(*genre, adapter().recipe().variants, set, allowed, adapter().seed(), 0);
 	return PressOutcome::Accepted;
 }
 
 template <typename Adapter>
 int32_t PerformSteering<Adapter>::waitingVariants() const {
 	int32_t count = 0;
-	forEachWaitingVariant([&count](uint8_t /*set*/, int32_t /*variant*/) { count++; });
+	forEachWaitingVariant([&count](uint8_t /*set*/, uint8_t /*allowed*/) { count++; });
 	return count;
 }
 
 template <typename Adapter>
 void PerformSteering<Adapter>::dropWaitingVariants() {
-	// Each press of the variant playing drains after the switch it drops, at the same decision: the core cancels the
-	// one waiting (spec §13.6).
-	forEachWaitingVariant([this](uint8_t set, int32_t variant) {
+	// Each press of the ticks allowed now drains after the switch it drops, at the same decision: the core cancels
+	// the one waiting (spec §13.6).
+	forEachWaitingVariant([this](uint8_t set, uint8_t allowed) {
 		listPresses_++;
-		queue_.push({CommandKind::SetVariant, set, variant});
+		queue_.push({CommandKind::SetVariantMask, set, allowed});
 	});
 }
 
 template <typename Adapter>
-int32_t PerformSteering<Adapter>::variantAhead(int32_t set) const {
-	const Generator* piece = playing();
-	if (piece != nullptr && set >= 0 && set < kMaxVariantSets) {
-		// A press the core hasn't drained yet goes on as pushed: a switch waits, and the one playing cancels the wait.
-		if (const Command* queued = queue_.newest(CommandKind::SetVariant, static_cast<uint8_t>(set))) {
-			return queued->value;
-		}
-		const int32_t waiting = piece->variantWaiting(set);
-		if (waiting >= 0) {
-			return waiting;
-		}
+uint8_t PerformSteering<Adapter>::maskAhead(int32_t set) const {
+	const Genre* genre = rosterGenre();
+	if (genre == nullptr || set < 0 || set >= static_cast<int32_t>(genre->variantSets.size())) {
+		return 0;
 	}
-	return variantPlaying(set);
+	const Generator* piece = playing();
+	if (piece == nullptr) {
+		return allowedIn(genre->variantSets[set], adapter().recipe().variants.allowed[set]);
+	}
+	// A press the core hasn't drained yet goes on as pushed: a switch waits, and the ticks allowed now cancel it.
+	if (const Command* queued = queue_.newest(CommandKind::SetVariantMask, static_cast<uint8_t>(set))) {
+		return static_cast<uint8_t>(queued->value);
+	}
+	const int32_t waiting = piece->maskWaiting(set);
+	return waiting >= 0 ? static_cast<uint8_t>(waiting)
+	                    : allowedIn(genre->variantSets[set], piece->variants().allowed[set]);
 }
 
 template <typename Adapter>

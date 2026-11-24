@@ -65,6 +65,7 @@ namespace {
 /// A Drop change's draw fields (Purpose::VariantChange).
 constexpr int32_t kChangeWhether = 0;
 constexpr int32_t kChangeWhich = 1;
+constexpr int32_t kChangeMask = 2; ///< a live switch's ticks leave out the variant playing: which one plays
 
 } // namespace
 
@@ -82,14 +83,20 @@ GEN_STEP_CODE uint8_t dropChange(const VariantSet& set, uint8_t allowed, uint8_t
 	return drawWithin(set, others, draw(withField(key, kChangeWhich)));
 }
 
-GEN_STEP_CODE bool switchable(const Genre& genre, int32_t set, int32_t variant) {
+GEN_STEP_CODE bool switchable(const Genre& genre, int32_t set, uint8_t allowed) {
 	return set >= 0 && set < static_cast<int32_t>(genre.variantSets.size()) && genre.variantSets[set].live
-	       && variant >= 0 && variant < static_cast<int32_t>(genre.variantSets[set].variants.size());
+	       && allowed != 0 && (allowed & ~allVariants(genre.variantSets[set])) == 0;
 }
 
-GEN_STEP_CODE void switchVariant(VariantPicks& picks, int32_t set, int32_t variant) {
-	picks.pick[set] = static_cast<uint8_t>(variant);
-	picks.allowed[set] |= static_cast<uint8_t>(1U << variant);
+GEN_STEP_CODE void landMask(const Genre& genre, VariantPicks& picks, int32_t s, uint8_t allowed, uint32_t seed,
+                            uint16_t groove) {
+	picks.allowed[s] = allowed;
+	if ((allowed >> picks.pick[s]) & 1U) {
+		return; // still ticked: it plays on
+	}
+	const DrawKey key = onPhrase(partKey(seed, kArcPart, Lane::None, 0, Purpose::VariantChange), groove,
+	                             static_cast<uint16_t>(s), fieldWord(0, kChangeMask));
+	picks.pick[s] = drawWithin(genre.variantSets[s], allowed, draw(key));
 }
 
 GEN_STEP_CODE bool patchesGenre(const Genre& genre, const VariantPicks& picks) {

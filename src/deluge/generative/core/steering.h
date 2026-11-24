@@ -117,14 +117,15 @@ enum class CommandKind : uint8_t {
 	/// being decided, so a sample/wavetable path can follow as a kSettingPathTag (0x85) record.
 	SetSetting,
 	/// A live variant set's switch (spec §3.6, §13.6): target: the set, by index in the genre's list. value: the
-	/// variant. Waits for the next Drop and lands there, with the Drop's own changes, where the instance re-applies its
-	/// genre copy. Only a live set takes one. Picking the variant that plays cancels the one waiting.
-	SetVariant,
+	/// variants it allows from then on, a bit each (Perform's VARIANTS ▸ ticks). Waits for the next Drop and lands
+	/// there, with the Drop's own changes, where the instance re-applies its genre copy (landMask()). Only a live set
+	/// takes one. The mask the set allows now cancels the one waiting.
+	SetVariantMask,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::SetVariant;
+constexpr CommandKind kLastCommandKind = CommandKind::SetVariantMask;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;
@@ -180,7 +181,7 @@ constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
 	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
 	       || kind == CommandKind::SetSound || kind == CommandKind::Transition || kind == CommandKind::SetOctave
-	       || kind == CommandKind::Restart || kind == CommandKind::SetVariant;
+	       || kind == CommandKind::Restart || kind == CommandKind::SetVariantMask;
 }
 
 struct Command {

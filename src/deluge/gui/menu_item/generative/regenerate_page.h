@@ -19,7 +19,8 @@
 // `<GENRE>?` or a LOAD's `<NAME>?`: TRANSITION (DROP, FADE or CUT), VARIANTS ▸ (a row per set of the incoming genre,
 // each a stock multi-select of its variants; not for a LOAD, nor a genre with no sets), then GO, where the cursor
 // starts. BACK cancels. Its state is the portable perform::RegeneratePage. The Compose screen's VARIANTS ▸ row (spec
-// §14.4) opens the same per-set rows on the Current Recipe's masks.
+// §14.4) opens the same per-set rows on the Current Recipe's masks, and the Perform menu's (spec §13.6) on the playing
+// piece's, queueing a change for the next Drop.
 
 #pragma once
 
@@ -45,5 +46,14 @@ void openLoadPage(const deluge::generative::RecipeFile& file, const deluge::gene
 
 /// The Compose screen's VARIANTS ▸ row, after SCALE: shown only when the Current Recipe's genre has sets.
 extern MenuItem& composeVariantsMenu;
+
+/// The Perform menu's VARIANTS ▸ row, after REGENERATE (spec §13.6): the same rows and multi-selects, on the playing
+/// piece's ticks; a turned tick queues them for the next Drop, and a set that isn't live shows AT REGEN. Shown only
+/// when the genre playing has sets.
+extern MenuItem& performVariantsMenu;
+
+/// Whether `item` is a VARIANTS menu, a set's row or a tick: what the Perform menu reads again as the playing piece
+/// moves.
+bool showsVariants(const MenuItem* item);
 
 } // namespace deluge::gui::menu_item::generative

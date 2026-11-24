@@ -176,9 +176,9 @@ BUILDERS = {
         "src/deluge/generative/perform/regenerate_page.*",
         *_L10N,
     ),  # a set's OLED name, what its row shows
-    "gen_perform_variants_row": (
+    "gen_variants_press": (
         "src/deluge/generative/core/genres/dub.cpp",
-    ),  # a set's OLED name and its playing variant's
+    ),  # a set's stable name
     "gen_variants_landed": (
         "src/deluge/generative/core/genres/dub.cpp",
         "src/deluge/generative/perform/regenerate_page.*",

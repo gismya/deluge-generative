@@ -244,6 +244,9 @@ otherwise.
   size (Release build only): find padding elsewhere, or make it a bit beside them.
 - Perform's VARIANTS ▸ (#495) sits after REGENERATE and shows only for a genre with sets, so in Dub every Perform
   menu row below REGENERATE is one further down than in a genre without sets: a probe script that counts rows from
-  the top in Dub counts it. Its rows are stock `Selection`s: a live row enters its list (`shouldEnterSubmenu()`), a
-  turn there is the press (`pressVariant()`), as OCTAVES' turns are; a row that isn't live returns `false` and its
-  `selectButtonPress()` shows AT REGEN.
+  the top in Dub counts it. It is the Regenerate page's `VariantsMenu` over the same `VariantSetRow`s and
+  `VariantToggle`s, with a third `VariantsTarget` (`perform`): the ticks read `maskAhead()`, a turned tick is
+  `pressVariantMask()`, and a set that isn't live doesn't open (AT REGEN). A recipe's `allowed` may be 0 (RANDOM):
+  compare masks through `allowedIn()`. Perform's target has no `allowed` array (nullptr): a toggle path that falls
+  through to the page's `target.allowed[...] =` hangs the firmware. `Submenu::selectButtonPress()` is `final`, so a
+  row that must not open refuses in `checkPermissionToBeginSession()` (the sound editor asks it before entering).
