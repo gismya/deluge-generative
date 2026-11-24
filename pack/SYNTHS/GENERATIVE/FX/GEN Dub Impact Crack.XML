@@ -26,7 +26,7 @@
 		<oscAVolume>0x75C28F30</oscAVolume>
 		<oscBVolume>0x6147ADEC</oscBVolume>
 		<noiseVolume>0x80000000</noiseVolume>
-		<volume>0x7FFFFFFF</volume>
+		<volume>0x570A3D4A</volume>
 		<pan>0x00000000</pan>
 		<lpfFrequency>0x7FFFFFFF</lpfFrequency>
 		<lpfResonance>0x80000000</lpfResonance>
@@ -37,7 +37,7 @@
 			<sustain>0x7FFFFFFF</sustain>
 			<release>0x7FFFFFFF</release>
 		</envelope1>
-		<delayFeedback>0x051EB83A</delayFeedback>
+		<delayFeedback>0xE6666654</delayFeedback>
 		<reverbAmount>0xFAE14798</reverbAmount>
 		<patchCables>
 			<patchCable>
