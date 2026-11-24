@@ -56,6 +56,8 @@ public:
 	[[nodiscard]] bool sectionStartsHere() const { return stepInSection_ == 0; }
 	/// Whether this step is an Arc Drop: the Groove a Build lands on starts here.
 	[[nodiscard]] bool dropStartsHere() const { return stepInSection_ == 0 && afterDrop_; }
+	/// Whether this step is in a Groove that started on a Drop, any phrase of it (a yield's `inDrops`, spec §5.6).
+	[[nodiscard]] bool inDrop() const { return kind_ == SectionKind::Groove && afterDrop_; }
 
 	[[nodiscard]] int32_t stepInBar() const { return stepInPhrase_ % kStepsPerBar; }
 	[[nodiscard]] int32_t barInPhrase() const { return stepInPhrase_ / kStepsPerBar; }

@@ -109,9 +109,9 @@ describe sound_settings("Load-time sound settings", $ {
 		expect(partSoundSettings(bass).volume).to_equal(uint8_t{80});
 	});
 
-	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322)", _ {
+	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322) and Classic psytrance (#497)", _ {
 		for (const Genre* genre : allGenres()) {
-			if (genre == &genres::technoDub) {
+			if (genre == &genres::technoDub || genre == &genres::psytranceClassic) {
 				continue;
 			}
 			for (const PartSpec& p : genre->parts) {

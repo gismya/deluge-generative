@@ -340,6 +340,11 @@ struct LoopSpec {
 	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.
 	uint8_t slideOverlapTicks = 6;
+	/// Bit i: an octave jump may land on step i of each bar's 16 (line step modulo 16: a line's step is its pattern's
+	/// step, line[patternStep]); a step off the mask
+	/// keeps its drawn octave at 0, so the line's high and low notes mark a grouping (spec §5.2; Psytrance's 3-3-2).
+	/// 0: any step (every genre before #497).
+	uint16_t jumpSteps = 0;
 };
 
 /// How a Sustain part holds its voicing (spec §5.2, §8.1).
@@ -484,6 +489,19 @@ struct GestureSpec {
 	[[nodiscard]] constexpr bool on(GestureMoment moment) const { return (off & momentBit(moment)) == 0; }
 };
 
+/// How a part makes room for another while that one plays (spec §5.6, #497): it rests, or keeps only its 8ths.
+enum class YieldMode : uint8_t { None, Rest, Eighths };
+
+/// A part yielding to another (spec §5.6, #497; Psytrance's Arp under its Lead). It holds on each step where `part`
+/// sounds by the Arc's rules (its gate open, kept by the Section, no drop-out; mutes never count), never in a Build:
+/// `inDrops` in a Groove that started on a Drop, `outside` everywhere else. A patterned pitched part only, yielding
+/// to another part (yieldValid()). part -1: it never yields (every genre before #497).
+struct YieldSpec {
+	int8_t part = -1;
+	YieldMode inDrops = YieldMode::None;
+	YieldMode outside = YieldMode::None;
+};
+
 /// A part's drift (spec §11.5).
 struct DriftSpec {
 	/// Depth at a given Motion, per-mille ×0..×2 of the Generator-wide depth.
@@ -525,6 +543,8 @@ struct PartSpec {
 	/// The post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning): a synth
 	/// part's, or each row's of a Kit part (Drums, FX). 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
+	/// Whom the part makes room for, and how (spec §5.6). Off by default.
+	YieldSpec yield;
 	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
 	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup
 	/// is written on load and never thrown: FX lanes throw their own rows (spec §11.4).
@@ -1496,6 +1516,28 @@ constexpr bool stabNotesValid(const Genre& genre) {
 		if (part.flavour == Flavour::Stab
 		    && (part.pool.empty() || part.stab.gateTicks == 0
 		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every part that yields (spec §5.6, #497) is a patterned pitched part yielding to another of the genre's
+/// parts, which isn't itself yielding: the Generator works out the yields in one pass, after every part's own silence.
+/// A part that never yields names no part and sets no mode; a mode of None everywhere is never set.
+constexpr bool yieldValid(const Genre& genre) {
+	const auto parts = static_cast<int32_t>(genre.parts.size());
+	for (const PartSpec& part : genre.parts) {
+		const YieldSpec& yield = part.yield;
+		const bool modes = yield.inDrops != YieldMode::None || yield.outside != YieldMode::None;
+		if (yield.part < 0) {
+			if (modes) {
+				return false;
+			}
+			continue;
+		}
+		if (!modes || yield.part >= parts || &genre.parts[yield.part] == &part || !part.lanes.empty()
+		    || part.pool.empty() || genre.parts[yield.part].yield.part >= 0) {
 			return false;
 		}
 	}

@@ -737,6 +737,36 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(2, 0, Role::Drums)).to_be_false();
 	});
 
+	it("lets a patterned pitched part yield to another part that doesn't yield, with a mode (yieldValid(), spec §5.6)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(yieldValid(*genre)).to_be_true();
+		}
+		static constexpr Pattern kPool[] = {{"X...............", "................", 0}};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick, .pool = kPool}};
+		const auto valid = [](YieldSpec arp, YieldSpec lead, bool kit) {
+			const PartSpec parts[] = {
+			    {.role = Role::Drums, .lanes = kLanes},
+			    {.role = Role::Lead, .flavour = Flavour::Loop, .pool = kPool, .yield = lead},
+			    {.role = Role::Lead,
+			     .flavour = kit ? Flavour::None : Flavour::Loop,
+			     .lanes = kit ? std::span<const LaneSpec>(kLanes) : std::span<const LaneSpec>(),
+			     .pool = kit ? std::span<const Pattern>() : std::span<const Pattern>(kPool),
+			     .yield = arp}};
+			return yieldValid(Genre{.name = "yields", .parts = parts});
+		};
+		constexpr YieldSpec kNone{};
+		constexpr YieldSpec kToLead{.part = 1, .inDrops = YieldMode::Rest, .outside = YieldMode::None};
+		expect(valid(kNone, kNone, false)).to_be_true();
+		expect(valid(kToLead, kNone, false)).to_be_true();
+		expect(valid({.part = 1, .outside = YieldMode::Eighths}, kNone, false)).to_be_true();
+		expect(valid({.part = 1}, kNone, false)).to_be_false();                          // no mode
+		expect(valid({.inDrops = YieldMode::Rest}, kNone, false)).to_be_false();       // a mode, no part
+		expect(valid({.part = 2, .inDrops = YieldMode::Rest}, kNone, false)).to_be_false(); // itself
+		expect(valid({.part = 6, .inDrops = YieldMode::Rest}, kNone, false)).to_be_false(); // past the roster
+		expect(valid(kToLead, {.part = 2, .inDrops = YieldMode::Rest}, false)).to_be_false(); // to a yielding part
+		expect(valid(kToLead, kNone, true)).to_be_false();                               // a Kit part
+	});
+
 	it("keeps every pitched anchor a MIDI note two octaves either way (registersShiftValid(), spec §7.3)", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(registersShiftValid(*genre)).to_be_true();

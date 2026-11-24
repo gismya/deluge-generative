@@ -5,6 +5,8 @@
 #include "core_walk.h"
 #include "fake_card.h"
 #include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
+#include "generative/core/variants.h"
 #include "harness.h"
 #include "palette_helpers.h"
 #include "stream_helpers.h"
@@ -57,6 +59,68 @@ std::vector<int32_t> buildEnds(const Walked& walked) {
 	return out;
 }
 
+/// `recipe` with every variant set on its first variant: the genre as written (#497).
+Recipe asWritten(const Recipe& recipe) {
+	return withVariants(recipe, {"figure=sequence", "break=arp", "arplead=dropboth", "lead=drops", "accents=anywhere"});
+}
+
+/// Per bar of a walk: its Section, whether it is in a Groove that started on a Drop, and the onset steps (0–15) of
+/// the Arp's and the Lead's notes in it.
+struct BarParts {
+	SectionKind section = SectionKind::Intro;
+	bool inDrop = false;
+	std::set<int32_t> arp;
+	std::set<int32_t> lead;
+};
+std::vector<BarParts> barParts(const Walked& walked) {
+	const auto steps = static_cast<int32_t>(walked.steps.size());
+	std::vector<BarParts> bars(static_cast<size_t>(steps / kStepsPerBar));
+	bool inDrop = false;
+	for (int32_t n = 0; n < steps; n++) {
+		const Walked::Step& step = walked.steps[n];
+		if (step.sectionStart) {
+			inDrop = step.drop;
+		}
+		if (n % kStepsPerBar == 0 && n / kStepsPerBar < static_cast<int32_t>(bars.size())) {
+			bars[n / kStepsPerBar].section = step.section;
+			bars[n / kStepsPerBar].inDrop = inDrop && step.section == SectionKind::Groove;
+		}
+	}
+	for (const Event& e : walked.noteOns) {
+		const int32_t step = stepAt(e);
+		if (step / kStepsPerBar >= static_cast<int32_t>(bars.size())) {
+			continue;
+		}
+		BarParts& bar = bars[step / kStepsPerBar];
+		if (e.part == kArpPart) {
+			bar.arp.insert(step % kStepsPerBar);
+		}
+		else if (e.part == kLeadPart) {
+			bar.lead.insert(step % kStepsPerBar);
+		}
+	}
+	return bars;
+}
+
+/// Whether any of `steps` is an e or an a (an odd 16th).
+bool anyOdd(const std::set<int32_t>& steps) {
+	return std::ranges::any_of(steps, [](int32_t step) { return step % 2 != 0; });
+}
+
+/// Psytrance as written with the Arp's Answers off and `jumpSteps` on its Loop, and no variant sets: the jump mask
+/// alone, with no Rotate moving a jump a beat (a test edit of the data).
+struct PsyWithJumps {
+	PartSpec parts[6];
+	Genre genre;
+	explicit PsyWithJumps(uint16_t jumpSteps) : genre(psyGenre) {
+		std::copy(psyGenre.parts.begin(), psyGenre.parts.end(), parts);
+		parts[kArpPart].loop.answers = {};
+		parts[kArpPart].loop.jumpSteps = jumpSteps;
+		genre.parts = parts;
+		genre.variantSets = {};
+	}
+};
+
 } // namespace
 
 // clang-format off
@@ -65,7 +129,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(6);
+		expect(psyGenre.version).to_equal(7);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -100,6 +164,7 @@ describe psytrance("Psytrance", $ {
 		expect(psyGenre.arc.dropDecayPhrases).to_equal(parent->arc.dropDecayPhrases);
 		expect(psyGenre.arc.breakKeeps.parts).to_equal(parent->arc.breakKeeps.parts);
 		expect(psyGenre.harmony.extensionCeiling).to_equal(parent->harmony.extensionCeiling);
+		expect(psyGenre.variantSets.data() == parent->variantSets.data()).to_be_true();
 	});
 
 	it("has six parts: Drums, Bass, Drone, Lead, Arp and FX (spec §4.5)", _ {
@@ -453,14 +518,14 @@ describe psytrance("Psytrance", $ {
 		});
 
 		it("gates the Lead at 31 with a 16-bar Sweep, so it plays a Drop's first two phrases and leaves on the phrase line; the "
-		   "Arp ungated with an 8-bar Sweep, the Drone a 32-bar one (round 2, S2, S10)",
+		   "Arp at 12 with an 8-bar Sweep, the Drone a 32-bar one (round 2, S2, S10; #497)",
 		   _ {
 			const PartSpec& lead = psyGenre.parts[kLeadPart];
 			const PartSpec& arp = psyGenre.parts[kArpPart];
 			expect(lead.densityGate).to_equal(macroPoints(31));
 			expect(laneOf(Lane::Perc1).densityGate).to_equal(macroPoints(29));
 			expect(lead.drift.sweepBars).to_equal(16);
-			expect(arp.densityGate).to_equal(0);
+			expect(arp.densityGate).to_equal(macroPoints(12));
 			expect(arp.drift.sweepBars).to_equal(8);
 			expect(psyGenre.parts[kDronePart].drift.sweepBars).to_equal(32);
 			int32_t leaves = 0;
@@ -470,7 +535,7 @@ describe psytrance("Psytrance", $ {
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				// Default Motion (25): Grooves run 2–4 phrases, so 3- and 4-phrase Grooves reach the third phrase
 				// after a Drop and show the Lead leaving on the phrase line (at Motion 50 Grooves last 1–2 phrases).
-				Recipe recipe = newRecipe(psyGenre, seed);
+				Recipe recipe = asWritten(newRecipe(psyGenre, seed));
 				recipe.scale = Scale::Minor;
 				const Walked walked = walk(recipe, seed, 320 * kStepsPerBar);
 				const int32_t steps = static_cast<int32_t>(walked.steps.size());
@@ -499,7 +564,8 @@ describe psytrance("Psytrance", $ {
 				}
 				// The Lead plays every non-rested Groove bar of each Drop's first two phrases (its lift decays over
 				// four), and none of the third: it leaves on the phrase line (round 2, S2). A kick-and-bass-only rest
-				// (#457) can silence Lead, Arp and Drone together for 8 bars inside those two phrases.
+				// (#457) can silence Lead, Arp and Drone together for 8 bars inside those two phrases, and a Lead rest
+				// (#497) the Lead alone for 8 or 16.
 				std::set<int32_t> arpBars;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kArpPart) {
@@ -517,7 +583,13 @@ describe psytrance("Psytrance", $ {
 							break;
 						}
 						if (bar < dropBar + 32) {
-							expect(leadBars.count(bar) == 1 || arpBars.count(bar) == 0).to_be_true();
+							// A Lead rest (#497) takes a whole half phrase or two, on its lines.
+							const int32_t block = bar - (bar - dropBar) % 8;
+							bool leadInBlock = false;
+							for (int32_t b = block; b < block + 8; b++) {
+								leadInBlock = leadInBlock || leadBars.count(b) == 1;
+							}
+							expect(leadBars.count(bar) == 1 || arpBars.count(bar) == 0 || !leadInBlock).to_be_true();
 						}
 						else {
 							expect(leadBars.count(bar)).to_equal(size_t{0});
@@ -556,7 +628,7 @@ describe psytrance("Psytrance", $ {
 			// distinct Groove bars over 40 pieces.
 			std::set<std::vector<std::pair<int32_t, int32_t>>> figures;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Recipe recipe = harness::movingRecipe(psyGenre, Scale::Minor, seed);
+				const Recipe recipe = asWritten(harness::movingRecipe(psyGenre, Scale::Minor, seed));
 				const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
 				std::map<int32_t, std::vector<std::pair<int32_t, int32_t>>> bars;
 				for (const Event& e : walked.noteOns) {
@@ -584,7 +656,9 @@ describe psytrance("Psytrance", $ {
 			int32_t hats = 0;
 			int32_t breakSteps = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 160 * kStepsPerBar);
+				// S3 as written (#497): its other variants take the Arp out of the Break.
+				const Walked walked =
+				    walk(asWritten(harness::movingRecipe(psyGenre, Scale::Minor, seed)), seed, 160 * kStepsPerBar);
 				for (const Walked::Step& step : walked.steps) {
 					breakSteps += step.section == SectionKind::Break ? 1 : 0;
 				}
@@ -670,8 +744,10 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its Groove rests (spec §4.5, §8.8, #457)", _ {
-		it("defines 8- and 16-bar Arp rests and 8-bar kick-and-bass-only rests on half-phrase lines, with no Throw", _ {
-			expect(psyGenre.dropOuts.size()).to_equal(size_t{3});
+		it("defines 8- and 16-bar Arp rests, 8-bar kick-and-bass-only rests and 8- and 16-bar Lead rests (#497) on "
+		   "half-phrase lines, with no Throw",
+		   _ {
+			expect(psyGenre.dropOuts.size()).to_equal(size_t{5});
 			expect(psyGenre.dropOutChance).to_equal(300);
 			expect(psyGenre.dropOutGapBars).to_equal(8);
 			expect(psyGenre.dropOutGridBars).to_equal(8);
@@ -690,6 +766,13 @@ describe psytrance("Psytrance", $ {
 			expect(psyGenre.dropOuts[2].mask == arpOnly).to_be_true();
 			expect(psyGenre.dropOuts[2].bars).to_equal(16);
 			expect(psyGenre.dropOuts[2].weight).to_equal(1);
+			const PartsAndLanes leadOnly{.parts = partBit(kLeadPart)};
+			expect(psyGenre.dropOuts[3].mask == leadOnly).to_be_true();
+			expect(psyGenre.dropOuts[3].bars).to_equal(8);
+			expect(psyGenre.dropOuts[3].weight).to_equal(2);
+			expect(psyGenre.dropOuts[4].mask == leadOnly).to_be_true();
+			expect(psyGenre.dropOuts[4].bars).to_equal(16);
+			expect(psyGenre.dropOuts[4].weight).to_equal(1);
 			for (const DropOutEntry& entry : psyGenre.dropOuts) {
 				expect(entry.throwTarget.empty()).to_be_true();
 			}
@@ -705,7 +788,8 @@ describe psytrance("Psytrance", $ {
 			int32_t seedsWithKickBassOnly = 0;
 			constexpr uint8_t kNotFx = static_cast<uint8_t>((1U << kFxPart) - 1);
 			for (uint32_t seed = 1; seed <= 40; seed++) {
-				Recipe recipe = newRecipe(psyGenre, seed);
+				// As written (#497): turns rests the Arp under the Lead, which a rest span here would read as a rest.
+				Recipe recipe = asWritten(newRecipe(psyGenre, seed));
 				recipe.scale = Scale::Minor;
 				StepwisePiece<> piece({.recipe = recipe, .seed = seed, .skipIntro = true});
 				ArcPlan plan;
@@ -807,6 +891,356 @@ describe psytrance("Psytrance", $ {
 			expect(kickBassOnly).to_be_greater_than(10);
 			expect(seedsWithKickBassOnly).to_be_greater_than(12);
 			expect(fullPhrasePlannedOff).to_be_greater_than(2);
+		});
+	});
+
+	context("its sign-off 1 retune and variant sets (#497, ADR 0008)", _ {
+		it("lists five sets, the genre as written first in each: figure, break, arplead, lead and accents", _ {
+			std::vector<std::vector<std::string>> names;
+			std::vector<std::vector<int32_t>> weights;
+			std::vector<bool> live;
+			for (const VariantSet& set : psyGenre.variantSets) {
+				names.push_back({set.name, set.oledName});
+				weights.emplace_back();
+				for (const Variant& variant : set.variants) {
+					names.back().emplace_back(variant.name);
+					weights.back().push_back(variant.weight);
+				}
+				expect(set.variants[0].apply == nullptr).to_be_true();
+				expect(set.changeAt == ChangeAt::Never).to_be_true();
+				live.push_back(set.live);
+			}
+			expect(names).to_equal(std::vector<std::vector<std::string>>{
+			    {"figure", "FIGURE", "sequence", "walk", "shuffle", "triad"},
+			    {"break", "BREAK", "arp", "lead", "leadnohat"},
+			    {"arplead", "ARP+LEAD", "dropboth", "turns", "eighths"},
+			    {"lead", "LEAD", "drops", "grooves", "intro"},
+			    {"accents", "ACCENTS", "anywhere", "332", "offbeat"}});
+			expect(weights).to_equal(
+			    std::vector<std::vector<int32_t>>{{3, 1, 1, 1}, {2, 1, 1}, {1, 2, 2}, {1, 3, 1}, {1, 3, 2}});
+			expect(live).to_equal(std::vector<bool>{true, false, true, false, true});
+		});
+
+		it("plays the figure set's walk, shuffle and triad as an Arp walking kArpLine's walks (triad: no 7th), and the "
+		   "sequence as the Loop",
+		   _ {
+			const auto as = [](const char* fix, ResolvedGenre& copy) -> const Genre& {
+				return resolveGenre(psyGenre, withVariants(newRecipe(psyGenre, 0), {fix}).variants, &copy);
+			};
+			ResolvedGenre walkCopy;
+			ResolvedGenre shuffleCopy;
+			ResolvedGenre triadCopy;
+			ResolvedGenre sequenceCopy;
+			const Genre& walkGenre = as("figure=walk", walkCopy);
+			const Genre& shuffleGenre = as("figure=shuffle", shuffleCopy);
+			const Genre& triadGenre = as("figure=triad", triadCopy);
+			const Genre& sequenceGenre = as("figure=sequence", sequenceCopy);
+			expect(sequenceGenre.parts[kArpPart].flavour == Flavour::Loop).to_be_true();
+			for (const Genre* genre : {&walkGenre, &shuffleGenre, &triadGenre}) {
+				const PartSpec& arp = genre->parts[kArpPart];
+				expect(arp.flavour == Flavour::Arp).to_be_true();
+				expect(arp.arp.walks.size()).to_equal(arp.pool.size());
+				expect(arp.pool.data() == psyGenre.parts[kArpPart].pool.data()).to_be_true(); // the same tiers
+			}
+			for (const ArpWalk& walk : shuffleGenre.parts[kArpPart].arp.walks) {
+				expect(walk.order == ArpOrder::Random).to_be_true();
+			}
+			expect(walkGenre.parts[kArpPart].arp.walks[0].order == ArpOrder::Up).to_be_true();
+			expect(walkGenre.harmony.extensionCeiling).to_equal(1);
+			expect(triadGenre.harmony.extensionCeiling).to_equal(0);
+			// Played: in Minor the walk reaches the 7th (10) and the triad never does.
+			auto intervals = [](const char* fix) {
+				std::set<int32_t> out;
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {fix});
+					recipe.scale = Scale::Minor;
+					recipe.macros.set(Macro::Complexity, macroPoints(50));
+					for (const Event& e : walk(recipe, seed, 96 * kStepsPerBar).noteOns) {
+						if (e.part == kArpPart) {
+							out.insert(pitchClass(e.pitch - recipe.keyRoot));
+						}
+					}
+				}
+				return out;
+			};
+			expect(intervals("figure=walk") == std::set<int32_t>{0, 3, 7, 10}).to_be_true();
+			expect(intervals("figure=triad") == std::set<int32_t>{0, 3, 7}).to_be_true();
+		});
+
+		it("plays the Break set's lead and leadnohat with the Lead in and the Arp out at the Break's Density + 6, "
+		   "leadnohat with no drums",
+		   _ {
+			for (const char* fix : {"break=lead", "break=leadnohat"}) {
+				ResolvedGenre copy;
+				const Genre& genre =
+				    resolveGenre(psyGenre, withVariants(newRecipe(psyGenre, 0), {fix}).variants, &copy);
+				const SectionOffsets& offsets = genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)];
+				expect(offsets.densityFrom).to_equal(macroPoints(6));
+				expect(offsets.densityTo).to_equal(macroPoints(6));
+				expect(offsets.energyFrom).to_equal(macroPoints(-10));
+				expect(genre.arc.breakKeeps.parts)
+				    .to_equal(static_cast<uint8_t>(partBit(kDronePart) | partBit(kLeadPart)));
+				std::map<int32_t, int32_t> inBreak;
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const Walked walked = walk(withVariants(asWritten(newRecipe(psyGenre, seed)), {fix}), seed,
+					                           160 * kStepsPerBar);
+					for (const Event& e : walked.noteOns) {
+						const int32_t step =
+						    std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
+						inBreak[e.part] += walked.steps[step].section == SectionKind::Break ? 1 : 0;
+					}
+				}
+				expect(inBreak[kLeadPart]).to_be_greater_than(0);
+				expect(inBreak[kArpPart]).to_equal(0);
+				if (std::string(fix) == "break=leadnohat") {
+					expect(genre.arc.breakKeeps.lanes).to_equal(uint16_t{0});
+					expect(inBreak[kDrumsPart]).to_equal(0);
+				}
+				else {
+					expect(genre.arc.breakKeeps.lanes).to_equal(laneBit(Lane::ClosedHat));
+					expect(inBreak[kDrumsPart]).to_be_greater_than(0);
+				}
+			}
+		});
+
+		it("tiers the Arp's figure: the beats X or 9, the &s 7, the e's and a's 5 or 6, so a Groove plays 8ths and a Drop 16ths", _ {
+			for (const Pattern& pattern : psyGenre.parts[kArpPart].pool) {
+				for (int32_t i = 0; i < pattern.length; i++) {
+					const int32_t importance = pattern.importance[i];
+					if (i % kStepsPerBeat == 0) {
+						expect(importance == kAnchor || importance == 9).to_be_true();
+					}
+					else if (i % kStepsPerBeat == 2) {
+						expect(importance).to_equal(7);
+					}
+					else {
+						expect(importance == 5 || importance == 6).to_be_true();
+					}
+				}
+			}
+			// As written at the default macros: a Groove away from a Drop plays the 8ths and a 6 or two, a Drop's
+			// first phrase the 16ths, and the Intro ramps from nothing to 8ths.
+			int32_t grooveBars = 0;
+			int32_t grooveNotes = 0;
+			int32_t dropBars = 0;
+			int32_t dropNotes = 0;
+			int32_t introEarly = 0;
+			int32_t introLate = 0;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				Recipe recipe = asWritten(newRecipe(psyGenre, seed));
+				recipe.macros.set(Macro::Motion, macroPoints(25));
+				const std::vector<BarParts> bars = barParts(walk(recipe, seed, 160 * kStepsPerBar));
+				int32_t sinceDrop = 0;
+				for (size_t b = 0; b < bars.size(); b++) {
+					const BarParts& bar = bars[b];
+					sinceDrop = bar.inDrop && b > 0 && !bars[b - 1].inDrop ? 0 : sinceDrop + 1;
+					if (bar.section == SectionKind::Intro) {
+						(b < 8 ? introEarly : introLate) += static_cast<int32_t>(bar.arp.size());
+						expect(bar.arp.size() <= size_t{10}).to_be_true();
+					}
+					if (bar.arp.empty()) {
+						continue; // a rest
+					}
+					if (bar.section == SectionKind::Groove && !bar.inDrop) {
+						grooveBars++;
+						grooveNotes += static_cast<int32_t>(bar.arp.size());
+						// The 8ths, and a 6 on up to every a: 8 to 12 notes.
+						expect(bar.arp.size() >= size_t{8} && bar.arp.size() <= size_t{12}).to_be_true();
+					}
+					if (bar.inDrop && sinceDrop < 8) {
+						dropBars++;
+						dropNotes += static_cast<int32_t>(bar.arp.size());
+					}
+				}
+			}
+			expect(grooveBars).to_be_greater_than(20);
+			expect(dropBars).to_be_greater_than(8);
+			expect(grooveNotes * 2 >= grooveBars * 15 && grooveNotes <= grooveBars * 10).to_be_true(); // 7.5-10 a bar
+			expect(dropNotes).to_be_greater_than(dropBars * 14);
+			expect(introEarly * 3).to_be_less_than(introLate);
+		});
+
+		it("yields the Arp to the Lead: both in a Drop and 8ths elsewhere as written, turns rests it, eighths keeps its 8ths, never in a Build", _ {
+			struct Seen {
+				int32_t leadBars = 0;      ///< Bars outside Builds where the Lead plays
+				int32_t arpWithLead = 0;   ///< ... and the Arp too
+				int32_t oddWithLead = 0;   ///< ... the Arp on an e or an a
+				int32_t oddDropLead = 0;   ///< ... in a Drop
+				int32_t oddOutsideLead = 0; ///< ... outside one
+				int32_t oddBuild = 0;      ///< Build bars with an Arp e or a
+			};
+			auto seen = [](const char* arplead) {
+				Seen out;
+				for (uint32_t seed = 1; seed <= 6; seed++) {
+					// The Lead in every Groove (lead=grooves), so the yield meets it outside Drops too.
+					Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {arplead, "lead=grooves"});
+					recipe.macros.set(Macro::Density, macroPoints(30)); // the e's and a's in reach outside Drops
+					for (const BarParts& bar : barParts(walk(recipe, seed, 160 * kStepsPerBar))) {
+						if (bar.section == SectionKind::Build) {
+							out.oddBuild += anyOdd(bar.arp) ? 1 : 0;
+							continue;
+						}
+						if (bar.lead.empty()) {
+							continue;
+						}
+						out.leadBars++;
+						out.arpWithLead += bar.arp.empty() ? 0 : 1;
+						out.oddWithLead += anyOdd(bar.arp) ? 1 : 0;
+						(bar.inDrop ? out.oddDropLead : out.oddOutsideLead) += anyOdd(bar.arp) ? 1 : 0;
+					}
+				}
+				return out;
+			};
+			const Seen both = seen("arplead=dropboth");
+			const Seen turns = seen("arplead=turns");
+			const Seen eighths = seen("arplead=eighths");
+			expect(both.leadBars).to_be_greater_than(30);
+			expect(both.oddDropLead).to_be_greater_than(3);
+			expect(both.oddOutsideLead).to_equal(0);
+			// A Lead bar's Arp notes all come before the Lead enters or after it leaves: a gate opens on a bar line.
+			expect(turns.leadBars).to_be_greater_than(30);
+			expect(turns.arpWithLead).to_equal(0);
+			expect(eighths.arpWithLead).to_be_greater_than(30);
+			expect(eighths.oddWithLead).to_equal(0);
+			// The Builds' 16ths fill in whatever the yield.
+			expect(both.oddBuild).to_be_greater_than(10);
+			expect(turns.oddBuild).to_equal(both.oddBuild);
+			expect(eighths.oddBuild).to_equal(both.oddBuild);
+		});
+
+		it("dims the Arp's MUTE while it rests for the Lead, and the Arc plan shows it", _ {
+			int32_t resting = 0;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {"arplead=turns", "lead=grooves"});
+				StepwisePiece<> piece({.recipe = recipe, .seed = seed, .skipIntro = true});
+				ArcPlan plan;
+				piece.generator.planArc(plan);
+				for (int32_t phrase = 0; phrase < ArcPlan::kMaxPhrases; phrase++) {
+					for (int32_t bar = 0; bar < 16; bar++) {
+						piece.decideBefore(phrase * kPhraseSteps + bar * kStepsPerBar + 1);
+						const Generator& g = piece.generator;
+						if (g.arc().section() != SectionKind::Build && !g.partSilenced(kLeadPart)) {
+							expect(g.partSilenced(kArpPart)).to_be_true();
+							resting++;
+						}
+					}
+					piece.decideBefore((phrase + 1) * kPhraseSteps + 1);
+					ArcPhrase heard;
+					expect(piece.driver.history().at(phrase, heard)).to_be_true();
+					expect(plan.at(phrase)->sounds & partBit(kArpPart)).to_equal(heard.sounds & partBit(kArpPart));
+				}
+			}
+			expect(resting).to_be_greater_than(50);
+		});
+
+		it("brings the Lead in on Drops as written, every Groove with grooves, and from the Intro's last third with intro, "
+		   "an octave over its root at most",
+		   _ {
+			auto firstLeadBars = [](const char* lead) {
+				std::vector<int32_t> first;
+				int32_t introBars = 0;
+				int32_t grooveBars = 0;
+				for (uint32_t seed = 1; seed <= 8; seed++) {
+					const Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {lead});
+					const std::vector<BarParts> bars = barParts(walk(recipe, seed, 192 * kStepsPerBar));
+					int32_t at = -1;
+					for (size_t b = 0; b < bars.size(); b++) {
+						if (bars[b].lead.empty()) {
+							continue;
+						}
+						at = at < 0 ? static_cast<int32_t>(b) : at;
+						introBars += bars[b].section == SectionKind::Intro ? 1 : 0;
+						grooveBars += bars[b].section == SectionKind::Groove && !bars[b].inDrop ? 1 : 0;
+					}
+					first.push_back(at < 0 ? 999 : at);
+				}
+				std::ranges::sort(first);
+				return std::tuple{first[first.size() / 2], introBars, grooveBars};
+			};
+			const auto drops = firstLeadBars("lead=drops");
+			const auto grooves = firstLeadBars("lead=grooves");
+			const auto intro = firstLeadBars("lead=intro");
+			expect(std::get<1>(drops)).to_equal(0);
+			expect(std::get<2>(drops)).to_equal(0);
+			// With grooves the Intro's ramp reaches the gate (24) in its last bar or two; with intro, from its last third.
+			expect(std::get<1>(grooves) <= 2 * 8).to_be_true();
+			expect(std::get<2>(grooves)).to_be_greater_than(40);
+			expect(std::get<1>(intro)).to_be_greater_than(4 * 8);
+			// The median piece's first Lead bar: the first Groove (bar 32) with grooves, the Intro with intro.
+			expect(std::get<0>(grooves)).to_be_less_than(std::get<0>(drops));
+			expect(std::get<0>(grooves) <= 40).to_be_true();
+			expect(std::get<0>(intro)).to_be_less_than(32);
+			expect(psyGenre.parts[kLeadPart].reg.spanHigh).to_equal(12);
+		});
+
+		it("lands the sequence's octave jumps only on its jump mask's steps, and the accents set sets the mask", _ {
+			constexpr uint16_t k332 = 0b0100100101001001; // steps 0, 3, 6, 8, 11 and 14
+			auto jumps = [](uint16_t mask) {
+				const PsyWithJumps psy(mask);
+				std::map<bool, int32_t> onMask;
+				for (uint32_t seed = 1; seed <= 6; seed++) {
+					Recipe recipe = newRecipe(psy.genre, seed);
+					recipe.scale = Scale::Minor;
+					recipe.macros.set(Macro::Complexity, macroPoints(50)); // the most jumps
+					const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
+					// Each bar's lowest root: a jump is a note an octave or more over it.
+					std::map<int32_t, int32_t> lowestRoot;
+					for (const Event& e : walked.noteOns) {
+						if (e.part == kArpPart && pitchClass(e.pitch - recipe.keyRoot) == 0) {
+							const auto added = lowestRoot.emplace(stepAt(e) / kStepsPerBar, e.pitch);
+							added.first->second = std::min<int32_t>(added.first->second, e.pitch);
+						}
+					}
+					for (const Event& e : walked.noteOns) {
+						const auto root = lowestRoot.find(stepAt(e) / kStepsPerBar);
+						if (e.part == kArpPart && root != lowestRoot.end() && e.pitch >= root->second + 12) {
+							onMask[mask == 0 || (mask & (1U << (stepAt(e) % kStepsPerBar))) != 0]++;
+						}
+					}
+				}
+				return onMask;
+			};
+			std::map<bool, int32_t> anywhere = jumps(0);
+			std::map<bool, int32_t> gallop = jumps(k332);
+			expect(gallop[true]).to_be_greater_than(20);
+			expect(gallop[false]).to_equal(0);
+			expect(jumps(0b0100010001000100)[false]).to_equal(0); // offbeats
+			// With no mask, jumps land everywhere, the e's included.
+			expect(anywhere[true]).to_be_greater_than(gallop[true]);
+			ResolvedGenre copy;
+			const Genre& resolved =
+			    resolveGenre(psyGenre, withVariants(newRecipe(psyGenre, 0), {"accents=332"}).variants, &copy);
+			expect(resolved.parts[kArpPart].loop.jumpSteps).to_equal(k332);
+			expect(psyGenre.parts[kArpPart].loop.jumpSteps).to_equal(0);
+		});
+
+		it("rolls the Bass's 16ths at a narrow spread, and sets the Arp at 75 % and each drum row at 85 % (sign-off 1, V2 C)", _ {
+			expect(psyGenre.parts[kBassPart].expression.spread).to_equal(2);
+			// The effect: inside a Groove bar the Bass's velocities lie within a few steps (spread 6 gave about 11).
+			int32_t bars = 0;
+			int32_t ranges = 0;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				const Walked walked = walk(asWritten(newRecipe(psyGenre, seed)), seed, 96 * kStepsPerBar);
+				std::map<int32_t, std::pair<int32_t, int32_t>> bar;
+				for (const Event& e : walked.noteOns) {
+					const int32_t step = std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1);
+					if (e.part != kBassPart || walked.steps[step].section != SectionKind::Groove) {
+						continue;
+					}
+					const auto at = bar.try_emplace(step / kStepsPerBar, e.velocity, e.velocity).first;
+					at->second = {std::min<int32_t>(at->second.first, e.velocity),
+					              std::max<int32_t>(at->second.second, e.velocity)};
+				}
+				for (const auto& [b, range] : bar) {
+					bars++;
+					ranges += range.second - range.first;
+				}
+			}
+			expect(bars).to_be_greater_than(40);
+			expect(ranges).to_be_less_than(bars * 6);
+			expect(psyGenre.parts[kArpPart].volume).to_equal(75);
+			expect(psyGenre.parts[kDrumsPart].volume).to_equal(85);
+			expect(laneSoundSettings(psyGenre.parts[kDrumsPart], Lane::Kick).volume).to_equal(uint8_t{85});
 		});
 	});
 

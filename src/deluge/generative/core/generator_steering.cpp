@@ -702,10 +702,11 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 	const Genre& genre = *genre_;
 	const int32_t phraseSteps = genre.phraseSteps();
 	const int32_t parts = partCount(genre);
-	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut (ending or leading) and the Gap never cover a
-	// whole phrase or a whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole
-	// phrase (or the Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The
-	// dim counts all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
+	// The plan reads gates, keeps, drop-outs, the roll, yields and mutes. The cut (ending or leading) and the Gap never
+	// cover a whole phrase or a whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover
+	// a whole phrase (or the Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8,
+	// §13.5). The dim counts all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the
+	// Build roll.
 	const auto lets = [&](int32_t p, const Keeps& keeps, const PartsAndLanes& dropOut, RollStage roll) {
 		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane) && !dropOut.has(p, lane); });
@@ -750,9 +751,16 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 		const PartsAndLanes dropOut =
 		    dropOut_.step(genre, seed_, arc_, step, centre_[Macro::Motion], [&] { return waitingMove(step); });
 		const RollStage roll = rollStageOn(genre.arc, arc_, centre_[Macro::Complexity]);
+		uint8_t plays = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			plays |= lets(p, keeps, dropOut, roll) ? partBit(p) : 0;
+		}
+		// A part resting for the one it yields to doesn't sound (Generator::updateSilent(), spec §5.6).
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, dropOut, roll) && mutes_.audible(p) ? partBit(p) : 0;
+			const YieldSpec& yield = genre.parts[p].yield;
+			const bool rests = yieldOn(yield, arc_, plays) == YieldMode::Rest;
+			sounds |= (plays & partBit(p)) != 0 && !rests && mutes_.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc_, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as

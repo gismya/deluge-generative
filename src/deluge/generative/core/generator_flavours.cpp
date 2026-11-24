@@ -62,14 +62,18 @@ GEN_STEP_CODE LineStep drawLineStep(std::span<const LineWeight> values, const Li
 	return out;
 }
 
-/// One step of `spec`'s line, rolled from the live Complexity (spec §5.2, §8.1): a Motif slot stores a chord position;
-/// a Loop step stores a scale step and adds its slide.
-GEN_STEP_CODE LineStep rollLineStep(const PartSpec& spec, DrawKey key, int32_t complexity) {
+/// One step of `spec`'s line, step `lineStep` of its pattern, rolled from the live Complexity (spec §5.2, §8.1): a
+/// Motif slot stores a chord position; a Loop step stores a scale step and adds its slide. A Loop step off its jump
+/// mask keeps the octave it drew at 0, after the draws, so the mask moves no other draw.
+GEN_STEP_CODE LineStep rollLineStep(const PartSpec& spec, DrawKey key, int32_t complexity, int32_t lineStep) {
 	if (spec.flavour == Flavour::Motif) {
 		return drawLineStep(spec.motif.positions, spec.motif.draws, key, complexity);
 	}
 	LineStep out = drawLineStep(spec.loop.degrees, spec.loop.draws, key, complexity);
 	out.slide = drawChance(withField(key, kSlide), spec.loop.slide.at(complexity));
+	if (spec.loop.jumpSteps != 0 && (spec.loop.jumpSteps & (1U << (lineStep % kStepsPerBar))) == 0) {
+		out.octave = 0;
+	}
 	return out;
 }
 
@@ -87,7 +91,7 @@ GEN_STEP_CODE void Generator::rollLine(int32_t partIndex, int32_t complexity) {
 		part.line[i] = rollLineStep(spec,
 		                            lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
 		                                    Purpose::LineRoll, part.lanes[0], 0, i, 0),
-		                            complexity);
+		                            complexity, i);
 		if (pattern != nullptr) {
 			if (pattern->importance[patternStep] == kAnchor) {
 				part.line[i].degree = 0;
@@ -121,7 +125,7 @@ GEN_STEP_CODE void Generator::mutateLine(int32_t partIndex, int32_t motion, int3
 		// Drawn the way a fresh pick rolls it. A Motif slot re-rolls its chord position and octave and keeps its
 		// accent (spec §5.2).
 		const bool accent = part.line[i].accent;
-		part.line[i] = rollLineStep(spec, key, complexity);
+		part.line[i] = rollLineStep(spec, key, complexity, i);
 		if (motif) {
 			part.line[i].accent = accent;
 		}
