@@ -8,10 +8,12 @@ import hashlib
 import io
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -191,6 +193,57 @@ class DerivedTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "0 matches"):
             derived.make(self.tmp)
+
+
+class LeadTrimTest(unittest.TestCase):
+    """A derived sample: a factory WAV with its leading silence cut (Dub sign-off 1's snare)."""
+
+    FRAMES = ((0, 0), (1, -1), (2, -2), (1000, -1000), (2000, -2000), (3000, -3000))
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "SAMPLES"))
+        self.path = os.path.join(self.tmp, "SAMPLES", "A.wav")
+        with wave.open(self.path, "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(44100)
+            w.writeframes(b"".join(struct.pack("<hh", *f) for f in self.FRAMES))
+        with open(self.path, "rb") as f:
+            self.sha = hashlib.sha256(f.read()).hexdigest()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def frames(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            params = (w.getnchannels(), w.getsampwidth(), w.getframerate())
+            raw = w.readframes(w.getnframes())
+        return params, [
+            struct.unpack_from("<hh", raw, i) for i in range(0, len(raw), 4)
+        ]
+
+    def test_cuts_the_lead_and_fades_the_rest_in_keeping_the_format(self):
+        derived = make_pack.Derived("SAMPLES/A.wav", self.sha, make_pack.LeadTrim(3, 2))
+
+        params, frames = self.frames(derived.make(self.tmp))
+
+        self.assertEqual(params, (2, 2, 44100))
+        self.assertEqual(frames, [(0, 0), (1000, -1000), (3000, -3000)])
+
+    def test_refuses_a_cut_past_the_end(self):
+        derived = make_pack.Derived("SAMPLES/A.wav", self.sha, make_pack.LeadTrim(6, 0))
+
+        with self.assertRaisesRegex(ValueError, "frames"):
+            derived.make(self.tmp)
+
+    def test_the_pack_snare_starts_on_its_attack(self):
+        derived = make_pack.DERIVED["SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav"]
+        self.assertEqual(derived.source, "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav")
+        trim = derived.edits[0]
+        # The factory file's attack (its first frame over -26 dBFS) is at frame 1464, 33.2 ms: the copy keeps under
+        # 1 ms before it, as the other Dub snares' files do.
+        self.assertTrue(0 < 1464 - trim.frames < 44, trim.frames)
 
 
 if __name__ == "__main__":

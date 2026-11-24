@@ -527,7 +527,8 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
 	const int32_t savedTranspose = synth->transpose;
 #endif
-	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part), *song);
+	const SoundSettings settings = partSoundSettings(part, load.volume);
+	applySoundSettings(*synth, out->clip->paramManager, settings, *song);
 #if ENABLE_SYSEX_TEST
 	if (part.delay.on) {
 		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
@@ -539,7 +540,8 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	}
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
 	if (!previewBuild()) {
-		TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
+		TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name,
+		           static_cast<int>(settings.volume),
 		           playedLevel < presetLevel   ? "lower"
 		           : playedLevel > presetLevel ? "higher"
 		                                       : "same",

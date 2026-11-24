@@ -20,7 +20,7 @@ differs from what it would write, and any file here it doesn't write.
 | `SYNTHS/GENERATIVE/FX/GEN Impact.XML` | Impact lane synth fallback: a sine boom with a fast pitch drop and a noise crack |
 | `SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML` | Impact for Techno and Psytrance: the factory `808 Kick sustained.wav` on both oscillators, played once through (the preset only: the sample is the factory card's) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML` | Impact for Techno: white noise and a quiet square and detuned saw through a swept resonant low-pass, a short splash into reverb and a dotted 8th ping-pong echo |
-| `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the factory `DDD1 Snare wet.wav` and `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
+| `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the pack's `GEN DDD1 Snare wet.wav` (below) and the factory `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML` | Dub's Impact: the factory `808 Kick.wav` and `808 Cymbal.wav` layered into some reverb (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Siren.XML` | Dub's Siren: a square and a saw a fifth apart, a triangle LFO sweeping the pitch, a long release, velocity to volume |
 | `SAMPLES/FX/Riser/GEN Riser 1.wav` | 8 s noise riser, a resonant band-pass sweeping up, peaking at the file end |
@@ -55,7 +55,7 @@ differs from what it would write, and any file here it doesn't write.
 
 ## Derived from the factory presets
 
-Each file below is a copy of a preset from the Deluge's factory card content by Synthstrom Audible, with a few edits.
+Each file below is a copy of a preset or sample from the Deluge's factory card content by Synthstrom Audible, with a few edits.
 They are derived from that factory content and are distributed on its terms, not under CC0. `make_pack.py` writes them
 from the factory file (read from the card's files, checked by its SHA-256) and the edits recorded in its `DERIVED`
 table, never by hand; `make_pack.py --check` fails while a `DERIVED` file has no row here naming its source. To add
@@ -67,6 +67,7 @@ one: a `DERIVED` entry, a row here, then run the script.
 | `SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML` | `SYNTHS/082 Short Sharp Delay.XML` | delay feedback 0, volume 34 | Dub techno's Stab (#322) |
 | `SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML` | `SYNTHS/072 Kyoto Phono.XML` | delay feedback 0, volume 28 | Dub techno's Stab (#322) |
 | `SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML` | `SYNTHS/126 Dark FM Pad.XML` | every oscillator and modulator an octave up | Dub techno's Pad, an octave over 126 (#120) |
+| `SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav` | `SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav` | its first 1,440 frames (32.7 ms, near silence before the attack) cut, the rest faded in over 22 frames | Dub's Snare swap and its Impact crack, so the backbeat snare doesn't flam behind the kick and hats (Dub sign-off 1) |
 
 Every pack synth preset must respond to velocity (spec §10.1). Check with
 `python3 scripts/generative/check_pack_velocity.py`.

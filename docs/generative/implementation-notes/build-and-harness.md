@@ -72,8 +72,10 @@ otherwise.
   header with a newer mtime, so the next incremental build skips it. A layout change (a field added to `ControlSet`)
   then shows up as a `__stack_chk_fail` abort or a segfault before a spec prints anything. `touch` the edited headers
   and build again.
-- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and checked by
-  `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per line, under a
+- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre and per genre signed off
+  on #133 (`goldenGenres()` in `golden.h` names them: Dub so far), written and checked by `golden_spec` (`golden.h`).
+  Signing an M2 genre off: add it to `goldenGenres()` and a `kPinned` row (`steering_fingerprint_spec`, with the
+  pieces its held fill holds a Rest and a Swap in: Dub's held entry is a Swap), bump its version, then update. Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per line, under a
   header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint specs live there.
   A retune that's meant follows **A retune** in spec §21.2. The command refuses (exit 1) a golden that changed without a
   bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI

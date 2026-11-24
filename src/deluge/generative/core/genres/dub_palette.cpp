@@ -31,12 +31,13 @@ namespace {
 
 /// The bass that carries the tune: the pack's soft sine sub first, then 004 (round, named for the job), the plain
 /// square and the sampled upright. Not the draft's 006 Vaporwave Bass: its saved portamento glides every leap, and
-/// Dub's bass never slides.
+/// Dub's bass never slides. The upright at 84 % of its volume knob, about 3 dB down: at its preset's it sat about
+/// 5 dB over the other picks, near full scale (the owner, Dub sign-off 1: "a bit too loud", tuning).
 constexpr PaletteEntry kBass[] = {
     {"SYNTHS/GENERATIVE/GEN Dub Sub.XML", 3},
     {"SYNTHS/004 Dubby Bass.XML", 2},
     {"SYNTHS/002 Basic Square Bass.XML", 1},
-    {"SYNTHS/169 Double Bass.XML", 1},
+    {.path = "SYNTHS/169 Double Bass.XML", .weight = 1, .volume = 84},
 };
 /// The skank: percussive organ first, then piano and organ (082 Short Sharp Delay and 026 PW Organ dropped, round 2
 /// I4).
@@ -91,9 +92,13 @@ constexpr TagWeight kPerc2Tags[] = {{"Bongo", 2}, {"808 Conga", 1}, {"CR78 Conga
 
 /// Each piece plays the 808 (with swaps) or, less often, a pure CR78 (no swaps, round 2 I7). Not the Linndrum (owner).
 constexpr MachineWeight kMachines[] = {{&machines::k808, 2}, {&machines::kCR78, 1, false}};
-/// The Simmons tom for fills, a snare with its own room, and the RX-5's bongos for roots hand drums.
-constexpr KitSwap kSwaps[] = {
-    {Lane::Tom, "SDS5 Tom medium"}, {Lane::Snare, "DDD1 Snare wet"}, {Lane::Perc2, "RX-5 Bongo low"}};
+/// The Simmons tom for fills, a snare with its own room, and the RX-5's bongos for roots hand drums. The snare is the
+/// pack's copy of `DDD1 Snare wet` with its 33 ms of leading silence cut (Dub sign-off 1: the factory file flammed
+/// behind the kick and hats it lands with), by its path in a folder no lane reads; on a card without the pack the
+/// swap finds nothing and the Snare plays the machine's own.
+constexpr KitSwap kSwaps[] = {{Lane::Tom, "SDS5 Tom medium"},
+                              {Lane::Snare, "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav"},
+                              {Lane::Perc2, "RX-5 Bongo low"}};
 
 // ---- FX lanes (spec §10.5) ----
 

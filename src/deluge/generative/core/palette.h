@@ -42,6 +42,9 @@ struct PaletteEntry {
 	const char* path = nullptr;
 	uint8_t weight = 1;
 	ControlRanges ranges{};
+	/// The preset's level in this palette, as a percent of its volume knob, applied on top of the part's own volume
+	/// (PartSpec::volume, spec §10.6): a preset that sits louder than the palette's others comes down to them. 1–100.
+	uint8_t volume = 100;
 };
 
 /// A lane's filename tag and its weight (spec §10.3). A tag matches case-insensitively anywhere in a file's name
@@ -323,6 +326,8 @@ struct SoundLoad {
 	/// The control ranges of the preset that loaded, from its palette entry (spec §11.1). The defaults for a sample,
 	/// the default synth and a preset the palette doesn't list.
 	ControlRanges ranges{};
+	/// The palette level of the synth part's preset that loaded (PaletteEntry::volume): 100 for anything else.
+	uint8_t volume = 100;
 
 	/// Whether the player sees the one missing-sound warning for this load.
 	[[nodiscard]] constexpr bool warns() const {

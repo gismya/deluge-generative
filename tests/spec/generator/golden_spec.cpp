@@ -1,4 +1,4 @@
-// The goldens (spec §21.2, #121): each Techno subgenre plays its committed golden, its default Recipe at a fixed seed
+// The goldens (spec §21.2, #121): each signed-off genre plays its committed golden, its default Recipe at a fixed seed
 // as a text dump plus its stream fingerprint. A failure prints where the dump parts ways with the file. A retune that
 // means it follows spec §21.2 ("A retune"). See golden.h.
 
@@ -278,7 +278,7 @@ describe golden("The goldens", $ {
 		});
 	}
 
-	it("has one golden per Techno subgenre, and none for anything else (dotfiles aside)", _ {
+	it("has one golden per signed-off genre (each Techno subgenre, Dub), and none for anything else (dotfiles aside)", _ {
 		// After the goldens' own specs, so an update that adds a subgenre has written its golden by now.
 		const std::vector<const Genre*> genres = goldenGenres();
 		expect(genres.empty()).to_be_false();

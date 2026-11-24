@@ -198,7 +198,7 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			int32_t drops = 0;
 			int32_t changes = 0;
 			for (uint32_t seed = 1; seed <= 12; seed++) {
-				Recipe recipe = dubWith({"skank=sevenths"});
+				Recipe recipe = dubWith({"skank=sevenths", "break=seven"}); // the Drops the chance was counted on
 				recipe.variants.pick[kDrums] = kOneDrop;
 				recipe.variants.allowed[kDrums] = 0b011; // one drop and rockers: steppers never plays
 				const Stepped run = stepThrough(recipe, seed, 160 * kStepsPerBar);

@@ -727,7 +727,8 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		LoadOutcome outcome = loader.loadPreset(pick);
 		if (outcome != LoadOutcome::Missing) {
 			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError,
-			        .ranges = picked != nullptr ? picked->ranges : ControlRanges{}};
+			        .ranges = picked != nullptr ? picked->ranges : ControlRanges{},
+			        .volume = picked != nullptr ? picked->volume : uint8_t{100}};
 		}
 	}
 	for (const PaletteEntry& entry : entries) {
@@ -737,7 +738,8 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		LoadOutcome outcome = loader.loadPreset(entry.path);
 		if (outcome != LoadOutcome::Missing) {
 			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError,
-			        .ranges = entry.ranges};
+			        .ranges = entry.ranges,
+			        .volume = entry.volume};
 		}
 	}
 	return {SoundSource::DefaultSynth};

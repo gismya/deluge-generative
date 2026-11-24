@@ -7,7 +7,10 @@ otherwise.
   (`computeFinalValueForStandardMenuItem`), not `50 * 85899345 - 2^31` (`0x7FFFFFD2`): `SoundControls::uses()`'s
   `SustainBelowFull` compares with `INT32_MAX`, so the formula's value bound Decay to env1's decay on full-sustain
   presets (#483). A sample preset (`sample_preset()`) leaves its samples on the factory card: only the XML is in the
-  pack. Past the volume knob's top: `clippingAmount` (the voice's saturation) is `tanh(x << (5+c)) >> (6+c) << (c-2)`,
+  pack, unless it names a `DERIVED` sample (`LeadTrim`, Dub's `GEN DDD1 Snare wet`). Trap: `main()` runs `to_wav()`
+  (mono, normalised) only over `SAMPLES`' synthesized lists; a `DERIVED` WAV is written as its edits leave it. A
+  factory drum sample can start late: `DDD1 Snare wet` sits near silent for 33 ms, a flam on a backbeat; check a
+  new drum file's attack against the others on its lane. Past the volume knob's top: `clippingAmount` (the voice's saturation) is `tanh(x << (5+c)) >> (6+c) << (c-2)`,
   so its ceiling is the same at every amount. On a hot sample (the 808 boom) it lowered the peak and added 0-2 dB;
   on the noise wash, 4 added 6 dB. A sample on both oscillators adds 6.0 dB; a velocity->volume cable adds gain
   for velocities over 64 (the source is bipolar), about 5.5 dB at 50 for an Impact's 80-94 (#472).

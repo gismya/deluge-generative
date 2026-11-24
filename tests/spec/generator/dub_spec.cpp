@@ -66,7 +66,7 @@ describe dub("Dub", $ {
 		expect(std::string(dubGenre.oledName)).to_equal(std::string("ROOTS DUB"));
 		expect(std::string(dubGenre.oledName).find("TECHNO")).to_equal(std::string::npos);
 		expect(dubGenre.parent == nullptr).to_be_true();
-		expect(dubGenre.version).to_equal(8);
+		expect(dubGenre.version).to_equal(9);
 		expect(findGenre("dub") == &dubGenre).to_be_true();
 		expect(partCount(dubGenre)).to_equal(5);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -389,7 +389,7 @@ describe dub("Dub", $ {
 			expect(arc.buildCutBars).to_equal(0);
 			expect(arc.gap == GapLength::None).to_be_true();
 			expect(arc.roll.lane == Lane::Snare).to_be_true();
-			expect(arc.roll.top == RollStage::ThirtySecond).to_be_true();
+			expect(arc.roll.top == RollStage::Sixteenth).to_be_true(); // sign-off 1: no 32nds under the swing
 			expect(arc.dropDecayPhrases).to_equal(1);
 			expect(arc.transitionEntry == TransitionEntry::Drop).to_be_true();
 			expect(cutAndGapUnderBuild(dubGenre)).to_be_true();
@@ -418,6 +418,65 @@ describe dub("Dub", $ {
 			}
 			expect(builds).to_be_greater_than(1);
 			expect(breakNotes).to_be_greater_than(0);
+		});
+	});
+
+	context("its rolls and Break lengths (Dub sign-off 1, #133)", _ {
+		it("rolls the Snare in 16ths at most, in the Build and in its Roll fill: a swung 32nd is a gallop", _ {
+			int32_t rolled = 0;
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				const Walked walked = walk(harness::movingRecipe(dubGenre, seed), seed, 96 * kStepsPerBar);
+				int32_t last = -kBarTicks;
+				for (const Event& e : walked.noteOns) {
+					if (e.part != kDrumsPart || e.lane != Lane::Snare) {
+						continue;
+					}
+					expect(e.tick - last).to_be_greater_than(kTicksPerStep - 1);
+					last = e.tick;
+					const int32_t step = std::min<int32_t>(e.tick / kTicksPerStep, static_cast<int32_t>(walked.steps.size()) - 1);
+					rolled += walked.steps[step].section == SectionKind::Build ? 1 : 0;
+				}
+			}
+			expect(rolled).to_be_greater_than(0);
+		});
+
+		it("lists the break set: today's 7 bars (weight 2) and 15 bars (weight 1), read ahead by the Arc so not live", _ {
+			const VariantSet& set = dubGenre.variantSets[2];
+			expect(std::string(set.name)).to_equal(std::string("break"));
+			expect(std::string(set.oledName)).to_equal(std::string("BREAK"));
+			expect(set.variants.size()).to_equal(size_t{2});
+			expect(std::string(set.variants[0].name)).to_equal(std::string("seven"));
+			expect(std::string(set.variants[0].oledName)).to_equal(std::string("7 BARS"));
+			expect(set.variants[0].apply == nullptr).to_be_true();
+			expect(set.variants[0].weight).to_equal(2);
+			expect(std::string(set.variants[1].name)).to_equal(std::string("fifteen"));
+			expect(std::string(set.variants[1].oledName)).to_equal(std::string("15 BARS"));
+			expect(set.variants[1].weight).to_equal(1);
+			expect(set.live).to_be_false();
+			expect(set.changeAt == ChangeAt::Never).to_be_true();
+		});
+
+		it("plays each Break for 7 bars with seven and 15 with fifteen, the 1-bar Build ending its last phrase", _ {
+			for (const auto& [fix, bars] : {std::pair{"break=seven", 7}, std::pair{"break=fifteen", 15}}) {
+				int32_t breaks = 0;
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const Walked walked = walk(withVariants(harness::movingRecipe(dubGenre, seed), {fix}), seed, 160 * kStepsPerBar);
+					int32_t run = 0;
+					for (size_t n = 0; n < walked.steps.size(); n++) {
+						const bool inBreak = walked.steps[n].section == SectionKind::Break;
+						run = inBreak ? run + 1 : run;
+						if (run > 0 && (!inBreak || n + 1 == walked.steps.size())) {
+							if (!inBreak) {
+								expect(std::string(fix) + " " + std::to_string(run))
+								    .to_equal(std::string(fix) + " " + std::to_string(bars * kStepsPerBar));
+								breaks++;
+							}
+							run = 0;
+						}
+					}
+				}
+				expect(breaks).to_be_greater_than(1);
+			}
 		});
 	});
 
@@ -761,6 +820,32 @@ describe dub("Dub", $ {
 			expect(skankPresets == std::set<std::string>{"SYNTHS/077 FM Perc-Organ.XML", "SYNTHS/073 Piano.XML",
 			                                             "SYNTHS/076 Organ.XML"})
 			    .to_be_true();
+		});
+
+		it("swaps the Snare to the pack's DDD1 Snare wet, its 33 ms of leading silence cut, out of every lane's folder (sign-off 1)", _ {
+			constexpr const char* kTight = "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav";
+			const DrumKits& kits = dubGenre.palette->kits;
+			const auto swap = std::ranges::find_if(kits.swaps, [](const KitSwap& s) { return s.lane == Lane::Snare; });
+			expect(swap != kits.swaps.end()).to_be_true();
+			expect(std::string(swap->tag)).to_equal(std::string(kTight));
+			FakeCard card = harness::factoryCardWithPack();
+			expect(card.has(kTight)).to_be_true();
+			expect(harness::lanePicks(dubGenre, card, 400)[Lane::Snare].contains(kTight)).to_be_true();
+			// Its own folder: no genre's Snare lane reaches it by a tag, Dub's own list included.
+			for (const Genre* genre : allGenres()) {
+				if (genre->palette == nullptr) {
+					continue;
+				}
+				expect(harness::lanePicks(*genre, card, 100, {}, false)[Lane::Snare].contains(kTight)).to_be_false();
+			}
+		});
+
+		it("plays 169 Double Bass about 3 dB under its preset and every other Bass pick at its own (sign-off 1, Song B)", _ {
+			for (const PaletteEntry& entry : dubGenre.palette->partEntries(dubGenre.parts[kBassPart])) {
+				const bool doubleBass = std::string(entry.path) == "SYNTHS/169 Double Bass.XML";
+				expect(std::string(entry.path) + " " + std::to_string(entry.volume))
+				    .to_equal(std::string(entry.path) + " " + std::to_string(doubleBass ? 84 : 100));
+			}
 		});
 
 		it("lists GEN Siren alone on the Siren lane and no folder, GEN Riser Short alone on the Riser, and its Impacts", _ {
