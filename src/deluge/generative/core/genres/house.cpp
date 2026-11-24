@@ -102,9 +102,9 @@ constexpr Pattern kRiffBass[] = {
 };
 
 /// The offbeat bass (the `bass` set's `fifth` and `root` variants, the base of its `pickups`): the & of every beat,
-/// anchored, never a beat (the kick's). 16th pickups as Complexity rises, each line's in one half: the first, so the Lead's Respond
-/// rule leaves the second free for answers, except one tier-1 line's in the second, which moves the answers to the
-/// first half (#368).
+/// anchored, never a beat (the kick's). 16th pickups as Complexity rises, each line's in one half: the first, so the
+/// Lead's Respond rule leaves the second free for answers, except one tier-1 line's in the second, which moves the
+/// answers to the first half (#368).
 constexpr Pattern kOffbeatBass[] = {
     {"..X...X...X...X.", "................", 0, 3},
     {"..X..7X...X...X.", ".....g..........", 0},
