@@ -311,7 +311,8 @@ class TailFadeTest(unittest.TestCase):
 
     def test_the_pack_psy_kicks_are_20_db_down_before_the_bass_speaks(self):
         """The committed copies, measured: from 115 ms on, every 5 ms window is 20 dB under the loudest, and nothing
-        sounds past 130 ms (the bass's first 16th starts at 105 ms at 143 BPM)."""
+        sounds past 130 ms (the bass's first 16th starts at 105 ms at 143 BPM). It reads the left channel only: the
+        TailFade that makes them applies to every channel alike."""
         for name in ("Bonus01", "Radar", "Silence"):
             path = f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav"
             self.assertEqual(
