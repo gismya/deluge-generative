@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "generative/core/recipe_overrides.h"
 #include <cstdint>
 
 namespace deluge::generative::golden_case {
@@ -28,5 +29,20 @@ constexpr uint32_t kEntropy = 0; ///< The default Recipe: the genre's new Recipe
 constexpr uint32_t kSeed = 1;
 /// From SHIFT+PLAY: the Groove at the Recipe's macros from the first bar, with no Intro.
 constexpr bool kSkipIntro = true;
+/// Every variant set fixed to its first variant, the genre as it played before its sets (spec §3.6, ADR 0008): a set
+/// added with today's behaviour first moves no golden.
+constexpr int8_t kVariant = 0;
+
+/// The golden case as Recipe overrides: the genre's new Recipe from kEntropy at kSeed, each set on kVariant. No genre
+/// name: rollWithOverrides() plays the genre it is given.
+inline RecipeOverrides overrides() {
+	RecipeOverrides out;
+	out.entropy = kEntropy;
+	out.seed = kSeed;
+	for (int8_t& variant : out.variant) {
+		variant = kVariant;
+	}
+	return out;
+}
 
 } // namespace deluge::generative::golden_case

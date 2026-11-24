@@ -16,6 +16,7 @@
 #include "generative/core/steering_log.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
+#include "instance.h"
 #include "log_store.h"
 
 #include <algorithm>
@@ -331,13 +332,13 @@ struct Result {
 	/// The piece ended by itself, at the end of its Outro (spec §13.2), at this driver clock.
 	bool ended = false;
 	int32_t endedAt = 0;
-	std::unique_ptr<Generator> generator; ///< Left as it ended, for queries.
+	std::unique_ptr<Instance> generator; ///< Left as it ended, for queries.
 };
 
 /// Plays `run` through the Perform driver for `bars` bars of song time, then stops (flushes) the driver.
 inline Result play(const Run& run, int32_t bars) {
 	Result result;
-	result.generator = std::make_unique<Generator>();
+	result.generator = std::make_unique<Instance>();
 	Generator& generator = *result.generator;
 	SteeringQueue queue;
 	RecordingSink sink;
@@ -470,7 +471,7 @@ struct Start {
 /// that needs more at the start (a tempo, a decision timer, a second instance) derives from StepwisePiece and adds it.
 template <typename Sink = RecordingSink>
 struct StepwisePiece {
-	Generator generator;
+	Instance generator;
 	Sink sink;
 	perform::PerformDriver driver;
 	Recipe currentRecipe;

@@ -352,10 +352,25 @@ constexpr WeightedBars kBuildBars[] = {{1, 1}};
 /// The Break's drum and bass: the Kick, the Rim and the Bass (spec §4.5).
 constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim)};
 
+/// The skank's chord (Q359, #359; ADR 0008): the 7ths every Skank stab played at the default Complexity before the
+/// set, or plain triads (no Extension above the floor). The owner kept both ("both are good"), so they draw evenly.
+/// It patches the genre's harmony, so the Melodica's chord tones lose the 7th with it.
+constexpr Variant kSkankVariants[] = {
+    {.name = "sevenths", .oledName = "7THS", .weight = 1},
+    {.name = "plain",
+     .oledName = "PLAIN",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.extensionCeiling = 0; }},
+};
+
+constexpr VariantSet kVariantSets[] = {
+    {.name = "skank", .oledName = "SKANK", .variants = kSkankVariants},
+};
+
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 6,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 7,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,
@@ -397,6 +412,7 @@ constexpr Genre kDub{
             .accentLane = Lane::Crash,
             .accentChance = 50, // a Crash on Drops, after a fill that ends a phrase, and at 50 per-mille
         },
+    .variantSets = kVariantSets,
 };
 static_assert(genreValid(kDub), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 

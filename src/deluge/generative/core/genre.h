@@ -870,6 +870,38 @@ struct Facts {
 	[[nodiscard]] constexpr int8_t swingMiddle() const { return static_cast<int8_t>((swingLow + swingHigh) / 2); }
 };
 
+// ---- Variant sets (slot 11, spec §3.6, §4.2, ADR 0008) ----
+
+struct ResolvedGenre;
+
+/// When a playing variant set may change its variant on its own (spec §3.6). Only Never is built: Drop is #495's.
+enum class ChangeAt : uint8_t { Never, Drop };
+
+/// One way a variant set's rule can go: a patch to a copy of the genre (core/variants.h).
+struct Variant {
+	const char* name = "";     ///< Stable, lowercase, for Recipe files: "plain". Never reused within its set.
+	const char* oledName = ""; ///< At most kMaxVariantOledName characters: "PLAIN".
+	uint16_t weight = 1;       ///< Its share of a draw, against its set's other variants. More than 0.
+	/// Writes the variant's fields into a copy of the genre. nullptr: the genre as written.
+	void (*apply)(ResolvedGenre&) = nullptr;
+};
+
+/// A rule a piece draws one variant of, as it rolls key and tempo (spec §3.6): Dub's 7th or plain skank.
+struct VariantSet {
+	const char* name = "";             ///< Stable, for Recipe files: "skank". Never reused within its genre.
+	const char* oledName = "";         ///< At most kMaxVariantSetOledName characters: "SKANK".
+	std::span<const Variant> variants; ///< 2 to kMaxVariants. The first is the genre as it played before the set.
+	bool live = false;                 ///< Perform may switch it at a Drop (ADR 0008; not built yet).
+	ChangeAt changeAt = ChangeAt::Never;
+	int16_t changeChance = 0; ///< Per mille at each Drop, for ChangeAt::Drop (not built yet).
+};
+
+/// The OLED names fit a menu row (ADR 0008): a set's name, and a variant's, in characters.
+constexpr int32_t kMaxVariantSetOledName = 8;
+constexpr int32_t kMaxVariantOledName = 9;
+/// A variant's stable name, in characters: a Recipe file's `allow` list holds every variant's (recipe_file.cpp).
+constexpr int32_t kMaxVariantNameChars = 23;
+
 struct Genre {
 	// Slot 1: identity (spec §4.4)
 	const char* name = ""; ///< Stable, lowercase, used in Recipe files. Never reused. A subgenre's: `<parent>-<own>`.
@@ -930,6 +962,8 @@ struct Genre {
 	const Palette* palette = nullptr;
 	// Slot 9: section rules
 	ArcSpec arc;
+	// Slot 11: variant sets (spec §3.6), at most kMaxVariantSets. None: every piece plays the table as written.
+	std::span<const VariantSet> variantSets;
 
 	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }
 };

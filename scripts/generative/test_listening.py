@@ -178,6 +178,18 @@ class RecipeCheck(unittest.TestCase):
             ],
         )
 
+    def test_a_variant_set_the_job_fixes_is_passed_on_and_checked(self):
+        job = self.job("--seed 1 --variant skank=plain")
+        self.assertEqual(job.recipe.variant, ("skank=plain",))
+        self.assertEqual(job.recipe.flags()[-2:], ["--variant", "skank=plain"])
+        self.assertEqual(
+            recipe.mismatches(job, theory(**{"variant.skank": "plain"})), []
+        )
+        self.assertEqual(
+            recipe.mismatches(job, theory(**{"variant.skank": "sevenths"})),
+            ["variant skank: asked plain, the harness plays sevenths"],
+        )
+
     def test_what_the_job_leaves_to_the_roll_is_not_checked(self):
         self.assertEqual(
             recipe.mismatches(

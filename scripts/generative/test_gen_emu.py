@@ -152,7 +152,7 @@ class Pin(unittest.TestCase):
 
 # The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp), written out here so a change to
 # gen_emu's packing has to agree with it.
-RECIPE_LAYOUT = "<8s32sIIi4bbbbx"
+RECIPE_LAYOUT = "<8s32sIIi4bbbbx64s"
 RECIPE_FIELDS = (
     "magic",
     "genre",
@@ -166,13 +166,14 @@ RECIPE_FIELDS = (
     "key",
     "scale",
     "swing",
+    "variants",
 )
 
 
-def recipe_bytes(genre, entropy, seed, tempo, macros, key, scale, swing):
+def recipe_bytes(genre, entropy, seed, tempo, macros, key, scale, swing, variants=b""):
     return struct.pack(
         RECIPE_LAYOUT,
-        b"GENCAP1\0",
+        b"GENCAP2\0",
         genre,
         entropy,
         seed,
@@ -181,6 +182,7 @@ def recipe_bytes(genre, entropy, seed, tempo, macros, key, scale, swing):
         key,
         scale,
         swing,
+        variants,
     )
 
 
@@ -220,6 +222,51 @@ class CaptureBuild(unittest.TestCase):
             gen_emu.capture_recipe(args),
             recipe_bytes(b"techno-dub", 0, 1, 0, (-1, -1, -1, -1), -1, -1, -128),
         )
+
+    def test_variants_go_into_the_header_and_the_render_check_and_the_name(self):
+        args = gen_emu.parser().parse_args(
+            [
+                "capture",
+                "--genre",
+                "dub",
+                "--variant",
+                "skank=plain",
+                "--variant",
+                "drums=rockers",
+            ]
+        )
+        self.assertEqual(
+            gen_emu.capture_recipe(args),
+            recipe_bytes(
+                b"dub",
+                0,
+                1,
+                0,
+                (-1, -1, -1, -1),
+                -1,
+                -1,
+                -128,
+                b"skank=plain,drums=rockers",
+            ),
+        )
+        cmd = gen_emu.render_command("/r", args, "/tmp/o", 4)
+        self.assertEqual(
+            cmd[cmd.index("--variant") :][:4],
+            ["--variant", "skank=plain", "--variant", "drums=rockers"],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIn(
+                "-skank=plain-drums=rockers",
+                os.path.basename(gen_emu.capture_path(args, tmp)),
+            )
+        for bad in ("skank", "skank=", "=plain", "Skank=plain", "skank=plain,x=y"):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                gen_emu.parser().parse_args(["capture", "--variant", bad])
+        long = gen_emu.parser().parse_args(
+            ["capture"] + ["--variant", "abcdefgh=ijklmnop"] * 4
+        )
+        with self.assertRaises(SystemExit):
+            gen_emu.capture_recipe(long)
 
     def test_it_takes_the_ranges_the_render_takes(self):
         for argv in (

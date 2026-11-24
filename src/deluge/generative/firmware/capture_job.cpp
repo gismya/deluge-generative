@@ -18,6 +18,7 @@
 #include "generative/firmware/capture_job.h"
 #include "generative/compose/compose_driver.h"
 #include "generative/core/steering_log.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
 #include "generative/firmware/capture_files.h"
@@ -52,10 +53,12 @@ namespace {
 
 /// What a build holds beside the song, as Compose's: the Generator block, the driver and the Song adapter.
 struct CaptureWork {
+	CaptureWork() { generator.useResolvedGenre(&resolved); }
 	Generator generator;
 	compose::ComposeDriver driver;
 	ComposeSong writer;
 	Roster roster;
+	ResolvedGenre resolved; ///< The genre with the Recipe's variants applied (spec §3.6), beside the block.
 };
 
 /// The Capture build (spec §17.7): modal; BACK stops it at once.

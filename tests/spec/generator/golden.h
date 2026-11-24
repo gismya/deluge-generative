@@ -171,7 +171,7 @@ struct Golden {
 /// `pieces` pieces (a spec that only needs the dump passes 0).
 inline Golden playGolden(const Genre& genre, uint32_t pieces = kFingerprintPieces) {
 	Run run;
-	run.recipe = newRecipe(genre, kEntropy);
+	run.recipe = rollWithOverrides(genre, deluge::generative::golden_case::overrides()).recipe;
 	run.seed = kSeed;
 	run.skipIntro = kSkipIntro;
 	const Result result = play(run, kBars);

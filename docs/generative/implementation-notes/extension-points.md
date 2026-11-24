@@ -105,3 +105,13 @@ otherwise.
   Restart command once loaded; at the line `restartPiece()` puts the piece header's Recipe, takes and param snapshot
   back before `Generator::start()`. #143's `openPiece()` (set by `begin()` and `switchToIncoming()`) also needs
   setting in `restartOnLine()`, so the new piece gets its header.
+- **Variant sets (#493, ADR 0008).** Data: `Variant`/`VariantSet` in `core/genre.h` (slot 11, `Genre::variantSets`),
+  the rules in `variantSetsValid()` (`core/variants.h`, in `genreValid()`). A genre's new set lists today's behaviour
+  first (apply nullptr) and bumps the genre's version; its spec pins the set's names. The draw is `drawVariants()`,
+  called last in `newRecipe()`, after #498's swing roll. The menus (#494) edit `Recipe::variants.allowed`
+  and pass it as `newRecipe()`'s `narrowed` (the Compose screen's REGENERATE already does,
+  `CurrentRecipe::regenerate()`; Perform's `rollPending()` passes none: its page opens on RANDOM). Drop changes and
+  live switches (#495): `VariantSet::live`, `changeAt` and `changeChance` are in the data, refused by
+  `variantSetsValid()` while `changeAt` isn't Never; re-resolving is `resolveGenre()` into the instance's
+  `resolved_` at a Drop's first decision, and the patch-diff rule is `variant_sets_spec`'s `patchesKeepLookAhead()`.
+  The tools' `--variant SET=NAME` is `fixVariant()`.

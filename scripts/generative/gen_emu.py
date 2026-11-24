@@ -559,11 +559,12 @@ def scale_names():
 # The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp): the Recipe it plays, which
 # write_capture_elf patches into a copy of its ELF. The two layouts must agree; the firmware static_asserts its own.
 CAPTURE_SYMBOL = b"generative_capture_recipe"
-CAPTURE_MAGIC = b"GENCAP1\0"
+CAPTURE_MAGIC = b"GENCAP2\0"
 CAPTURE_LAYOUT = struct.Struct(
-    "<8s32sIIi4bbbbx"
-)  # magic, genre, entropy, seed, tempo, macros, key, scale, swing
+    "<8s32sIIi4bbbbx64s"
+)  # magic, genre, entropy, seed, tempo, macros, key, scale, swing, variants
 CAPTURE_GENRE_BYTES = 32
+CAPTURE_VARIANT_BYTES = 64  # "set=name,set=name", NUL-terminated
 KEEP_SWING = -128  # RecipeOverrides::kKeepSwing
 
 
@@ -591,6 +592,9 @@ def capture_recipe(args):
     genre = args.genre.encode()
     if len(genre) >= CAPTURE_GENRE_BYTES:  # the firmware needs its terminating NUL
         sys.exit(f"genre name too long for a capture: {args.genre}")
+    variants = ",".join(getattr(args, "variant", None) or []).encode()
+    if len(variants) >= CAPTURE_VARIANT_BYTES:
+        sys.exit(f"--variant too long for a capture: {variants.decode()}")
     return CAPTURE_LAYOUT.pack(
         CAPTURE_MAGIC,
         genre,
@@ -601,6 +605,7 @@ def capture_recipe(args):
         key,
         scale,
         KEEP_SWING if args.swing is None else args.swing,
+        variants,
     )
 
 
@@ -697,6 +702,8 @@ def capture_path(args, out, mutes=()):
         name += f"-tempo{args.tempo:g}"
     if args.swing is not None:
         name += f"-swing{args.swing}"
+    for variant in getattr(args, "variant", None) or []:
+        name += f"-{variant}"
     for part in sorted(set(mutes)):
         name += f"-mute{part}"
     if getattr(args, "end_after_drop", None):
@@ -867,6 +874,8 @@ def render_command(render, args, out, bars):
         cmd += ["--tempo", f"{args.tempo:g}"]
     if args.swing is not None:
         cmd += ["--swing", str(args.swing)]
+    for variant in getattr(args, "variant", None) or []:
+        cmd += ["--variant", variant]
     return cmd + end_flags(args) + ["--bars", str(bars), "--midi-only", "--out", out]
 
 
@@ -1745,6 +1754,13 @@ def add_leak_args(p):
     )
 
 
+def variant_arg(text):
+    """A --variant value: SET=NAME, stable names as the genre's data writes them (lowercase letters and digits)."""
+    if not re.fullmatch(r"[a-z][a-z0-9]*=[a-z][a-z0-9]*", text):
+        raise argparse.ArgumentTypeError(f"takes SET=NAME, not {text!r}")
+    return text
+
+
 def add_recipe_args(p):
     """The capture's Recipe, length and mutes: capture and check take the same."""
     p.add_argument("--genre", default="techno-acid")
@@ -1763,6 +1779,14 @@ def add_recipe_args(p):
     p.add_argument("--scale", help="minor, phrygian, harmonic-minor ...")
     p.add_argument("--tempo", type=bpm, help="BPM, 20 to 999")
     p.add_argument("--swing", type=int, choices=range(-49, 50), metavar="-49..49")
+    p.add_argument(
+        "--variant",
+        action="append",
+        type=variant_arg,
+        metavar="SET=NAME",
+        help="fix one of the genre's variant sets to a variant by stable names (skank=plain); repeatable. The "
+        "harness render refuses a name the genre doesn't have",
+    )
     p.add_argument(
         "--seconds", type=float, default=60.0, help="Perform time to capture"
     )
