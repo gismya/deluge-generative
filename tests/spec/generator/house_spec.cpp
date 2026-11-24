@@ -176,7 +176,7 @@ describe house("House", $ {
 		expect(std::string(houseGenre.name)).to_equal(std::string("house"));
 		expect(std::string(houseGenre.oledName)).to_equal(std::string("HOUSE"));
 		expect(houseGenre.parent == nullptr).to_be_true();
-		expect(houseGenre.version).to_equal(5);
+		expect(houseGenre.version).to_equal(6);
 		expect(findGenre("house") == &houseGenre).to_be_true();
 		expect(partCount(houseGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -787,10 +787,19 @@ describe house("House", $ {
 			expect(names).to_equal(std::vector<std::string>{"loops", "build", "bass"});
 			expect(variants).to_equal(std::vector<std::vector<std::string>>{
 			    {"third", "half", "every", "never"}, {"full", "nolead", "cut2", "nokick"}, {"fifth", "root", "pickups"}});
-			expect(weights).to_equal(std::vector<std::vector<int32_t>>{{2, 3, 1, 1}, {2, 1, 1, 1}, {2, 1, 1}});
+			expect(weights).to_equal(std::vector<std::vector<int32_t>>{{1, 6, 1, 1}, {2, 1, 1, 1}, {2, 1, 1}});
 			expect(sets[0].live).to_be_true();
 			expect(sets[1].live).to_be_false(); // the Build is read ahead of its line
 			expect(sets[2].live).to_be_false(); // pickups' pool has more entries than today's
+		});
+
+		it("S1: a new Recipe draws a new loop on 1 Drop in 2 about two thirds of the time (the owner, #472 round 3)", _ {
+			int32_t half = 0;
+			constexpr uint32_t kPieces = 900;
+			for (uint32_t entropy = 1; entropy <= kPieces; entropy++) {
+				half += newRecipe(houseGenre, entropy).variants.pick[0] == 1 ? 1 : 0;
+			}
+			expect(half * 100 / static_cast<int32_t>(kPieces)).to_be_between(60, 73); // 6 of 9
 		});
 
 		it("S1: a new loop on 1 Drop in 3, 1 in 2, every Drop or never, each going back to an earlier loop at 333", _ {
