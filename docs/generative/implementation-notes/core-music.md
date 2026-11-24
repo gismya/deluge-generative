@@ -39,6 +39,12 @@ otherwise.
   keyed on the loop's index and the bar in it (`Purpose::ChordLoop`), so every pass replays it chord for chord: the
   walk's other inputs agree because a loop always starts on home, but only while `abaAllowed` is true (House's and Dub's case): with it false, a 2-chord half loop (home, A) would exclude A on its second pass, since `previousChord_` carries over from the pass before. A genre turning both on must handle that first. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
   rhythm's grid draws no chord there, so the loop stays on the phrase grid. `LoopSpec::rootOnAnchors` (Dub's Bass) pins anchor steps to `(degree 0, octave 0)` in `rollLine()` using a step counter instead of `% pattern.length` (no `__aeabi_idivmod` on Cortex-A9); `mutateLine()` already skips anchors.
+- A loop return (`ChordGraph::returnChance`, House S1, #496) moves `chordLoop_` to an earlier index; `newestLoop_` keeps
+  the newest drawn, so the next new loop is `++newestLoop_`, not `chordLoop_ + 1`. In specs, a new loop can draw the
+  same chords as an earlier one (vamps), so a "returned" count by chord signature needs a returnChance-0 baseline.
+- A variant that swaps the Chord graph (House's `loops` set) must keep `barsPerChord`, whether it loops and
+  `halfLoopChance` if the set is live: each bar re-reads the half-loop draw for the loop playing. The patch-diff spec
+  (`sameChordLines()` in variant_sets_spec) checks it.
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its

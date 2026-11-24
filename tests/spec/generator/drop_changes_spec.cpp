@@ -22,6 +22,7 @@
 #include "generative/core/variants.h"
 #include "generative/perform/queue_text.h"
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -53,11 +54,7 @@ constexpr int32_t kSteppers = 2;
 
 /// Dub's default Recipe with its sets fixed by `fixes` (`set=name`).
 Recipe dubWith(std::initializer_list<const char*> fixes, uint32_t entropy = 0) {
-	Recipe recipe = newRecipe(genres::dub, entropy);
-	for (const char* fix : fixes) {
-		fixVariant(recipe.variants, parseVariantFix(genres::dub, fix).value());
-	}
-	return recipe;
+	return withVariants(newRecipe(genres::dub, entropy), fixes);
 }
 
 /// What a piece did, step by step: the Drops' steps, each step's picks (after its decision), and its events.

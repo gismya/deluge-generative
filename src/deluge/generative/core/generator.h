@@ -1015,9 +1015,10 @@ private:
 	/// crosses, so a jump leaves the walk where it is.
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
-	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255). Moved only
-	/// on a Drop's chord line.
+	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255), and the
+	/// newest drawn, which a return to an earlier loop leaves where it is. Moved only on a Drop's chord line.
 	uint8_t chordLoop_ = 0;
+	uint8_t newestLoop_ = 0;
 	/// The playing chord, voiced on the last bar line (spec §7.4): the walk's degree is its root, `steps[0]`, and its
 	/// Extension level the Recipe's Complexity then, within the genre's floor and ceiling. Chords, Extensions and keys
 	/// change only on bar lines (a key change lands on a phrase line), so every part that plays chord tones reads it

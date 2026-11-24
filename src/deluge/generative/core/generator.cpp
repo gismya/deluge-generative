@@ -90,6 +90,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	previousChord_ = -1;
 	chordCount_ = 0;
 	chordLoop_ = 0;
+	newestLoop_ = 0;
 	// Home, at the Extension level this Recipe's Complexity gives, so chord() reads a voiced chord before step 0. Step
 	// 0's bar line voices it again, from the macros then: a transition's carryOver() replaces them after begin().
 	voiceChordAt(kHomeChord);
@@ -219,7 +220,7 @@ GEN_STEP_CODE int32_t Generator::walkLoop(const ChordGraph& graph, int32_t step,
 	if (stepsToChordLine() != 0 && step != 0 && !drop) {
 		return current; // a Section start off the grid keeps the loop's chord
 	}
-	enum Field : uint32_t { kWhether, kLength, kChord };
+	enum Field : uint32_t { kWhether, kLength, kChord, kReturn, kWhich };
 	auto loopKey = [&](uint32_t position, uint32_t bar, Field field) {
 		DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::ChordLoop);
 		key.position[0] = position;
@@ -227,9 +228,16 @@ GEN_STEP_CODE int32_t Generator::walkLoop(const ChordGraph& graph, int32_t step,
 		key.position[2] = field;
 		return key;
 	};
-	// A Drop moves to a new loop now and then.
+	// A Drop moves to another loop now and then: a new one, or by returnChance an earlier one other than the one
+	// playing, which re-keys its index, so it plays its chords again.
 	if (drop && drawChance(loopKey(arc_.occurrence(), 0, kWhether), graph.loopChance)) {
-		chordLoop_++;
+		if (newestLoop_ > 0 && drawChance(loopKey(arc_.occurrence(), 0, kReturn), graph.returnChance)) {
+			const int32_t earlier = drawBelow(loopKey(arc_.occurrence(), 0, kWhich), newestLoop_);
+			chordLoop_ = static_cast<uint8_t>(earlier >= chordLoop_ ? earlier + 1 : earlier);
+		}
+		else {
+			chordLoop_ = ++newestLoop_;
+		}
 	}
 	const int32_t phraseBars = genre_->phraseBars;
 	const bool halfLoop = drawChance(loopKey(chordLoop_, 0, kLength), graph.halfLoopChance);
