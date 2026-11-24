@@ -108,7 +108,8 @@ constexpr Pattern kOffbeatBass[] = {
     {".7X7.7X...X...X.", ".g.g.g..........", 2},
 };
 
-/// S6's pickups (round 2's B, #369): the offbeat bass with five more rhythms, two of them 2 bars long.
+/// S6's pickups (round 2's B, #369): the offbeat bass with five more rhythms, two of them 2 bars long. Its first five
+/// rows and its last repeat kOffbeatBass's six, in order: change them together.
 constexpr Pattern kPickupBass[] = {
     {"..X...X...X...X.", "................", 0, 3},
     {"..X..7X...X...X.", ".....g..........", 0},
@@ -186,7 +187,7 @@ constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
 /// The chord root, its 5th as Complexity rises. The Register's span (−5 to +7) holds the line under the Strings, so
 /// no octave jumps.
 constexpr LineWeight kBassDegrees[] = {{0, 8}, {4, 2}};
-/// S6's pickups: the 5th most, the root and the 7th below about as often; the anchors stay on the root.
+/// S6's pickups: the 5th most, the root and the 7th below about as often; the anchors stay on the root (tuning).
 constexpr LineWeight kPickupDegrees[] = {{0, 3}, {4, 4}, {6, 3}};
 
 /// Short offbeat notes, rare slides, a line that changes slowly.
@@ -408,7 +409,7 @@ constexpr Variant kBuildVariants[] = {
          }},
 };
 
-/// S6, the Bass's pickups (#369): the 5th from Complexity 25 (round 2's A, today), the root alone at Complexity 0
+/// S6, the Bass's pickups (#369): the 5th from Complexity 25 (round 2's A, today), the 5th only from Complexity 34
 /// (round 2's today), or B's pickups. The owner liked them all and kept A for now, so A is the heaviest. Not live: the
 /// pickups' pool has five more entries, and a frozen Bass holds its entry across a Drop.
 constexpr Variant kBassVariants[] = {
@@ -425,7 +426,7 @@ constexpr Variant kBassVariants[] = {
 	         PartSpec& bass = resolved.parts[kBassPart];
 	         bass.pool = kPickupBass;
 	         bass.loop.degrees = kPickupDegrees;
-	         bass.loop.draws.leap = {4, 8};
+	         bass.loop.draws.leap = {4, 8}; // tuning
 	         bass.loop.rootOnAnchors = true;
          }},
 };

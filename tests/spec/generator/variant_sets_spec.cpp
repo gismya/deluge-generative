@@ -56,25 +56,30 @@ void longerRoll(ResolvedGenre& resolved) {
 void fewerRepicks(ResolvedGenre& resolved) {
 	resolved.genre.repickChance = 50;
 }
-/// Dub's loop graph at another grid, or with its loop's length drawn otherwise, or moving loops at another chance.
-ChordGraph withGraph(int32_t bars, int16_t half, int16_t chance) {
-	ChordGraph graph = *genres::dub.harmony.graph;
-	graph.barsPerChord = static_cast<uint8_t>(bars);
-	graph.halfLoopChance = half;
-	graph.loopChance = chance;
-	return graph;
+/// Dub's loop graph with `edit` applied to a copy, for a patch to point at.
+template <typename Edit>
+const ChordGraph* dubGraphWith(Edit edit) {
+	static ChordGraph graph = [&] {
+		ChordGraph copy = *genres::dub.harmony.graph;
+		edit(copy);
+		return copy;
+	}();
+	return &graph;
 }
 void otherGrid(ResolvedGenre& resolved) {
-	static const ChordGraph kGraph = withGraph(2, 1000, 0);
-	resolved.genre.harmony.graph = &kGraph;
+	resolved.genre.harmony.graph = dubGraphWith([](ChordGraph& graph) { graph.barsPerChord = 2; });
 }
 void otherLoopLength(ResolvedGenre& resolved) {
-	static const ChordGraph kGraph = withGraph(1, 0, 0);
-	resolved.genre.harmony.graph = &kGraph;
+	resolved.genre.harmony.graph = dubGraphWith([](ChordGraph& graph) { graph.halfLoopChance = 0; });
 }
-void otherLoopChance(ResolvedGenre& resolved) {
-	static const ChordGraph kGraph = withGraph(1, 1000, 500);
-	resolved.genre.harmony.graph = &kGraph;
+void otherMoves(ResolvedGenre& resolved) {
+	resolved.genre.harmony.graph = dubGraphWith([](ChordGraph& graph) { graph.repeatWeight += 5; });
+}
+void otherLoopChances(ResolvedGenre& resolved) {
+	resolved.genre.harmony.graph = dubGraphWith([](ChordGraph& graph) {
+		graph.loopChance = 500;
+		graph.returnChance = 333;
+	});
 }
 /// The Bass's pool cut to its first entry: a frozen Bass's pick could point past it.
 void shorterPool(ResolvedGenre& resolved) {
@@ -97,14 +102,17 @@ Genre madeUp() {
 	return genre;
 }
 
-/// Whether two Chord graphs keep the chord lines and the loop playing across a Drop: the harmonic rhythm, whether the
-/// chords loop, and the loop's length draw, which each bar reads for the loop playing (spec §7.4). A live House S1
-/// moves only the loop chance, which the Drop's own step reads.
+/// Whether two Chord graphs differ at most in their loop chances: a live or Drop-changing set may change only
+/// `loopChance` (within looping or not) and `returnChance`, which the Drop's own step reads (spec §3.6, §7.4). The
+/// harmonic rhythm, the moves and the loop's length draw are read on every bar for the loop playing.
 bool sameChordLines(const ChordGraph* a, const ChordGraph* b) {
 	if (a == nullptr || b == nullptr) {
 		return a == b;
 	}
-	return a->barsPerChord == b->barsPerChord && (a->loopChance >= 0) == (b->loopChance >= 0)
+	return a->homePull == b->homePull && a->moves.data() == b->moves.data() && a->moves.size() == b->moves.size()
+	       && a->repeatWeight == b->repeatWeight && a->abaAllowed == b->abaAllowed
+	       && a->cadenceTarget == b->cadenceTarget && a->cadencePeriod == b->cadencePeriod
+	       && a->barsPerChord == b->barsPerChord && (a->loopChance >= 0) == (b->loopChance >= 0)
 	       && a->halfLoopChance == b->halfLoopChance;
 }
 
@@ -390,7 +398,7 @@ describe variant_sets("Variant sets", $ {
 				expect(patchesKeepLookAhead(*genre)).to_be_true();
 			}
 		});
-		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register, a pool's size, the chord grid or a loop's length, and lets one that moves the repicks or the loop chance by", _ {
+		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register, a pool's size, the Chord graph beyond its loop chances, and lets one that moves the repicks or the loop chances by", _ {
 			static constexpr Variant kArc[] = {{.name = "a", .oledName = "A"},
 			                                   {.name = "b", .oledName = "B", .apply = longerGrooves}};
 			static constexpr Variant kRegister[] = {{.name = "a", .oledName = "A"},
@@ -407,8 +415,10 @@ describe variant_sets("Variant sets", $ {
 			                                    {.name = "b", .oledName = "B", .apply = otherGrid}};
 			static constexpr Variant kLoopLength[] = {{.name = "a", .oledName = "A"},
 			                                          {.name = "b", .oledName = "B", .apply = otherLoopLength}};
+			static constexpr Variant kMoves[] = {{.name = "a", .oledName = "A"},
+			                                     {.name = "b", .oledName = "B", .apply = otherMoves}};
 			static constexpr Variant kLoopChance[] = {{.name = "a", .oledName = "A"},
-			                                          {.name = "b", .oledName = "B", .apply = otherLoopChance}};
+			                                          {.name = "b", .oledName = "B", .apply = otherLoopChances}};
 			static constexpr VariantSet kLive[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kArc, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRegister, .live = true}},
@@ -419,6 +429,7 @@ describe variant_sets("Variant sets", $ {
 			    {{.name = "s", .oledName = "S", .variants = kPool, .changeAt = ChangeAt::Drop, .changeChance = 10}},
 			    {{.name = "s", .oledName = "S", .variants = kGrid, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kLoopLength, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kMoves, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kLoopChance, .live = true}},
 			};
 			std::vector<bool> kept;
@@ -427,7 +438,7 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				kept.push_back(patchesKeepLookAhead(genre));
 			}
-			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false, false, false, true});
+			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false, false, false, false, true});
 		});
 	});
 
