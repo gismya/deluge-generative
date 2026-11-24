@@ -341,7 +341,7 @@ void Generator::updateSilent(const Step& step) {
 	// yieldValid()): a resting part is silenced from here on, in silenced() too.
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const YieldSpec& yield = genre_->parts[p].yield;
-		const YieldMode mode = yieldOn(yield, arc_, yield.part >= 0 && !partSilenced(yield.part));
+		const YieldMode mode = yieldOn(yield, arc_, static_cast<uint8_t>(~silent_));
 		if (mode == YieldMode::Rest) {
 			yieldRest_ |= partBit(p);
 			silent_ |= partBit(p);

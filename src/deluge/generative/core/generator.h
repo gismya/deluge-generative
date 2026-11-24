@@ -240,10 +240,10 @@ constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollSta
 }
 
 /// The mode a part yielding by `yield` plays in on a step of `arc` (spec §5.6): None in a Build, when it yields to
-/// no one, or when the part it yields to doesn't sound there (`targetSounds`, by the Arc's rules alone). The
-/// Generator (updateSilent()) and the Arc plan (ArcPlanner::advance()) both ask it.
-constexpr YieldMode yieldOn(const YieldSpec& yield, const Arc& arc, bool targetSounds) {
-	if (yield.part < 0 || !targetSounds || arc.section() == SectionKind::Build) {
+/// no one, or when the part it yields to doesn't sound there (bit p of `sounding`: part p sounds by the Arc's rules
+/// alone). The Generator (updateSilent()) and the Arc plan (ArcPlanner::advance()) both ask it.
+constexpr YieldMode yieldOn(const YieldSpec& yield, const Arc& arc, uint8_t sounding) {
+	if (yield.part < 0 || (sounding & partBit(yield.part)) == 0 || arc.section() == SectionKind::Build) {
 		return YieldMode::None;
 	}
 	return arc.inDrop() ? yield.inDrops : yield.outside;

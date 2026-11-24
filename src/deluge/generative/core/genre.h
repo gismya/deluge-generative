@@ -340,7 +340,8 @@ struct LoopSpec {
 	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.
 	uint8_t slideOverlapTicks = 6;
-	/// Bit i: an octave jump may land on step i of each bar's 16 (i of the pattern step modulo 16); a step off the mask
+	/// Bit i: an octave jump may land on step i of each bar's 16 (line step modulo 16: a line's step is its pattern's
+	/// step, line[patternStep]); a step off the mask
 	/// keeps its drawn octave at 0, so the line's high and low notes mark a grouping (spec §5.2; Psytrance's 3-3-2).
 	/// 0: any step (every genre before #497).
 	uint16_t jumpSteps = 0;

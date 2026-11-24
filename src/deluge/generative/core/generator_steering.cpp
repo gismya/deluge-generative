@@ -758,8 +758,7 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
 			const YieldSpec& yield = genre.parts[p].yield;
-			const bool rests =
-			    yieldOn(yield, arc_, yield.part >= 0 && (plays & partBit(yield.part)) != 0) == YieldMode::Rest;
+			const bool rests = yieldOn(yield, arc_, plays) == YieldMode::Rest;
 			sounds |= (plays & partBit(p)) != 0 && !rests && mutes_.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc_, sounds, energy);
