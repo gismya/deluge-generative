@@ -89,8 +89,17 @@ int32_t openSet = 0;
 	return target.genre != nullptr ? static_cast<int32_t>(target.genre->variantSets.size()) : 0;
 }
 
+/// Whether Perform's target names another genre than the roster playing: a genre change landed while the menu was
+/// open, so its set indices no longer name the same sets (#508 R2).
+[[nodiscard]] bool performTargetStale() {
+	return target.perform && target.genre != gen::firmware::performAdapter.steering().rosterGenre();
+}
+
 /// Set `s`'s ticks as its row and toggles show them.
 [[nodiscard]] uint8_t maskOf(int32_t s) {
+	if (performTargetStale()) {
+		return gen::allowedIn(target.genre->variantSets[s], 0); // shown as RANDOM; a tick queues nothing
+	}
 	return target.perform ? gen::firmware::performAdapter.steering().maskAhead(s)
 	                      : gen::allowedIn(target.genre->variantSets[s], target.allowed[s]);
 }
@@ -163,7 +172,10 @@ public:
 		if (target.perform) {
 			// Queued for the next Drop (VARIANT DROP); refused while a transition is pending, the ticks stay. The last
 			// tick, which stays, queues nothing.
-			if (allowed != mask()) {
+			if (performTargetStale()) {
+				TEST_EVENT("gen_variants_press set=%s stale", set().name);
+			}
+			else if (allowed != mask()) {
 				const gen::perform::PressOutcome outcome =
 				    gen::firmware::performAdapter.steering().pressVariantMask(openSet, allowed);
 				refusedWithPopup(outcome);
