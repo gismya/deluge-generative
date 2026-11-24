@@ -51,6 +51,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
      - At most about 60 words of text per card, besides the clip labels (a whole-song card's timeline may need more: give it `max_words`). Line breaks in card text show on the page. Measurements, harness results, diffs and caveats go in `variants.md`, not on the card; link it once at the top of the page.
      - Clip labels name the option and what's soloed ("Proposed, Pad alone"), not file names.
    - **Answer controls on each card:** a pick per option, "keep as is", "can't tell", and a free-text note. Answers are kept in `localStorage`.
+   - **A timeline under each whole-song clip:** `"timeline": True` on the clip (`rendering.md` step 5): which parts play in each Section, each named with its sound, so the owner needn't name sounds from memory.
    - **An Export button:** it produces one Markdown block with a Copy button. The block opens with the line `Listening-session answers (<genre>, round <n>, <session folder>): handle them with the listening-session skill.` That line makes whoever reads the pasted block load this skill. The block then lists, per card: the ticket, the pick, the note and the clips compared. It also carries the "Later rounds" list.
 5. **Report.** The page's path, the questions and clips, the total size, the variants built, what couldn't be rendered and why, and the held questions. Leave the worktree clean.
 

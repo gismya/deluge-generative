@@ -20,6 +20,14 @@ A content file is a Python file defining SESSION, a dict:
                               [{stem, reuse, label, kind}]: reuse is an m4a already cut, as another round's
                               audio/<stem>.m4a, relative to the session folder (or ~/...): copied as it is, so
                               the owner hears the very clip they answered before. A clip may give its own kbps.
+                              A whole-song clip may give `timeline` (#513): a strip under it, one row per part
+                              labelled with its sound, the bars each part plays (shaded by note density), the
+                              Sections on top, a playhead following the audio; a click seeks. True takes the
+                              capture's Recipe and variant from its sidecar and the clip's bars; a dict gives
+                              {args, bars, variant, sounds} itself, as a reused clip must: args as a job's
+                              (with its End flags), bars the cut [first, end), variant default base, sounds
+                              {PART: name} to override generator_render --list-sounds (a palette-override card).
+                              See listening/timeline.py.
         rough                 True: rough render (stand-in sounds), badged
         kbps                  optional: the AAC bitrate of its clips, in kb/s (a whole song at 80 keeps the page
                               small); a clip's own kbps wins
@@ -50,7 +58,7 @@ import shlex
 import shutil
 import subprocess
 
-from . import cutter, variants
+from . import cutter, timeline, variants
 from . import jobs as _jobs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -123,6 +131,7 @@ def problems(session, sources, folder=None):
                 out.append(f"{cid} clip {stem}: stem repeated")
             stems.add(stem)
             out += kbps_problems(f"{cid} clip {stem}", clip.get("kbps"))
+            out += timeline.problems(f"{cid} clip {stem}", clip)
             if "reuse" in clip:
                 if "src" in clip or "bars" in clip:
                     out.append(
@@ -198,8 +207,10 @@ def verdict_problems(cid, verdicts):
     return out
 
 
-def page_data(session, clips):
-    """The page's DATA: the content with each clip's file and seconds (`clips`: stem -> seconds)."""
+def page_data(session, clips, timelines=None):
+    """The page's DATA: the content with each clip's file and seconds (`clips`: stem -> seconds), and its timeline
+    strip's data (`timelines`: stem -> timeline.strip()'s), if it has one."""
+    timelines = timelines or {}
     cards = []
     for card in session["cards"]:
         c = dict(card)
@@ -211,6 +222,7 @@ def page_data(session, clips):
                 file=f"audio/{x['stem']}.m4a",
                 seconds=clips.get(x["stem"], 0),
                 kind=x.get("kind", "full"),
+                timeline=timelines.get(x["stem"]),
             )
             for x in card["clips"]
         ]
@@ -343,7 +355,7 @@ def build(session, scratch, out_dir, recut=False):
         for c in session["cards"]
         if words(c) > word_limit(c)
     ]
-    seconds = {}
+    seconds, timelines = {}, {}
     index_path = os.path.join(out_dir, "audio", "cuts.json")
     try:
         with open(index_path) as fh:
@@ -383,8 +395,15 @@ def build(session, scratch, out_dir, recut=False):
                 with open(index_path, "w") as fh:
                     json.dump(cuts, fh, indent=1)
             seconds[clip["stem"]] = done["seconds"]
+            if clip.get("timeline"):
+                timelines[clip["stem"]] = timeline.build(
+                    clip,
+                    scratch,
+                    card.get("genre") or session["genre"],
+                    None if "reuse" in clip else info,
+                )
         card["midiFiles"] = render_midi(card, scratch, out_dir, session["genre"])
-    data = page_data(session, seconds)
+    data = page_data(session, seconds, timelines)
     with open(os.path.join(out_dir, "index.html"), "w") as fh:
         fh.write(html(data))
     with open(os.path.join(out_dir, "variants.md"), "w") as fh:

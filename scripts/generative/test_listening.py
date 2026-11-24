@@ -1508,3 +1508,186 @@ class ToolkitNits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def tl_piece(sections, parts, bars, tempo="124.00"):
+    """A theory_review.Piece of parts {name: [(first tick, end tick)]}, for the timeline strip."""
+    tpb = theory_review.TICKS_PER_BAR
+    built = []
+    for name, notes in parts.items():
+        part = theory_review.Part(name, "Bass", "Loop", 25.0)
+        part.notes = [
+            theory_review.Note(int(s * tpb), 40, 100, int(e * tpb)) for s, e in notes
+        ]
+        built.append(part)
+    return theory_review.Piece({"tempo": tempo}, built, [], bars, sections, [], [], [])
+
+
+class Timeline(unittest.TestCase):
+    """#513: a whole-song clip's strip, from the harness MIDI render and generator_render --list-sounds."""
+
+    SOUNDS = (
+        "DRUMS.kit\t909\tRim=808 Rim,Perc1=Linndrum Tambourine\n"
+        "DRUMS.Kick\tSAMPLES/DRUMS/Kick/909 Kick.wav\n"
+        "DRUMS.Ride\t-\n"
+        "BASS\tSYNTHS/002 Basic Square Bass.XML\n"
+        "LEAD\t-\n"
+        "FX.Riser\tSAMPLES/FX/Riser/GEN Riser 3.wav\n"
+        "FX.Impact\tSYNTHS/GENERATIVE/FX/GEN Impact Boom.XML\n"
+    )
+
+    def test_sound_labels_name_a_preset_a_kit_and_an_fx_parts_lanes(self):
+        from listening import timeline
+
+        self.assertEqual(
+            timeline.sound_labels(self.SOUNDS),
+            {
+                "BASS": ("002 Basic Square Bass", ""),
+                "DRUMS": (
+                    "909 kit",
+                    "swapped in: Rim 808 Rim, Perc1 Linndrum Tambourine",
+                ),
+                "FX": (
+                    "GEN Riser 3, GEN Impact Boom",
+                    "Riser: GEN Riser 3; Impact: GEN Impact Boom",
+                ),
+            },
+        )
+
+    def test_a_kit_without_swaps_has_no_detail(self):
+        from listening import timeline
+
+        self.assertEqual(
+            timeline.sound_labels("DRUMS.kit\t808\t-\nDRUMS.Kick\tK.wav\n"),
+            {"DRUMS": ("808 kit", "")},
+        )
+
+    def test_a_groove_a_build_lands_in_is_its_drop(self):
+        from listening import timeline
+
+        self.assertEqual(
+            timeline.section_labels(
+                [
+                    (0, "INTRO 1"),
+                    (16, "GROOVE 1"),
+                    (56, "BREAK 1"),
+                    (60, "BUILD 1"),
+                    (64, "GROOVE 2"),
+                    (112, "BUILD 2"),
+                    (116, "GROOVE 3"),
+                    (124, "OUTRO 1"),
+                ]
+            ),
+            [
+                (0, "INTRO 1"),
+                (16, "GROOVE 1"),
+                (56, "BREAK 1"),
+                (60, "BUILD 1"),
+                (64, "DROP 1"),
+                (112, "BUILD 2"),
+                (116, "DROP 2"),
+                (124, "OUTRO 1"),
+            ],
+        )
+
+    def test_notes_merge_into_spans_by_bar_with_their_onsets(self):
+        from listening import timeline
+
+        piece = tl_piece(
+            [(0, "INTRO 1"), (4, "GROOVE 1")],
+            # bars 0 and 1 (two notes in bar 1), a pad held over bars 4-6, nothing in 2-3
+            {"BASS": [(0, 0.5), (1, 1.25), (1.5, 1.75), (4, 7)]},
+            8,
+        )
+        got = timeline.strip(piece, {"BASS": ("080 House", "")}, 0, 8)
+        self.assertEqual(got["barSeconds"], round(240 / 124, 6))
+        self.assertEqual(got["sections"], [[0, 4, "INTRO 1"], [4, 8, "GROOVE 1"]])
+        (bass,) = got["parts"]
+        self.assertEqual((bass["name"], bass["sound"]), ("Bass", "080 House"))
+        self.assertEqual(bass["spans"], [[0, 2, [1, 2]], [4, 7, [1, 0, 0]]])
+
+    def test_a_cut_past_bar_one_counts_bars_from_its_start(self):
+        from listening import timeline
+
+        piece = tl_piece(
+            [(0, "INTRO 1"), (16, "GROOVE 1"), (24, "BREAK 1")],
+            {"BASS": [(10, 20)], "FX": [(0, 1)]},
+            32,
+        )
+        got = timeline.strip(piece, {}, 12, 26)
+        self.assertEqual(got["bars"], 14)
+        self.assertEqual(got["first"], 12)
+        self.assertEqual(
+            got["sections"],
+            [[0, 4, "INTRO 1"], [4, 12, "GROOVE 1"], [12, 14, "BREAK 1"]],
+        )
+        bass, fx = got["parts"]
+        self.assertEqual(bass["spans"], [[0, 8, [0] * 8]])
+        self.assertEqual((fx["name"], fx["spans"]), ("FX", []))
+
+    def test_a_muted_part_is_left_out(self):
+        from listening import timeline
+
+        piece = tl_piece([(0, "GROOVE 1")], {"DRUMS": [(0, 1)], "BASS": [(0, 1)]}, 2)
+        got = timeline.strip(piece, {}, 0, 2, muted=(2,))
+        self.assertEqual([p["name"] for p in got["parts"]], ["Drums"])
+
+    def test_the_timeline_key_is_checked(self):
+        from listening import timeline
+
+        self.assertEqual(timeline.problems("F1 clip a", {"timeline": True}), [])
+        self.assertEqual(
+            timeline.problems("F1 clip a", {"reuse": "x.m4a", "timeline": True}),
+            ["F1 clip a: a reused clip's timeline is a dict with its args and bars"],
+        )
+        self.assertEqual(
+            timeline.problems(
+                "F1 clip a",
+                {"reuse": "x.m4a", "timeline": {"args": "--seed 5", "bar": [0, 8]}},
+            ),
+            [
+                "F1 clip a: timeline key bar unknown",
+                "F1 clip a: a reused clip's timeline gives args and bars",
+            ],
+        )
+
+    def test_true_takes_the_captures_sidecar_and_a_dict_wins(self):
+        from listening import timeline
+
+        info = {"args": "--genre house --seed 5 --end-after-drop 2", "variant": "v1"}
+        clip = {"stem": "a", "src": "s", "bars": [0, 138], "timeline": True}
+        self.assertEqual(
+            timeline.spec(clip, info),
+            ("--genre house --seed 5 --end-after-drop 2", "v1", [0, 138], None),
+        )
+        clip = {
+            "stem": "a",
+            "reuse": "audio/a.m4a",
+            "timeline": {"args": "--seed 9", "bars": [16, 40], "sounds": {"BASS": "x"}},
+        }
+        self.assertEqual(
+            timeline.spec(clip), ("--seed 9", "base", [16, 40], {"BASS": "x"})
+        )
+
+    def test_the_page_carries_the_strip_and_keeps_its_answers_key(self):
+        session = content(
+            clips=[
+                {
+                    "stem": "s1-a",
+                    "src": "s1_e5",
+                    "bars": [0, 8],
+                    "label": "A",
+                    "timeline": True,
+                }
+            ]
+        )
+        strip = {"barSeconds": 2.0, "bars": 8, "first": 0, "sections": [], "parts": []}
+        data = page.page_data(session, {"s1-a": 16.0}, {"s1-a": strip})
+        self.assertEqual(data["cards"][0]["clips"][0]["timeline"], strip)
+        self.assertEqual(data["session"], "psytrance-classic-round-3")
+        self.assertEqual(
+            page.page_data(session, {})["cards"][0]["clips"][0]["timeline"], None
+        )
+        html = page.html(data)
+        self.assertIn("renderTimeline(c.timeline, audio)", html)
+        self.assertIn("const KEY = 'listening-session:' + DATA.session;", html)

@@ -67,6 +67,22 @@ button.secondary { background: transparent; color: var(--accent); }
 .tip { font-size: .85rem; color: var(--accent); opacity: 0; transition: opacity .2s; }
 .tip:not(:empty) { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+/* A whole-song clip's timeline strip (#513): Sections on top, a row per part, a playhead; a click seeks. */
+.clip.has-timeline { grid-column: 1 / -1; }
+.timeline { display: grid; grid-template-columns: minmax(7rem, 15rem) 1fr; gap: 2px .6rem; margin-block: .5rem .2rem; font-size: .78rem; align-items: center; }
+.timeline .who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline .who b { font-weight: 600; }
+.timeline .lane { position: relative; block-size: 1.1rem; background: light-dark(#f0f0ec, #1a1b1e); border-radius: .2rem; cursor: pointer; }
+.timeline .bands { block-size: 1.5rem; background: none; }
+.timeline .band { position: absolute; inset-block: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-inline: .2rem; font-size: .7rem; line-height: 1.5rem; border-inline-start: 1px solid var(--muted); color: var(--muted); }
+.timeline .band:nth-child(odd) { background: light-dark(#ecebf6, #26253a); }
+.timeline .band[data-now] { color: var(--ink); font-weight: 700; background: var(--chosen); }
+.timeline .span { position: absolute; inset-block: 1px; display: flex; border-radius: .2rem; overflow: hidden; }
+.timeline .span i { flex: 1; background: var(--accent); }
+.timeline .head { position: absolute; inset-block: 0; inline-size: 2px; margin-inline-start: -1px; background: var(--warn-ink); pointer-events: none; }
+.timeline .ticks { position: relative; block-size: 1rem; color: var(--muted); font-size: .68rem; cursor: pointer; }
+.timeline .ticks span { position: absolute; transform: translateX(-50%); }
+.timeline .ticks span:first-child { transform: none; }
 /* Card text keeps the line breaks the content file gives it (a song card's timeline, a list of questions). */
 .card p, .options li { white-space: pre-line; }
 </style>
@@ -141,9 +157,11 @@ function renderCard(card) {
         row.append(sel);
       }
     }
-    grid.append(el('div', { className: 'clip' },
+    const box = el('div', { className: 'clip' + (c.timeline ? ' has-timeline' : '') },
       el('div', { className: 'top' }, el('span', { textContent: c.label }), el('span', { className: 'kind', textContent: c.kind })),
-      audio, row));
+      audio, row);
+    if (c.timeline) box.append(renderTimeline(c.timeline, audio));
+    grid.append(box);
   }
   if (card.clips.length) sec.append(grid);
   if (card.midiFiles && card.midiFiles.length) {
@@ -165,6 +183,65 @@ function renderCard(card) {
   sec.append(fs);
   document.getElementById('section-' + card.section).append(sec);
   document.getElementById('nav').append(el('a', { href: '#' + card.id, textContent: card.id, title: card.title }));
+}
+
+// A clip's timeline (#513): bars are from the cut's start; a bar lasts tl.barSeconds of the clip.
+const clock = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+function renderTimeline(tl, audio) {
+  const pct = (bar) => (100 * bar / tl.bars) + '%';
+  const bar = (b) => 'bar ' + (tl.first + b) + ' (' + clock(b * tl.barSeconds) + ')';
+  const box = el('div', { className: 'timeline', role: 'group', 'aria-label': 'Timeline: the parts playing in each Section; click to seek' });
+  const heads = [], lanes = [];
+  const lane = (cls) => { const l = el('div', { className: 'lane' + (cls ? ' ' + cls : '') }); const h = el('div', { className: 'head' }); h.style.insetInlineStart = '0%'; heads.push(h); lanes.push(l); return l; };
+  const bands = lane('bands');
+  for (const [s, e, label] of tl.sections) {
+    const b = el('div', { className: 'band', textContent: label, title: label + ': ' + bar(s) + ' to ' + bar(e) });
+    b.style.insetInlineStart = pct(s); b.style.inlineSize = pct(e - s); b.dataset.start = s; b.dataset.end = e;
+    bands.append(b);
+  }
+  box.append(el('span', { className: 'who muted', textContent: 'Sections' }), bands);
+  for (const p of tl.parts) {
+    const most = Math.max(1, ...p.spans.flatMap(([, , d]) => d));
+    const row = lane();
+    for (const [s, e, d] of p.spans) {
+      const span = el('div', { className: 'span', title: p.name + ': ' + bar(s) + ' to ' + bar(e) });
+      span.style.insetInlineStart = pct(s); span.style.inlineSize = pct(e - s);
+      for (const n of d) { const i = el('i'); i.style.opacity = (0.25 + 0.75 * n / most).toFixed(2); span.append(i); }
+      row.append(span);
+    }
+    const who = el('span', { className: 'who', title: p.name + (p.sound ? ' · ' + p.sound : '') + (p.detail ? ' (' + p.detail + ')' : '') },
+      el('b', { textContent: p.name }), p.sound ? ' · ' + p.sound : '');
+    box.append(who, row);
+  }
+  const ticks = el('div', { className: 'ticks' });
+  const total = tl.bars * tl.barSeconds;
+  const every = total > 240 ? 30 : total > 60 ? 15 : 5;
+  for (let t = 0; t < total - every / 3; t += every) {
+    const k = el('span', { textContent: clock(t) }); k.style.insetInlineStart = (100 * t / total) + '%'; ticks.append(k);
+  }
+  lanes.push(ticks);
+  box.append(el('span'), ticks);
+  heads.forEach((h, i) => lanes[i].append(h));
+  // The playhead: where the audio is, as a bar of the cut; its Section is marked.
+  const show = () => {
+    const at = Math.min(audio.currentTime / tl.barSeconds, tl.bars);
+    for (const h of heads) h.style.insetInlineStart = pct(at);
+    for (const b of bands.querySelectorAll('.band')) b.toggleAttribute('data-now', at >= +b.dataset.start && at < +b.dataset.end && (audio.currentTime > 0));
+  };
+  let raf = 0;
+  const tick = () => { show(); if (!audio.paused) raf = requestAnimationFrame(tick); };
+  audio.addEventListener('play', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
+  for (const ev of ['pause', 'seeked', 'timeupdate', 'ended']) audio.addEventListener(ev, show);
+  // A click seeks there and plays. With preload none, the time is set once the metadata is in.
+  const seek = (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * total;
+    if (audio.readyState >= 1) audio.currentTime = t;
+    else audio.addEventListener('loadedmetadata', () => { audio.currentTime = t; }, { once: true });
+    audio.play();
+  };
+  for (const l of lanes) l.addEventListener('click', seek);
+  return box;
 }
 
 function markNav() {
