@@ -128,7 +128,8 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	            && x.buildBars.data() == y.buildBars.data() && x.buildBars.size() == y.buildBars.size()
 	            && x.grooveToBuild == y.grooveToBuild && x.dropDecayPhrases == y.dropDecayPhrases
 	            && x.breakKeeps == y.breakKeeps && x.buildKeeps == y.buildKeeps && x.buildCut == y.buildCut
-	            && x.buildCutBars == y.buildCutBars && x.gap == y.gap && a.phraseBars == b.phraseBars
+	            && x.buildCutBars == y.buildCutBars && x.buildCutLeads == y.buildCutLeads
+	            && x.buildRiser == y.buildRiser && x.gap == y.gap && a.phraseBars == b.phraseBars
 	            && x.roll.lane == y.roll.lane && x.roll.top == y.roll.top
 	            && std::ranges::equal(x.roll.stageFraction, y.roll.stageFraction)
 	            && sameChordLines(a.harmony.graph, b.harmony.graph);

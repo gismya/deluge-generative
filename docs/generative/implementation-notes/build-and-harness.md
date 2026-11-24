@@ -34,6 +34,9 @@ otherwise.
   `./dbt exec`, and the build is multi-config: without `-C Debug` every test shows "Not Run". `-n` prints the binary it
   built; run that one (`<binary> <name>_spec --verbose`). `check_all.py` builds only `build/tests-sanitize`, so after a
   plain `-n` its binary there is stale (`--sanitize -n` rebuilds it): the "`--no-run` didn't rebuild" of #436.
+  The other way round too: `--sanitize` builds only `build/tests-sanitize`, so `build/tests/.../generator_render` (what
+  renders and `gen_emu.py` read) keeps the last plain build's tables until `./dbt test --generator -n` (#518 R1
+  rendered a variant from before its patch).
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
