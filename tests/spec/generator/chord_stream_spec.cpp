@@ -460,7 +460,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			expect(wholes).to_be_greater_than(halves);
 		});
 
-		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before", _ {
+		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before when returnChance is 0", _ {
 			int32_t drops = 0;
 			int32_t changes = 0;
 			int32_t returns = 0;
@@ -484,6 +484,57 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			// A new loop can draw the chords of the one before, or of one before that: the shares are approximate.
 			expect(changes * 100 / drops).to_be_between(20, 40);
 			expect(returns * 100 / drops).to_be_less_than(5);
+		});
+
+		it("goes back to the loop before on every change after the second loop when returnChance is 1000 (House S1, #496)", _ {
+			static constexpr ChordGraph kAlwaysBack = [] {
+				ChordGraph graph = kLooping;
+				graph.loopChance = 1000;
+				graph.returnChance = 1000;
+				return graph;
+			}();
+			static constexpr Genre kBack{.name = "back", .parts = kRootBass, .harmony = {.graph = &kAlwaysBack}, .arc = kArc};
+			int32_t checked = 0;
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(kBack), seed, 400 * kStepsPerBar));
+				// Loop 0, a new loop 1, then back and forth: 0, 1, 0, 1...
+				for (size_t i = 2; i < spans.size(); i++) {
+					expect(spans[i].signature() == spans[i - 2].signature()).to_be_true();
+					checked++;
+				}
+			}
+			expect(checked).to_be_greater_than(20);
+		});
+
+		it("goes back to an earlier loop on about returnChance of the changes once there is one, else draws a new loop", _ {
+			// The share of changes (from the second) that play an earlier loop's chords, over 40 pieces.
+			const auto returnShare = [&](int16_t returnChance) {
+				static ChordGraph graph;
+				graph = kLooping;
+				graph.loopChance = 1000;
+				graph.returnChance = returnChance;
+				static const Genre kSometimes{.name = "sometimes", .parts = kRootBass, .harmony = {.graph = &graph}, .arc = kArc};
+				int32_t changes = 0;
+				int32_t returns = 0;
+				for (uint32_t seed = 1; seed <= 40; seed++) {
+					const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(kSometimes), seed, 400 * kStepsPerBar));
+					for (size_t i = 2; i < spans.size(); i++) {
+						changes++;
+						for (size_t j = 0; j + 1 < i; j++) {
+							if (spans[j].signature() == spans[i].signature()) {
+								returns++;
+								break;
+							}
+						}
+					}
+				}
+				expect(changes).to_be_greater_than(150);
+				return returns * 100 / changes;
+			};
+			// A new loop can draw the chords of one heard before: that share comes on top of the returns.
+			const int32_t chance = returnShare(0);
+			const int32_t returned = returnShare(333);
+			expect(returned - chance).to_be_between(33 * (100 - chance) / 100 - 10, 33 * (100 - chance) / 100 + 10);
 		});
 
 		it("keeps one 4-bar loop for the whole piece when loopChance is 0 and halfLoopChance is 1000 (Dub, spec §7.4)", _ {

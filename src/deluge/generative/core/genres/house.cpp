@@ -22,6 +22,7 @@
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/genre.h"
+#include "generative/core/variants.h"
 
 namespace deluge::generative::genres {
 
@@ -107,6 +108,21 @@ constexpr Pattern kOffbeatBass[] = {
     {".7X7.7X...X...X.", ".g.g.g..........", 2},
 };
 
+/// S6's pickups (round 2's B, #369): the offbeat bass with five more rhythms, two of them 2 bars long.
+constexpr Pattern kPickupBass[] = {
+    {"..X...X...X...X.", "................", 0, 3},
+    {"..X..7X...X...X.", ".....g..........", 0},
+    {"..X..7X7..X...X.", ".....g.g........", 1},
+    {"..X7..X...X...X.", "...g............", 1},
+    {"..X...X..7X7..X.", ".........g.g....", 1},
+    {"..X...X7..X...X.", ".......g........", 1},
+    {".7X...X...X...X.", ".g..............", 1},
+    {"..X7..X7..X...X.", "...g...g........", 1},
+    {"..X...X...X...X." "..X..7X7..X...X.", ".....................g.g........", 1, 2},
+    {"..X7..X...X...X." ".7X...X7..X...X.", "...g.............g.....g........", 1},
+    {".7X7.7X...X...X.", ".g.g.g..........", 2},
+};
+
 /// The stab: anchored on the a of 1, then &s and a's, more of them as Complexity rises, two 2-bar lines whose second bar
 /// answers the first. Never on a beat (the kick's and the clap's) or an e.
 constexpr Pattern kStab[] = {
@@ -170,6 +186,8 @@ constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
 /// The chord root, its 5th as Complexity rises. The Register's span (−5 to +7) holds the line under the Strings, so
 /// no octave jumps.
 constexpr LineWeight kBassDegrees[] = {{0, 8}, {4, 2}};
+/// S6's pickups: the 5th most, the root and the 7th below about as often; the anchors stay on the root.
+constexpr LineWeight kPickupDegrees[] = {{0, 3}, {4, 4}, {6, 3}};
 
 /// Short offbeat notes, rare slides, a line that changes slowly.
 constexpr LoopSpec kBassLoop{
@@ -183,6 +201,7 @@ constexpr LoopSpec kBassLoop{
 /// Chord positions: mostly the root, the 3rd and the 5th, the 7th now and then, the note under the root rarely.
 constexpr LineWeight kAnswerPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 2}};
 
+constexpr int32_t kDrumsPart = 0;
 constexpr int32_t kBassPart = 1;
 constexpr int32_t kStabPart = 2;
 constexpr int32_t kStringsPart = 3;
@@ -271,6 +290,7 @@ constexpr PartSpec kParts[] = {
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
+static_assert(kParts[kDrumsPart].role == Role::Drums);
 static_assert(kParts[kBassPart].role == Role::Bass);
 static_assert(kParts[kStabPart].role == Role::Chords && kParts[kStabPart].flavour == Flavour::Stab);
 static_assert(kParts[kStringsPart].role == Role::Pad && kParts[kStringsPart].flavour == Flavour::Sustain);
@@ -306,7 +326,8 @@ constexpr ChordMove kHouseMoves[] = {
 /// 2 bars a chord, a repeat now and then so some last 4 and a few longer, the cadence on ♭VII every 4 chords (spec
 /// §4.5). The repeat weight has no cap and weighs most where the guard thins the other ways on: at 15 one bar in 7
 /// sat in a hold of 6 bars or more, at 8 one in 16. The chords loop (spec §7.4, round 2's S1): a 2- or 4-chord loop
-/// held through the Break and the Build, a new one on 1 Drop in 3.
+/// held through the Break and the Build, a new one on 1 Drop in 3 (S1's other variants change that), and one Drop's
+/// move in 3 goes back to an earlier loop (the owner, round 2: "might also go back to a previous loop", tuning).
 constexpr ChordGraph kHouseGraph{
     .homePull = 20,
     .moves = kHouseMoves,
@@ -316,17 +337,109 @@ constexpr ChordGraph kHouseGraph{
     .barsPerChord = 2,
     .loopChance = 333,
     .halfLoopChance = 333,
+    .returnChance = 333,
 };
+
+/// House's graph moving to another loop at `chance` per-mille on each Drop (S1).
+constexpr ChordGraph loopsAt(int16_t chance) {
+	ChordGraph graph = kHouseGraph;
+	graph.loopChance = chance;
+	return graph;
+}
+constexpr ChordGraph kHalfDropsGraph = loopsAt(500);
+constexpr ChordGraph kEveryDropGraph = loopsAt(1000);
+constexpr ChordGraph kOneLoopGraph = loopsAt(0);
 
 constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Mixolydian};
 
 /// 4 bars once in three, 8 bars twice (spec §4.5).
 constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
 
+// Variant sets (#461, #496, ADR 0008): the owner asked in round 2 for S1, S4a and S6 to vary per piece. Today's first
+// in each; weights are tuning.
+
+/// S1, how often a Drop brings another chord loop: 1 Drop in 3 (round 2's pick), half of them (the owner's note, so
+/// the heaviest), every Drop or never (one loop for the whole piece). Live: only the graph's loop chance moves, read
+/// on the Drop's own step after dropVariants() lands it.
+constexpr Variant kLoopVariants[] = {
+    {.name = "third", .oledName = "1 IN 3", .weight = 2},
+    {.name = "half",
+     .oledName = "1 IN 2",
+     .weight = 3,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kHalfDropsGraph; }},
+    {.name = "every",
+     .oledName = "EVERY",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kEveryDropGraph; }},
+    {.name = "never",
+     .oledName = "NEVER",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kOneLoopGraph; }},
+};
+
+/// S4a, the Build's shape (round 2's QBK options): everything (today), no Lead (it returns on the Drop), the kick and
+/// Bass cut for the last 2 bars, or no kick or Bass in the whole Build. Not live: the Arc reads the Build ahead.
+constexpr Variant kBuildVariants[] = {
+    {.name = "full", .oledName = "FULL", .weight = 2},
+    {.name = "nolead",
+     .oledName = "NO LEAD",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildKeeps = kEverything.without({.parts = partBit(kLeadPart)});
+         }},
+    {.name = "cut2",
+     .oledName = "CUT 2",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildCut = {.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)};
+	         resolved.genre.arc.buildCutBars = 2;
+         }},
+    {.name = "nokick",
+     .oledName = "NO KICK",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         // The Drums by lane, so the kick alone leaves.
+	         resolved.genre.arc.buildKeeps =
+	             kEverything.without({.parts = static_cast<uint8_t>(partBit(kDrumsPart) | partBit(kBassPart)),
+	                                  .lanes = laneBit(Lane::Kick)});
+         }},
+};
+
+/// S6, the Bass's pickups (#369): the 5th from Complexity 25 (round 2's A, today), the root alone at Complexity 0
+/// (round 2's today), or B's pickups. The owner liked them all and kept A for now, so A is the heaviest. Not live: the
+/// pickups' pool has five more entries, and a frozen Bass holds its entry across a Drop.
+constexpr Variant kBassVariants[] = {
+    {.name = "fifth", .oledName = "5TH", .weight = 2},
+    {.name = "root",
+     .oledName = "ROOT",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kBassPart].loop.draws.leap = {0, 6}; }},
+    {.name = "pickups",
+     .oledName = "PICKUPS",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         PartSpec& bass = resolved.parts[kBassPart];
+	         bass.pool = kPickupBass;
+	         bass.loop.degrees = kPickupDegrees;
+	         bass.loop.draws.leap = {4, 8};
+	         bass.loop.rootOnAnchors = true;
+         }},
+};
+
+constexpr VariantSet kVariantSets[] = {
+    {.name = "loops", .oledName = "LOOPS", .variants = kLoopVariants, .live = true},
+    {.name = "build", .oledName = "BUILD", .variants = kBuildVariants},
+    {.name = "bass", .oledName = "BASS", .variants = kBassVariants},
+};
+
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 5, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 20},
     .phraseBars = 8,
     .parts = kParts,
@@ -366,6 +479,7 @@ constexpr Genre kHouse{
             // a Crash on Drops, after a fill that ends a phrase, and at 150 per-mille on other phrase starts
             .accentChance = 150,
         },
+    .variantSets = kVariantSets,
 };
 static_assert(genreValid(kHouse), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 

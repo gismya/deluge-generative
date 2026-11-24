@@ -998,7 +998,8 @@ constexpr bool harmonyValid(const Genre& genre) {
 	// A loop half a phrase long holds 2 whole chords or more, and every chance is per-mille.
 	if (graph->loopChance >= 0
 	    && (graph->loopChance > 1000 || graph->halfLoopChance < 0 || graph->halfLoopChance > 1000
-	        || graph->barsPerChord == 0 || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
+	        || graph->returnChance < 0 || graph->returnChance > 1000 || graph->barsPerChord == 0
+	        || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
 		return false;
 	}
 	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {

@@ -56,6 +56,26 @@ void longerRoll(ResolvedGenre& resolved) {
 void fewerRepicks(ResolvedGenre& resolved) {
 	resolved.genre.repickChance = 50;
 }
+/// Dub's loop graph at another grid, or with its loop's length drawn otherwise, or moving loops at another chance.
+ChordGraph withGraph(int32_t bars, int16_t half, int16_t chance) {
+	ChordGraph graph = *genres::dub.harmony.graph;
+	graph.barsPerChord = static_cast<uint8_t>(bars);
+	graph.halfLoopChance = half;
+	graph.loopChance = chance;
+	return graph;
+}
+void otherGrid(ResolvedGenre& resolved) {
+	static const ChordGraph kGraph = withGraph(2, 1000, 0);
+	resolved.genre.harmony.graph = &kGraph;
+}
+void otherLoopLength(ResolvedGenre& resolved) {
+	static const ChordGraph kGraph = withGraph(1, 0, 0);
+	resolved.genre.harmony.graph = &kGraph;
+}
+void otherLoopChance(ResolvedGenre& resolved) {
+	static const ChordGraph kGraph = withGraph(1, 1000, 500);
+	resolved.genre.harmony.graph = &kGraph;
+}
 /// The Bass's pool cut to its first entry: a frozen Bass's pick could point past it.
 void shorterPool(ResolvedGenre& resolved) {
 	resolved.parts[1].pool = resolved.parts[1].pool.first(1);
@@ -77,9 +97,20 @@ Genre madeUp() {
 	return genre;
 }
 
+/// Whether two Chord graphs keep the chord lines and the loop playing across a Drop: the harmonic rhythm, whether the
+/// chords loop, and the loop's length draw, which each bar reads for the loop playing (spec §7.4). A live House S1
+/// moves only the loop chance, which the Drop's own step reads.
+bool sameChordLines(const ChordGraph* a, const ChordGraph* b) {
+	if (a == nullptr || b == nullptr) {
+		return a == b;
+	}
+	return a->barsPerChord == b->barsPerChord && (a->loopChance >= 0) == (b->loopChance >= 0)
+	       && a->halfLoopChance == b->halfLoopChance;
+}
+
 /// The fields a live or Drop-changing set's patch may never touch (ADR 0008): what the Arc's look-ahead reads across
-/// a Drop's line, the Arc's lengths, its Section offsets, the Build (with its roll), the Break and the Registers. True
-/// when `a` and `b` agree on them.
+/// a Drop's line, the Arc's lengths, its Section offsets, the Build (with its roll), the Break and the Registers, and
+/// the chord lines (sameChordLines()). True when `a` and `b` agree on them.
 bool sameLookAhead(const Genre& a, const Genre& b) {
 	const ArcSpec& x = a.arc;
 	const ArcSpec& y = b.arc;
@@ -91,7 +122,8 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	            && x.breakKeeps == y.breakKeeps && x.buildKeeps == y.buildKeeps && x.buildCut == y.buildCut
 	            && x.buildCutBars == y.buildCutBars && x.gap == y.gap && a.phraseBars == b.phraseBars
 	            && x.roll.lane == y.roll.lane && x.roll.top == y.roll.top
-	            && std::ranges::equal(x.roll.stageFraction, y.roll.stageFraction);
+	            && std::ranges::equal(x.roll.stageFraction, y.roll.stageFraction)
+	            && sameChordLines(a.harmony.graph, b.harmony.graph);
 	for (int32_t k = 0; k < kNumSectionKinds; k++) {
 		const SectionOffsets& o = x.offsets[k];
 		const SectionOffsets& q = y.offsets[k];
@@ -358,7 +390,7 @@ describe variant_sets("Variant sets", $ {
 				expect(patchesKeepLookAhead(*genre)).to_be_true();
 			}
 		});
-		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register or a pool's size, and lets one that moves the repicks by", _ {
+		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register, a pool's size, the chord grid or a loop's length, and lets one that moves the repicks or the loop chance by", _ {
 			static constexpr Variant kArc[] = {{.name = "a", .oledName = "A"},
 			                                   {.name = "b", .oledName = "B", .apply = longerGrooves}};
 			static constexpr Variant kRegister[] = {{.name = "a", .oledName = "A"},
@@ -371,6 +403,12 @@ describe variant_sets("Variant sets", $ {
 			                                    {.name = "b", .oledName = "B", .apply = longerRoll}};
 			static constexpr Variant kPool[] = {{.name = "a", .oledName = "A"},
 			                                    {.name = "b", .oledName = "B", .apply = shorterPool}};
+			static constexpr Variant kGrid[] = {{.name = "a", .oledName = "A"},
+			                                    {.name = "b", .oledName = "B", .apply = otherGrid}};
+			static constexpr Variant kLoopLength[] = {{.name = "a", .oledName = "A"},
+			                                          {.name = "b", .oledName = "B", .apply = otherLoopLength}};
+			static constexpr Variant kLoopChance[] = {{.name = "a", .oledName = "A"},
+			                                          {.name = "b", .oledName = "B", .apply = otherLoopChance}};
 			static constexpr VariantSet kLive[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kArc, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRegister, .live = true}},
@@ -379,6 +417,9 @@ describe variant_sets("Variant sets", $ {
 			    {{.name = "s", .oledName = "S", .variants = kOffsets, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRoll, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kPool, .changeAt = ChangeAt::Drop, .changeChance = 10}},
+			    {{.name = "s", .oledName = "S", .variants = kGrid, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kLoopLength, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kLoopChance, .live = true}},
 			};
 			std::vector<bool> kept;
 			for (const auto& sets : kLive) {
@@ -386,7 +427,7 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				kept.push_back(patchesKeepLookAhead(genre));
 			}
-			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false});
+			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false, false, false, true});
 		});
 	});
 

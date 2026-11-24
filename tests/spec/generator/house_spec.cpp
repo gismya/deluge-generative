@@ -7,6 +7,7 @@
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/palette.h"
+#include "generative/core/variants.h"
 #include "harness.h"
 #include "palette_helpers.h"
 #include "stream_helpers.h"
@@ -69,6 +70,47 @@ struct HouseWithRespond {
 	}
 };
 
+/// `recipe` with House's set fixed to one variant, `set=name` (the tuning tools' --variant).
+Recipe withVariant(Recipe recipe, const char* fix) {
+	fixVariant(recipe.variants, parseVariantFix(houseGenre, fix).value());
+	return recipe;
+}
+
+/// House as variant `fix` (`set=name`) patches it, the other sets on their first.
+struct HouseAs {
+	ResolvedGenre copy;
+	const Genre& genre;
+	explicit HouseAs(const char* fix) : genre(resolveGenre(houseGenre, withVariant({}, fix).variants, &copy)) {}
+};
+
+/// The note-ons of `part` (and `lane`, for Drums) in each Build's last `lastBars` bars and before them, over `pieces`
+/// pieces of `recipe`'s variants.
+struct BuildNotes {
+	int32_t early = 0;
+	int32_t late = 0;
+};
+BuildNotes buildNotes(const char* fix, int32_t part, Lane lane, int32_t lastBars) {
+	BuildNotes notes;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		const Walked walked = walk(withVariant(movingRecipe(houseGenre, seed), fix), seed, 128 * kStepsPerBar);
+		const auto steps = static_cast<int32_t>(walked.steps.size());
+		for (const Event& e : walked.noteOns) {
+			const int32_t step = std::min<int32_t>(stepAt(e), steps - 1);
+			if (walked.steps[step].section != SectionKind::Build || e.part != part
+			    || (part == kDrumsPart && e.lane != lane)) {
+				continue;
+			}
+			// Steps to the Build's end.
+			int32_t end = step;
+			while (end < steps && walked.steps[end].section == SectionKind::Build) {
+				end++;
+			}
+			(end - step <= lastBars * kStepsPerBar ? notes.late : notes.early)++;
+		}
+	}
+	return notes;
+}
+
 } // namespace
 
 // clang-format off
@@ -77,7 +119,7 @@ describe house("House", $ {
 		expect(std::string(houseGenre.name)).to_equal(std::string("house"));
 		expect(std::string(houseGenre.oledName)).to_equal(std::string("HOUSE"));
 		expect(houseGenre.parent == nullptr).to_be_true();
-		expect(houseGenre.version).to_equal(4);
+		expect(houseGenre.version).to_equal(5);
 		expect(findGenre("house") == &houseGenre).to_be_true();
 		expect(partCount(houseGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -107,7 +149,7 @@ describe house("House", $ {
 		}
 	});
 
-	it("loops a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 8, cadence ♭VII every 4, Extensions 1–2, no guarded chord, a new loop on 1 Drop in 3", _ {
+	it("loops a Chord graph from home i: i–iv, i–♭VII, iv–♭VII, i–♭VI and ♭VI–♭VII both ways, 2 bars a chord, repeat 8, cadence ♭VII every 4, Extensions 1–2, no guarded chord, a new loop on 1 Drop in 3, one move in 3 going back to an earlier loop", _ {
 		const ChordGraph* graph = houseGenre.harmony.graph;
 		expect(graph != nullptr).to_be_true();
 		std::set<std::pair<int32_t, int32_t>> moves;
@@ -129,6 +171,7 @@ describe house("House", $ {
 		// The loop (rules review S1, round 2's s1-loop): a new one on 1 Drop in 3.
 		expect(graph->loopChance).to_equal(int16_t{333});
 		expect(graph->halfLoopChance).to_equal(int16_t{333});
+		expect(graph->returnChance).to_equal(int16_t{333}); // the owner's round 2 note (#496)
 		// ♭VII weakened from i and ♭VI (#371), and no vii° or vi° (#367): the guard at 0.
 		for (const ChordMove& move : graph->moves) {
 			if (move.to == kVII && (move.from == kI || move.from == kVI)) {
@@ -639,7 +682,8 @@ describe house("House", $ {
 			int32_t breakNotes = 0;
 			std::set<int32_t> buildParts;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Walked walked = walk(movingRecipe(houseGenre, seed), seed, 96 * kStepsPerBar);
+				// S4a on today's Build (#496): its other variants leave the Lead or the kick and Bass out.
+				const Walked walked = walk(withVariant(movingRecipe(houseGenre, seed), "build=full"), seed, 96 * kStepsPerBar);
 				for (const Walked::Step& step : walked.steps) {
 					buildSteps += step.section == SectionKind::Build ? 1 : 0;
 				}
@@ -662,6 +706,100 @@ describe house("House", $ {
 			for (int32_t p : {kDrumsPart, kBassPart, kStabPart, kLeadPart}) {
 				expect(buildParts.contains(p)).to_be_true();
 			}
+		});
+	});
+
+	context("its variant sets (#461, #496, ADR 0008)", _ {
+		it("lists S1's loop changes (live), S4a's Build and S6's Bass pickup, today's first in each", _ {
+			const std::span<const VariantSet> sets = houseGenre.variantSets;
+			expect(sets.size()).to_equal(size_t{3});
+			std::vector<std::string> names;
+			std::vector<std::vector<std::string>> variants;
+			std::vector<std::vector<int32_t>> weights;
+			for (const VariantSet& set : sets) {
+				names.emplace_back(set.name);
+				variants.emplace_back();
+				weights.emplace_back();
+				for (const Variant& variant : set.variants) {
+					variants.back().emplace_back(variant.name);
+					weights.back().push_back(variant.weight);
+				}
+				expect(set.variants[0].apply == nullptr).to_be_true(); // today's: the genre as written
+				expect(set.changeAt == ChangeAt::Never).to_be_true();
+			}
+			expect(names).to_equal(std::vector<std::string>{"loops", "build", "bass"});
+			expect(variants).to_equal(std::vector<std::vector<std::string>>{
+			    {"third", "half", "every", "never"}, {"full", "nolead", "cut2", "nokick"}, {"fifth", "root", "pickups"}});
+			expect(weights).to_equal(std::vector<std::vector<int32_t>>{{2, 3, 1, 1}, {2, 1, 1, 1}, {2, 1, 1}});
+			expect(sets[0].live).to_be_true();
+			expect(sets[1].live).to_be_false(); // the Build is read ahead of its line
+			expect(sets[2].live).to_be_false(); // pickups' pool has more entries than today's
+		});
+
+		it("S1: a new loop on 1 Drop in 3, 1 in 2, every Drop or never, each going back to an earlier loop at 333", _ {
+			std::vector<int32_t> chances;
+			for (const char* fix : {"loops=third", "loops=half", "loops=every", "loops=never"}) {
+				const HouseAs house(fix);
+				const ChordGraph& graph = *house.genre.harmony.graph;
+				chances.push_back(graph.loopChance);
+				expect(graph.returnChance).to_equal(int16_t{333});
+				expect(graph.halfLoopChance).to_equal(houseGenre.harmony.graph->halfLoopChance);
+				expect(graph.barsPerChord).to_equal(houseGenre.harmony.graph->barsPerChord);
+				expect(graph.moves.data() == houseGenre.harmony.graph->moves.data()).to_be_true();
+			}
+			expect(chances).to_equal(std::vector<int32_t>{333, 500, 1000, 0});
+		});
+
+		it("S4a: the Build with everything, with no Lead, with the kick and Bass cut for its last 2 bars, or with no kick or Bass", _ {
+			const BuildNotes full = buildNotes("build=full", kDrumsPart, Lane::Kick, 2);
+			expect(full.early).to_be_greater_than(0);
+			expect(full.late).to_be_greater_than(0);
+			expect(buildNotes("build=nolead", kLeadPart, Lane::None, 0).early).to_equal(0);
+			expect(buildNotes("build=full", kLeadPart, Lane::None, 0).early).to_be_greater_than(0);
+			for (const int32_t part : {kDrumsPart, kBassPart}) {
+				const BuildNotes cut = buildNotes("build=cut2", part, Lane::Kick, 2);
+				expect(cut.early).to_be_greater_than(0);
+				expect(cut.late).to_equal(0);
+				const BuildNotes none = buildNotes("build=nokick", part, Lane::Kick, 2);
+				expect(none.early + none.late).to_equal(0);
+			}
+			expect(buildNotes("build=nokick", kStabPart, Lane::None, 0).early).to_be_greater_than(0);
+		});
+
+		it("S6: the 5th from Complexity 25 (today), the root alone at 0, or pickups on the 5th and the 7th below with five more rhythms", _ {
+			const LoopSpec& fifth = HouseAs("bass=fifth").genre.parts[kBassPart].loop;
+			expect(fifth.draws.leap.atZero).to_equal(int16_t{3});
+			const HouseAs root("bass=root");
+			expect(root.genre.parts[kBassPart].loop.draws.leap.atZero).to_equal(int16_t{0});
+			expect(root.genre.parts[kBassPart].loop.draws.leap.atFull).to_equal(int16_t{6});
+			const HouseAs pickups("bass=pickups");
+			const PartSpec& bass = pickups.genre.parts[kBassPart];
+			expect(bass.loop.rootOnAnchors).to_be_true();
+			expect(bass.loop.draws.leap.atZero).to_equal(int16_t{4});
+			expect(bass.loop.draws.leap.atFull).to_equal(int16_t{8});
+			expect(bass.pool.size()).to_equal(houseGenre.parts[kBassPart].pool.size() + 5);
+			// Played: every anchor (the &s) on the chord root; the pickups off it now and then.
+			int32_t anchors = 0;
+			int32_t offRootAnchors = 0;
+			for (uint32_t seed = 1; seed <= 6; seed++) {
+				Recipe recipe = withVariant(movingRecipe(houseGenre, Scale::Minor, seed), "bass=pickups");
+				recipe.keyRoot = 0;
+				const Walked walked = walk(recipe, seed, 64 * kStepsPerBar);
+				for (const Event& e : walked.noteOns) {
+					const int32_t step = stepAt(e);
+					if (e.part != kBassPart || step % 4 != 2 || step >= static_cast<int32_t>(walked.steps.size())) {
+						continue;
+					}
+					anchors++;
+					const int32_t root = (walked.steps[step].chord == kI    ? 0
+					                      : walked.steps[step].chord == kIV ? 5
+					                      : walked.steps[step].chord == kVI ? 8
+					                                                        : 10);
+					offRootAnchors += e.pitch % 12 == root ? 0 : 1;
+				}
+			}
+			expect(anchors).to_be_greater_than(300);
+			expect(offRootAnchors).to_equal(0);
 		});
 	});
 
