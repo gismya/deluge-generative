@@ -36,8 +36,8 @@ golden   the firmware check and the Compose and Recipe-file smoke checks (spec Â
 capture  the tuning loop's main step: builds a capture firmware in build-capture/ (--build-dir; --elf: that one, built
          before, and nothing builds), writes a copy of its ELF beside the WAV whose Current Recipe and seed come from
          the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots it,
-         plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
-         --no-play. Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new
+         plays Perform for --seconds and writes the rendered audio to a WAV. --play then plays it (afplay); by
+         default it stays silent, so agents' captures don't sound on the desk (--no-play is kept, a no-op). Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new
          Recipe rebuilds nothing; a source change rebuilds and relinks. --out is a folder (the WAV is named after
          the arguments, never overwriting one) or a .wav path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
@@ -1694,7 +1694,7 @@ def capture(args):
         )
     if not args.ab:
         wav, failures = capture_one(args, elf, args.mute or [], harness, end)
-        if not args.no_play:
+        if args.play:
             subprocess.run(["afplay", wav], check=False)
         return 1 if failures else 0
     full, full_failures = capture_one(args, elf, [], harness, end)
@@ -1899,7 +1899,14 @@ def parser():
         action="store_true",
         help="capture without and then with --mute, and print both levels and the muted parts' estimated level",
     )
-    c.add_argument("--no-play", action="store_true")
+    c.add_argument(
+        "--play",
+        action="store_true",
+        help="play the WAV (afplay) once written; silent without it",
+    )
+    c.add_argument(
+        "--no-play", action="store_true", help="the default; kept for old command lines"
+    )
     c.add_argument(
         "--no-check",
         action="store_true",
