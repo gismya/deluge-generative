@@ -61,9 +61,11 @@ otherwise.
 - A sound-control target whose stock stage switches on at "> 0" can step the level the moment a "+"-only control
   (Drive, Thin) leaves home. `LOCAL_FOLD` did (#516): `voice.cpp` runs `foldBufferPolyApproximation` from any fold
   above 0, starting at `FOLD_MIN`, and the folder's gain there is −1 to −34 dB depending on input level. So every
-  synth part dropped about 4 dB when a Build took Energy past home, and the harness can't see it (it doesn't model
-  sound). Before adding a target, measure the level at its first step with a delugemu capture pair (`gen_emu.py
-  capture`, the part alone, with and without the target).
+  synth part dropped 1.5–5 dB (about 4 on most) when a Build took Energy past home, and the harness can't see it (it
+  doesn't model sound). Another gate of this shape: `Sound` runs `doHPF` once `LOCAL_HPF_FREQ` leaves its minimum
+  (`processing/sound/sound.cpp:2537`), and Thin crosses it on subtractive and Ringmod parts (`kThin` has no
+  `Needs::HpfInUse`); its level step isn't measured. Before adding a target, measure the level at its first step with
+  a delugemu capture pair (`gen_emu.py capture`, the part alone, with and without the target).
 - A lane sample of 2 s or more loads in CUT mode (`perform/one_shot.h`, §10.4), so its note-off stops it: a lane's
   note length is what you hear, not the file's. Before #423 the Fall's 6-tick note cut the 8 s Downers to a beat
   while the rough render, which played every sample out, rendered all 8 s. The render now follows the same rule, so a

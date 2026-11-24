@@ -50,7 +50,9 @@ enum class Target : uint8_t {
 	Modulator2Level,
 	ModulatorFeedback, ///< each modulator in use
 	CarrierFeedback,   ///< both carriers
-	Fold, ///< in no table: the stock folder drops the level as it switches in at 1, so "+"-only Drive stepped (#516)
+	/// Kept out of every table: the stock folder cuts the level as it switches in (spec §11.2). Kept for a future
+	/// crossfaded folder; sound_mapping_spec keeps it out of the tables.
+	Fold,
 	Env1Release,
 	Env1Decay,
 	Env1Sustain,
