@@ -133,3 +133,8 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   function and the page free of anything a Proxy stub can't stand in for at load.
 - The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
   `pack/` alone prints `-` for every drum lane.
+- A clip's timeline strip (`listening/timeline.py`, #513) names each part's sound from `generator_render
+  --list-sounds`: the harness's palette roll over `pack/` and the stock card, not what the capture loaded. A capture
+  on a palette-override card (`listen.py card --palette`) plays other presets: give the clip's timeline `sounds`
+  ({PART: name}, merged over the listed names). A sample lane's file can differ too (the card's file order). Every
+  render the page runs goes through `variants.current_render`, which refuses a `bin/<name>` whose stamp is stale.

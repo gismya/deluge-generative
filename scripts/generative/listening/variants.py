@@ -295,6 +295,31 @@ def render_stamp(worktree, session, name):
     return {"variant": name, "diff": diff, "head": head}
 
 
+def current_render(repo, scratch, session, name, fallback_base=True):
+    """bin/<name> in `scratch`, if it was built from `repo`'s HEAD and the variant's diff now (render_stamp): else
+    JobError, so a stale render never draws clips, MIDI or a timeline from another build. Base with no bin/base takes
+    the harness build's generator_render, when `fallback_base`."""
+    render = os.path.join(scratch, "bin", name)
+    if not os.path.exists(render):
+        if name == "base" and fallback_base:
+            found = _jobs.gen_emu.theory_review.find_render()
+            if found:
+                return found
+        raise _jobs.JobError(
+            f"no {render}; prove the variant first (it keeps its generator_render)"
+        )
+    try:
+        with open(render + ".json") as fh:
+            built = json.load(fh)
+    except (OSError, ValueError):
+        built = None
+    if built != render_stamp(repo, session, name):
+        raise _jobs.JobError(
+            f"{render} was built from another commit or diff than the repo's now; prove {name} again"
+        )
+    return render
+
+
 def render_midi(render, genre, seed, bars, extra, out_prefix):
     subprocess.run(
         [
