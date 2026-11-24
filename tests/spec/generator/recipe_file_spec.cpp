@@ -274,7 +274,7 @@ describe recipe_file("Recipe files", $ {
 			       == RecipeFileRead::Ok)
 			    .to_be_true();
 			expect(int32_t{loaded->recipe.swing}).to_equal((house.facts.swingLow + house.facts.swingHigh) / 2);
-			expect(int32_t{loaded->recipe.swing}).to_equal(15); // House's swing before its range (#498)
+			expect(int32_t{loaded->recipe.swing}).to_equal(12); // House's range is +10 to +14 since version 7 (#518)
 		});
 
 		it("fills what a file leaves out from the genre, clamps what's out of range and skips what it doesn't know", _ {

@@ -37,6 +37,9 @@ struct VariantSet {
 | House S1: a per-piece new-loop chance at each Drop | `ChordGraph::loopChance`, through an alternate graph | probably |
 | House S4a: the Build's shape | `ArcSpec` Build fields and roll | no |
 | House S6: the Bass's pickup | the Bass part's pattern pool | yes |
+| House feel-1 Build (#518): the `filter` Build and `nokick`'s lead-in | `ArcSpec` keeps, roll, Gap, and the Build fields `buildCut`, `buildCutBars`, `buildCutLeads`, `buildRiser` | no |
+| House feel-1 Bass (#518): the riff, or the offbeat line | the Bass part's pool, tier band and `LoopSpec` | no |
+| House feel-1 chords (#518): the loop or the vamp | `HarmonySpec::graph`, through alternate graphs (the vamp's moves, cadence and loop length, keeping S1's loop chance) | no: it moves the chord lines |
 | Psytrance S1: the Arp's figure | the Arp part's `ArpSpec` | yes |
 | Psytrance S3: the Break | `ArcSpec` Break offsets and keeps | no |
 | Dub Q359: 7th or plain skank | the skank's chord Extensions | probably |
