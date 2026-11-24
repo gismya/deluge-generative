@@ -12,6 +12,7 @@
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/playback/playback_handler.*
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -52,13 +53,14 @@ expect no_event gen_riser_on within=2
 expect event gen_riser_on sample_ms= within=40
 expect event gen_riser ok=1 within=40
 
-# ---- REGENERATE → BUILD INTO A DROP: the Build's tempo glides to the incoming Recipe's ----
+# ---- REGENERATE → DROP: the Build's tempo glides to the incoming Recipe's ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

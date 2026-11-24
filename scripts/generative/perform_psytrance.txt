@@ -1,4 +1,4 @@
-# Psytrance's hardware session (#127, spec §20 H1 and H16): Acid techno changes into Psytrance by BUILD INTO A DROP,
+# Psytrance's hardware session (#127, spec §20 H1 and H16): Acid techno changes into Psytrance by DROP,
 # the highlighted style, landing on Psytrance's Drop. After a phrase of its Groove a forced Build plays (16 or 32 bars:
 # the snare roll climbing to 32nds, the kick and bass cut for its last 2 bars, a beat's Gap) into a second Drop, which
 # plays a phrase. Psytrance plays the most steps a second of any genre (142 BPM, a 16th bass and a 16th Arp), so this
@@ -14,6 +14,7 @@
 # covers: src/deluge/gui/context_menu/generative.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -23,7 +24,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP, the highlighted style: Acid's Build into Psytrance's Drop ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP, the highlighted style: Acid's Build into Psytrance's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -40,7 +41,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

@@ -1,6 +1,6 @@
 # The audio output's margin (#449, spec §20): about 5.5 minutes of Perform with busy steering and two genre changes into
 # the heaviest genres, the card-write spike's load (#447) with its card log left out. Acid techno (1 min of busy
-# steering), BUILD INTO A DROP into Psytrance, 2.5 min of busy steering, HARD CUT AT PHRASE into Detroit techno (6 parts),
+# steering), DROP into Psytrance, 2.5 min of busy steering, CUT into Detroit techno (6 parts),
 # 1 min of busy steering, stop. Every 4 bars gen_audio gives the audio routine's entries, those after the TX ring ran
 # dry (underruns), the least audio left at an entry, the entries with under 0.5, 1 and 2 ms left and the DMA's drift off
 # the timer; gen_audio_late names the task behind the underruns and gen_audio_ui_timer the UI timers over 2 ms.
@@ -14,6 +14,7 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/transitions.cpp
 # covers: src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -30,7 +31,7 @@ report input
 include capture_h13_minute.txt
 expect playing=true within=100
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -47,7 +48,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -61,7 +63,7 @@ include capture_h13_minute.txt
 wait 30000
 expect playing=true within=200
 
-# ---- TECHNO > DETROIT -> HARD CUT AT PHRASE ----
+# ---- TECHNO > DETROIT -> CUT ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -78,8 +80,10 @@ expect event /^gen_genre_pick techno-detroit row=DETROIT/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

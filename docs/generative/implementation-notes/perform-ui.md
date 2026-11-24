@@ -80,6 +80,14 @@ otherwise.
   that fits. All groups share one list of genre items, which read the open parent (set in `GenreGroup::beginSession()`).
   All three open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a probe script that picks a genre
   counts rows from there, not from the top.
+- The Regenerate page (§13.6, #494) is a stock `Submenu` (`gui/menu_item/generative/regenerate_page.*`) over the
+  Perform menu, entered with `soundEditor.enterSubmenu()`: a leaf's `selectButtonPress()` return value is ignored by
+  the sound editor (only a submenu's current item is entered), so a genre item can't navigate by returning the page.
+  Its state is portable (`perform/regenerate_page.h`, harness-tested); the firmware items read it. The VARIANTS set
+  rows and their toggles are shared by the page and the Compose screen's VARIANTS ▸ through a `VariantsTarget` the
+  open VARIANTS menu sets in `beginSession()`, as GENRE ▸'s groups share their genre items. A mid-set LOAD opens it with
+  `soundEditor.setup(nullptr, &page)` once the browser has closed. `beginSession(nullptr)` also runs when the sound
+  editor regains focus (a popup closing): only a fresh open (`freshOpen`) jumps to GO.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
   editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
   the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.

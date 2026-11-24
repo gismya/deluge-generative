@@ -19,19 +19,14 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/perform_adapter.h"
 #include "generative/firmware/recipe_files.h"
-#include "generative/firmware/transitions.h"
-#include "generative/firmware/working_animation.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/perform_from.h"
 #include "gui/ui/generative_modal.h"
-#include "gui/ui/generative_popups.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/views/perform_view.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
-#include <algorithm>
-#include <cstring>
 
 namespace deluge::gui::context_menu {
 
@@ -39,7 +34,6 @@ Generative generativeMenu{};
 DiscardSong discardSong{};
 LeavePerform leavePerform{};
 RegenerateRecipe regenerateRecipe{};
-TransitionConfirm transitionConfirm{};
 
 ActionResult GenerativeContextMenu::padAction(int32_t x, int32_t y, int32_t on) {
 	// As ContextMenu's, without waiting for the card routine to end: any pad closes the menu.
@@ -172,73 +166,6 @@ bool LeavePerform::acceptCurrentOption() {
 	}
 	close();
 	performView.leave(option);
-	return true;
-}
-
-// ---- REGENERATE?, or the genre changed to ----
-
-bool TransitionConfirm::regenerates() const {
-	return file_ == nullptr && genre_ == generative::firmware::currentRecipe.recipe.genre;
-}
-
-char const* TransitionConfirm::getTitle() {
-	if (regenerates()) {
-		return l10n::get(l10n::String::STRING_FOR_REGENERATE_QMARK);
-	}
-	// A genre change: the incoming genre's full name, asked (`MELODIC TECHNO?`); a LOAD: the file's name (one too long
-	// to remember has none, and shows its genre's). The `?` is punctuation, as in STRING_FOR_REGENERATE_QMARK's text:
-	// no language this firmware ships puts the name anywhere else.
-	const char* name = file_ != nullptr && !name_->empty() ? name_->text : genre_->oledName;
-	const size_t length = std::min(std::strlen(name), sizeof(title_) - 2);
-	std::memcpy(title_, name, length);
-	title_[length] = '?';
-	title_[length + 1] = 0;
-	return title_;
-}
-
-std::span<char const*> TransitionConfirm::getOptions() {
-	// In TransitionStyle order.
-	static char const* options[] = {l10n::get(l10n::String::STRING_FOR_BUILD_INTO_A_DROP),
-	                                l10n::get(l10n::String::STRING_FOR_FADE_THROUGH),
-	                                l10n::get(l10n::String::STRING_FOR_HARD_CUT_AT_PHRASE)};
-	static_assert(std::size(options) == generative::kNumTransitionStyles);
-	return {options, std::size(options)};
-}
-
-bool TransitionConfirm::setupAndCheckAvailability() {
-	if (genre_ == nullptr) {
-		return false;
-	}
-	// The incoming genre's transition entry is highlighted (spec §9.7): the playing genre's for a Regenerate, which
-	// genre_ is then. Hard cut is never a default.
-	currentOption = static_cast<int32_t>(generative::perform::confirmStyle(*genre_));
-	scrollPos = currentOption;
-	return true;
-}
-
-bool TransitionConfirm::acceptCurrentOption() {
-	using generative::firmware::Transitions;
-	const auto style = static_cast<generative::TransitionStyle>(currentOption);
-	const bool regenerate = regenerates();
-	// Back to the Perform page, which shows the working animation while the incoming roster loads (spec §12.10): out of
-	// the Perform menu, or (a LOAD's, opened from the load browser) straight over Perform.
-	if (isUIOpen(&soundEditor)) {
-		soundEditor.exitCompletely();
-	}
-	else {
-		close();
-	}
-	const Transitions::Request request = generative::firmware::pressShowingWork([&] {
-		return file_ != nullptr ? generative::firmware::transitions.load(*file_, *name_, style)
-		                        : generative::firmware::transitions.change(*genre_, style);
-	});
-	refusedWithPopup(generative::perform::pressOutcome(request));
-	TEST_EVENT("gen_confirm %s style=%d result=%d working=%d",
-	           file_ != nullptr ? "load"
-	           : regenerate     ? "regenerate"
-	                            : genre_->name,
-	           static_cast<int>(style), static_cast<int>(request),
-	           generative::firmware::workingAnimationShown() ? 1 : 0);
 	return true;
 }
 

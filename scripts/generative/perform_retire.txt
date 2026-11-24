@@ -22,6 +22,7 @@
 # covers: src/deluge/generative/firmware/perform_song.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -110,8 +111,10 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -139,7 +142,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -414,8 +418,10 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

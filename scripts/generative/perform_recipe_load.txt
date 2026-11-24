@@ -3,7 +3,7 @@
 # once the player scrolls; a pad press brings it back. A file cut short and one naming Techno's parent table are
 # refused and the browser stays. Stopped, a file loads at once: LOAD MISSING's two missing sounds are re-rolled (2
 # sounds replaced, so it no longer matches its file but for the sounds), LOAD OK matches its file. Playing, LOAD OLDER
-# shows its version notice and asks the transition confirm; the confirm's default plays through, and the new piece
+# shows its version notice and opens the Regenerate page; GO's default plays through, and the new piece
 # has the file's Recipe, seed, takes and macros ("check recipe *"). The card log is off ("hold card_log_off"): a press
 # made while it writes (its spare file, a flush) is handled inside that card wait and refused BUSY (#485).
 # gen_recipe_load opened at=|at= qwerty=|chose name= genre= version=|refused why=|stopped result= working=|replaced
@@ -20,6 +20,7 @@
 # covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/capture_files.cpp
 # covers: scripts/generative/fixtures/recipe_load/card.txt
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold card_log_off
 include perform_open.txt
@@ -109,7 +110,7 @@ button BACK up
 expect event gen_recipe_load closed
 expect ui=generative_perform
 
-# ---- Playing: LOAD OLDER shows its notice, asks the confirm, and plays through as a transition ----
+# ---- Playing: LOAD OLDER shows its notice, opens the Regenerate page, and plays through as a transition ----
 button PLAY down
 wait 50
 button PLAY up
@@ -127,7 +128,8 @@ wait 50
 button SELECT_ENC up
 expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
 expect event gen_recipe_load version older file=1 genre=4
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

@@ -194,3 +194,7 @@ otherwise.
   moves `gen_sound` expects: since #488 an FX lane with no sample picks one of its presets per piece (`pick ...
   SYNTHS/...`, not `fallback`), and on delugemu's factory card, which has no pack, the Impact is `silent` and counts
   in `gen_sound_missing` as the Riser does. A script that runs on both cards matches either.
+- The Regenerate page (#494) opens on GO: SELECT, SELECT keeps a one-press confirm's flow. A style other than the
+  entry: `include perform_regen_transition.txt`, the `encoder 3 N` turn, `include perform_regen_go.txt`, then SELECT.
+  Its multi-selects and FROM's list remember their row across scripts on one boot: choose a variant from the top
+  (`encoder 3 -5`). Menu events carry l10n's text (`title=Regenerate`, `Random`), not the capitals the OLED draws.

@@ -24,10 +24,10 @@
 #include "generative/firmware/working_animation.h"
 #include "generative/perform/genre_menu.h"
 #include "generative/perform/recipe_name.h"
-#include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/perform_from.h"
+#include "gui/menu_item/generative/regenerate_page.h"
 #include "gui/ui/generative_popups.h"
 #include "gui/ui/ui.h"
 #include "gui/ui_timer_manager.h"
@@ -87,11 +87,8 @@ void loadChosen() {
 		return;
 	}
 	if (playbackHandler.playbackState != 0) {
-		deluge::gui::context_menu::transitionConfirm.setLoad(&chosen.file, &chosen.name);
-		if (deluge::gui::context_menu::transitionConfirm.setupAndCheckAvailability()) {
-			display->setNextTransitionDirection(1);
-			openUI(&deluge::gui::context_menu::transitionConfirm);
-		}
+		// The Regenerate page with only TRANSITION (spec §13.6): the file brings its own variants.
+		deluge::gui::menu_item::generative::openLoadPage(chosen.file, chosen.name);
 		return;
 	}
 	// Stopped: it rebuilds at once (it commits when loaded, as a stopped genre change does), so no style is asked.

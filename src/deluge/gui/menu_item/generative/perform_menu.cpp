@@ -27,9 +27,9 @@
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/queue_text.h"
-#include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/genre_rows.h"
+#include "gui/menu_item/generative/regenerate_page.h"
 #include "gui/menu_item/generative/row_value.h"
 #include "gui/menu_item/integer.h"
 #include "gui/menu_item/selection.h"
@@ -367,12 +367,11 @@ private:
 
 // ---- CANCEL CHANGE, GENRE, REGENERATE (spec §13.6) ----
 
-/// Opens the transition confirm over the menu (spec §13.6): BUILD INTO A DROP, FADE THROUGH or HARD CUT AT PHRASE. To
-/// `genre`, a genre change, or the genre playing, a Regenerate.
+/// Opens the Regenerate and genre-change page over the menu (spec §13.6): TRANSITION, VARIANTS ▸ and GO. On
+/// `genre`, a genre change, or on the genre playing, a Regenerate.
 MenuItem* confirmTransition(const deluge::generative::Genre* genre) {
-	context_menu::transitionConfirm.setGenre(genre);
-	if (context_menu::transitionConfirm.setupAndCheckAvailability()) {
-		openUI(&context_menu::transitionConfirm);
+	if (genre != nullptr) {
+		openRegeneratePage(*genre);
 	}
 	return NO_NAVIGATION;
 }
@@ -393,7 +392,7 @@ public:
 	}
 };
 
-/// REGENERATE: a genre change to the genre playing (spec §9.7), through the confirm.
+/// REGENERATE: a genre change to the genre playing (spec §9.7), through the page.
 class RegenerateItem final : public MenuItem {
 public:
 	using MenuItem::MenuItem;
@@ -428,7 +427,7 @@ public:
 };
 
 /// RESET PART BIAS: the focused part's Part biases back to 0, or every part's with nothing focused (spec §3.3,
-/// §13.6). It closes the menu, as REGENERATE's confirm does, so the faders and rings show the result at once.
+/// §13.6). It closes the menu, as REGENERATE's GO does, so the faders and rings show the result at once.
 class ResetPartBiasItem final : public MenuItem {
 public:
 	using MenuItem::MenuItem;
