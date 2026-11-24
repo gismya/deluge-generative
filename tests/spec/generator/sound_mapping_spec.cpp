@@ -47,6 +47,7 @@ describe sound_mapping("The sound-control mapping", $ {
 		it("only raises Drive's ladder morph, 0..+15", _ {
 			Found morph = rangeOf(SoundControl::Drive, Engine::Subtractive, Target::LpfMorph);
 			expect(morph.found && morph.low == 0 && morph.high == 15).to_be_true();
+			expect(controlTargets(SoundControl::Drive, Engine::Subtractive).size()).to_equal(size_t{1});
 		});
 		it("moves delay feedback ±4 only where the preset already uses the delay", _ {
 			bool found = false;
@@ -77,6 +78,24 @@ describe sound_mapping("The sound-control mapping", $ {
 			}
 			Found row = rangeOf(SoundControl::Brightness, Engine::KitRow, Target::LpfFrequency);
 			expect(row.found && row.low == -15 && row.high == 0).to_be_true();
+		});
+		it("never moves the wavefolder: the stock folder drops the level about 4 dB as it switches in at 1 (#516)", _ {
+			for (int32_t engine = 0; engine < mapping::kNumEngines; engine++) {
+				for (int32_t control = 0; control < kNumSoundControls; control++) {
+					for (const TargetRange& range :
+					     controlTargets(static_cast<SoundControl>(control), static_cast<Engine>(engine))) {
+						expect(range.target == Target::Fold).to_be_false();
+					}
+				}
+			}
+		});
+		it("gives FM Drive the modulator and carrier feedback, 0..+8, and DX7 no Drive", _ {
+			Found modulator = rangeOf(SoundControl::Drive, Engine::Fm, Target::ModulatorFeedback);
+			expect(modulator.found && modulator.low == 0 && modulator.high == 8).to_be_true();
+			Found carrier = rangeOf(SoundControl::Drive, Engine::Fm, Target::CarrierFeedback);
+			expect(carrier.found && carrier.low == 0 && carrier.high == 8).to_be_true();
+			expect(controlTargets(SoundControl::Drive, Engine::Fm).size()).to_equal(size_t{2});
+			expect(controlTargets(SoundControl::Drive, Engine::Dx7).empty()).to_be_true();
 		});
 		it("darkens and thins a whole Kit through its affect-entire filter", _ {
 			Found lpf = rangeOf(SoundControl::Brightness, Engine::KitLevel, Target::LpfFrequency);
@@ -180,9 +199,9 @@ describe sound_mapping("The sound-control mapping", $ {
 	});
 
 	context("the most params one set of controls can move", _ {
-		it("is FM's, from the table: modulators 2, Decay 3, feedbacks and fold 5, Space 2, Wobble 5 plus its cables", _ {
-			expect(maxParamsPerSet(0)).to_equal(17);
-			expect(maxParamsPerSet(32)).to_equal(49);
+		it("is FM's, from the table: modulators 2, Decay 3, feedbacks 4, Space 2, Wobble 5 plus its cables", _ {
+			expect(maxParamsPerSet(0)).to_equal(16);
+			expect(maxParamsPerSet(32)).to_equal(48);
 		});
 	});
 
