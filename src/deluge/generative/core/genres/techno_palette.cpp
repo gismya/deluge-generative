@@ -286,6 +286,11 @@ constexpr RoleSounds kDetroitRoles[] = {
     {Role::Lead, kMotifSounds},
 };
 
+static_assert(levelsValid(kAcidParts, kAcidRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kMelodicParts, kMelodicRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kDubParts, kDubRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kDetroitParts, kDetroitRoles), "a palette level is 1 to kFullLevel");
+
 } // namespace
 
 const Palette technoPalette{.lanes = kLanes, .kits = {.machines = kMachines}};

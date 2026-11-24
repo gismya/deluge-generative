@@ -714,6 +714,18 @@ bool chooseSound(const Genre& genre, int32_t part, const SoundChoice& choice, So
 	return true;
 }
 
+namespace {
+
+/// A synth part's load from `source`, with the control ranges and level of its palette entry `entry`: the defaults
+/// where the palette doesn't list the preset (nullptr).
+SoundLoad partLoad(SoundSource source, const PaletteEntry* entry) {
+	return {.source = source,
+	        .ranges = entry != nullptr ? entry->ranges : ControlRanges{},
+	        .volume = entry != nullptr ? entry->volume : kFullLevel};
+}
+
+} // namespace
+
 SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char* pick, SoundLoader& loader) {
 	std::span<const PaletteEntry> entries = palette.partEntries(part);
 	const PaletteEntry* picked = nullptr; // the pick's entry, if the palette lists it: the first that does (spec §11.1)
@@ -726,8 +738,7 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		}
 		LoadOutcome outcome = loader.loadPreset(pick);
 		if (outcome != LoadOutcome::Missing) {
-			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError,
-			        .ranges = picked != nullptr ? picked->ranges : ControlRanges{}};
+			return partLoad(outcome == LoadOutcome::Loaded ? SoundSource::Pick : SoundSource::CardError, picked);
 		}
 	}
 	for (const PaletteEntry& entry : entries) {
@@ -736,8 +747,7 @@ SoundLoad loadPartSound(const Palette& palette, const PartSpec& part, const char
 		}
 		LoadOutcome outcome = loader.loadPreset(entry.path);
 		if (outcome != LoadOutcome::Missing) {
-			return {.source = outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError,
-			        .ranges = entry.ranges};
+			return partLoad(outcome == LoadOutcome::Loaded ? SoundSource::Fallback : SoundSource::CardError, &entry);
 		}
 	}
 	return {SoundSource::DefaultSynth};

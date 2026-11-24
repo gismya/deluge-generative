@@ -219,7 +219,10 @@ otherwise.
   is rolled as a one-tag copy of the lane (`rollKitTag()`), so it matches the lane's folders whatever its list says:
   a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
   the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
-  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
+  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`. A swap
+  by exact path in a folder no lane reads (Dub's pack snare in `SAMPLES/DRUMS/Snare/Dub`) reaches no other lane, and
+  where the file is missing the lane rolls its machine's tag, not the lane list. A preset's own level is
+  `PaletteEntry::volume` (on top of `PartSpec::volume`, `partSoundSettings(part, load.volume)`).
 - An FX lane whose roll finds no sample rolls one of its `synths` by weight from the lane's own draws
   (`rollLaneOrPreset()`, `palette.cpp`), and that preset path is its pick: the Siren's pick is `GEN Siren` and the
   Impact's one of its presets (#472). A lane listing both folders and presets still rolls a file whenever one

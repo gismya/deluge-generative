@@ -100,6 +100,15 @@ describe sound_settings("Load-time sound settings", $ {
 		}
 	});
 
+	it("scales a part's volume by the loaded preset's palette level, so a loud preset sits with the others", _ {
+		PartSpec bass = part(Role::Bass, Flavour::Loop);
+		expect(partSoundSettings(bass, 84).volume).to_equal(uint8_t{84});
+		bass.volume = 80;
+		expect(partSoundSettings(bass, 84).volume).to_equal(uint8_t{67});
+		expect(partSoundSettings(bass, 100).volume).to_equal(uint8_t{80});
+		expect(partSoundSettings(bass).volume).to_equal(uint8_t{80});
+	});
+
 	it("keeps every Kit row at its preset's volume in every genre but Dub techno (#322)", _ {
 		for (const Genre* genre : allGenres()) {
 			if (genre == &genres::technoDub) {

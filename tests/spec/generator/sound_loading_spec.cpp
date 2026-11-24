@@ -32,7 +32,8 @@ constexpr PartSpec kAcidPart{.role = Role::Bass, .flavour = Flavour::Loop, .name
 constexpr ControlRanges kDark = ControlRanges{}.with(SoundControl::Brightness, 50);
 constexpr ControlRanges kStill = ControlRanges{}.with(SoundControl::Drive, 0).with(SoundControl::Wobble, 0);
 constexpr ControlRanges kWet = ControlRanges{}.with(SoundControl::Space, 200);
-constexpr PaletteEntry kRangedAcid[] = {{"SYNTHS/A.XML", 1, kDark}, {"SYNTHS/B.XML"}, {"SYNTHS/C.XML", 1, kStill}};
+constexpr PaletteEntry kRangedAcid[] = {
+    {"SYNTHS/A.XML", 1, kDark}, {"SYNTHS/B.XML"}, {"SYNTHS/C.XML", 1, kStill}, {.path = "SYNTHS/D.XML", .volume = 70}};
 constexpr PartSounds kRangedParts[] = {{"ACID", kRangedAcid}};
 constexpr PaletteEntry kRangedRisers[] = {{"SYNTHS/R1.XML"}, {"SYNTHS/R2.XML", 1, kWet}};
 constexpr LaneSounds kRangedLanes[] = {{.lane = Lane::Riser, .synths = kRangedRisers}};
@@ -164,6 +165,20 @@ describe sound_loading("Loading sounds with fallback", $ {
 		SoundLoad picked = loadLaneSound(kPalette, Lane::Riser, "SAMPLES/FX/Riser/GEN Riser 1.wav", withFx, sample);
 		expect(picked.source == SoundSource::Pick).to_be_true();
 		expect(picked.synth).to_be_false();
+	});
+
+	it("hands back the palette level of the preset that loaded: its entry's, else the preset's own", _ {
+		FakeLoader pick;
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/D.XML", pick).volume).to_equal(uint8_t{70});
+		FakeLoader otherCase;
+		expect(loadPartSound(kRanged, kAcidPart, "synths/d.xml", otherCase).volume).to_equal(uint8_t{70});
+		FakeLoader fallback; // the first three missing: the fallback chain reaches D
+		fallback.missing = {"SYNTHS/A.XML", "SYNTHS/B.XML", "SYNTHS/C.XML"};
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/A.XML", fallback).volume).to_equal(uint8_t{70});
+		FakeLoader plain;
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/B.XML", plain).volume).to_equal(uint8_t{100});
+		FakeLoader unlisted;
+		expect(loadPartSound(kRanged, kAcidPart, "SYNTHS/MINE.XML", unlisted).volume).to_equal(uint8_t{100});
 	});
 
 	it("hands back the control ranges of the preset that loaded", _ {

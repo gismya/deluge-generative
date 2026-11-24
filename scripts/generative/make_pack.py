@@ -521,7 +521,7 @@ def sample_preset(
     sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob at `volume`
     (full by default), `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume.
     Velocity is bipolar about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples
-    stay on the factory card: the pack holds only the preset."""
+    are the factory card's (or a DERIVED copy in the pack): the preset names them."""
     oscillators = []
     for name, path in (("osc1", osc1), ("osc2", osc2)):
         if path is None:
@@ -681,15 +681,15 @@ PRESETS = {
         delay=Delay(**DOTTED_EIGHTH, feedback=24),
         clipping=4,
     ),
-    # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo and some
-    # reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8, about -1.9 dB), so the echo dies within
-    # about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4); its first build's 26 held the echo
-    # at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators are taken, so a velocity cable
-    # of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
-    # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
-    # Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
+    # Dub's crack: the pack's DDD1 Snare wet (its leading silence cut, DERIVED) and the factory 808 Rim thrown into a
+    # dotted 8th analog ping-pong echo and some reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8,
+    # about -1.9 dB), so the echo dies within about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4);
+    # its first build's 26 held the echo at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators
+    # are taken, so a velocity cable of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about
+    # 5.6 dB (peak); at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level
+    # or under. Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
-        "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
+        "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
         osc1_volume=48,
         osc2_volume=44,
@@ -1016,6 +1016,40 @@ class Transpose:
         return replace_once(pattern, rf"\g<1>{self.semitones}\g<2>", text, what)
 
 
+class LeadTrim:
+    """Cut a WAV's first `frames` frames (its leading silence) and fade what is left in over `fade` frames, against
+    a click; the format (channels, width, rate) stays the source's. 16-bit PCM only. Extra chunks are dropped."""
+
+    binary = True
+
+    def __init__(self, frames, fade):
+        self.frames, self.fade = frames, fade
+
+    def apply(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            channels, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
+            count = w.getnframes()
+            raw = w.readframes(count)
+        if width != 2:
+            raise ValueError(f"{width * 8}-bit samples: LeadTrim reads 16-bit PCM only")
+        if self.frames + self.fade >= count:
+            raise ValueError(
+                f"cutting {self.frames} frames and fading {self.fade} leaves nothing of {count} frames"
+            )
+        samples = list(struct.unpack(f"<{count * channels}h", raw))[
+            self.frames * channels :
+        ]
+        for i in range(self.fade * channels):
+            samples[i] = int(samples[i] * (i // channels) / self.fade)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as w:
+            w.setnchannels(channels)
+            w.setsampwidth(width)
+            w.setframerate(rate)
+            w.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+        return out.getvalue()
+
+
 def replace_once(pattern, replacement, text, what):
     new, count = pattern.subn(replacement, text)
     if count != 1:
@@ -1040,6 +1074,19 @@ class Derived:
             raise ValueError(
                 f"{path}: SHA-256 {digest}, the edits were written against {self.sha256}"
             )
+        if not self.edits:
+            raise ValueError(
+                f"{self.source}: no edits, so the pack would ship a plain factory copy"
+            )
+        binary = [getattr(edit, "binary", False) for edit in self.edits]
+        if any(binary) and not all(binary):
+            raise ValueError(
+                f"{self.source}: a mix of sample (binary) and preset (text) edits"
+            )
+        if all(binary):
+            for edit in self.edits:
+                data = edit.apply(data)
+            return data
         text = data.decode("utf-8")
         for edit in self.edits:
             text = edit.apply(text)
@@ -1080,6 +1127,16 @@ DERIVED = {
         Transpose("osc2", -5),
         Transpose("modulator1", -12),
         Transpose("modulator2", 16),
+    ),
+    # Dub's swap snare and its Impact crack (Dub sign-off 1): the factory DDD1 Snare wet with its leading 32.7 ms cut.
+    # The factory file is near silent until its attack at frame 1464 (33.2 ms), so on the backbeat it sounded 33 ms
+    # behind the kick and hats it lands with, a flam with the lazy +2 lean on top (every other Dub snare file starts
+    # within 0.4 ms). 24 frames (0.5 ms) stay before the attack, faded in over 22. A folder of its own, so no lane's
+    # tags reach it: only Dub's swap names it, by its path.
+    "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav": Derived(
+        "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
+        "56ad8d3411d31ddd026caade6d1e15e0ac31210ad923932841a0582578e7f15d",
+        LeadTrim(1440, 22),
     ),
 }
 
@@ -1183,7 +1240,7 @@ def main(argv=None):
         except ValueError as e:
             print(e, file=sys.stderr)
             return 1
-        data = to_wav(data) if path.endswith(".wav") else data
+        data = to_wav(data) if path in SAMPLES else data
         target = os.path.normpath(os.path.join(args.pack, path))
         current = None
         if os.path.exists(target):

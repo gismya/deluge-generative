@@ -83,9 +83,10 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=2
+expect event gen_variants_menu open sets=3
 expect event gen_variants_row SKANK Random
 expect event gen_variants_row DRUMS Random
+expect event gen_variants_row BREAK Random
 # DRUMS' multi-select, from the top (a list remembers its row) on ONE DROP: untick it, then ROCKERS; each turn queues
 mark now
 encoder 3 1
@@ -136,7 +137,7 @@ pad 17 5 up
 expect event gen_press force BUILD
 expect event gen_section BUILD within=40
 expect event gen_section GROOVE within=10
-expect event /^gen_variants_landed step=\d+ drop=1 skank=sevenths:\d+ drums=steppers:4$/ since=mark within=5
+expect event /^gen_variants_landed step=\d+ drop=1 skank=sevenths:\d+ drums=steppers:4 break=(seven|fifteen):3$/ since=mark within=5
 expect event gen_h1 steps= within=20
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20

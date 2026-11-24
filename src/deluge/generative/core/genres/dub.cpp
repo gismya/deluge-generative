@@ -409,6 +409,17 @@ constexpr Variant kDrumVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kSteppersLanes; }},
 };
 
+/// The Break's length (Dub sign-off 1, BRK): 7 bars, the genre as written (a phrase, the 1-bar Build taking its last
+/// bar), or 15 (two phrases), 2:1 toward the shorter (the owner, tuning). Not live: the Arc draws the Break's length
+/// as it enters the Section before it, ahead of the line.
+constexpr Variant kBreakVariants[] = {
+    {.name = "seven", .oledName = "7 BARS", .weight = 2},
+    {.name = "fifteen",
+     .oledName = "15 BARS",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.arc.breakPhrases = {2, 2}; }},
+};
+
 constexpr VariantSet kVariantSets[] = {
     {.name = "skank", .oledName = "SKANK", .variants = kSkankVariants, .live = true},
     {.name = "drums",
@@ -417,12 +428,13 @@ constexpr VariantSet kVariantSets[] = {
      .live = true,
      .changeAt = ChangeAt::Drop,
      .changeChance = 400}, // per mille at each Drop (tuning)
+    {.name = "break", .oledName = "BREAK", .variants = kBreakVariants},
 };
 
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 8,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 9,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,
@@ -460,7 +472,8 @@ constexpr Genre kDub{
             // No cut and no Gap: each would cover the whole 1-bar Build (cutAndGapUnderBuild()).
             .buildCutBars = 0,
             .gap = GapLength::None,
-            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
+            // 16ths at most: under the song swing a straight 32nd roll warps into a gallop (Dub sign-off 1).
+            .roll = {.lane = Lane::Snare, .top = RollStage::Sixteenth},
             .accentLane = Lane::Crash,
             .accentChance = 50, // a Crash on Drops, after a fill that ends a phrase, and at 50 per-mille
         },

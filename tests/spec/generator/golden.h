@@ -46,11 +46,13 @@ inline std::string pathOf(const Genre& genre) {
 	return path.lexically_normal().string();
 }
 
-/// The genres that have a golden before v1 (spec §21.2): every subgenre of Techno.
+/// The genres that have a golden before v1 (spec §21.2): every subgenre of Techno, and each genre the owner signed
+/// off on #133 since (Dub, sign-off 1).
 inline std::vector<const Genre*> goldenGenres() {
 	std::vector<const Genre*> out;
 	for (const Genre* genre : allGenres()) {
-		if (genre->parent == genres::technoAcid.parent) { // the Techno parent table
+		if (genre->parent == genres::technoAcid.parent // the Techno parent table
+		    || genre == &genres::dub) {
 			out.push_back(genre);
 		}
 	}
