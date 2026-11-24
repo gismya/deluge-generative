@@ -1081,6 +1081,13 @@ class BootFiles(unittest.TestCase):
         )  # fmt: skip
 
 
+class CapturePlays(unittest.TestCase):
+    def test_a_capture_is_silent_unless_asked_to_play(self):
+        self.assertFalse(gen_emu.parser().parse_args(["capture"]).play)
+        self.assertFalse(gen_emu.parser().parse_args(["capture", "--no-play"]).play)
+        self.assertTrue(gen_emu.parser().parse_args(["capture", "--play"]).play)
+
+
 class CaptureExit(unittest.TestCase):
     def run_capture(self, failures, argv=()):
         args = gen_emu.parser().parse_args(["capture", "--no-play", *argv])
