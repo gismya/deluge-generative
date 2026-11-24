@@ -77,7 +77,7 @@ describe house("House", $ {
 		expect(std::string(houseGenre.name)).to_equal(std::string("house"));
 		expect(std::string(houseGenre.oledName)).to_equal(std::string("HOUSE"));
 		expect(houseGenre.parent == nullptr).to_be_true();
-		expect(houseGenre.version).to_equal(4);
+		expect(houseGenre.version).to_equal(5);
 		expect(findGenre("house") == &houseGenre).to_be_true();
 		expect(partCount(houseGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -697,7 +697,7 @@ describe house("House", $ {
 			expect(paths(kLeadPart).size()).to_equal(size_t{4});
 		});
 
-		it("rolls the pack's claps and rides, only Risers of 6 s or less, the 909 crash or the descending kick as Impacts, the plain kicks, and 3 files or more on every ungated Drums lane", _ {
+		it("rolls the pack's claps and rides, only Risers of 6 s or less, the pack's boom alone as the Impact, the plain kicks, and 3 files or more on every ungated Drums lane", _ {
 			FakeCard card = harness::factoryCardWithPack();
 			// The lanes' own lists, the kit aside (spec §10.2): with it, the pack's claps never play, as all three
 			// machines have a clap.
@@ -707,11 +707,9 @@ describe house("House", $ {
 			const auto picked = [&](Lane lane, const std::string& tag) {
 				return std::ranges::any_of(picks[lane], [&](const std::string& path) { return path.find(tag) != std::string::npos; });
 			};
-			// A tag matches any part of a name: "909" alone would roll the 909 kicks as Impacts, "909 Kick" its
-			// distorted and dry ones as kicks.
-			expect(picks[Lane::Impact] == std::set<std::string>{"SAMPLES/DRUMS/Crash/909 Crash.wav",
-			                                                    "SAMPLES/DRUMS/Kick/Deep Sky Kick descending.wav"})
-			    .to_be_true();
+			// The Impact: the owner's boom alone (#472, impact round 3's H1).
+			expect(picks[Lane::Impact] == std::set<std::string>{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"}).to_be_true();
+			// A tag matches any part of a name: "909 Kick" would roll the distorted and dry 909 kicks as kicks.
 			expect(picks[Lane::Kick] == std::set<std::string>{"SAMPLES/DRUMS/Kick/909 Kick.wav", "SAMPLES/DRUMS/Kick/808 Kick.wav",
 			                                                  "SAMPLES/DRUMS/Kick/Linndrum Kick.wav"})
 			    .to_be_true();

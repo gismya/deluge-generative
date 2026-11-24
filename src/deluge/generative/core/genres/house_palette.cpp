@@ -113,11 +113,9 @@ constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}}
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
 constexpr PaletteEntry kFallSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Fall.XML"}};
-/// The draft's Impact: the 909 crash or Techno's descending kick. The crash by its path: a "909" tag matches the
-/// Kick folder's 909 kicks and Deep Sky Kick HQ9094 too.
-constexpr const char* const kImpactFolders[] = {"SAMPLES/DRUMS/Crash", "SAMPLES/DRUMS/Kick"};
-constexpr TagWeight kImpactTags[] = {{"SAMPLES/DRUMS/Crash/909 Crash.wav", 2}, {"Deep Sky Kick descending", 1}};
-constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact.XML"}};
+/// Impact: the pack's factory 808 boom alone (owner, #472 impact round 3's H1). It lists no folder, and its default
+/// SAMPLES/FX/Impact holds no files, so the lane loads its preset (spec §10.5).
+constexpr PaletteEntry kImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"}};
 
 constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Kick, .tags = kKickTags},
@@ -132,7 +130,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Perc2, .folders = kPerc2Folders, .tags = kPerc2Tags},
     {.lane = Lane::Riser, .tags = kRiserTags, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
-    {.lane = Lane::Impact, .folders = kImpactFolders, .tags = kImpactTags, .synths = kImpactSynths},
+    {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
 } // namespace

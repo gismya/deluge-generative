@@ -492,10 +492,11 @@ def sample_preset(
     delay=None,
     clipping=None,
     velocity=8,
+    volume=50,
 ):
     """A preset playing one or two factory samples once through (loopMode 1, ONCE), with an open filter, full
-    sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob full,
-    `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
+    sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob at `volume`
+    (full by default), `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
     about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples stay on the factory
     card: the pack holds only the preset."""
     oscillators = []
@@ -531,7 +532,7 @@ def sample_preset(
         f"\t\t<oscAVolume>{knob(osc1_volume)}</oscAVolume>",
         f"\t\t<oscBVolume>{knob(osc2_volume if osc2 is not None else 0)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(0)}</noiseVolume>",
-        f"\t\t<volume>{knob(50)}</volume>",
+        f"\t\t<volume>{knob(volume)}</volume>",
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(50)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(0)}</lpfResonance>",
@@ -614,10 +615,12 @@ PRESETS = {
     # the volume knob's top measured in delugemu (Acid techno and Dub, the FX part alone). Saturation
     # (`clippingAmount`) caps a voice at a fixed level, under round 2's boom peak, so it lifts only the wash.
     # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz) on both
-    # oscillators, in phase: +6.0 dB.
+    # oscillators, in phase: +6.0 dB. Impact round 3 (owner) took it 3 dB louder again everywhere it plays, by a
+    # velocity cable of 30 (+3.0 dB peak, the FX part alone, at an Impact's velocity).
     "SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        velocity=30,
     ),
     # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
     # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
@@ -650,6 +653,7 @@ PRESETS = {
     # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
     # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
     # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
+    # Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
@@ -658,6 +662,7 @@ PRESETS = {
         reverb=24,
         delay=Delay(**DOTTED_EIGHTH, feedback=26),
         velocity=50,
+        volume=42,
     ),
     # Dub's kick and crash: the factory 808 Kick and 808 Cymbal layered, into some reverb; velocity 50 as the crack's
     # (about 5.1 dB, peak).
