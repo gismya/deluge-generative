@@ -1363,6 +1363,9 @@ class PageMidiGenre(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as out,
             mock.patch.object(page.subprocess, "run", run),
+            mock.patch.object(
+                page.variants, "current_render", return_value="/x/bin/base"
+            ),
         ):
             page.render_midi(card, "/x", out, session_genre)
         return seen
@@ -1506,10 +1509,6 @@ class ToolkitNits(unittest.TestCase):
                     )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def tl_piece(sections, parts, bars, tempo="124.00"):
     """A theory_review.Piece of parts {name: [(first tick, end tick)]}, for the timeline strip."""
     tpb = theory_review.TICKS_PER_BAR
@@ -1638,7 +1637,7 @@ class Timeline(unittest.TestCase):
         self.assertEqual(timeline.problems("F1 clip a", {"timeline": True}), [])
         self.assertEqual(
             timeline.problems("F1 clip a", {"reuse": "x.m4a", "timeline": True}),
-            ["F1 clip a: a reused clip's timeline is a dict with its args and bars"],
+            ["F1 clip a: a reused clip's timeline is a dict giving its args and bars"],
         )
         self.assertEqual(
             timeline.problems(
@@ -1647,9 +1646,51 @@ class Timeline(unittest.TestCase):
             ),
             [
                 "F1 clip a: timeline key bar unknown",
-                "F1 clip a: a reused clip's timeline gives args and bars",
+                "F1 clip a: a reused clip's timeline is a dict giving its args and bars",
             ],
         )
+        self.assertEqual(
+            timeline.problems("F1 clip a", {"timeline": {"sounds": ["x"]}}),
+            ["F1 clip a: timeline sounds is {PART: name}"],
+        )
+
+    def test_given_sounds_override_only_their_parts_and_must_name_a_part(self):
+        from listening import timeline
+
+        listed = timeline.sound_labels(self.SOUNDS)
+        got = timeline.merged_sounds(listed, {"BASS": "Moog"}, ["DRUMS", "BASS"])
+        self.assertEqual(got["BASS"], ("Moog", ""))
+        self.assertEqual(got["DRUMS"], listed["DRUMS"])
+        with self.assertRaisesRegex(ValueError, "BAS isn't a part"):
+            timeline.merged_sounds(listed, {"BAS": "Moog"}, ["DRUMS", "BASS"])
+
+    def test_a_stale_bin_is_refused_and_base_falls_back_to_the_harness_build(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            os.makedirs(os.path.join(scratch, "bin"))
+            render = os.path.join(scratch, "bin", "base")
+            with open(render, "w") as fh:
+                fh.write("")
+            stamp = {"variant": "base", "diff": "-", "head": "abc"}
+            with open(render + ".json", "w") as fh:
+                fh.write('{"variant": "base", "diff": "-", "head": "old"}')
+            with mock.patch.object(variants, "render_stamp", return_value=stamp):
+                with self.assertRaisesRegex(jobs.JobError, "prove base again"):
+                    variants.current_render("/r", scratch, "/s", "base")
+                with open(render + ".json", "w") as fh:
+                    fh.write('{"variant": "base", "diff": "-", "head": "abc"}')
+                self.assertEqual(
+                    variants.current_render("/r", scratch, "/s", "base"), render
+                )
+            os.remove(render)
+            with mock.patch.object(
+                theory_review, "find_render", return_value="/build/generator_render"
+            ):
+                self.assertEqual(
+                    variants.current_render("/r", scratch, "/s", "base"),
+                    "/build/generator_render",
+                )
+                with self.assertRaisesRegex(jobs.JobError, "prove the variant first"):
+                    variants.current_render("/r", scratch, "/s", "v1")
 
     def test_true_takes_the_captures_sidecar_and_a_dict_wins(self):
         from listening import timeline
@@ -1691,3 +1732,7 @@ class Timeline(unittest.TestCase):
         html = page.html(data)
         self.assertIn("renderTimeline(c.timeline, audio)", html)
         self.assertIn("const KEY = 'listening-session:' + DATA.session;", html)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -76,6 +76,7 @@ button.secondary { background: transparent; color: var(--accent); }
 .timeline .bands { block-size: 1.5rem; background: none; }
 .timeline .band { position: absolute; inset-block: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-inline: .2rem; font-size: .7rem; line-height: 1.5rem; border-inline-start: 1px solid var(--muted); color: var(--muted); }
 .timeline .band:nth-child(odd) { background: light-dark(#ecebf6, #26253a); }
+.timeline .bands:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .timeline .band[data-now] { color: var(--ink); font-weight: 700; background: var(--chosen); }
 .timeline .span { position: absolute; inset-block: 1px; display: flex; border-radius: .2rem; overflow: hidden; }
 .timeline .span i { flex: 1; background: var(--accent); }
@@ -192,7 +193,15 @@ function renderTimeline(tl, audio) {
   const bar = (b) => 'bar ' + (tl.first + b) + ' (' + clock(b * tl.barSeconds) + ')';
   const box = el('div', { className: 'timeline', role: 'group', 'aria-label': 'Timeline: the parts playing in each Section; click to seek' });
   const heads = [], lanes = [];
-  const lane = (cls) => { const l = el('div', { className: 'lane' + (cls ? ' ' + cls : '') }); const h = el('div', { className: 'head' }); h.style.insetInlineStart = '0%'; heads.push(h); lanes.push(l); return l; };
+  // A row of the strip, with its own copy of the playhead.
+  const lane = (cls) => {
+    const l = el('div', { className: 'lane' + (cls ? ' ' + cls : '') });
+    const h = el('div', { className: 'head' });
+    h.style.insetInlineStart = '0%';
+    heads.push(h);
+    lanes.push(l);
+    return l;
+  };
   const bands = lane('bands');
   for (const [s, e, label] of tl.sections) {
     const b = el('div', { className: 'band', textContent: label, title: label + ': ' + bar(s) + ' to ' + bar(e) });
@@ -233,14 +242,28 @@ function renderTimeline(tl, audio) {
   audio.addEventListener('play', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); });
   for (const ev of ['pause', 'seeked', 'timeupdate', 'ended']) audio.addEventListener(ev, show);
   // A click seeks there and plays. With preload none, the time is set once the metadata is in.
-  const seek = (ev) => {
-    const r = ev.currentTarget.getBoundingClientRect();
-    const t = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * total;
+  const go = (t) => {
     if (audio.readyState >= 1) audio.currentTime = t;
     else audio.addEventListener('loadedmetadata', () => { audio.currentTime = t; }, { once: true });
     audio.play();
   };
+  const seek = (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect();
+    go(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * total);
+  };
   for (const l of lanes) l.addEventListener('click', seek);
+  // The keyboard: the Sections row takes focus; Enter or Space plays or pauses, the arrows jump a Section.
+  bands.tabIndex = 0;
+  bands.setAttribute('aria-label', 'Sections: Enter plays or pauses, arrow keys jump to the previous or next Section');
+  bands.addEventListener('keydown', (ev) => {
+    const at = audio.currentTime / tl.barSeconds;
+    const starts = tl.sections.map(([s]) => s);
+    if (ev.key === 'Enter' || ev.key === ' ') { if (audio.paused) audio.play(); else audio.pause(); }
+    else if (ev.key === 'ArrowRight') { const n = starts.find(s => s > at + 0.01); if (n != null) go(n * tl.barSeconds); }
+    else if (ev.key === 'ArrowLeft') { const p = starts.filter(s => s < at - 0.5).pop(); go((p ?? 0) * tl.barSeconds); }
+    else return;
+    ev.preventDefault();
+  });
   return box;
 }
 

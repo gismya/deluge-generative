@@ -272,6 +272,7 @@ def render_midi(card, scratch, out_dir, genre):
     recorded genre (diffs/genres.json in the session folder `out_dir`), else `genre` (the session's)."""
     variant_genres = variants.genres(out_dir)
     files = []
+    renders = {}
     for m in card.get("midi", []):
         slug = re.sub(r"[^a-z0-9]+", "-", m["label"].lower()).strip("-")
         name = f"{card['id'].lower()}-{slug}"
@@ -284,9 +285,14 @@ def render_midi(card, scratch, out_dir, genre):
                 card.get("genre") or variant_genres.get(m.get("variant")) or genre,
                 *args,
             ]
+        variant = m.get("variant") or "base"
+        if variant not in renders:
+            renders[variant] = variants.current_render(
+                _jobs.gen_emu.REPO, scratch, out_dir, variant
+            )
         subprocess.run(
             [
-                os.path.join(scratch, "bin", m.get("variant") or "base"),
+                renders[variant],
                 *args,
                 "--bars",
                 str(m.get("bars", 200)),
@@ -399,6 +405,7 @@ def build(session, scratch, out_dir, recut=False):
                 timelines[clip["stem"]] = timeline.build(
                     clip,
                     scratch,
+                    out_dir,
                     card.get("genre") or session["genre"],
                     None if "reuse" in clip else info,
                 )

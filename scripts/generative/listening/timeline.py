@@ -12,14 +12,20 @@ on in a bar where any of its notes sounds (a held pad counts); runs of such bars
 its note-on count, for shading.
 """
 
+import math
 import os
 import shlex
 import subprocess
 import tempfile
 
 from . import jobs as _jobs
+from . import variants as _variants
 
 theory = _jobs.gen_emu.theory_review
+# Part names shown as the MIDI track spells them; the rest read capitalised ("BASS" -> "Bass").
+KEEP_CASE = {"FX"}
+TIMELINE_KEYS = ("args", "variant", "bars", "sounds")
+REUSED = "a reused clip's timeline is a dict giving its args and bars"
 
 
 def stem(path):
@@ -87,7 +93,7 @@ def strip(piece, sounds, first, end, muted=()):
     cut's start. `sounds` is sound_labels()'s; `muted` holds the part numbers (1 = the first) the clip leaves out."""
     tempo = float(piece.recipe["tempo"])
     length = end - first
-    lo, hi = int(first), int(-(-end // 1))  # whole bars the cut touches
+    lo, hi = math.floor(first), math.ceil(end)  # whole bars the cut touches
     sections = []
     labels = section_labels(piece.sections)
     for i, (start, label) in enumerate(labels):
@@ -100,52 +106,38 @@ def strip(piece, sounds, first, end, muted=()):
         if i + 1 in muted:
             continue
         on, onsets = part_bars(part, max(hi, 1))
-        spans, run = [], None
+        spans, current = [], None
         for b in range(lo, hi):
-            if on[b] and run is None:
-                run = [b, []]
+            if on[b] and current is None:
+                current = [b, []]
             if on[b]:
-                run[1].append(onsets[b])
-            if run is not None and (not on[b] or b == hi - 1):
+                current[1].append(onsets[b])
+            if current is not None and (not on[b] or b == hi - 1):
                 stop = b + 1 if on[b] else b
                 spans.append(
                     [
-                        round(max(run[0], first) - first, 3),
+                        round(max(current[0], first) - first, 3),
                         round(min(stop, end) - first, 3),
-                        run[1],
+                        current[1],
                     ]
                 )
-                run = None
+                current = None
         sound, detail = sounds.get(part.name, ("", ""))
         parts.append(
             {
-                "name": part.name.capitalize() if len(part.name) > 2 else part.name,
+                "name": part.name if part.name in KEEP_CASE else part.name.capitalize(),
                 "sound": sound,
                 "detail": detail,
                 "spans": spans,
             }
         )
     return {
-        "barSeconds": round(240.0 / tempo, 6),
+        "barSeconds": round(_jobs.gen_emu.bar_seconds(tempo), 6),
         "bars": round(length, 3),
         "first": first,
         "sections": sections,
         "parts": parts,
     }
-
-
-def find_render(scratch, variant):
-    """The generator_render for `variant`: <scratch>/bin/<variant>, or the harness build's for base."""
-    render = os.path.join(scratch, "bin", variant)
-    if os.path.exists(render):
-        return render
-    if variant == "base":
-        found = theory.find_render()
-        if found:
-            return found
-    raise ValueError(
-        f"no generator_render for {variant}: prove the variant (bin/{variant}), or build the harness for base"
-    )
 
 
 def spec(clip, info=None):
@@ -154,7 +146,7 @@ def spec(clip, info=None):
     t = clip["timeline"]
     given = t if isinstance(t, dict) else {}
     if info is None and "args" not in given:
-        raise ValueError("a reused clip's timeline gives its args")
+        raise ValueError(REUSED)
     args = given.get("args") or info["args"]
     variant = given.get("variant") or (info or {}).get("variant") or "base"
     bars = list(given.get("bars") or clip.get("bars") or [])
@@ -166,29 +158,51 @@ def spec(clip, info=None):
 def problems(where, clip):
     """What's wrong with a clip's `timeline` key, one line each."""
     t = clip.get("timeline")
-    if t is None or t is True:
-        if t is True and "reuse" in clip:
-            return [
-                f"{where}: a reused clip's timeline is a dict with its args and bars"
-            ]
+    if t is None:
         return []
-    if not isinstance(t, dict):
+    if t is not True and not isinstance(t, dict):
         return [f"{where}: timeline is True or a dict"]
+    given = t if isinstance(t, dict) else {}
     out = [
-        f"{where}: timeline key {k} unknown"
-        for k in t
-        if k not in ("args", "variant", "bars", "sounds")
+        f"{where}: timeline key {k} unknown" for k in given if k not in TIMELINE_KEYS
     ]
-    if "reuse" in clip and not (t.get("args") and t.get("bars")):
-        out.append(f"{where}: a reused clip's timeline gives args and bars")
+    if "reuse" in clip and not (given.get("args") and given.get("bars")):
+        out.append(f"{where}: {REUSED}")
+    sounds = given.get("sounds", {})
+    if not isinstance(sounds, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in sounds.items()
+    ):
+        out.append(f"{where}: timeline sounds is {{PART: name}}")
     return out
 
 
-def build(clip, scratch, genre, info=None):
-    """A clip's timeline: renders its Recipe's MIDI and lists its sounds, with the clip's generator_render."""
+def run(cmd):
+    """generator_render's stdout; RuntimeError with the command and its stderr if it fails."""
+    done = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if done.returncode != 0:
+        raise RuntimeError(
+            f"{shlex.join(cmd)}: {(done.stderr or done.stdout).strip()[-300:]}"
+        )
+    return done.stdout
+
+
+def merged_sounds(listed, given, parts):
+    """The names --list-sounds gave (`listed`, sound_labels()'s), each part in `given` ({PART: name}) overriding its
+    own. ValueError naming a `given` key that is none of the piece's `parts`."""
+    unknown = sorted(set(given) - set(parts))
+    if unknown:
+        raise ValueError(
+            f"timeline sounds: {', '.join(unknown)} isn't a part (have {', '.join(parts)})"
+        )
+    return {**listed, **{k: (v, "") for k, v in given.items()}}
+
+
+def build(clip, scratch, session, genre, info=None):
+    """A clip's timeline: renders its Recipe's MIDI and lists its sounds, with the clip's generator_render (a
+    current bin/<variant> of the session folder `session`, or the harness build's for base)."""
     args, variant, (first, end), given_sounds = spec(clip, info)
     recipe, mutes, _quiet, end_flags = _jobs.parse_args(args, genre)
-    render = find_render(scratch, variant)
+    render = _variants.current_render(_jobs.gen_emu.REPO, scratch, session, variant)
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "timeline")
         cmd = [
@@ -196,26 +210,16 @@ def build(clip, scratch, genre, info=None):
             *recipe.flags(),
             *end_flags,
             "--bars",
-            str(int(-(-end // 1)) + 1),
+            str(math.ceil(end) + 1),
             "--midi-only",
             "--out",
             out,
         ]
-        done = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if done.returncode != 0 or not os.path.exists(out + ".mid"):
-            raise RuntimeError(
-                f"{shlex.join(cmd)}: {(done.stderr or done.stdout).strip()[-300:]}"
-            )
+        run(cmd)
+        if not os.path.exists(out + ".mid"):
+            raise RuntimeError(f"{shlex.join(cmd)}: wrote no {out}.mid")
         with open(out + ".mid", "rb") as fh:
             piece = theory.piece_from_midi(fh.read())
-    if given_sounds is not None:
-        sounds = {k: (v, "") for k, v in given_sounds.items()}
-    else:
-        listed = subprocess.run(
-            [render, "--list-sounds", *recipe.flags()],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        sounds = sound_labels(listed.stdout)
+    listed = sound_labels(run([render, "--list-sounds", *recipe.flags()]))
+    sounds = merged_sounds(listed, given_sounds or {}, [p.name for p in piece.parts])
     return strip(piece, sounds, first, end, mutes)
