@@ -387,11 +387,11 @@ describe house("House", $ {
 			for (int32_t step = 0; step < kStepsPerBar; step++) {
 				expect(int32_t{pool[0].importance[step]}).to_equal(step == 14 ? 7 : step % kStepsPerBeat == 2 ? 5 : 0);
 			}
-			// Under House's jitter (±45) an importance 5 never meets the home threshold and always meets Density 30's.
+			// Under House's jitter (±45) an importance 5 never meets the home threshold and always meets Density 31's.
 			const int32_t lowest = 500 - houseGenre.densityJitter;
 			const int32_t highest = 500 + houseGenre.densityJitter;
 			expect(highest).to_be_less_than(houseGenre.densityCurve.threshold(macroPoints(25)));
-			expect(lowest).to_be_greater_than(houseGenre.densityCurve.threshold(macroPoints(30)) - 10);
+			expect(lowest).to_be_greater_than(houseGenre.densityCurve.threshold(macroPoints(31)));
 		});
 
 		it("gates the shaker's 16ths at 28 and the Ride and Congas at 29: none in a Groove at home (feel-1 F2, F6)", _ {
@@ -538,7 +538,7 @@ describe house("House", $ {
 			expect(riff.importance[0]).to_equal(kAnchor);
 			expect(riff.importance[6]).to_equal(kAnchor);
 			expect(int32_t{bass.loop.gateTicks}).to_equal(60);
-			expect(60).to_be_less_than(3 * kTicksPerStep);
+			expect(int32_t{bass.loop.gateTicks}).to_be_less_than(3 * kTicksPerStep);
 			expect(bass.loop.rootOnAnchors).to_be_true();
 		});
 
@@ -1042,7 +1042,7 @@ describe house("House", $ {
 			expect(differs).to_be_greater_than(0);
 		});
 
-		it("S4a: the Build with everything, with no Lead, with the kick and Bass cut for its last 2 bars, or with no kick or Bass", _ {
+		it("S4a: the Build with everything, with no Lead, with the kick and Bass cut for its last 2 bars, or with no kick", _ {
 			const BuildNotes full = buildNotes("build=full", kDrumsPart, Lane::Kick, 2);
 			expect(full.early).to_be_greater_than(0);
 			expect(full.late).to_be_greater_than(0);
@@ -1052,10 +1052,22 @@ describe house("House", $ {
 				const BuildNotes cut = buildNotes("build=cut2", part, Lane::Kick, 2);
 				expect(cut.early).to_be_greater_than(0);
 				expect(cut.late).to_equal(0);
-				const BuildNotes none = buildNotes("build=nokick", part, Lane::Kick, 2);
-				expect(none.early + none.late).to_equal(0);
 			}
+			const BuildNotes kick = buildNotes("build=nokick", kDrumsPart, Lane::Kick, 2);
+			expect(kick.early + kick.late).to_equal(0);
 			expect(buildNotes("build=nokick", kStabPart, Lane::None, 0).early).to_be_greater_than(0);
+		});
+
+		it("nokick brings the Bass in on the Build's last bar, as filter does, and keeps the roll and the Riser (#518 R1)", _ {
+			const ArcSpec& arc = HouseAs("build=nokick").genre.arc;
+			expect(arc.buildCutLeads).to_be_true();
+			expect(int32_t{arc.buildCutBars}).to_equal(1);
+			expect(arc.buildCut == PartsAndLanes{.parts = partBit(kBassPart)}).to_be_true();
+			const BuildNotes bass = buildNotes("build=nokick", kBassPart, Lane::None, 1);
+			expect(bass.early).to_equal(0);
+			expect(bass.late).to_be_greater_than(10);
+			expect(buildNotes("build=nokick", kDrumsPart, Lane::Snare, 0).early).to_be_greater_than(0);
+			expect(buildNotes("build=nokick", kFxPart, Lane::Riser, 0).early).to_be_greater_than(0);
 		});
 
 		it("feel-1 F4: the filter Build has no roll, Gap or Riser, no kick, and the Bass only in its last bar, leading into the Drop (#518)", _ {

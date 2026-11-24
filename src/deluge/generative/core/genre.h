@@ -1552,10 +1552,27 @@ constexpr int32_t shortestBuildBars(const Genre& genre) {
 
 /// Whether the Build cut and the Gap are each shorter than the genre's shortest Build and its phrase (spec §9.1, §9.5,
 /// §13.5): the Arc plan counts a Build's keeps as sounding and leaves the cut and the Gap out, so one that covered a
-/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing.
+/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing. A leading cut
+/// (`buildCutLeads`) covers each Build but its last `buildCutBars` bars: it leaves at least one bar, and its span stays
+/// under the phrase in every Build length.
 constexpr bool cutAndGapUnderBuild(const Genre& genre) {
+	const ArcSpec& arc = genre.arc;
 	const int32_t shortest = shortestBuildBars(genre);
-	return genre.arc.buildCutBars < shortest && gapSteps(genre.arc.gap) < shortest * kStepsPerBar;
+	if (gapSteps(arc.gap) >= shortest * kStepsPerBar) {
+		return false;
+	}
+	if (!arc.buildCutLeads) {
+		return arc.buildCutBars < shortest;
+	}
+	if (arc.buildCutBars < 1) {
+		return false;
+	}
+	for (const WeightedBars& build : arc.buildBars) {
+		if (build.bars - arc.buildCutBars >= genre.phraseBars) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /// Whether every Siren lane holds its note 1 bar up to a phrase, on an FX part, and no other lane sets a held length

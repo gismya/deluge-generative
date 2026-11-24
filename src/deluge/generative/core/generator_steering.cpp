@@ -702,10 +702,10 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 	const Genre& genre = *genre_;
 	const int32_t phraseSteps = genre.phraseSteps();
 	const int32_t parts = partCount(genre);
-	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut and the Gap never cover a whole phrase or a
-	// whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole phrase (or the
-	// Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The dim counts
-	// all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
+	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut (ending or leading) and the Gap never cover a
+	// whole phrase or a whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole
+	// phrase (or the Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The
+	// dim counts all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
 	const auto lets = [&](int32_t p, const Keeps& keeps, const PartsAndLanes& dropOut, RollStage roll) {
 		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane) && !dropOut.has(p, lane); });

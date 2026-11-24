@@ -706,6 +706,17 @@ describe genre_data("Every built-in genre", $ {
 		// A Build longer than the phrase: the phrase still bounds them, as the Arc plan leaves them out of it.
 		expect(ends(8, kSixteen, 8, GapLength::None)).to_be_false();
 		expect(ends(8, kSixteen, 7, GapLength::Bar)).to_be_true();
+		// A leading cut covers a Build but its last bars: at least one bar left, and under a phrase in every Build.
+		const auto leads = [](std::span<const WeightedBars> builds, uint8_t cutBars) {
+			return cutAndGapUnderBuild(Genre{
+			    .name = "leads",
+			    .phraseBars = 8,
+			    .arc = {.buildBars = builds, .buildCutBars = cutBars, .buildCutLeads = true, .gap = GapLength::None}});
+		};
+		expect(leads(kEight, 1)).to_be_true(); // House's: 7 bars of an 8-bar Build
+		expect(leads(kEight, 0)).to_be_false();
+		expect(leads(kSixteen, 8)).to_be_false(); // 8 bars: a whole phrase
+		expect(leads(kSixteen, 9)).to_be_true();
 	});
 
 	it("holds a Siren's note 1 bar up to a phrase, and no other lane's (sirensValid(), spec §9.5)", _ {

@@ -23,6 +23,7 @@
 #include "generative/core/chord_walk.h"
 #include "generative/core/genre.h"
 #include "generative/core/variants.h"
+#include <iterator>
 
 namespace deluge::generative::genres {
 
@@ -60,7 +61,7 @@ constexpr Pattern kClosedHat[] = {
 };
 
 /// One open hat a bar, on the & of 4, at home; the other three &s only above it (importance 5 under House's jitter:
-/// none at Density 25, about half at 28, all from 30), so "boots and cats" comes in late in a Build and early in a Drop
+/// none at Density 25, about half at 28, all from 31), so "boots and cats" comes in late in a Build and early in a Drop
 /// (feel-1 F2). Each replaces the closed hat there (spec §5.7).
 constexpr Pattern kOpenHat[] = {
     {"..5...5...5...7.", "................", 0},
@@ -100,8 +101,8 @@ constexpr Pattern kRiffBass[] = {
     {"X..8..X...8..7..", "................", 0},
 };
 
-/// The offbeat bass (the `offbeat` and `root` variants, today's line before v7): the & of every beat, anchored, never
-/// a beat (the kick's). 16th pickups as Complexity rises, each line's in one half: the first, so the Lead's Respond
+/// The offbeat bass (the `bass` set's `fifth` and `root` variants, the base of its `pickups`): the & of every beat,
+/// anchored, never a beat (the kick's). 16th pickups as Complexity rises, each line's in one half: the first, so the Lead's Respond
 /// rule leaves the second free for answers, except one tier-1 line's in the second, which moves the answers to the
 /// first half (#368).
 constexpr Pattern kOffbeatBass[] = {
@@ -166,9 +167,9 @@ constexpr Expression kClosedHatExpression = [] {
 	return expression;
 }();
 
-/// The Ride and the Congas: only in a Drop's first bars and a Build's last, over Density 29 (feel-1 F6).
+/// The Ride and the Congas: only in a Drop's first bars and a Build's last, over Density 29 (feel-1 F6, tuning).
 constexpr int16_t kPercGate = macroPoints(29);
-/// The shaker's 16ths come in a little before them (feel-1 F2: for the intense parts, not the Groove at home).
+/// The shaker's 16ths come in a little before them (feel-1 F2: for the intense parts, not the Groove at home; tuning).
 constexpr int16_t kShakerGate = macroPoints(28);
 
 /// In the fixed lane order (spec §5.4). The Snare plays only the Swap, the Roll fill and the Build roll; the Crash
@@ -192,15 +193,16 @@ constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.
 /// The Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
 constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
 
-/// The riff's: the root, the 5th and the 7th below, the anchors on the root; an octave up now and then (feel-1).
+/// The riff's: the root, the 5th and the 7th below, the anchors on the root (feel-1, tuning).
 constexpr LineWeight kRiffDegrees[] = {{0, 5}, {4, 3}, {6, 2}};
 /// The offbeat line's: the chord root, its 5th as Complexity rises.
 constexpr LineWeight kOffbeatDegrees[] = {{0, 8}, {4, 2}};
 /// S6's pickups: the 5th most, the root and the 7th below about as often; the anchors stay on the root (tuning).
 constexpr LineWeight kPickupDegrees[] = {{0, 3}, {4, 4}, {6, 3}};
 
-/// The riff: 60-tick notes, rare slides, a line that changes slowly. The Register's span (−5 to +7) holds the line
-/// under the Strings, so an octave up lands only from the root's low end.
+/// The riff: 60-tick notes, an octave up now and then, rare slides, a line that changes slowly; the leap and the
+/// octave chance are tuning. The Register's span (−5 to +7) holds the line under the Strings, so an octave up lands
+/// only from the root's low end.
 constexpr LoopSpec kBassLoop{
     .degrees = kRiffDegrees,
     .draws = {.leap = {4, 6}, .octaveUp = 150, .octaveDown = 0, .accent = 120},
@@ -209,7 +211,7 @@ constexpr LoopSpec kBassLoop{
     .mutation = 60,
     .gateTicks = 60,
 };
-/// The offbeat line's (v6's Bass): short notes, no octave, the anchors free.
+/// The offbeat line's: short notes, no octave, the anchors free.
 constexpr LoopSpec kOffbeatLoop{
     .degrees = kOffbeatDegrees,
     .draws = {.leap = {3, 6}, .octaveUp = 0, .octaveDown = 0, .accent = 120},
@@ -375,7 +377,7 @@ constexpr ChordGraph kHouseGraph{
 
 /// The vamp (feel-1 F5): i–iv and back, 2 bars each, every loop two chords. The home pull brings iv back to i.
 constexpr ChordMove kVampMoves[] = {
-    {kI, kIV, 30}, // i–iv
+    {kI, kIV, 30}, // i–iv (tuning)
 };
 constexpr ChordGraph kVampGraph = [] {
 	ChordGraph graph = kHouseGraph;
@@ -399,12 +401,27 @@ constexpr ChordGraph kHalfDropsVamp = loopsAt(kVampGraph, 500);
 constexpr ChordGraph kEveryDropVamp = loopsAt(kVampGraph, 1000);
 constexpr ChordGraph kOneLoopVamp = loopsAt(kVampGraph, 0);
 
-/// The vamp with the loop chance the loops set (S1) left in `graph`: the chords set comes after it, so both hold.
+/// Each loops variant's graph (S1, in kLoopVariants' order) and the vamp with its loop chance.
+struct VampPair {
+	const ChordGraph* loop;
+	const ChordGraph* vamp;
+};
+constexpr VampPair kVampPairs[] = {
+    {&kHouseGraph, &kVampGraph},
+    {&kHalfDropsGraph, &kHalfDropsVamp},
+    {&kEveryDropGraph, &kEveryDropVamp},
+    {&kOneLoopGraph, &kOneLoopVamp},
+};
+
+/// The vamp with the loop chance the loops set (S1) left in `graph`: the chords set comes after it, so both hold. A
+/// graph kVampPairs lacks plays the genre's vamp; the static_assert after kLoopVariants keeps the table whole.
 constexpr const ChordGraph* vampOf(const ChordGraph* graph) {
-	return graph == &kHalfDropsGraph   ? &kHalfDropsVamp
-	       : graph == &kEveryDropGraph ? &kEveryDropVamp
-	       : graph == &kOneLoopGraph   ? &kOneLoopVamp
-	                                   : &kVampGraph;
+	for (const VampPair& pair : kVampPairs) {
+		if (pair.loop == graph) {
+			return pair.vamp;
+		}
+	}
+	return &kVampGraph;
 }
 
 constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Mixolydian};
@@ -434,14 +451,22 @@ constexpr Variant kLoopVariants[] = {
      .weight = 1,
      .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kOneLoopGraph; }},
 };
+static_assert(std::size(kVampPairs) == std::size(kLoopVariants), "every loops variant's graph has its vamp (vampOf())");
 
-/// The filter Build's keeps and cut (feel-1 F4): no kick for the whole Build, and the Bass only in its last bar, where
-/// it enters filtered at the Rise's peak and leads into the Drop (#518).
+/// The kickless Builds' keeps and cut (feel-1 F4): no kick for the whole Build, and the Bass only in its last bar,
+/// where it enters filtered at the Rise's peak and leads into the Drop (#518).
 constexpr PartsAndLanes kNoKick = kEverything.without({.parts = partBit(kDrumsPart), .lanes = laneBit(Lane::Kick)});
 constexpr PartsAndLanes kBassOnly{.parts = partBit(kBassPart)};
+/// `arc` with no kick in its Builds and the Bass leading in on their last bar.
+constexpr void bassLeadsIn(ArcSpec& arc) {
+	arc.buildKeeps = kNoKick;
+	arc.buildCut = kBassOnly;
+	arc.buildCutBars = 1;
+	arc.buildCutLeads = true;
+}
 
-/// S4a and feel-1 F4, the Build's shape: today's roll Build with everything, with no Lead (it returns on the Drop),
-/// with the kick and Bass cut for its last 2 bars, or with no kick or Bass in the whole Build; or the filter Build,
+/// S4a and feel-1 F4, the Build's shape: the roll Build with everything, with no Lead (it returns on the Drop), with
+/// the kick and Bass cut for its last 2 bars, or with no kick and the Bass only in its last bar; or the filter Build,
 /// with no roll, Gap or Riser, the kick out and the Bass entering on its last bar, as heavy as the four roll Builds
 /// together (the owner: "both work"). Not live: the Arc reads the Build ahead.
 constexpr Variant kBuildVariants[] = {
@@ -464,54 +489,45 @@ constexpr Variant kBuildVariants[] = {
     {.name = "nokick",
      .oledName = "NO KICK",
      .weight = 1,
-     .apply =
-         [](ResolvedGenre& resolved) {
-	         // The Drums by lane, so the kick alone leaves.
-	         resolved.genre.arc.buildKeeps =
-	             kEverything.without({.parts = static_cast<uint8_t>(partBit(kDrumsPart) | partBit(kBassPart)),
-	                                  .lanes = laneBit(Lane::Kick)});
-         }},
+     .apply = [](ResolvedGenre& resolved) { bassLeadsIn(resolved.genre.arc); }},
     {.name = "filter",
      .oledName = "FILTER",
      .weight = 5,
      .apply =
          [](ResolvedGenre& resolved) {
 	         ArcSpec& arc = resolved.genre.arc;
-	         arc.buildKeeps = kNoKick;
-	         arc.buildCut = kBassOnly;
-	         arc.buildCutBars = 1;
-	         arc.buildCutLeads = true;
+	         bassLeadsIn(arc);
 	         arc.buildRiser = false;
 	         arc.gap = GapLength::None;
 	         arc.roll = {.lane = Lane::None};
          }},
 };
 
-/// S6 and feel-1 F1, the Bass: the 3-3-2 riff (the genre as written), or the offbeat line v6 played, with the 5th
-/// from Complexity 25, with the root alone below 34, or with S6's pickups, the riff 3 to 1 over the three (the owner:
-/// "B should be the default, A has its place sometimes"). Not live: the pools differ in size, and a frozen Bass holds
-/// its entry across a Drop.
+/// `bass` playing the offbeat line: its pool, its tiers and its Loop.
+constexpr void offbeatBass(PartSpec& bass) {
+	bass.pool = kOffbeatBass;
+	bass.band = {0, 2};
+	bass.loop = kOffbeatLoop;
+}
+
+/// S6 and feel-1 F1, the Bass: the 3-3-2 riff (the genre as written), or the offbeat line, with the 5th from
+/// Complexity 25, with the root alone below 34, or with S6's pickups, the riff 3 to 1 over the three (the owner: "B
+/// should be the default, A has its place sometimes"). `fifth` keeps its stable name from before the riff, so a
+/// Recipe file that picked it still plays it; on the OLED it reads OFFBEAT, which is what the player hears. Not live:
+/// the pools differ in size, and a frozen Bass holds its entry across a Drop.
 constexpr Variant kBassVariants[] = {
     {.name = "riff", .oledName = "RIFF", .weight = 9},
     {.name = "fifth",
      .oledName = "OFFBEAT",
      .weight = 1,
-     .apply =
-         [](ResolvedGenre& resolved) {
-	         PartSpec& bass = resolved.parts[kBassPart];
-	         bass.pool = kOffbeatBass;
-	         bass.band = {0, 2};
-	         bass.loop = kOffbeatLoop;
-         }},
+     .apply = [](ResolvedGenre& resolved) { offbeatBass(resolved.parts[kBassPart]); }},
     {.name = "root",
      .oledName = "OFF ROOT",
      .weight = 1,
      .apply =
          [](ResolvedGenre& resolved) {
 	         PartSpec& bass = resolved.parts[kBassPart];
-	         bass.pool = kOffbeatBass;
-	         bass.band = {0, 2};
-	         bass.loop = kOffbeatLoop;
+	         offbeatBass(bass);
 	         bass.loop.draws.leap = {0, 6};
          }},
     {.name = "pickups",
@@ -520,9 +536,8 @@ constexpr Variant kBassVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         PartSpec& bass = resolved.parts[kBassPart];
+	         offbeatBass(bass);
 	         bass.pool = kPickupBass;
-	         bass.band = {0, 2};
-	         bass.loop = kOffbeatLoop;
 	         bass.loop.degrees = kPickupDegrees;
 	         bass.loop.draws.leap = {4, 8}; // tuning
 	         bass.loop.rootOnAnchors = true;
@@ -554,15 +569,16 @@ constexpr Genre kHouse{
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 14},
     .phraseBars = 8,
     .parts = kParts,
-    // ±45, not the default ±60: an importance 5 then never plays at home (Density 25) and always from 30, so the open
-    // hat's other &s join only above home (feel-1 F2).
+    // ±45, not the default ±60: an importance 5 then never plays at home (Density 25) and always from 31, so the open
+    // hat's other &s join only above home (feel-1 F2). Genre-wide: at home every importance-6 step plays and no
+    // importance-5 one (the closed hat's tier-0 a's, the Rim's a of 2), where ±60 played about 92 % and 9 % of them.
     .densityJitter = 45,
     .fills = kFills,
     .heldFill = 0,
     .fillChance = 350,
     .sectionEndChance = 1000,
     .dropOuts = kDropOuts,
-    .dropOutChance = 500,
+    .dropOutChance = 500, // tuning
     .dropOutGapBars = 4,
     .dropOutGridBars = 4,
     // Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
