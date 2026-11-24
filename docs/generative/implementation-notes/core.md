@@ -278,6 +278,17 @@ otherwise.
   needs the patched data reads `genre_`, never `recipe_.genre` (the constant table, kept for identity and files).
   A patch writes `ResolvedGenre::genre` (a scalar, or a span or pointer to another constexpr table) or
   `ResolvedGenre::parts[p]`; `genre.parts` points at the copy's parts.
+- Trap: two sets that patch the same field compose in set order: `resolveGenre()` applies each set's pick in turn, so a
+  later set's patch sees the earlier one's. House's `chords=vamp` reads the graph pointer the `loops` set left and
+  swaps in the vamp with that loop chance (`vampOf()`); written as a plain pointer swap it would undo `loops`. Keep
+  such a set after the one it reads, and append it (the draw order is the set order).
+- Trap: a pattern step's Density jitter is fixed per pick (`plays()` keys it on the pick), and ±60 by default, so an
+  importance-5 step plays at Density 25 in about one pick in eleven, for the whole pick. To tier a lane by Density
+  (House's open hat: one a bar at home, every & from 30), check the band, `importance × 100 ± densityJitter`,
+  against `densityCurve.threshold()` at both ends; House sets its jitter to 45 for that.
+- `ArcSpec::buildCutLeads` turns the Build cut round (the set stops until the last `buildCutBars` bars and enters
+  there); `buildRiser` false keeps the Riser out of every Build (`Keeps::riser`, read in `Keeps::lets()`). The Arc
+  plan still counts a leading-cut part as playing for the whole Build, as it ignores the cut.
 - Trap: `PerformAdapter`'s members before `steering_` are baked into the step's code (offset 20): #493's
   `resolved_[2]` first went beside `blocks_` and moved `steering_` to 28. New adapter members go after `sink_`.
 - **Variant changes at a Drop (#495).** `Generator::dropVariants()` runs in `decideLanded()` right after

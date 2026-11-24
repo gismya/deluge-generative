@@ -45,15 +45,17 @@ GEN_STEP_CODE void Generator::sectionRules(Step& step) {
 		const int32_t toDrop = arc_.stepsToDrop();
 		const int32_t gap = gapSteps(rules.gap);
 		const int32_t cut = rules.buildCutBars * kStepsPerBar;
+		// The cut holds for the Build's last `cut` steps, or with buildCutLeads up to them.
+		const bool inCut = cut > 0 && (rules.buildCutLeads ? toDrop > cut : toDrop <= cut);
 		step.gap = toDrop <= gap;
-		if (toDrop <= cut) {
+		if (inCut) {
 			step.cut = rules.buildCut;
 		}
 		// The Gap and the cut end the pitched notes they stop where they start. Drum and FX tails ring out.
 		if (step.gap && (toDrop == gap || step.sectionStart)) {
 			sounding_.endPitchedBy(step.tick);
 		}
-		else if (toDrop <= cut && (toDrop == cut || step.sectionStart)) {
+		else if (inCut && (toDrop == cut || step.sectionStart)) {
 			for (int32_t p = 0; p < partCount(*genre_); p++) {
 				if (rules.buildCut.has(p, Lane::None)) {
 					sounding_.endPitchedBy(p, step.tick);
