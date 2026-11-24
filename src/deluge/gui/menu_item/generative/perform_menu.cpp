@@ -368,6 +368,12 @@ private:
 
 // ---- VARIANTS (spec §3.6, §13.6) ----
 
+/// The variant sets of the genre playing (the Current Recipe's while stopped): VARIANTS ▸'s rows.
+int32_t variantSetCount() {
+	const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
+	return genre != nullptr ? static_cast<int32_t>(genre->variantSets.size()) : 0;
+}
+
 /// A variant set's row in Perform's VARIANTS ▸: its OLED name and the variant playing now (a Drop may have moved it). A
 /// live set's row opens a plain list of its variants, on the one going on (variantAhead()): a pick queues for the next
 /// Drop, `VARIANT DROP` in QUEUE, and the variant playing cancels it, as BACK does. A set that isn't live shows
@@ -400,7 +406,7 @@ public:
 	}
 	void readCurrentValue() override { setValue(std::max<int32_t>(performAdapter.steering().variantAhead(set_), 0)); }
 	void writeCurrentValue() override {
-		const PressOutcome outcome = performAdapter.steering().pressVariant(static_cast<uint8_t>(set_), getValue());
+		const PressOutcome outcome = performAdapter.steering().pressVariant(set_, getValue());
 		refusedWithPopup(outcome);
 		TEST_EVENT("gen_press variant set=%s variant=%s outcome=%d", set().name, set().variants[getValue()].name,
 		           static_cast<int>(outcome));
@@ -420,10 +426,7 @@ public:
 	[[nodiscard]] const char* shownName() const { return shown(); }
 
 private:
-	[[nodiscard]] bool relevant() const {
-		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
-		return genre != nullptr && set_ < static_cast<int32_t>(genre->variantSets.size());
-	}
+	[[nodiscard]] bool relevant() const { return set_ < variantSetCount(); }
 	[[nodiscard]] const deluge::generative::VariantSet& set() const {
 		return performAdapter.steering().rosterGenre()->variantSets[set_];
 	}
@@ -439,8 +442,7 @@ class PerformVariantsMenu final : public Submenu {
 public:
 	using Submenu::Submenu;
 	[[nodiscard]] bool isRelevant(ModControllableAudio* /*modControllable*/, int32_t /*whichThing*/) const override {
-		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
-		return genre != nullptr && !genre->variantSets.empty();
+		return variantSetCount() > 0;
 	}
 	void beginSession(MenuItem* navigatedBackwardFrom) override;
 };
@@ -646,7 +648,7 @@ PLACE_SDRAM_BSS PerformVariantsMenu variantsMenu{
 void PerformVariantsMenu::beginSession(MenuItem* navigatedBackwardFrom) {
 	if (navigatedBackwardFrom == nullptr) {
 		const deluge::generative::Genre* genre = performAdapter.steering().rosterGenre();
-		const int32_t sets = genre != nullptr ? static_cast<int32_t>(genre->variantSets.size()) : 0;
+		const int32_t sets = variantSetCount();
 		TEST_EVENT("gen_perform_variants open sets=%ld", static_cast<long>(sets));
 		for (int32_t s = 0; s < sets; s++) {
 			TEST_EVENT("gen_perform_variants_row %s %s live=%d", genre->variantSets[s].oledName,
@@ -692,10 +694,12 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.steering().takePresses(part);
 	}
-	presses += performAdapter.steering().octavePresses();
-	// VARIANTS' rows move with the variant playing: a Drop may change it.
+	presses += performAdapter.steering().listPresses();
+	// VARIANTS' rows move with the variant playing, which a Drop may change: 4 bits a set, -1 (none) as 0.
+	static_assert(deluge::generative::kMaxVariants < 16 && deluge::generative::kMaxVariantSets * 4 <= 32);
+	uint32_t playing = 0;
 	for (int32_t set = 0; set < deluge::generative::kMaxVariantSets; set++) {
-		presses += static_cast<uint32_t>(performAdapter.steering().variantPlaying(set) + 1) << (3 * set);
+		playing |= static_cast<uint32_t>(performAdapter.steering().variantPlaying(set) + 1) << (4 * set);
 	}
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
@@ -704,10 +708,12 @@ void refreshPerformMenu() {
 	presses += static_cast<uint32_t>(log.markedPieces()) << 8 | static_cast<uint32_t>(log.pieces()) << 16;
 	presses += log.opened() << 20; // a new piece can drop one and add one, keeping both counts
 	static Basis shownBasis;
-	if (shownBasis == basisNow(presses)) {
+	static uint32_t shownPlaying = 0;
+	if (shownBasis == basisNow(presses) && shownPlaying == playing) {
 		return;
 	}
 	shownBasis = basisNow(presses);
+	shownPlaying = playing;
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
 	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu || item == &octavesMenu

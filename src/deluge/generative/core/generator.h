@@ -965,8 +965,7 @@ private:
 	ResolvedGenre* resolved_ = nullptr;
 
 	int32_t nextStep_ = 0;
-	static constexpr int32_t kNever = INT32_MAX;
-	static_assert(kNever == kNoLine, "stepsToLine() gives kNever for a line not ahead, and landsAt() passes it on");
+	static constexpr int32_t kNever = kNoLine;
 	/// A landed transition's start step: nothing at or after it is decided. kNever otherwise.
 	int32_t stopAt_ = kNever;
 	Arc arc_;

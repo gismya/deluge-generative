@@ -82,6 +82,16 @@ GEN_STEP_CODE uint8_t dropChange(const VariantSet& set, uint8_t allowed, uint8_t
 	return drawWithin(set, others, draw(withField(key, kChangeWhich)));
 }
 
+GEN_STEP_CODE bool switchable(const Genre& genre, int32_t set, int32_t variant) {
+	return set >= 0 && set < static_cast<int32_t>(genre.variantSets.size()) && genre.variantSets[set].live
+	       && variant >= 0 && variant < static_cast<int32_t>(genre.variantSets[set].variants.size());
+}
+
+GEN_STEP_CODE void switchVariant(VariantPicks& picks, int32_t set, int32_t variant) {
+	picks.pick[set] = static_cast<uint8_t>(variant);
+	picks.allowed[set] |= static_cast<uint8_t>(1U << variant);
+}
+
 GEN_STEP_CODE bool patchesGenre(const Genre& genre, const VariantPicks& picks) {
 	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
 		if (pickedVariant(genre, picks, static_cast<int32_t>(s)).apply != nullptr) {

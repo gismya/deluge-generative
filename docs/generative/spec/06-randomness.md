@@ -46,6 +46,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 - Drift keeps wandering, because freeze holds notes, not sound.
 - A frozen Loop or Motif part stops mutating, so its line is held as it is. No copy is kept.
 - Unfreeze jumps to where the counters would be now, not back to where it froze, which keeps the timeline reproducible. If no pick happened during the freeze, the line carries on from where it was held, with the next mutation at the next pass end, and the pass count includes the frozen time. If a pick did happen (a Drop or a Groove re-pick), the part takes that pick's pattern and its freshly rolled line, rolled on the unfreeze step, with its pass count starting there; an Answer it was playing stops, and the rest of the bar plays the call. A Complexity tier change made during the freeze shows at the pattern's next wrap after it.
+- A variant change at a Drop ([§3.6](03-recipe.md#36-variant-sets)) still reaches a frozen part: it keeps its pool entry, and plays that entry of the new variant's pool (a live or Drop-changing set's pools keep their entry counts and lengths, so the entry is there).
 - A take change still lands on a frozen part: its patterns re-pick for the new take and a Loop or Motif line rolls fresh, then holds.
 
 ### 6.8 Perform and Compose agree

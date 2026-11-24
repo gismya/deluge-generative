@@ -265,6 +265,18 @@ public:
 		}
 		return nullptr;
 	}
+	/// Drops each queued command `drop(command)` holds for, keeping the others in order.
+	template <typename Drop>
+	void removeIf(Drop drop) {
+		int32_t kept = 0;
+		for (int32_t i = 0; i < count_; i++) {
+			const Command command = entries_[(head_ + i) % kCapacity];
+			if (!drop(command)) {
+				entries_[(head_ + kept++) % kCapacity] = command;
+			}
+		}
+		count_ = kept;
+	}
 	/// Discrete commands that would still fit.
 	[[nodiscard]] int32_t room() const { return kCapacity - count_; }
 	void clear() { head_ = count_ = 0; }

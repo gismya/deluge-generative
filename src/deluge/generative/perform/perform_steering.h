@@ -28,6 +28,7 @@
 #include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/variants.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/keyboard_page.h"
@@ -271,8 +272,15 @@ public:
 
 	/// VARIANTS ▸: live set `set` plays `variant` from the next Drop; the variant playing pressed again cancels the one
 	/// waiting. Stopped, it is the Recipe's at once (joining the set's allowed variants), and the next start plays it.
-	/// Nothing to do for a set that isn't live, one past the genre's, or a variant past the set's.
-	[[gnu::noinline]] PressOutcome pressVariant(uint8_t set, int32_t variant);
+	/// Refused while a transition is pending (spec §12.9). Nothing to do for a set that isn't live, one past the
+	/// genre's, or a variant past the set's.
+	[[gnu::noinline]] PressOutcome pressVariant(int32_t set, int32_t variant);
+	/// Sets with a live switch waiting for the Drop, in the playing core or still in the steering queue.
+	/// dropWaitingVariants() takes a place in the queue for each.
+	[[nodiscard]] int32_t waitingVariants() const;
+	/// A transition's confirm (spec §12.9): each switch waiting is dropped, as a press of the variant that plays drops
+	/// it. The caller has checked that the queue has room for waitingVariants() presses.
+	void dropWaitingVariants();
 	/// Set `set`'s variant as it goes on: its newest switch still in the steering queue, else the one waiting in the
 	/// core for the Drop, else the one playing. -1 past the roster genre's sets.
 	[[nodiscard, gnu::noinline]] int32_t variantAhead(int32_t set) const;
@@ -390,8 +398,9 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
-	/// Octave shift and variant switch presses, and BACK taps (which may cancel one), from any control, modulo 256.
-	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
+	/// Presses of the menus' per-row lists, octave shifts and variant switches, and BACK taps (which may cancel one),
+	/// from any control, modulo 256.
+	[[nodiscard]] uint32_t listPresses() const { return listPresses_; }
 
 private:
 	[[nodiscard]] Adapter& adapter() { return static_cast<Adapter&>(*this); }
@@ -421,6 +430,18 @@ private:
 			const auto part = static_cast<uint8_t>(p);
 			if (piece->takeWaiting(p) >= 0 || queue_.holdsFor(CommandKind::SetTake, part)) {
 				visit(part, piece->take(p));
+			}
+		}
+	}
+	/// Calls `visit(set, variant)` for each set with a live switch waiting, in the playing piece or in the queue, with
+	/// the variant it plays: what waitingVariants() counts is what dropWaitingVariants() drops.
+	template <typename Visit>
+	void forEachWaitingVariant(Visit visit) const {
+		const Generator* piece = playing();
+		for (int32_t s = 0; piece != nullptr && s < kMaxVariantSets; s++) {
+			const auto set = static_cast<uint8_t>(s);
+			if (piece->variantWaiting(s) >= 0 || queue_.holdsFor(CommandKind::SetVariant, set)) {
+				visit(set, piece->variants().pick[s]);
 			}
 		}
 	}
@@ -465,7 +486,7 @@ private:
 	GlideLength glide_ = kDefaultGlide;
 	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
 	/// step pins (PerformAdapter::incomingStarts()).
-	uint8_t octavePresses_ = 0;
+	uint8_t listPresses_ = 0;
 };
 
 // ---- Definitions ----
@@ -563,6 +584,11 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	}
 	adapter().seed() = pending.seed;
 	adapter().takes() = pending.takes;
+	// An octave shift or a variant switch still queued names the outgoing roster's part or set: it goes with it, so
+	// the incoming instance never lands it on its own (spec §12.9).
+	queue_.removeIf([](const Command& command) {
+		return command.kind == CommandKind::SetOctave || command.kind == CommandKind::SetVariant;
+	});
 	newRecipe();
 }
 
@@ -728,7 +754,7 @@ template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
 	// It may cancel a waiting key change, take, octave shift or variant switch: menus showing one read it again.
 	keyPresses_++;
-	octavePresses_++;
+	listPresses_++;
 	for (uint32_t& presses : takePresses_) {
 		presses++;
 	}
@@ -852,7 +878,7 @@ PressOutcome PerformSteering<Adapter>::pressOctave(uint8_t part, int32_t shift) 
 	if (leaving_ || !takesOctave(part) || !octavesOf(part).contains(shift)) {
 		return PressOutcome::NothingToDo;
 	}
-	octavePresses_++;
+	listPresses_++;
 	if (playing() != nullptr) {
 		return queued(queue_.push({CommandKind::SetOctave, part, shift}));
 	}
@@ -893,22 +919,39 @@ int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
 }
 
 template <typename Adapter>
-PressOutcome PerformSteering<Adapter>::pressVariant(uint8_t set, int32_t variant) {
+PressOutcome PerformSteering<Adapter>::pressVariant(int32_t set, int32_t variant) {
+	if (gated(PressKind::Variant)) {
+		return PressOutcome::ChangePending; // it would wait for a Drop the outgoing piece never plays
+	}
 	const Genre* genre = rosterGenre();
-	if (leaving_ || !entered_ || genre == nullptr || set >= genre->variantSets.size() || !genre->variantSets[set].live
-	    || variant < 0 || variant >= static_cast<int32_t>(genre->variantSets[set].variants.size())) {
+	if (leaving_ || !entered_ || genre == nullptr || !switchable(*genre, set, variant)) {
 		return PressOutcome::NothingToDo;
 	}
-	octavePresses_++;
+	listPresses_++;
 	if (playing() != nullptr) {
-		return queued(queue_.push({CommandKind::SetVariant, set, variant}));
+		return queued(queue_.push({CommandKind::SetVariant, static_cast<uint8_t>(set), variant}));
 	}
 	// Stopped: no Drop to wait for. The variant is the Recipe's, as a live switch landing makes it
 	// (Generator::apply()).
-	VariantPicks& picks = adapter().recipe().variants;
-	picks.pick[set] = static_cast<uint8_t>(variant);
-	picks.allowed[set] |= static_cast<uint8_t>(1U << variant);
+	switchVariant(adapter().recipe().variants, set, variant);
 	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::waitingVariants() const {
+	int32_t count = 0;
+	forEachWaitingVariant([&count](uint8_t /*set*/, int32_t /*variant*/) { count++; });
+	return count;
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::dropWaitingVariants() {
+	// Each press of the variant playing drains after the switch it drops, at the same decision: the core cancels the
+	// one waiting (spec §13.6).
+	forEachWaitingVariant([this](uint8_t set, int32_t variant) {
+		listPresses_++;
+		queue_.push({CommandKind::SetVariant, set, variant});
+	});
 }
 
 template <typename Adapter>

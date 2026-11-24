@@ -302,6 +302,32 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			perform::statusTag(waiting, 0, tag);
 			expect(std::string(tag)).to_equal(std::string(">VAR--"));
 		});
+		it("replaces the Drop's own draw for its set: a Drop that would change the drums plays the switch instead", _ {
+			// A seed whose first Drop changes the drums with every style allowed, then the same piece switched to the
+			// third style: the Drop plays the switch, and nothing else moves there.
+			bool found = false;
+			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
+				Recipe recipe = dubWith({"skank=sevenths", "drums=onedrop"});
+				recipe.variants.allowed[kDrums] = 0b111;
+				const Stepped drawn = stepThrough(recipe, seed, 120 * kStepsPerBar);
+				if (drawn.drops.empty() || drawn.picks[drawn.drops[0]].pick[kDrums] == kOneDrop) {
+					continue;
+				}
+				found = true;
+				const int32_t drop = drawn.drops[0];
+				const int32_t drawnStyle = drawn.picks[drop].pick[kDrums];
+				const int32_t other = drawnStyle == kRockers ? kSteppers : kRockers;
+				const Stepped switched = stepThrough(recipe, seed, drop + 1, [&](int32_t step, SteeringQueue& queue) {
+					if (step == 4) {
+						queue.push({CommandKind::SetVariant, kDrums, other});
+					}
+				});
+				expect(static_cast<int32_t>(switched.picks[drop - 1].pick[kDrums])).to_equal(kOneDrop);
+				expect(static_cast<int32_t>(switched.picks[drop].pick[kDrums])).to_equal(other);
+			}
+			expect(found).to_be_true();
+		});
+
 		it("is cancelled by picking the variant playing, and by BACK", _ {
 			DubPiece piece(dubWith({"skank=sevenths", "drums=onedrop"}));
 			piece.runToStepLine(4);

@@ -52,12 +52,6 @@ GEN_STEP_CODE bool validOctave(const Command& command, const Genre& genre) {
 	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
 
-/// Whether a SetVariant names a live set of `genre` and one of its variants (spec §3.6, §13.6).
-GEN_STEP_CODE bool validVariant(const Command& command, const Genre& genre) {
-	return command.target < genre.variantSets.size() && genre.variantSets[command.target].live && command.value >= 0
-	       && command.value < static_cast<int32_t>(genre.variantSets[command.target].variants.size());
-}
-
 /// Whether a Section kind can be forced: Groove, Break or Build (spec §9.6, §13.5). The Outro comes with End.
 constexpr bool forceable(SectionKind kind) {
 	return kind == SectionKind::Groove || kind == SectionKind::Break || kind == SectionKind::Build;
@@ -283,13 +277,11 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 	case CommandKind::SetStutter:
 		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
 	case CommandKind::SetVariant: {
-		// It lands on a Drop's first step, where dropVariants() applies the genre copy again with it (spec §3.6). A
-		// variant the set didn't allow joins its allowed ones, so a Drop change, SAVE and the file keep it.
-		if (!validVariant(command, *recipe_.genre)) {
+		// It lands on a Drop's first step, where dropVariants() applies the genre copy again with it (spec §3.6).
+		if (!switchable(*recipe_.genre, command.target, command.value)) {
 			return false;
 		}
-		recipe_.variants.pick[command.target] = static_cast<uint8_t>(command.value);
-		recipe_.variants.allowed[command.target] |= static_cast<uint8_t>(1U << command.value);
+		switchVariant(recipe_.variants, command.target, command.value);
 		switchedSets_ |= static_cast<uint8_t>(1U << command.target);
 		return true;
 	}
@@ -395,7 +387,7 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 		break;
 	}
 	case CommandKind::SetVariant:
-		if (!validVariant(command, *recipe_.genre)) {
+		if (!switchable(*recipe_.genre, command.target, command.value)) {
 			return true;
 		}
 		// Picking the variant that plays cancels the one waiting, as a take does (spec §13.6).

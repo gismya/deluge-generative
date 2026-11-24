@@ -37,8 +37,9 @@ constexpr Pattern kKick[] = {
     {"....X.......X..7", "................", 1},
 };
 
-/// Rockers (#460 S5 C, round 2's s5 clips): the drop's kick on 2 and 4, and on 1 and 3 as Density allows. As many
-/// entries as kKick, each as long, so a frozen Drums part keeps its pick across a Drop that changes the style.
+/// Rockers (#460 S5 C): the kick anchored on 2 and 4, and on 1 and 3 at importance 8, so Density takes those away
+/// first. As many entries as kKick, each as long, so a frozen Drums part keeps its pick across a Drop that changes the
+/// style.
 constexpr Pattern kKickRockers[] = {
     {"8...X...8...X...", "................", 0, 2},
     {"8...X...8...X..7", "................", 1},
@@ -394,7 +395,8 @@ constexpr Variant kSkankVariants[] = {
 };
 
 /// The drum style (#460 S5 C, ADR 0008): the one drop it played before the set, rockers or steppers, by the Kick's
-/// pool. It may change at each Drop, never inside a Section; Perform may switch it there too.
+/// pool. It may change at each Drop, never inside a Section; Perform may switch it there too. The weights 2:1:1 keep
+/// the one drop the most common style (tuning).
 constexpr Variant kDrumVariants[] = {
     {.name = "onedrop", .oledName = "ONE DROP", .weight = 2},
     {.name = "rockers",
