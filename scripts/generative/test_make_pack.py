@@ -193,5 +193,58 @@ class DerivedTest(unittest.TestCase):
             derived.make(self.tmp)
 
 
+class DelayFeedbackTest(unittest.TestCase):
+    """No pack preset saves delay feedback of 25 or more: each repeat's gain is the menu value / 25, and at 25 and over
+    the Deluge's delay never abandons in Perform (spec §11.4), so an echo plays on for good (GEN Dub Impact Crack at
+    26, the Dub sign-off)."""
+
+    def test_reads_every_delay_feedback_in_menu_units(self):
+        xml = (
+            f"<sound><defaultParams><delayFeedback>{make_pack.knob(20)}</delayFeedback></defaultParams>"
+            f"<kit><delayFeedback>{make_pack.knob(26)}</delayFeedback></kit></sound>"
+        )
+        self.assertEqual(make_pack.delay_feedbacks(xml), [20, 26])
+
+    def test_reads_a_kits_delay_attribute(self):
+        xml = f'<kit><delay pingPong="1" feedback="{make_pack.knob(26)}" rate="0x00000000"/></kit>'
+        self.assertEqual(make_pack.delay_feedbacks(xml), [26])
+        self.assertTrue(make_pack.runaway_delay(xml))
+
+    def test_flags_a_feedback_of_25_or_more(self):
+        for value, runaway in (
+            (0, False),
+            (24, False),
+            (25, True),
+            (26, True),
+            (50, True),
+        ):
+            xml = (
+                f"<sound><delayFeedback>{make_pack.knob(value)}</delayFeedback></sound>"
+            )
+            self.assertEqual(make_pack.runaway_delay(xml), runaway, value)
+
+    def test_no_generated_preset_saves_a_runaway_delay(self):
+        for rel, make in make_pack.PRESETS.items():
+            if rel.endswith(".XML"):
+                data = make()
+                self.assertFalse(
+                    make_pack.runaway_delay(
+                        data if isinstance(data, str) else data.decode()
+                    ),
+                    rel,
+                )
+
+    def test_no_preset_in_the_pack_saves_a_runaway_delay(self):
+        for root, _, files in os.walk(make_pack.PACK):
+            for name in files:
+                if name.upper().endswith(".XML") and not name.startswith("._"):
+                    with open(
+                        os.path.join(root, name), encoding="utf-8", errors="replace"
+                    ) as f:
+                        self.assertFalse(
+                            make_pack.runaway_delay(f.read()), os.path.join(root, name)
+                        )
+
+
 if __name__ == "__main__":
     unittest.main()

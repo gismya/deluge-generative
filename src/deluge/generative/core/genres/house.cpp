@@ -359,14 +359,14 @@ constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
 // Variant sets (#461, #496, ADR 0008): the owner asked in round 2 for S1, S4a and S6 to vary per piece. Today's first
 // in each; weights are tuning.
 
-/// S1, how often a Drop brings another chord loop: 1 Drop in 3 (round 2's pick), half of them (the owner's note, so
-/// the heaviest), every Drop or never (one loop for the whole piece). Live: only the graph's loop chance moves, read
-/// on the Drop's own step after dropVariants() lands it.
+/// S1, how often a Drop brings another chord loop: 1 Drop in 3 (round 2's pick), half of them (the owner's note: about
+/// two thirds of pieces draw it, #472 round 3), every Drop or never (one loop for the whole piece). Weights tuning.
+/// Live: only the graph's loop chance moves, read on the Drop's own step after dropVariants() lands it.
 constexpr Variant kLoopVariants[] = {
-    {.name = "third", .oledName = "1 IN 3", .weight = 2},
+    {.name = "third", .oledName = "1 IN 3", .weight = 1},
     {.name = "half",
      .oledName = "1 IN 2",
-     .weight = 3,
+     .weight = 6,
      .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kHalfDropsGraph; }},
     {.name = "every",
      .oledName = "EVERY",
@@ -440,7 +440,7 @@ constexpr VariantSet kVariantSets[] = {
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 5, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 6, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 20},
     .phraseBars = 8,
     .parts = kParts,

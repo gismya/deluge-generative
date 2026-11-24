@@ -626,7 +626,7 @@ describe detroit_techno("Detroit techno", $ {
 		});
 
 		it("shares Techno's drum and FX lanes", _ {
-			expect(detroit.palette->lanes.data() == genres::technoAcid.palette->lanes.data()).to_be_true();
+			expect(detroit.palette->lanes.data() == genres::technoMelodic.palette->lanes.data()).to_be_true();
 		});
 	});
 });
