@@ -58,6 +58,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	frozen_ = 0;
 	switchedSets_ = 0;
 	silent_ = 0;
+	yieldRest_ = 0;
+	yieldEighths_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held

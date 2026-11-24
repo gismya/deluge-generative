@@ -300,3 +300,9 @@ otherwise.
   either way. `stepsToLine()` for a `SetVariantMask` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
   Drop ahead, which `landsAt()` passes on as `Generator::kNoLine`. Re-resolving writes the copy in place, so a
   patched pool must keep its entry count and lengths: a frozen part's `PatternState::entry` indexes the new pool.
+- Trap: once a genre has variant sets, a spec's `newRecipe()` or `movingRecipe()` draws them, so a spec of the
+  table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
+  `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the
+  Lead) until pinned (#497).
+- Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
+  the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).

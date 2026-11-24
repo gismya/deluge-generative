@@ -40,10 +40,15 @@ struct VariantSet {
 | House feel-1 Build (#518): the `filter` Build and `nokick`'s lead-in | `ArcSpec` keeps, roll, Gap, and the Build fields `buildCut`, `buildCutBars`, `buildCutLeads`, `buildRiser` | no |
 | House feel-1 Bass (#518): the riff, or the offbeat line | the Bass part's pool, tier band and `LoopSpec` | no |
 | House feel-1 chords (#518): the loop or the vamp | `HarmonySpec::graph`, through alternate graphs (the vamp's moves, cadence and loop length, keeping S1's loop chance) | no: it moves the chord lines |
-| Psytrance S1: the Arp's figure | the Arp part's `ArpSpec` | yes |
+| Psytrance S1: the Arp's figure | the Arp part's flavour (Loop → Arp), its `ArpSpec` walks, and for the triad `HarmonySpec::extensionCeiling` | yes |
 | Psytrance S3: the Break | `ArcSpec` Break offsets and keeps | no |
+| Psytrance ARP+LEAD (#497) | the Arp part's `yield` (§5.6) | yes |
+| Psytrance LEAD amount (#497) | the Lead part's `densityGate` | no (kept per piece) |
+| Psytrance ACCENTS (#497) | the Arp's `LoopSpec::jumpSteps` | yes |
 | Dub Q359: 7th or plain skank | the skank's chord Extensions | probably |
 | Dub S5: drum style (#460) | the Drums lanes' pools, `ChangeAt::Drop` | yes |
+
+Psytrance's live `extensionCeiling` patch is safe as Dub's skank's is (#495): only a bar line's voicing reads the Extensions, and nothing reads them across a Drop's line before it. A live flavour switch is safe because the flavour and its line or walk data are read step by step, and the pool, the only thing a held pick reads across the Drop, stays the same.
 
 For the "probably" rows, the build ticket confirms the voicing look-ahead, and that a change lands before the Drop's loop draw. House S1's "return to an earlier loop" is a Chord-loop change in House's retune: the `ChordLoop` draw already keys on the loop's index, so a return re-keys an earlier index.
 
