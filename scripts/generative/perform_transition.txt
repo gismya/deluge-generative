@@ -263,7 +263,10 @@ button PLAY up
 expect playing=false
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
-expect event gen_transition phase=idle within=10
+# Stopped, an outgoing Output still sounding is freed at its cap, a phrase of Acid techno (8 bars, at most 15.4 s at
+# 125 BPM; spec §12.9). GEN Impact Wash's echo (feedback 24: stock keeps it for 110 repeats) holds the FX Kit there
+# when the piece drew it and its Impact played (#505)
+expect event gen_transition phase=idle within=20
 button PLAY down
 wait 50
 button PLAY up
@@ -324,7 +327,9 @@ expect playing=false
 expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key) mode_notes=(?P=mode_notes)$/
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
-expect event gen_transition phase=idle within=10
+# At most the cap, as after the first stop's commit above. The piece the Drop above started drew GEN Impact Wash on the
+# Deluge (#505), and its Impact played at that Drop
+expect event gen_transition phase=idle within=20
 # SHIFT + NEW SOUND on Drums: the new roster has no previous sound (result=3, NO PREVIOUS SOUND)
 include perform_previous_sound_drums.txt
 expect event gen_press sound part=0 previous=1 result=3
