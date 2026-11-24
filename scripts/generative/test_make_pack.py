@@ -231,6 +231,18 @@ class LeadTrimTest(unittest.TestCase):
         self.assertEqual(params, (2, 2, 44100))
         self.assertEqual(frames, [(0, 0), (1000, -1000), (3000, -3000)])
 
+    def test_refuses_no_edits_and_a_mix_of_sample_and_preset_edits(self):
+        with self.assertRaisesRegex(ValueError, "no edits"):
+            make_pack.Derived("SAMPLES/A.wav", self.sha).make(self.tmp)
+        mixed = make_pack.Derived(
+            "SAMPLES/A.wav",
+            self.sha,
+            make_pack.LeadTrim(1, 0),
+            make_pack.Field("volume", "0"),
+        )
+        with self.assertRaisesRegex(ValueError, "a mix"):
+            mixed.make(self.tmp)
+
     def test_refuses_a_cut_past_the_end(self):
         derived = make_pack.Derived("SAMPLES/A.wav", self.sha, make_pack.LeadTrim(6, 0))
 

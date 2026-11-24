@@ -135,6 +135,8 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Siren, .synths = kSirenSynths},
 };
 
+static_assert(levelsValid(kParts, kRoles), "a palette level is 1 to kFullLevel");
+
 } // namespace
 
 /// Its Bass, Skank and Melodica over the one-drop drums and the Riser, Fall, Impact and Siren.

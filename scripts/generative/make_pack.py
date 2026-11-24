@@ -682,12 +682,12 @@ PRESETS = {
         clipping=4,
     ),
     # Dub's crack: the pack's DDD1 Snare wet (its leading silence cut, DERIVED) and the factory 808 Rim thrown into a
-    # dotted 8th analog ping-pong echo and some reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8, about -1.9 dB), so the echo dies within
-    # about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4); its first build's 26 held the echo
-    # at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators are taken, so a velocity cable
-    # of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
-    # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
-    # Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
+    # dotted 8th analog ping-pong echo and some reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8,
+    # about -1.9 dB), so the echo dies within about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4);
+    # its first build's 26 held the echo at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators
+    # are taken, so a velocity cable of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about
+    # 5.6 dB (peak); at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level
+    # or under. Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
@@ -1074,7 +1074,16 @@ class Derived:
             raise ValueError(
                 f"{path}: SHA-256 {digest}, the edits were written against {self.sha256}"
             )
-        if all(getattr(edit, "binary", False) for edit in self.edits) and self.edits:
+        if not self.edits:
+            raise ValueError(
+                f"{self.source}: no edits, so the pack would ship a plain factory copy"
+            )
+        binary = [getattr(edit, "binary", False) for edit in self.edits]
+        if any(binary) and not all(binary):
+            raise ValueError(
+                f"{self.source}: a mix of sample (binary) and preset (text) edits"
+            )
+        if all(binary):
             for edit in self.edits:
                 data = edit.apply(data)
             return data

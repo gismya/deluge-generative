@@ -36,6 +36,9 @@ struct SoundChoice;
 
 // ---- Palette data (slot 8) ----
 
+/// A preset's palette level that leaves it at its own volume knob: PaletteEntry::volume's default and highest value.
+constexpr uint8_t kFullLevel = 100;
+
 /// One weighted card preset for a synth part or an FX lane's synth fallback, with how far the sound controls move it
 /// (spec §11.1).
 struct PaletteEntry {
@@ -43,8 +46,9 @@ struct PaletteEntry {
 	uint8_t weight = 1;
 	ControlRanges ranges{};
 	/// The preset's level in this palette, as a percent of its volume knob, applied on top of the part's own volume
-	/// (PartSpec::volume, spec §10.6): a preset that sits louder than the palette's others comes down to them. 1–100.
-	uint8_t volume = 100;
+	/// (PartSpec::volume, spec §10.6) when it loads into a synth part: a preset that sits louder than the palette's
+	/// others comes down to them. 1 to kFullLevel (levelsValid()); an FX lane's synth fallback ignores it.
+	uint8_t volume = kFullLevel;
 };
 
 /// A lane's filename tag and its weight (spec §10.3). A tag matches case-insensitively anywhere in a file's name
@@ -85,6 +89,30 @@ struct RoleSounds {
 	Role role = Role::Bass;
 	std::span<const PaletteEntry> entries;
 };
+
+/// Whether every synth part's and role's entry has a palette level of 1 to kFullLevel. Each built-in palette
+/// `static_assert`s it over its parts and roles.
+constexpr bool levelsValid(std::span<const PartSounds> parts, std::span<const RoleSounds> roles) {
+	const auto valid = [](std::span<const PaletteEntry> entries) {
+		for (const PaletteEntry& entry : entries) {
+			if (entry.volume < 1 || entry.volume > kFullLevel) {
+				return false;
+			}
+		}
+		return true;
+	};
+	for (const PartSounds& part : parts) {
+		if (!valid(part.entries)) {
+			return false;
+		}
+	}
+	for (const RoleSounds& role : roles) {
+		if (!valid(role.entries)) {
+			return false;
+		}
+	}
+	return true;
+}
 
 /// One lane of a drum machine whose files its machine tag doesn't name alone: the lane's own tag or exact path.
 struct KitLane {
@@ -326,8 +354,8 @@ struct SoundLoad {
 	/// The control ranges of the preset that loaded, from its palette entry (spec §11.1). The defaults for a sample,
 	/// the default synth and a preset the palette doesn't list.
 	ControlRanges ranges{};
-	/// The palette level of the synth part's preset that loaded (PaletteEntry::volume): 100 for anything else.
-	uint8_t volume = 100;
+	/// The palette level of the synth part's preset that loaded (PaletteEntry::volume): kFullLevel for anything else.
+	uint8_t volume = kFullLevel;
 
 	/// Whether the player sees the one missing-sound warning for this load.
 	[[nodiscard]] constexpr bool warns() const {

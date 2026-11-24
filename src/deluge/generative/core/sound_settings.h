@@ -87,7 +87,7 @@ constexpr VoicePriorityLevel rolePriority(Role role) {
 /// A synth part's settings: its role's voice mode (spec §5.8), voice priority, portamento and, on a pitched part,
 /// whole-sound transpose 0. Its volume is the part's scaled by `presetVolume`, the loaded preset's palette level
 /// (PaletteEntry::volume, SoundLoad::volume).
-constexpr SoundSettings partSoundSettings(const PartSpec& part, uint8_t presetVolume = 100) {
+constexpr SoundSettings partSoundSettings(const PartSpec& part, uint8_t presetVolume = kFullLevel) {
 	SoundSettings settings;
 	settings.priority = rolePriority(part.role);
 	settings.zeroTranspose = part.role != Role::Drums && part.role != Role::FX;
@@ -107,7 +107,7 @@ constexpr SoundSettings partSoundSettings(const PartSpec& part, uint8_t presetVo
 	case Role::FX:
 		break;
 	}
-	settings.volume = static_cast<uint8_t>(part.volume * presetVolume / 100);
+	settings.volume = static_cast<uint8_t>(part.volume * presetVolume / kFullLevel);
 	settings.delay = part.delay;
 	if (part.flavour == Flavour::Loop) {
 		settings.slides = true;

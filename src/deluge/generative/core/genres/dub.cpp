@@ -409,9 +409,9 @@ constexpr Variant kDrumVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kSteppersLanes; }},
 };
 
-/// The Break's length (Dub sign-off 1, BRK): 7 bars, today's (a phrase, the 1-bar Build taking its last bar), or 15
-/// (two phrases), 2:1 toward the shorter (the owner, tuning). Not live: the Arc draws the Break's length as it enters
-/// the Section before it, ahead of the line.
+/// The Break's length (Dub sign-off 1, BRK): 7 bars, the genre as written (a phrase, the 1-bar Build taking its last
+/// bar), or 15 (two phrases), 2:1 toward the shorter (the owner, tuning). Not live: the Arc draws the Break's length
+/// as it enters the Section before it, ahead of the line.
 constexpr Variant kBreakVariants[] = {
     {.name = "seven", .oledName = "7 BARS", .weight = 2},
     {.name = "fifteen",

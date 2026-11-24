@@ -133,6 +133,8 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
+static_assert(levelsValid(kParts, kRoles), "a palette level is 1 to kFullLevel");
+
 } // namespace
 
 /// Its Bass, Drone, Lead and Arp over the Psy set's drums and the Riser, Fall and Impact.

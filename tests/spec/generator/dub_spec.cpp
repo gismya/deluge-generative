@@ -7,6 +7,7 @@
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/palette.h"
+#include "generative/core/sound_settings.h"
 #include "harness.h"
 #include "palette_helpers.h"
 #include "stream_helpers.h"
@@ -424,9 +425,11 @@ describe dub("Dub", $ {
 	context("its rolls and Break lengths (Dub sign-off 1, #133)", _ {
 		it("rolls the Snare in 16ths at most, in the Build and in its Roll fill: a swung 32nd is a gallop", _ {
 			int32_t rolled = 0;
+			int32_t rollFills = 0;
 			for (uint32_t seed = 1; seed <= 12; seed++) {
 				const Walked walked = walk(harness::movingRecipe(dubGenre, seed), seed, 96 * kStepsPerBar);
 				int32_t last = -kBarTicks;
+				std::set<int32_t> grooveEnds; // Groove snare hits in a phrase's last beat, by step
 				for (const Event& e : walked.noteOns) {
 					if (e.part != kDrumsPart || e.lane != Lane::Snare) {
 						continue;
@@ -434,13 +437,25 @@ describe dub("Dub", $ {
 					expect(e.tick - last).to_be_greater_than(kTicksPerStep - 1);
 					last = e.tick;
 					const int32_t step = std::min<int32_t>(e.tick / kTicksPerStep, static_cast<int32_t>(walked.steps.size()) - 1);
-					rolled += walked.steps[step].section == SectionKind::Build ? 1 : 0;
+					const Walked::Step& at = walked.steps[step];
+					rolled += at.section == SectionKind::Build ? 1 : 0;
+					if (at.section == SectionKind::Groove && at.stepInPhrase >= kPhraseSteps - kStepsPerBeat) {
+						grooveEnds.insert(step);
+					}
+				}
+				// The Roll fill: every 16th of a Groove phrase's last beat. The Swaps' Snare plays beats 2 and 4 alone.
+				for (const int32_t step : grooveEnds) {
+					if (walked.steps[step].stepInPhrase == kPhraseSteps - kStepsPerBeat && grooveEnds.contains(step + 1)
+					    && grooveEnds.contains(step + 2) && grooveEnds.contains(step + 3)) {
+						rollFills++;
+					}
 				}
 			}
 			expect(rolled).to_be_greater_than(0);
+			expect(rollFills).to_be_greater_than(0);
 		});
 
-		it("lists the break set: today's 7 bars (weight 2) and 15 bars (weight 1), read ahead by the Arc so not live", _ {
+		it("lists the break set: 7 bars, the genre as written (weight 2), and 15 (weight 1), read ahead by the Arc so not live", _ {
 			const VariantSet& set = dubGenre.variantSets[2];
 			expect(std::string(set.name)).to_equal(std::string("break"));
 			expect(std::string(set.oledName)).to_equal(std::string("BREAK"));
@@ -840,7 +855,28 @@ describe dub("Dub", $ {
 			}
 		});
 
-		it("plays 169 Double Bass about 3 dB under its preset and every other Bass pick at its own (sign-off 1, Song B)", _ {
+		it("loads 169 Double Bass at 84 percent of its volume knob, the Bass's other picks at their own (sign-off 1, Song B)", _ {
+			// The chain the firmware's loadSynth() runs: the roll's pick, its load, then the settings it applies.
+			FakeCard card = harness::factoryCardWithPack();
+			std::set<int32_t> levels;
+			bool doubleBass = false;
+			for (uint32_t entropy = 0; entropy < 200; entropy++) {
+				SoundPicks sounds;
+				rollSounds(dubGenre, *dubGenre.palette, sounds, entropy, card);
+				FakeLoader loader;
+				const PartSpec& bass = dubGenre.parts[kBassPart];
+				const SoundLoad load = loadPartSound(*dubGenre.palette, bass, sounds.part[kBassPart].c_str(), loader);
+				const int32_t level = partSoundSettings(bass, load.volume).volume;
+				const bool is169 = std::string(sounds.part[kBassPart].c_str()) == "SYNTHS/169 Double Bass.XML";
+				doubleBass = doubleBass || is169;
+				expect(level).to_equal(is169 ? 84 : 100);
+				levels.insert(level);
+			}
+			expect(doubleBass).to_be_true();
+			expect(levels == std::set<int32_t>{84, 100}).to_be_true();
+		});
+
+		it("lists 169 Double Bass at palette level 84, about 3 dB under its preset, every other Bass pick at its own", _ {
 			for (const PaletteEntry& entry : dubGenre.palette->partEntries(dubGenre.parts[kBassPart])) {
 				const bool doubleBass = std::string(entry.path) == "SYNTHS/169 Double Bass.XML";
 				expect(std::string(entry.path) + " " + std::to_string(entry.volume))
