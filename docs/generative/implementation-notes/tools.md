@@ -131,10 +131,19 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
 - The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
   function and the page free of anything a Proxy stub can't stand in for at load.
-- The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
-  `pack/` alone prints `-` for every drum lane.
+- The pack holds few drum samples (the GEN rides, claps and brushes, Dub's snare, Psytrance's `GEN PSYKICK-` kicks):
+  most of a kit's lanes come from the card folder, so `generator_render --list-sounds` over `pack/` alone prints `-`
+  for most drum lanes.
 - A clip's timeline strip (`listening/timeline.py`, #513) names each part's sound from `generator_render
   --list-sounds`: the harness's palette roll over `pack/` and the stock card, not what the capture loaded. A capture
   on a palette-override card (`listen.py card --palette`) plays other presets: give the clip's timeline `sounds`
   ({PART: name}, merged over the listed names). A sample lane's file can differ too (the card's file order). Every
   render the page runs goes through `variants.current_render`, which refuses a `bin/<name>` whose stamp is stale.
+- `gen_emu.py capture --variant`: the firmware's capture field is 64 B ("set=name,…" with its NUL), so Psytrance's
+  five sets don't all fit: leave out one the clip doesn't reach (`break` for a piece with no Break) (#497).
+- `gen_emu.py capture --elf` wants a capture build (its `generative_capture_recipe`), not `./dbt build release`'s ELF:
+  give `--build-dir` and let it build one. To compare two firmwares, run each capture from its own tree (a scratch
+  worktree for the base) with its own `--build-dir`, on the same card, with one `--render` (when the events match).
+- A power difference between a Bass+Drums and a Bass-alone capture misreads the kick's share once the bass is the
+  louder: phase and the bass's ducking move the sum by more than a faded kick's remainder. Capture the Drums alone
+  for the kick's level per 16th (#497).

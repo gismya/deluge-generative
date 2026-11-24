@@ -44,8 +44,10 @@ inline constexpr DrumMachine kLinndrum{.name = "Linndrum", .tag = "Linndrum"};
 
 /// Dean Daughters' Psy set (`SAMPLES/Artists/Dean Daughters/Psy`): a folder, its files named by sound (`KICK-Radar`),
 /// so each lane names its prefix. A lane reaches it only if the lane's folders include the set's. No rim, crash or tom.
+/// Its Kick is the pack's copies with their tails cut (`SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-*`, #497): PSYKICK- is in no
+/// factory name, so the kit never rolls the set's own long kicks (only Psytrance plays the set).
 inline constexpr KitLane kPsyLanes[] = {
-    {Lane::Kick, "KICK-"},     {Lane::Snare, "SNARE-"}, {Lane::Clap, "CLAP-"},  {Lane::ClosedHat, "CLHAT-"},
+    {Lane::Kick, "PSYKICK-"},  {Lane::Snare, "SNARE-"}, {Lane::Clap, "CLAP-"},  {Lane::ClosedHat, "CLHAT-"},
     {Lane::OpenHat, "OPHAT-"}, {Lane::Ride, "RIDE-"},   {Lane::Perc1, "PERC-"}, {Lane::Perc2, "SHAKER-"},
 };
 inline constexpr DrumMachine kPsy{.name = "Psy", .lanes = kPsyLanes};
