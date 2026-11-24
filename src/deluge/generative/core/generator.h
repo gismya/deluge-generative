@@ -281,6 +281,10 @@ public:
 	/// Regenerate keep them (spec §12.9), and the Part biases `bias` (a Regenerate's live ones, spec §3.3), and a held
 	/// Arc stays held from its first Groove (spec §9.7).
 	void carryOver(const Macros& macros, const PartBiases& bias, bool held);
+	/// Where this instance copies its genre when a Recipe's variant picks patch it (spec §3.6): owned beside the
+	/// instance, outside its block (spec §20), and kept while it plays. Without one, an instance plays every genre as
+	/// written, whatever its picks, so each owner that can play a genre with variant sets gives one.
+	void useResolvedGenre(ResolvedGenre* storage) { resolved_ = storage; }
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
@@ -945,7 +949,8 @@ private:
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
 	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
 	              "lastSpaceMacro_ holds the macro layer in 16 bits");
-	const Genre* genre_ = nullptr; ///< Constant data, never owned.
+	const Genre* genre_ = nullptr; ///< Constant data, or *resolved_: never owned.
+	ResolvedGenre* resolved_ = nullptr;
 
 	int32_t nextStep_ = 0;
 	static constexpr int32_t kNever = INT32_MAX;

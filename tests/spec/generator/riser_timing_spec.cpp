@@ -102,7 +102,7 @@ constexpr Command kForceGroove = {CommandKind::ForceSection, static_cast<uint8_t
 /// Techno from its first Groove at `tempo`, with a Build forced on step 1 (unless `forceBuild` is false) and a Riser
 /// of `riserMicros`.
 struct Piece : StepwisePiece<RiserSink> {
-	std::unique_ptr<Generator> incoming = std::make_unique<Generator>();
+	std::unique_ptr<harness::Instance> incoming = std::make_unique<harness::Instance>();
 
 	Piece(const Genre& genre, int32_t tempo, int32_t riserMicros, bool forceBuild = true)
 	    : StepwisePiece(startOf(genre, tempo)) {

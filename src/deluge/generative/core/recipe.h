@@ -135,6 +135,26 @@ struct SoundChoice {
 	Lane lane = Lane::None;
 };
 
+// ---- Variant sets (spec §3.6, ADR 0008) ----
+
+/// A genre lists at most this many variant sets (spec §4.4), each with 2 to kMaxVariants variants.
+constexpr int32_t kMaxVariantSets = 8;
+constexpr int32_t kMaxVariants = 8;
+static_assert(kMaxVariants <= 8, "VariantPicks::allowed is a uint8_t bitmask, a bit a variant");
+/// A pick a Recipe file named but this firmware doesn't know, until drawUnsetVariants() draws it (core/variants.h).
+constexpr uint8_t kUnsetVariant = 0xFF;
+
+/// The Recipe's variant picks (spec §3.6): per set of its genre, by the set's index in the genre's list, the variant
+/// playing (`pick`, an index into the set's variants) and the variants a draw may land on (`allowed`, a bit per
+/// variant). Every bit set is RANDOM, one bit a fixed variant, several a subset. Stored, not derived from the seed, so
+/// NEW SEED keeps them and a Recipe file, a Capture header and AS IT BEGAN carry them. Sets past the genre's are 0.
+struct VariantPicks {
+	uint8_t pick[kMaxVariantSets] = {};
+	uint8_t allowed[kMaxVariantSets] = {};
+
+	constexpr bool operator==(const VariantPicks&) const = default;
+};
+
 // ---- The Recipe (spec §3.1, §3.2) ----
 
 /// The longest swing interval a Recipe holds: 5 doublings of a 16th (2 bars), the coarsest sync level at the
@@ -159,6 +179,9 @@ struct Recipe {
 	int8_t octave[kMaxParts] = {};
 	/// Each part's Part bias (spec §3.3). Regenerate keeps it, as it keeps the macros; a genre change sets it to 0.
 	PartBiases bias;
+	/// Each variant set's pick and allowed variants (spec §3.6). A new Recipe and Regenerate draw them; NEW SEED keeps
+	/// them.
+	VariantPicks variants;
 
 	constexpr bool operator==(const Recipe&) const = default;
 };
@@ -179,7 +202,11 @@ struct Takes {
 /// A genre change or Regenerate passes the key that plays as `leanFrom` (spec §9.7): the scale is rolled first, then
 /// the roots whose key shares 6 or 7 notes with it split kKeyLeanPerMille of the root roll evenly, and the rest is
 /// spread evenly over all 12 roots.
-Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom = std::nullopt);
+///
+/// Each variant set is drawn by weight within `narrowed`'s allowed variants (every variant when it's null, or for a set
+/// it allows none of), after the facts, from the same stream (spec §3.6): a set never moves a fact.
+Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom = std::nullopt,
+                 const VariantPicks* narrowed = nullptr);
 
 /// The related roots' share of a leaning root roll, per mille (spec §9.7, tuning).
 constexpr int32_t kKeyLeanPerMille = 650;

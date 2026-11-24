@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "generative/core/golden_case.h"
 #include "harness.h"
 
 #include <cstdint>
@@ -67,6 +68,8 @@ inline StreamFingerprint fingerprintOf(const Genre& genre, uint32_t pieces, cons
 	for (uint32_t piece = 0; piece < pieces; piece++) {
 		Run run;
 		run.recipe = newRecipe(genre, piece * 7919U + how.recipeSalt);
+		// Each variant set on the golden's variant (spec §3.6): a set added with today's behaviour first moves nothing.
+		applyVariantOverrides(run.recipe, deluge::generative::golden_case::overrides().variant);
 		uint32_t r = piece * 2654435761U + how.drawSalt;
 		auto next = [&r] {
 			r = r * 1664525U + 1013904223U;

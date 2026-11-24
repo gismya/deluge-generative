@@ -1055,8 +1055,8 @@ describe steering_log("The steering log", $ {
 	});
 
 	context("settings log (spec §17.2)", _ {
-		it("round-trips SetSetting, SettingPath (0x85) and settings header blocks (0x92) at format 2", _ {
-			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(2));
+		it("round-trips SetSetting, SettingPath (0x85) and settings header blocks (0x92), there since format 2", _ {
+			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(3)); // 3: the Recipe's variant picks
 			Buffer b(4096);
 			b.log.beginPiece(startOf(1));
 			// Build a 0x92 settings header block with 2 scalars and 1 path.

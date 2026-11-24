@@ -29,7 +29,7 @@ struct Walked {
 	std::vector<Event> keys;    ///< KeyScale events, in the order they play.
 	uint32_t dropped = 0;       ///< Events a full buffer dropped.
 	uint32_t evicted = 0;       ///< Notes a full sounding-note table ended early.
-	std::unique_ptr<Generator> generator;
+	std::unique_ptr<harness::Instance> generator;
 
 	/// The steps where the chord differs from the step before.
 	[[nodiscard]] std::vector<int32_t> changes() const {
@@ -51,7 +51,7 @@ using WalkSteer = std::function<void(int32_t, const Generator&, SteeringQueue&)>
 inline Walked walk(const Recipe& recipe, uint32_t seed, int32_t count, const WalkSteer& steer = {},
                    bool skipIntro = false, const Takes& takes = Takes{}) {
 	Walked out;
-	out.generator = std::make_unique<Generator>();
+	out.generator = std::make_unique<harness::Instance>();
 	Generator& generator = *out.generator;
 	generator.start(recipe, seed, takes, skipIntro);
 	SteeringQueue queue;

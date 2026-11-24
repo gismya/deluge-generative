@@ -19,6 +19,7 @@
 #include "OSLikeStuff/scheduler_api.h"
 #include "generative/compose/compose_driver.h"
 #include "generative/compose/song_size.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/adapter_timing.h"
 #include "generative/firmware/blank_song.h"
 #include "generative/firmware/compose_song.h"
@@ -75,10 +76,12 @@ int64_t freeBytes() {
 
 /// What a build holds beside the song: the Generator block, the driver (its ClipBuilder) and the Song adapter.
 struct ComposeWork {
+	ComposeWork() { generator.useResolvedGenre(&resolved); }
 	Generator generator;
 	compose::ComposeDriver driver;
 	ComposeSong writer;
 	Roster roster;
+	ResolvedGenre resolved; ///< The genre with the Recipe's variants applied (spec §3.6), beside the block.
 };
 
 /// The Compose build (spec §15.7): modal; BACK cancels it until the swap.

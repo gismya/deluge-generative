@@ -56,3 +56,8 @@ otherwise.
   always written; read with a default of 0 and clamped to ±kMacroFull. Regenerate keeps the biases
   (`CurrentRecipe::regenerate()`, `PerformSteering::handOver()` when the genre stays, `PerformDriver::switchToIncoming()`
   through `carryOver()`); a genre change starts at 0; a LOAD plays the file's.
+- Variant sets (#493): one `<variant set pick allow>` child a set, by stable names (`writeVariant()`,
+  `RecipeParser::variant()`). The parser leaves a set the file doesn't name, or a pick it doesn't know, at
+  `kUnsetVariant`; `readRecipeFile()` (`firmware/recipe_files.cpp`, the one read both LOAD paths make) then draws them
+  with `drawUnsetVariants()` from fresh entropy. A spec that parses a file and plays it calls `drawUnsetVariants()`
+  itself (the Generator plays an unset pick as variant 0).

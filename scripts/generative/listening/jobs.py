@@ -49,6 +49,7 @@ RECIPE_FIELDS = (
     "scale",
     "tempo",
     "swing",
+    "variant",
 )
 
 
@@ -69,6 +70,7 @@ class Recipe:
     scale: "str | None" = None
     tempo: "float | None" = None
     swing: "int | None" = None
+    variant: tuple = ()  # "set=name" each, as --variant takes them (spec 3.6)
 
     def flags(self):
         """The Recipe as gen_emu/generator_render flags, only the ones given (and --genre, --seed, --entropy)."""
@@ -82,7 +84,9 @@ class Recipe:
         ]
         for name in RECIPE_FIELDS[3:]:
             value = getattr(self, name)
-            if value is not None:
+            if name == "variant":
+                out += [f for v in value for f in ("--variant", v)]
+            elif value is not None:
                 out += [
                     "--" + name,
                     f"{value:g}" if isinstance(value, float) else str(value),
@@ -176,6 +180,7 @@ def parse_args(args, genre=None):
         )
     if ns.end_after_drop and ns.end_at_bar is not None:
         raise JobError("--end-after-drop and --end-at-bar: give one")
+    ns.variant = tuple(ns.variant or ())
     recipe = Recipe(**{f: getattr(ns, f) for f in RECIPE_FIELDS})
     return (
         recipe,
