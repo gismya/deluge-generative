@@ -50,7 +50,7 @@ enum class Target : uint8_t {
 	Modulator2Level,
 	ModulatorFeedback, ///< each modulator in use
 	CarrierFeedback,   ///< both carriers
-	Fold,
+	Fold, ///< in no table: the stock folder drops the level as it switches in at 1, so "+"-only Drive stepped (#516)
 	Env1Release,
 	Env1Decay,
 	Env1Sustain,
@@ -87,7 +87,8 @@ struct TargetRange {
 
 namespace mapping {
 
-// The spec §11.2 table, one list per control and engine. Every range is a starting estimate (tuning).
+// The spec §11.2 table, one list per control and engine. Every range is a starting estimate (tuning). No list moves
+// the wavefolder (Target::Fold): see spec §11.2's engine notes.
 
 // Shared by the synth engines.
 inline constexpr TargetRange kDecay[] = {
@@ -112,7 +113,6 @@ inline constexpr TargetRange kSubtractiveBrightness[] = {
 };
 inline constexpr TargetRange kSubtractiveDrive[] = {
     {Target::LpfMorph, 0, 15, Needs::LpfInUse},
-    {Target::Fold, 0, 10},
 };
 
 inline constexpr TargetRange kFmBrightness[] = {
@@ -122,7 +122,6 @@ inline constexpr TargetRange kFmBrightness[] = {
 inline constexpr TargetRange kFmDrive[] = {
     {Target::ModulatorFeedback, 0, 8},
     {Target::CarrierFeedback, 0, 8},
-    {Target::Fold, 0, 10},
 };
 
 inline constexpr TargetRange kRingmodBrightness[] = {
@@ -136,7 +135,6 @@ inline constexpr TargetRange kDx7Decay[] = {
     {Target::Env1Decay, -6, 0, Needs::SustainBelowFull},
     {Target::Env2Decay, -6, 0, Needs::Env2InUse},
 };
-inline constexpr TargetRange kDx7Drive[] = {{Target::Fold, 0, 10}};
 inline constexpr TargetRange kDx7Thin[] = {{Target::HpfFrequency, 0, 20, Needs::HpfInUse}};
 
 // Factory kit rows are one-shots with sustain 50 and the LPF open, so Brightness only darkens and Decay only
@@ -160,8 +158,8 @@ inline constexpr std::span<const TargetRange> kTable[kNumEngines][kNumSoundContr
     // Brightness, Decay, Drive, Space, Wobble, Thin
     {kSubtractiveBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},      // Subtractive
     {kFmBrightness, kDecay, kFmDrive, kSpace, kWobble, kNone},                        // FM: no HPF on factory FM
-    {kRingmodBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},          // Ringmod: fold and ladder morph
-    {kDx7Brightness, kDx7Decay, kDx7Drive, kSpace, kWobble, kDx7Thin},                // DX7
+    {kRingmodBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},          // Ringmod: ladder morph
+    {kDx7Brightness, kDx7Decay, kNone, kSpace, kWobble, kDx7Thin},                    // DX7: no Drive
     {kKitRowBrightness, kKitRowDecay, kNone, kReverbOnly, kNone, kThin},              // Kit row
     {kKitLevelBrightness, kNone, kNone, kReverbOnly, kKitLevelWobble, kKitLevelThin}, // Kit level
 };

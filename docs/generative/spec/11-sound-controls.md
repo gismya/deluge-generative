@@ -24,7 +24,7 @@ Offsets are in menu units (0–50), relative to the stored value. Every range is
 |---|---|---|---|---|---|
 | Brightness | LPF ±8; wave index ±5 | modulator 1/2 volume ±6 (modulators in use only) | LPF ±8; pulse width ±6 | LPF −10..0 | LPF −15..0 (kit level −20..0) |
 | Decay | env1 release ±6; env1 decay ±6 if sustain < 50; env2 decay ±6 | same | same | cut only | cut only (lower sustain and decay) |
-| Drive | ladder `lpfMorph` 0..+15; fold 0..+10 | modulator and carrier feedback 0..+8; fold | fold; ladder morph | fold | bitcrush / SRR, genre opt-in |
+| Drive | ladder `lpfMorph` 0..+15 | modulator and carrier feedback 0..+8 | ladder morph | none | bitcrush / SRR, genre opt-in |
 | Space | reverb send 0..+10; delay feedback ±4 only if already > 0. Throw has its own delay range ([§11.4](#114-gestures)) | same | same | same | reverb send. Throw also moves the row's or kit's delay feedback where there is a delay setup |
 | Wobble | mod FX depth ±8 if type ≠ none; LFO rate ±4 if cabled; existing cable amounts ×0..×2 | same | same | same | kit-level mod FX |
 | Thin | HPF 0..+20 | none on factory FM | HPF 0..+20 | HPF if on | HPF (kit level 0..+25) |
@@ -32,7 +32,8 @@ Offsets are in menu units (0–50), relative to the stored value. Every range is
 Engine notes:
 
 - In FM, brightness is modulator level, and Drive is feedback.
-- `lpfMorph` is ladder drive on 12/24/24-drive LPFs, but an LP→BP→HP morph on SVFs. Wavefold does nothing on squares.
+- `lpfMorph` is ladder drive on 12/24/24-drive LPFs, but an LP→BP→HP morph on SVFs.
+- Drive never moves the wavefolder. The stock folder switches in at any fold above 0, and at its first step it already cuts the level, by about 4 dB on typical presets (more on louder input). Turning it further doesn't bring the level back. Drive only rises above home, so with fold in it every synth part dropped about 4 dB the moment a Build or Drop took Energy past home, and stayed down until Energy came back to home exactly. That's why DX7, whose only Drive target was fold, has no Drive. If Drive needs more grit, widen the ladder morph range rather than bring fold back.
 - DX7 operator levels and envelopes are `DxPatch` bytes, not params, so they can't move. The factory card has no DX7 or wavetable presets.
 - All kit rows on the factory card are one-shots with sustain 50 and the LPF open, so Brightness can only darken and Decay can only shorten. Whole-drum gestures use the kit's affect-entire filter, reverb and mod FX.
 - Wobble scales existing mod cables (lfo1 → pitch is in 69 presets) but never adds cables and never switches a mod FX on. A mod FX type change allocates memory.
