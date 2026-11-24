@@ -137,13 +137,15 @@ constexpr int16_t kSlowDrift = 1500;
 constexpr LineWeight kRootOnly[] = {{0, 1}};
 
 /// The root alone, never sliding and with no octave down (owner, round 1's I2: the lowest octave is mud); each note
-/// held two bars, to the pattern's end, ending before the next pick may start (loopNotesValid()).
+/// held two bars, to the pattern's end, ending before the next pick may start (loopNotesValid()). Half its notes on
+/// the root it still holds tie on instead of striking again (owner, sign-off 1's BASS, #337).
 constexpr LoopSpec kSubLoop{
     .degrees = kRootOnly,
     .draws = {.leap = 0, .octaveUp = 0, .octaveDown = 0, .accent = 0},
     .slide = 0,
     .mutation = 60,
     .gateTicks = 2 * kTicksPerBar,
+    .tieChance = 500,
 };
 
 /// Chord positions: mostly the root, the 3rd and the 5th, then the Extensions (spec §4.5).
@@ -278,7 +280,7 @@ constexpr WeightedBars kBuildBars[] = {{16, 1}};
 constexpr Genre kAmbient{
     .name = "ambient",
     .oledName = "AMBIENT",
-    .version = 2, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 3, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 60, .tempoHighBpm = 90, .scales = kScales},
     .phraseBars = 8,
     .parts = kParts,

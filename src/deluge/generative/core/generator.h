@@ -245,9 +245,10 @@ struct PartState {
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
 	AnswerKind answer = AnswerKind::None;
-	int8_t answerWay = 1; ///< A pitch shift's way: +1 up, -1 down.
-	bool slid = false;    ///< The part's last Loop note slides into the next step.
-	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	int8_t answerWay = 1;   ///< A pitch shift's way: +1 up, -1 down.
+	bool slid = false;      ///< The part's last Loop note slides into the next step.
+	bool newTake = false;   ///< A new take landed on this step: every pattern re-picks.
+	bool loopMuted = false; ///< The part's last struck Loop note was muted: a tie holds only under the same mute.
 	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
@@ -910,6 +911,10 @@ private:
 	};
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
+	/// Whether a Loop part's plain note on `step` may tie into the note it still sounds (LoopSpec::tieChance, spec
+	/// §8.6): its draw, and the rules a tie keeps. `muted` is the part's mute now.
+	[[nodiscard]] bool loopTies(int32_t partIndex, const LoopSpec& loop, const LinePitch& pitch, bool muted,
+	                            const Step& step) const;
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
 	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
 	/// @return The playing chord's degree from this step on.

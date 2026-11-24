@@ -150,6 +150,12 @@ otherwise.
   line or the next onset at runtime, as Stab/Arp/Motif notes are: `section_lines_spec`, `gates_spec` and
   `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
   cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
+- A Loop tie (`LoopSpec::tieChance`, #337) is `Generator::loopTies()` plus `SoundingNotes::extend()` from
+  `step.tick - 1`, so only a note ending exactly on the onset ties (a long note always does, at its gate). A Loop note
+  sounds on through a mute to its note-off (spec §12.5), so without `PartState::loopMuted` a tie would carry an
+  unmuted Bass on for bars after a mute: the tie checks the mute it was struck under. A tie sets `loopOn` to its own
+  step, as Avoid expects. Its draw has its own `Purpose::LoopTie`: reusing another purpose's key collides with its
+  draws wherever the position words happen to match.
 - A Register is the pitch heard (ADR 0007): pitched parts load at whole-sound transpose 0 (spec §10.6), so a factory
   bass saved at −24 (002, 007, 012, 047, 050) plays where its Register says. Set Registers for the sound you want,
   never to make up for a preset's saved transpose.

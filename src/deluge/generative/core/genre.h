@@ -340,6 +340,9 @@ struct LoopSpec {
 	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.
 	uint8_t slideOverlapTicks = 6;
+	/// Per-mille chance a plain note on the pitch the part still sounds ties into it: no new strike, and the sounding
+	/// note lasts to the new one's end (spec §5.2, §8.6). A rest, a Section line, a slide or a mute change ends a tie.
+	uint16_t tieChance = 0;
 };
 
 /// How a Sustain part holds its voicing (spec §5.2, §8.1).
@@ -1420,7 +1423,8 @@ constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 /// A Loop part's plain note lasts its gate: a step at most, or longer when every note ends before the pattern's next
 /// onset (detail::longLoopNotesFit(), #221: a sub bass's long notes). A slid note lasts a step plus the slide overlap
 /// from its latest start (detail::latestStart(), the clamp counted on every beat's 1), and the onset two 16ths on
-/// starts at its earliest (detail::earliestStart()) (spec §8.5, §8.6).
+/// starts at its earliest (detail::earliestStart()) (spec §8.5, §8.6). A part that ties (LoopSpec::tieChance, a
+/// per-mille) plays no Ornaments.
 constexpr bool loopNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Loop) {
@@ -1430,6 +1434,12 @@ constexpr bool loopNotesValid(const Genre& genre) {
 			continue;
 		}
 		if (part.loop.gateTicks > kTicksPerStep && !detail::longLoopNotesFit(part)) {
+			return false;
+		}
+		// A tie strikes nothing, so it can't carry an Ornament (spec §8.6).
+		const Ornaments& ornaments = part.expression.ornaments;
+		if (part.loop.tieChance > 1000
+		    || (part.loop.tieChance != 0 && (detail::mayRatchet(ornaments) || ornaments.flam > 0))) {
 			return false;
 		}
 		if (part.loop.slide.atZero == 0 && part.loop.slide.atFull == 0) {

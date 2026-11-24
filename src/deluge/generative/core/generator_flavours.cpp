@@ -315,9 +315,30 @@ GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).
 	VelocityLevel level = pitch.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = pitch.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
+	const uint8_t notePitch = resolvePitch(partIndex, pitch.steps);
+	const bool muted = !mutes_.audible(partIndex);
+	if (loopTies(partIndex, spec.loop, pitch, muted, step)
+	    && sounding_.extend(partIndex, Lane::None, notePitch, step.tick - 1, step.tick + length)) {
+		part.loopOn = step.tick; // its last segment: Avoid measures the plain gate from here (spec §5.5)
+		return;
+	}
 	part.loopOn = express(partIndex, spec.expression, state, patternStep,
-	                      {Lane::None, resolvePitch(partIndex, pitch.steps), level, length, part.slid}, step);
+	                      {Lane::None, notePitch, level, length, part.slid}, step);
 	part.slid = pitch.slide;
+	part.loopMuted = muted;
+}
+
+GEN_STEP_CODE bool Generator::loopTies(int32_t partIndex, const LoopSpec& loop, const LinePitch& pitch, bool muted,
+                                       const Step& step) const {
+	// Only a plain note after a plain one ties, and only under the mute its note was struck with, so a mute or unmute
+	// is heard at the next onset. A rest, a Section line or another cut ended the sounding note: extend() finds none.
+	if (loop.tieChance == 0 || pitch.slide || pitch.accent || parts_[partIndex].slid
+	    || parts_[partIndex].loopMuted != muted) {
+		return false;
+	}
+	DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex], Purpose::LoopTie);
+	key.position[0] = static_cast<uint32_t>(heldStep(partIndex, step.index)); // freeze replays its phrase
+	return drawChance(key, loop.tieChance);
 }
 
 // ---- Sustain (spec §5.2, §8.1) ----
