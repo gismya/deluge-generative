@@ -54,6 +54,8 @@ set_target_properties(generator_core PROPERTIES
 # line above the describe keeps clang-format from mangling CppSpec's nested lambdas.
 create_specs_driver(generator_specs ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(generator_specs PRIVATE generator_core)
+# The stock OLED fonts' metrics (plain C data): regenerate_page_spec checks the OLED names against them.
+target_sources(generator_specs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../../src/deluge/gui/fonts/fonts.c)
 
 get_property(generator_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${generator_tests} PROPERTIES LABELS generator)

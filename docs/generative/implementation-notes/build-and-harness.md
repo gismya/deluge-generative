@@ -115,3 +115,9 @@ otherwise.
   the ring fills (a stall) and a kept piece's header is never taken (the next piece doesn't open). Read pieces with
   `harness::image(log, i)` (whole, the playing one too) or `store.stored(i)` (the file alone, through `readImage()`,
   as Capture reads it). A `LogRecord`'s path points into its image: keep the `PieceImage` alive while reading it.
+- CppSpec nests with `context(...)`. A `describe(...)` inside a `describe` compiles and runs nothing: its `it`s are
+  silently skipped and the spec passes (#494 found it on a red stub). Check a new spec fails before it passes.
+- `regenerate_page_spec` reads the stock fonts' metrics: `src/deluge/gui/fonts/fonts.c` (plain C data) is linked into
+  `generator_specs`. The menu rows' font is monospaced (6 px, `kTextSpacingX`); titles use the bold 9 px Metric font
+  (`Canvas::drawScreenTitle()`, height 10), proportional, so a title's fit is a sum of glyph widths plus 2 px a gap
+  (5 px after a space, which has no glyph). Kerning only narrows, so the spec leaves it out.

@@ -1,0 +1,148 @@
+# The Regenerate and genre-change page (#494, spec §13.6, ADR 0008 "The menus") over the sysex test port: REGENERATE
+# on Acid techno opens it titled REGENERATE on GO, with TRANSITION and GO only (Acid has no variant sets); a style
+# turned there is forgotten after BACK. GENRE ▸ ROOTS DUB opens it titled ROOTS DUB? with VARIANTS ▸: SKANK shows
+# RANDOM, unticking 7THS leaves PLAIN (the last tick stays), and GO draws the incoming Recipe within it. Dub's
+# REGENERATE then opens with SKANK on RANDOM again. Runs on a Deluge (deluge_probe.py session) or in delugemu
+# (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
+#
+# Events carry l10n's text (Regenerate, Random), which the OLED draws in capitals.
+# gen_regen_page open title=<title> style=<0 drop|1 fade|2 cut> variants=<1: the VARIANTS row shows>, as the page
+# opens; gen_regen_page style=N, a TRANSITION turn. gen_variants_menu open sets=N, then gen_variants_row <SET> <shows>
+# per set (RANDOM, a variant's OLED name, n OF m). gen_variants set=<name> allowed=<mask> shows=<text>, a tick turned.
+# gen_confirm <genre|regenerate> style= result= working= allowed=<set 0's mask>, at GO. gen_pending_variants
+# <set>=<variant>:<allowed> ..., the incoming Recipe's picks once its roster has loaded.
+# For figures: --events 'gen_regen_page|gen_variants|gen_confirm|gen_pending_variants|gen_transition'.
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/core/variants.* src/deluge/generative/core/genres/dub.cpp
+# covers: src/deluge/gui/menu_item/generative/row_value.h src/deluge/gui/l10n/english.json
+# covers: src/deluge/gui/l10n/g_english.cpp src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/perform/transition_lifecycle.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- REGENERATE: titled REGENERATE, on DROP, no VARIANTS row. A turn of TRANSITION, then BACK: nothing changes ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0 variants=0
+# Up from GO is TRANSITION: no VARIANTS row between them for Acid
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 1
+expect event gen_regen_page style=1
+mark now
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 200
+expect no_event gen_confirm since=mark within=1
+expect no_event gen_transition phase=preloading since=mark
+# Opened again, it starts on DROP and GO again
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=0
+button BACK down
+wait 50
+button BACK up
+wait 100
+
+# ---- GENRE ▸ ROOTS DUB: titled ROOTS DUB?, with VARIANTS ▸ SKANK on RANDOM ----
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=ROOTS DUB? style=0 variants=1
+# VARIANTS is one up from GO
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=1
+expect event gen_variants_row SKANK Random
+# SKANK's multi-select, from the top (a list remembers its row) on 7THS: untick it, so only PLAIN is allowed (mask 2)
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=skank allowed=2 shows=PLAIN
+# PLAIN's tick is the last: it stays
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=skank allowed=2 shows=PLAIN
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm dub style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_pending_variants skank=plain:2
+expect event gen_transition start style=0 within=60
+# Dub's echo can ring on in the outgoing Outputs until their phrase cap (perform_transition.txt says why)
+expect event gen_transition phase=idle within=60
+
+# ---- REGENERATE in Dub: SKANK is on RANDOM again, and GO draws from both ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_row SKANK Random
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event /^gen_pending_variants skank=(sevenths|plain):3$/ within=20
+expect event gen_transition start style=0 within=60

@@ -9,14 +9,16 @@ wait 50
 button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
-# A Regenerate (HARD CUT AT PHRASE), with the outgoing roster freed before leaving
+# A Regenerate (CUT), with the outgoing roster freed before leaving
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

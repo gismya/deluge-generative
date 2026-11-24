@@ -1,6 +1,6 @@
 # A genre change mid-piece (#217, spec §9.7, §13.6, §14.1) over the sysex test port: GENRE ▸ opens on the playing
 # genre's row (TECHNO ▸) and its submenu on the playing subgenre (ACID, = REGEN). Picking the sibling (MELODIC, Melodic
-# techno, 5 parts where Acid techno has 4) asks MELODIC TECHNO? on BUILD INTO A DROP and plays the transition.
+# techno, 5 parts where Acid techno has 4) asks MELODIC TECHNO? on DROP and plays the transition.
 # Then back to ACID with a hard cut, from the other roster size, on to DUB (Dub techno, 5 parts, its Stab and Pad live
 # for the H1 after it) and to DETROIT (Detroit techno, 6 parts, the largest roster, its Strings, Stab and walk live for
 # the H1 after it), each with a hard cut, so the change visits all four, and back to ACID. Runs on a Deluge
@@ -28,6 +28,7 @@
 # covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/firmware/sound_swaps.*
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -37,7 +38,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- TECHNO ▸ MELODIC → BUILD INTO A DROP (the default): 4 parts to 5 ----
+# ---- TECHNO ▸ MELODIC → DROP (the default): 4 parts to 5 ----
 # Perform menu at its top row, GENRE; GENRE opens on TECHNO ▸, which opens on ACID (= REGEN); pick MELODIC by name
 mark
 include perform_transition_menu.txt
@@ -56,7 +57,8 @@ expect event gen_genre_pick techno-melodic row=MELODIC from=ACID
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -80,7 +82,7 @@ expect playing=true
 expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
-# ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 5 parts back to 4, asking ACID TECHNO? ----
+# ---- TECHNO ▸ ACID → CUT: 5 parts back to 4, asking ACID TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on MELODIC (= REGEN)
 include perform_transition_menu.txt
 button SELECT_ENC down
@@ -98,8 +100,10 @@ expect event gen_genre_pick techno-acid row=ACID from=MELODIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -116,7 +120,7 @@ expect playing=true
 expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
-# ---- TECHNO ▸ DUB → HARD CUT AT PHRASE: 4 parts to 5, asking DUB TECHNO? ----
+# ---- TECHNO ▸ DUB → CUT: 4 parts to 5, asking DUB TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on ACID (= REGEN)
 mark
 include perform_transition_menu.txt
@@ -135,8 +139,10 @@ expect event gen_genre_pick techno-dub row=DUB from=ACID
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -161,8 +167,10 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -171,7 +179,7 @@ expect event gen_transition_preload done error=0 parts=5 within=20
 expect event gen_transition start style=2 within=40
 expect event gen_transition phase=idle within=40
 
-# ---- TECHNO ▸ DETROIT → HARD CUT AT PHRASE: 5 parts to 6, asking DETROIT TECHNO? ----
+# ---- TECHNO ▸ DETROIT → CUT: 5 parts to 6, asking DETROIT TECHNO? ----
 # GENRE opens on TECHNO ▸ again, now on DUB (= REGEN)
 include perform_transition_menu.txt
 button SELECT_ENC down
@@ -189,8 +197,10 @@ expect event gen_genre_pick techno-detroit row=DETROIT from=DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -206,7 +216,7 @@ expect playing=true
 expect event gen_h1 steps= within=20
 expect no_event gen_outputs_freed since=mark within=2
 
-# ---- TECHNO ▸ ACID → HARD CUT AT PHRASE: 6 parts to 4, the largest roster to the smallest ----
+# ---- TECHNO ▸ ACID → CUT: 6 parts to 4, the largest roster to the smallest ----
 # (start_state resets the Current Recipe, so the next script starts on Acid without this; #234 added it for that.)
 # GENRE opens on TECHNO ▸ again, now on DETROIT (= REGEN)
 include perform_transition_menu.txt
@@ -225,8 +235,10 @@ expect event gen_genre_pick techno-acid row=ACID from=DETROIT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

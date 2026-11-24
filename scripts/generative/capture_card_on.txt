@@ -7,6 +7,7 @@
 # covers: src/deluge/generative/firmware/transitions.cpp src/deluge/generative/perform/capture.cpp
 # covers: src/deluge/generative/perform/capture.h src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include capture_card_onoff_body.txt

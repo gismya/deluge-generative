@@ -1,0 +1,8 @@
+# After perform_regen_transition.txt and the script's turn to its style (include perform_regen_go.txt): SELECT keeps
+# the style and goes back to the page, on TRANSITION; down to GO (the bottom row), which the script then presses.
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page style=
+encoder 3 5
+wait 100

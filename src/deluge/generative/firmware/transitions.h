@@ -63,8 +63,9 @@ public:
 	using TransitionLifecycle::started;
 
 	/// GENRE ▸ on `genre`, confirmed with `style` (spec §9.7, §13.6): a genre change, or on the genre playing (and
-	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`.
-	Request change(const Genre& genre, TransitionStyle style);
+	/// REGENERATE) a Regenerate. The preload rolls the incoming Recipe from `genre`, each variant set drawn within
+	/// `narrowed`'s allowed variants (the page's VARIANTS rows; all of them when a set's mask is 0).
+	Request change(const Genre& genre, TransitionStyle style, const VariantPicks& narrowed = {});
 	/// A Recipe file's LOAD (spec §16.5): confirmed with `style` while playing, or at once while stopped (it commits
 	/// when loaded). The preload takes `file` as the pending Recipe, macros included, with its missing sounds re-rolled
 	/// (spec §16.6), and the Current Recipe takes `name` with it. Both are copied: the caller's may change at once.
@@ -104,6 +105,7 @@ private:
 		const Genre* genre = nullptr;
 		const RecipeFile* file = nullptr;
 		const perform::RecipeName* name = nullptr;
+		VariantPicks narrowed; ///< A genre change's or Regenerate's: what each set draws within
 	};
 	bool submitPreload(uint32_t request, const Incoming& incoming);
 	void cancelPreload();

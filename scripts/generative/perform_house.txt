@@ -1,4 +1,4 @@
-# House's hardware session (#132 decision 9, spec §20 H1 and H16): Acid techno changes into House by BUILD INTO A DROP,
+# House's hardware session (#132 decision 9, spec §20 H1 and H16): Acid techno changes into House by DROP,
 # its 8- or 16-bar Build gliding from 125-135 to House's 120-126 BPM onto House's Drop. House then plays its Groove
 # (claps on 2 and 4, the offbeat bass, the stabs and Strings, the Lead answering in each bar's second half); a forced
 # Break keeps the Stab, the Strings and the closed hat; a forced Groove follows a phrase later, and a forced Build (4 or
@@ -23,6 +23,7 @@
 # covers: src/deluge/generative/firmware/retirements.cpp src/deluge/generative/firmware/sound_swaps.cpp
 # covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 mark now
@@ -35,7 +36,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- HOUSE -> BUILD INTO A DROP: Acid's Build glides to House's tempo, onto House's Drop ----
+# ---- HOUSE -> DROP: Acid's Build glides to House's tempo, onto House's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -46,7 +47,8 @@ expect event gen_genre_pick house row=HOUSE
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

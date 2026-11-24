@@ -1,0 +1,124 @@
+# The Compose screen's VARIANTS ▸ row (#494, spec §14.4, ADR 0008 "The menus") over the sysex test port: a Recipe of
+# Acid techno (no variant sets) shows no VARIANTS row; ROOTS DUB's shows it after SCALE, with SKANK on RANDOM; unticking
+# 7THS leaves PLAIN, which the Current Recipe keeps, and REGENERATE? → OK draws only within it.
+# gen_compose_variants <why> <set>=<variant>:<allowed> ...: the Current Recipe's picks after an edit (- for none).
+# gen_variants_menu open sets=N, gen_variants_row <SET> <shows>, gen_variants set= allowed= shows=: as in
+# perform_regen_page.txt. Rows are chosen from the top (encoder 3 -20): FROM, REGENERATE, SEED + TAKES, TEMPO, SWING,
+# KEY, SCALE, VARIANTS (only for a genre with sets), ENERGY, ...
+# covers: src/deluge/gui/menu_item/generative/compose_screen.* src/deluge/gui/menu_item/generative/regenerate_page.*
+# covers: src/deluge/generative/perform/regenerate_page.* src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/core/variants.* src/deluge/generative/core/genres/dub.cpp
+# covers: src/deluge/gui/context_menu/generative.*
+# covers: src/deluge/generative/firmware/compose_edits.cpp src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+start_state
+expect playing=false
+
+# ---- FROM ▸ GENRE ▸ ROOTS DUB rolls a Dub Recipe: every set on RANDOM ----
+compose screen
+expect event gen_compose_screen opened
+expect ui=sound_editor
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre dub
+expect event gen_genre_pick dub row=ROOTS DUB
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll genre done within=30
+expect event /^gen_compose_variants rolled skank=(sevenths|plain):3$/
+
+# ---- VARIANTS ▸, after SCALE: SKANK on RANDOM; untick 7THS ----
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=1
+expect event gen_variants_row SKANK Random
+# SKANK's multi-select, from the top (a list remembers its row): untick 7THS
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=skank allowed=2 shows=PLAIN
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+
+# ---- REGENERATE? → OK draws within the Recipe's allowed variants: PLAIN, every time ----
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll regenerate done within=30
+expect event gen_compose_variants rolled skank=plain:2
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll regenerate done within=30
+expect event gen_compose_variants rolled skank=plain:2
+
+# ---- FROM ▸ GENRE ▸ ACID: no VARIANTS row (row 8 is ENERGY). FROM's list remembers its row: GENRE from the bottom ----
+encoder 3 -20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+encoder 3 5
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=TECHNO
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+pick genre techno-acid
+expect event gen_genre_pick techno-acid row=ACID
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll genre done within=30
+expect event gen_compose_variants rolled -
+encoder 3 -20
+encoder 3 7
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect no_event gen_variants_menu within=1

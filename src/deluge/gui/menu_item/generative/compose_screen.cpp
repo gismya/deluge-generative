@@ -27,9 +27,11 @@
 #include "generative/firmware/current_recipe.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/queue_text.h"
+#include "generative/perform/regenerate_page.h"
 #include "gui/context_menu/generative.h"
 #include "gui/l10n/l10n.h"
 #include "gui/menu_item/generative/genre_rows.h"
+#include "gui/menu_item/generative/regenerate_page.h"
 #include "gui/menu_item/generative/row_value.h"
 #include "gui/menu_item/generative/source_rows.h"
 #include "gui/menu_item/integer.h"
@@ -90,6 +92,9 @@ void reportRecipe(const char* why) {
 	           static_cast<long>(gen::macroToPoints(r.macros.value[3])));
 	TEST_EVENT("gen_compose_seed %s seed=%s takes=%d,%d,%d,%d,%d,%d length=%ld", why, code, t.take[0], t.take[1],
 	           t.take[2], t.take[3], t.take[4], t.take[5], static_cast<long>(gen::firmware::composeLength()));
+	char picks[64];
+	gen::perform::picksText(*r.genre, r.variants, picks);
+	TEST_EVENT("gen_compose_variants %s %s", why, picks);
 #endif
 }
 
@@ -786,8 +791,8 @@ PLACE_SDRAM_BSS BuildRow buildRow{l10n::String::STRING_FOR_BUILD};
 
 PLACE_SDRAM_BSS ComposeScreen composeScreenItem{
     l10n::String::STRING_FOR_COMPOSE,
-    {&fromMenu, &regenerateRow, &seedTakesMenu, &tempoRow, &swingRow, &keyRow, &scaleRow, &energyRow, &densityRow,
-     &complexityRow, &motionRow, &soundsMenu, &lengthRow, &buildRow},
+    {&fromMenu, &regenerateRow, &seedTakesMenu, &tempoRow, &swingRow, &keyRow, &scaleRow, &composeVariantsMenu,
+     &energyRow, &densityRow, &complexityRow, &motionRow, &soundsMenu, &lengthRow, &buildRow},
 };
 
 // COMPOSE FROM (spec §14.1): the Generative menu's COMPOSE. Its GENRE ▸ and FILE... are FROM's: they show the

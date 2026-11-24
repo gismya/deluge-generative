@@ -1,6 +1,6 @@
 # The genre ring (#132, decision 9; spec §9.7, §21.3) over the sysex test port, in one boot: every built-in genre once,
 # each transition style at least once. Acid techno (the boot genre) -> Melodic techno CUT -> Dub techno BUILD ->
-# Detroit techno FADE -> Ambient FADE (its own entry, so the confirm opens on it) -> Psytrance ▸ Classic CUT -> Dub FADE
+# Detroit techno FADE -> Ambient FADE (its own entry, so the page opens on it) -> Psytrance ▸ Classic CUT -> Dub FADE
 # -> House BUILD. Each change checks the incoming roster's preload, the start with its tempo glide arrived (tempo_off,
 # the song's tempo against the incoming Recipe's in hundredths of a BPM, under 10 BPM), the outgoing roster's Outputs freed, and
 # an H1 and an H16 report in the new genre. Every pair in every style is the harness matrix spec's
@@ -16,6 +16,7 @@
 # covers: src/deluge/generative/firmware/retirements.* src/deluge/gui/context_menu/generative.*
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/adapter_timing.*
 # covers: src/deluge/generative/core/types.h src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -26,7 +27,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- TECHNO / MELODIC -> HARD CUT AT PHRASE: Acid's 4 parts to Melodic techno's 5 ----
+# ---- TECHNO / MELODIC -> CUT: Acid's 4 parts to Melodic techno's 5 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -43,8 +44,10 @@ expect event /^gen_genre_pick techno-melodic row=MELODIC/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -57,7 +60,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- TECHNO / DUB -> BUILD INTO A DROP: Melodic techno's 8- or 16-bar Build onto Dub techno's Drop ----
+# ---- TECHNO / DUB -> DROP: Melodic techno's 8- or 16-bar Build onto Dub techno's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -74,7 +77,8 @@ expect event /^gen_genre_pick techno-dub row=DUB/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -88,7 +92,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- TECHNO / DETROIT -> FADE THROUGH: Dub techno's 1-phrase Outro, Detroit techno's Intro ----
+# ---- TECHNO / DETROIT -> FADE: Dub techno's 1-phrase Outro, Detroit techno's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -105,8 +109,10 @@ expect event /^gen_genre_pick techno-detroit row=DETROIT/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -120,7 +126,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- AMBIENT -> FADE THROUGH: its own entry, so no detent: Detroit techno's Outro, Ambient's Intro ----
+# ---- AMBIENT -> FADE: its own entry, so no detent: Detroit techno's Outro, Ambient's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -131,7 +137,8 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -145,7 +152,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: two detents from DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -162,8 +169,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -176,7 +185,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- ROOTS DUB -> FADE THROUGH: Psytrance's 1-phrase Outro, Dub's Intro ----
+# ---- ROOTS DUB -> FADE: Psytrance's 1-phrase Outro, Dub's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -187,8 +196,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -202,7 +213,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- HOUSE -> BUILD INTO A DROP: Dub's 1-bar Build glides up onto House's Drop ----
+# ---- HOUSE -> DROP: Dub's 1-bar Build glides up onto House's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -213,7 +224,8 @@ expect event gen_genre_pick house row=HOUSE
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

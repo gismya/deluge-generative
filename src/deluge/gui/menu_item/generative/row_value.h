@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "generative/perform/regenerate_page.h"
 #include "gui/menu_item/menu_item.h"
 #include "hid/display/oled.h"
 #include <cstdint>
@@ -27,8 +28,13 @@
 
 namespace deluge::gui::menu_item::generative {
 
-constexpr int32_t kValueGap = 4; ///< pixels between the row's name and its value
-constexpr int32_t kValueRightMargin = 3;
+/// Pixels between the row's name and its value, and after it: the portable row layout's (perform/regenerate_page.h),
+/// which regenerate_page_spec checks the OLED names against.
+constexpr int32_t kValueGap = deluge::generative::perform::kRowValueGap;
+constexpr int32_t kValueRightMargin = deluge::generative::perform::kRowValueRightMargin;
+static_assert(deluge::generative::perform::kMenuCharPixels == kTextSpacingX, "the spec's menu font is the menu's");
+static_assert(deluge::generative::perform::kMenuIconPixels == kSubmenuIconSpacingX);
+static_assert(deluge::generative::perform::kMenuWidthPixels == OLED_MAIN_WIDTH_PIXELS);
 
 /// The pixels a row's `value` takes at its right, gap and margin included.
 inline int32_t valueRenderLength(const char* value) {

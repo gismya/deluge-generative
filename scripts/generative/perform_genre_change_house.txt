@@ -1,6 +1,6 @@
 # House's genre changes (#132, spec §9.7, §21.3) over the sysex test port, in one boot: Dub into House and back out in
 # all three styles (Dub 70-80 BPM, House 120-126). Acid techno (the boot genre) cuts to Dub first. HOUSE is a GENRE
-# row of its own (no parent), so picking it opens the confirm at once, on BUILD INTO A DROP (its transition entry). The
+# row of its own (no parent), so picking it opens the Regenerate page at once, on DROP (its transition entry). The
 # first change plays Dub's 1-bar Build, gliding about 75 -> 123 BPM in about 2 s, onto House's Drop; a forced Break in
 # House keeps the Stab, the Strings and the closed hat sounding; the last change out of House plays its own 4- or 8-bar
 # Build, gliding down to Dub's tempo onto Dub's Drop. Every start checks the glide arrived where the new roster starts:
@@ -25,6 +25,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/firmware/adapter_timing.*
 # covers: src/deluge/generative/core/types.h src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -35,7 +36,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- ROOTS DUB -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Acid's 4 parts to 5 ----
+# ---- ROOTS DUB -> CUT: two detents from DROP, Acid's 4 parts to 5 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -46,8 +47,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -58,7 +61,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- HOUSE -> BUILD INTO A DROP: Dub's 1-bar Build glides up to House's tempo onto its Drop ----
+# ---- HOUSE -> DROP: Dub's 1-bar Build glides up to House's tempo onto its Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -69,7 +72,8 @@ expect event gen_genre_pick house row=HOUSE
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -91,7 +95,7 @@ expect event gen_section BREAK within=60
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- ROOTS DUB -> HARD CUT AT PHRASE: House's 6 parts to 5 ----
+# ---- ROOTS DUB -> CUT: House's 6 parts to 5 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -102,8 +106,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -114,7 +120,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- HOUSE -> FADE THROUGH: one detent from BUILD INTO A DROP; Dub's 1-phrase Outro, House's Intro ----
+# ---- HOUSE -> FADE: one detent from DROP; Dub's 1-phrase Outro, House's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -125,8 +131,10 @@ expect event gen_genre_pick house row=HOUSE
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -140,7 +148,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- ROOTS DUB -> FADE THROUGH: House's 1-phrase Outro, Dub's Intro ----
+# ---- ROOTS DUB -> FADE: House's 1-phrase Outro, Dub's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -151,8 +159,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -164,7 +174,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- HOUSE -> HARD CUT AT PHRASE ----
+# ---- HOUSE -> CUT ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -175,8 +185,10 @@ expect event gen_genre_pick house row=HOUSE
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -189,7 +201,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- ROOTS DUB -> BUILD INTO A DROP: House's 4- or 8-bar Build glides down to Dub's tempo onto Dub's Drop ----
+# ---- ROOTS DUB -> DROP: House's 4- or 8-bar Build glides down to Dub's tempo onto Dub's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -200,7 +212,8 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

@@ -158,6 +158,24 @@ BUILDERS = {
         "src/deluge/generative/core/lane_names.h",
     ),  # a part's or laneName()'s row
     "gen_compose_recipe": _GENRE,  # the genre's name
+    "gen_compose_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText(): each set's stable name, its pick's and the allowed mask
+    "gen_pending_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText()
+    "gen_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+        *_L10N,
+    ),  # a set's stable name, what its row shows (RANDOM, a variant's OLED name, n OF m)
+    "gen_variants_row": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+        *_L10N,
+    ),  # a set's OLED name, what its row shows
     "gen_compose_seed": ("src/deluge/generative/perform/clip_page.*",),  # seedCode()
     "gen_compose_song": (
         *_GENRE,

@@ -26,6 +26,7 @@
 # covers: src/deluge/generative/firmware/retirements.cpp src/deluge/generative/firmware/sound_swaps.cpp
 # covers: src/deluge/gui/menu_item/generative/perform_menu.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_song.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 mark now
@@ -38,7 +39,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- TECHNO ▸ DUB → HARD CUT AT PHRASE ----
+# ---- TECHNO ▸ DUB → CUT ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -55,8 +56,10 @@ expect event gen_genre_pick techno-dub row=DUB from=ACID
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 mark now
 button SELECT_ENC down
 wait 50

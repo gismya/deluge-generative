@@ -1,5 +1,5 @@
 # Dub's hardware session (#131 decision 13, spec §20 H1 and H16, the "Delay Throw buffers" row): Acid techno cuts to
-# Psytrance, then Psytrance changes into Dub by BUILD INTO A DROP, its Build gliding about 142 -> 75 BPM onto Dub's
+# Psytrance, then Psytrance changes into Dub by DROP, its Build gliding about 142 -> 75 BPM onto Dub's
 # Drop. Dub then plays its Groove: the Siren holds 2 bars from the Drop and throws on its release, and drop-outs throw
 # the Skank, the Rim or the Melodica into their dotted-8th echoes. A forced Break throws the Skank and Melodica (the
 # Break keeps the kick, Rim and Bass), a forced Groove follows a phrase later, and a forced 1-bar Build rolls the
@@ -15,7 +15,7 @@
 # free before entry, at each Section line (Dub has delay setups), when the outgoing roster is freed, after leaving.
 # The buffers are allocated in the render and freed once the repeats run out: compare the Section lines' external=.
 # gen_transition start tempo_off=: the song's tempo against Dub's Recipe's at its first step's decision tick (12 ticks
-# early), in hundredths of a BPM: under 10 BPM. It is checked only on the BUILD INTO A DROP change, whose glide the
+# early), in hundredths of a BPM: under 10 BPM. It is checked only on the DROP change, whose glide the
 # Build sets; the hard cut glides at the GLIDE setting (spec §13.3), 1 bar after boot, and isn't checked here.
 # Pinned rolls (hold entropy): the same Recipes and seeds every run, so the drop-outs and hits fall the same.
 # needs: a Deluge for its timings, and about 6 minutes in delugemu, so check_all.py skips it; perform_genre_change_dub.txt is the functional check
@@ -32,6 +32,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/retirements.cpp
 # covers: src/deluge/generative/firmware/sound_swaps.cpp src/deluge/gui/menu_item/generative/perform_menu.cpp
 # covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 mark now
@@ -44,7 +45,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: two detents from DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -61,8 +62,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -71,7 +74,7 @@ expect event gen_transition_preload done error=0 parts=6 within=30
 expect event gen_transition start style=2 within=90
 expect event gen_transition phase=idle within=40
 
-# ---- ROOTS DUB -> BUILD INTO A DROP: Psytrance's Build glides down to Dub's tempo, onto Dub's Drop ----
+# ---- ROOTS DUB -> DROP: Psytrance's Build glides down to Dub's tempo, onto Dub's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -82,7 +85,8 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 mark now
 button SELECT_ENC down
 wait 50
