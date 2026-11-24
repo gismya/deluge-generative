@@ -189,6 +189,10 @@ class Hardware(Repo):
             "# needs: a Deluge and someone listening\nstart_state\n",
         )
         self.write(
+            G + "capture_pull.txt",
+            "# needs: a Deluge and someone to pull its power\nstart_state\n",
+        )
+        self.write(
             G + "perform_timing.txt", "# needs: a Deluge for its timings\nstart_state\n"
         )
         self.assertEqual(

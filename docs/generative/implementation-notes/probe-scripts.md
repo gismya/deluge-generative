@@ -112,6 +112,14 @@ otherwise.
   (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
   with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
   (`perform_genre_change.txt`).
+- Trap (#505): after a stop's commit, give `gen_transition phase=idle` the whole cap (a phrase of the genre that
+  played), not a few seconds. Stopped, an Output still sounding is freed only at its cap (spec §12.9), and an Impact
+  with an echo keeps its FX Kit sounding: `GEN Impact Wash`'s delay (feedback 24) keeps rendering for stock's 110
+  repeats, about 38 s. Which Impact a piece draws depends on the run (`perform_transition.txt` after a fresh load draws
+  the Wash every time; delugemu doesn't), so a short wait can pass in one run and fail in another. Until idle, a Regenerate is refused (`refused
+  phase=retiring`), so the expects after it fail too.
+- A script that needs someone at the Deluge (a listener, a power pull) says `# needs: a Deluge and someone ...`:
+  `covers.py --hardware` leaves out every needs line with the word `someone`.
 - The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
   the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in 160
   ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring" was a

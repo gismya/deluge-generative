@@ -20,7 +20,7 @@ check_all.py picks its delugemu scripts with it, unless --full or --scripts. The
 session or a delugemu run needs for the changes since the merge base with origin/BASE (pr_base.py, as check_all.py
 finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware lists the scripts a Deluge can run
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
-someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
+someone at the Deluge); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
 naming each covers path that matches no file, each src/ file that sends an event a script expects (or rules out)
 that its covers lines miss (a string literal whose first word is the event's kind), each event expect that doesn't
 start with its kind, each that pins a timing figure (TIMING_FIELDS) without hardware_only, and each orphan: a
@@ -271,8 +271,11 @@ RELAYS = {
         "src/deluge/generative/firmware/sound_swaps.*",
     ),
 }
-# "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a listener.
-NOT_ON_HARDWARE = re.compile(r"^# needs: (card |gen_emu\.py|.*listening)", re.MULTILINE)
+# "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a person at the
+# Deluge (someone listening, or someone to pull its power).
+NOT_ON_HARDWARE = re.compile(
+    r"^# needs: (card |gen_emu\.py|.*\bsomeone\b)", re.MULTILINE
+)
 
 
 def git_lines(*args, repo=REPO):
