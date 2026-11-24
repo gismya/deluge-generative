@@ -30,12 +30,14 @@ namespace {
 
 // ---- Synth parts ----
 
-/// The rolling bass: the pack's tight saw-and-square alone, sustain 0, so the Loop's 20-tick gate ends each 16th. The
-/// owner dropped the factory picks by ear (047, 050, 008, 095; #133's listening session, round 1), and chose 000 Rich
-/// Saw Bass at weight 0 as the pack-less fallback (round 2, H5), never rolled when the pack is present. Not the draft's
-/// 048 Thin Pulse Bass: its oscillators sit two and three octaves down (osc_octaves.py).
+/// The rolling bass: the pack's sine-and-saw pluck alone (#313, Classic sign-off 1, #497: the old GEN Psy Bass put
+/// half its energy in a square an octave down, 19 Hz in D#, and sat 7.5 dB under the Arp in 120 Hz-1 kHz), sustain 0,
+/// so each 16th dies on its own. The owner dropped the factory picks by ear (047, 050, 008, 095; #133's listening
+/// session, round 1), and chose 000 Rich Saw Bass at weight 0 as the pack-less fallback (round 2, H5), never rolled
+/// when the pack is present. Not the draft's 048 Thin Pulse Bass: its oscillators sit two and three octaves down
+/// (osc_octaves.py).
 constexpr PaletteEntry kBass[] = {
-    {"SYNTHS/GENERATIVE/GEN Psy Bass.XML", 3},
+    {"SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML", 3},
     {"SYNTHS/000 Rich Saw Bass.XML", 0},
 };
 /// The pedal tone under everything: dark and slow. Not 120 High Harsh Pad: dropped by ear (#133, round 1). 130, 148
@@ -47,10 +49,15 @@ constexpr PaletteEntry kDrone[] = {
 /// The swept Lead: mono, saturated, sync and FM leads with room for the Brightness Sweep. 098 has saturation saved
 /// (kept as is in round 2, H1). Not the draft's main pick 087 Define Leader: its oscillators sit an octave up and an
 /// octave down, none at the note (osc_octaves.py). Not 059 Distorted Lead Guitar: dropped by ear (#133, round 1).
+/// Classic sign-off 1 (#497) heard 057's top notes as shrill: its main pick is now the pack's copy with its first
+/// modulator an octave lower and its low-pass darker, the factory 057 at weight 0 as the pack-less fallback. It and
+/// 045 move their Brightness half as far, so a Drop's raised Energy lifts their FM modulators and sync less.
+constexpr ControlRanges kTamer = ControlRanges{}.with(SoundControl::Brightness, 50);
 constexpr PaletteEntry kLead[] = {
-    {"SYNTHS/057 FM Lead.XML", 3},
+    {"SYNTHS/GENERATIVE/GEN FM Lead Soft.XML", 3, kTamer},
     {"SYNTHS/098 Saturated Sync.XML", 2},
-    {"SYNTHS/045 Square Sync.XML", 1},
+    {"SYNTHS/045 Square Sync.XML", 1, kTamer},
+    {"SYNTHS/057 FM Lead.XML", 0, kTamer},
 };
 /// The Arp: arp-shaped sounds, each saved arp cleared at load (spec §10.6). Not the draft's 165 Acid Arp: its
 /// oscillators sit two and three octaves down, so it would sound under the Bass in the Arp's Register (osc_octaves.py
@@ -74,7 +81,9 @@ constexpr RoleSounds kRoles[] = {
 
 /// The lanes the Psy set holds look in its folder and in the lane's factory folder.
 constexpr const char* const kPsy = "SAMPLES/Artists/Dean Daughters/Psy";
-constexpr const char* const kKickFolders[] = {"SAMPLES/DRUMS/Kick", kPsy};
+/// The Psy kit's kicks are the pack's copies with their tails cut (#497), in their own folder; the factory ones still
+/// play from the lane list on a card without the pack.
+constexpr const char* const kKickFolders[] = {"SAMPLES/DRUMS/Kick", "SAMPLES/DRUMS/Kick/Psy", kPsy};
 constexpr TagWeight kKickTags[] = {{"KICK-", 3}, {"Deep Sky Kick HQ", 1}};
 constexpr const char* const kSnareFolders[] = {"SAMPLES/DRUMS/Snare", kPsy};
 constexpr TagWeight kSnareTags[] = {{"SNARE-", 2}, {"909", 1}};
@@ -101,8 +110,14 @@ constexpr TagWeight kPerc2Tags[] = {{"SHAKER-", 2}, {"Cabasa", 1}};
 
 // ---- Drum kits (spec §10.2, drum-kit listening session round 1) ----
 
+/// The Psy set with the pack's short kicks (PSYKICK-, #497) in place of its own.
+constexpr KitLane kPsyShortKickLanes[] = {
+    {Lane::Kick, "PSYKICK-"},  {Lane::Snare, "SNARE-"}, {Lane::Clap, "CLAP-"},  {Lane::ClosedHat, "CLHAT-"},
+    {Lane::OpenHat, "OPHAT-"}, {Lane::Ride, "RIDE-"},   {Lane::Perc1, "PERC-"}, {Lane::Perc2, "SHAKER-"},
+};
+constexpr DrumMachine kPsyShortKick{.name = "Psy", .lanes = kPsyShortKickLanes};
 /// Each piece plays the Psy set or, less often, the 909, on every lane they have a file for. Not the XV5080 (owner).
-constexpr MachineWeight kMachines[] = {{&machines::kPsy, 3}, {&machines::k909, 1}};
+constexpr MachineWeight kMachines[] = {{&kPsyShortKick, 3}, {&machines::k909, 1}};
 /// Psytrance's rides and crashes are classically the 909's; the Psy set has one ride and no crash.
 constexpr KitSwap kSwaps[] = {{Lane::Ride, "909 Ride"}, {Lane::Crash, "909 Crash"}};
 

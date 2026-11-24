@@ -258,6 +258,70 @@ class LeadTrimTest(unittest.TestCase):
         self.assertTrue(0 < 1464 - trim.frames < 44, trim.frames)
 
 
+class TailFadeTest(unittest.TestCase):
+    """A derived sample: a factory WAV held, then faded out and cut (Psytrance's kicks, #497)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "SAMPLES"))
+        self.path = os.path.join(self.tmp, "SAMPLES", "K.wav")
+        with wave.open(
+            self.path, "wb"
+        ) as w:  # 24-bit stereo at 1 kHz: a frame a millisecond
+            w.setnchannels(2)
+            w.setsampwidth(3)
+            w.setframerate(1000)
+            w.writeframes(
+                b"".join(
+                    (1000).to_bytes(3, "little", signed=True) * 2 for _ in range(20)
+                )
+            )
+        with open(self.path, "rb") as f:
+            self.sha = hashlib.sha256(f.read()).hexdigest()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_holds_then_fades_to_silence_and_cuts_keeping_the_format(self):
+        data = make_pack.Derived(
+            "SAMPLES/K.wav", self.sha, make_pack.TailFade(4, 8)
+        ).make(self.tmp)
+        with wave.open(io.BytesIO(data)) as w:
+            params = (
+                w.getnchannels(),
+                w.getsampwidth(),
+                w.getframerate(),
+                w.getnframes(),
+            )
+            raw = w.readframes(w.getnframes())
+        left = [
+            int.from_bytes(raw[i : i + 3], "little", signed=True)
+            for i in range(0, len(raw), 6)
+        ]
+        self.assertEqual(params, (2, 3, 1000, 8))
+        self.assertEqual(left[:4], [1000] * 4)
+        self.assertEqual(left[4:], [1000, 854, 500, 146])
+
+    def test_refuses_a_fade_past_the_end(self):
+        derived = make_pack.Derived(
+            "SAMPLES/K.wav", self.sha, make_pack.TailFade(10, 30)
+        )
+        with self.assertRaisesRegex(ValueError, "frames"):
+            derived.make(self.tmp)
+
+    def test_the_psy_kicks_are_down_20_db_before_the_bass_speaks(self):
+        for name in ("Bonus01", "Radar", "Silence"):
+            derived = make_pack.DERIVED[
+                f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav"
+            ]
+            fade = derived.edits[0]
+            # Gone by 130 ms, the e 16th starting at 105 ms at 143 BPM (the capture check is in notes/497.md).
+            self.assertLessEqual(fade.end_ms, 130)
+            self.assertEqual(
+                derived.source, f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav"
+            )
+
+
 class DelayFeedbackTest(unittest.TestCase):
     """No pack preset saves delay feedback of 25 or more: each repeat's gain is the menu value / 25, and at 25 and over
     the Deluge's delay never abandons in Perform (spec §11.4), so an echo plays on for good (GEN Dub Impact Crack at

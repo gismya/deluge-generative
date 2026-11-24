@@ -351,6 +351,28 @@ def runaway_delay(xml):
     return any(value >= RUNAWAY_DELAY_FEEDBACK for value in delay_feedbacks(xml))
 
 
+# GEN Psy Roll Bass's tuning (#497), set against delugemu captures (Song 3's Drop, the Bass alone, notes/497.md):
+# its 120 Hz-1 kHz band within 1 dB of the Arp's at 75 % (the old preset sat 3.7 dB under; with LPF 22 and no
+# clipping this one sat 14.8 under). A little clipping on the top gives the mids most of that. Release 2: at 3 the
+# clipped tail of each bar's last 16th rang into the kick's 16th, 5 dB under it; at 2 it is 49 dB under.
+PSY_ROLL = {
+    "lpf": 44,
+    "resonance": 14,
+    "env1": (0, 11, 0, 2),
+    "env2": (0, 8, 0, 3),
+    "env2_lpf": 20,
+    "sine": 50,
+    "saw": 50,
+    "hpf": 6,
+    "duck": 7,
+    "clipping": 4,
+}
+
+
+# GEN FM Lead Soft's edits to 057 (#497), set against delugemu captures (notes/497.md).
+PSY_LEAD = {"modulator1": 12, "lpf": 18}
+
+
 def preset(
     osc1,
     osc2,
@@ -379,13 +401,15 @@ def preset(
     osc1_volume=50,
     delay=None,
     clipping=None,
+    sidechain=None,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
     and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults; `lfo2_type` and `lfo2_rate`
     LFO 2 (per voice) the same way. `unison` is (voices, detune, stereo spread); `mod_fx` is (type, rate knob, depth
     knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults.
     `delay` is a Delay (its feedback a knob, left out at 0); `clipping` the saturation (`clippingAmount`), left out at
-    none."""
+    none. `sidechain` is the sound's own ducking envelope, (attack, release) as the firmware's rates, unsynced (a
+    cable from `compressor` reads it)."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -423,6 +447,14 @@ def preset(
             f"\t\t<detune>{detune}</detune>",
             f"\t\t<spread>{spread}</spread>",
             "\t</unison>",
+        ]
+    if sidechain is not None:
+        lines += [
+            "\t<compressor>",
+            "\t\t<syncLevel>0</syncLevel>",
+            f"\t\t<attack>{sidechain[0]}</attack>",
+            f"\t\t<release>{sidechain[1]}</release>",
+            "\t</compressor>",
         ]
     lines.append(f"\t<lpfMode>{lpf_mode}</lpfMode>")
     if mod_fx is not None:
@@ -726,6 +758,33 @@ PRESETS = {
         osc2_volume=40,
         reverb=0,
         volume=50,
+    ),
+    # Psytrance's rolling bass since Classic sign-off 1 (#313, #497): a sine sub and a saw top, both at the note (the
+    # old preset's square an octave down sat at 19 Hz in D#), each 16th a short pluck: amp decay about 70 ms, sustain 0,
+    # a short release; a fast env2 opening the 24 dB low-pass about an octave over its 600 Hz-1 kHz home for the
+    # "brrp", a little clipping for its mids; the high-pass at about 30 Hz. Its own sidechain envelope (attack about 0.3 ms, release 64 ms: back within
+    # the 105 ms 16th at 143 BPM) ducks it 2-4 dB under the Kick, which sends at full (spec §10.4). Velocity moves its
+    # volume a little. No reverb.
+    "SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML": lambda: preset(
+        "sine",
+        "saw",
+        noise=0,
+        lpf=PSY_ROLL["lpf"],
+        resonance=PSY_ROLL["resonance"],
+        env1=PSY_ROLL["env1"],
+        env2=PSY_ROLL["env2"],
+        cables=[
+            ("velocity", "volume", 20),
+            ("envelope2", "lpfFrequency", PSY_ROLL["env2_lpf"]),
+            ("compressor", "volumePostReverbSend", PSY_ROLL["duck"]),
+        ],
+        osc1_volume=PSY_ROLL["sine"],
+        osc2_volume=PSY_ROLL["saw"],
+        hpf=PSY_ROLL["hpf"],
+        clipping=PSY_ROLL["clipping"],
+        reverb=0,
+        volume=50,
+        sidechain=(386472, 2976),
     ),
     # The dub siren (spec §10.5, §18.2): a square and a saw a fifth apart, a triangle LFO sweeping the pitch up and
     # down about twice a second, a slow-ish attack and a long release that rings into its release Throw. Velocity
@@ -1050,6 +1109,50 @@ class LeadTrim:
         return out.getvalue()
 
 
+class TailFade:
+    """Keep a WAV's first `hold_ms`, then fade it out to silence over a raised-cosine to `end_ms` and cut it there;
+    the format (channels, width, rate) stays the source's. 16- and 24-bit PCM. Extra chunks are dropped."""
+
+    binary = True
+
+    def __init__(self, hold_ms, end_ms):
+        self.hold_ms, self.end_ms = hold_ms, end_ms
+
+    def apply(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            channels, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
+            count = w.getnframes()
+            raw = w.readframes(count)
+        if width not in (2, 3):
+            raise ValueError(
+                f"{width * 8}-bit samples: TailFade reads 16- or 24-bit PCM only"
+            )
+        hold = round(rate * self.hold_ms / 1000)
+        end = round(rate * self.end_ms / 1000)
+        if not 0 < hold < end < count:
+            raise ValueError(
+                f"holding {self.hold_ms} ms and ending at {self.end_ms} ms doesn't fit {count} frames"
+            )
+        out = bytearray()
+        for frame in range(end):
+            gain = (
+                1.0
+                if frame < hold
+                else 0.5 * (1 + math.cos(math.pi * (frame - hold) / (end - hold)))
+            )
+            for c in range(channels):
+                at = (frame * channels + c) * width
+                sample = int.from_bytes(raw[at : at + width], "little", signed=True)
+                out += round(sample * gain).to_bytes(width, "little", signed=True)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as w:
+            w.setnchannels(channels)
+            w.setsampwidth(width)
+            w.setframerate(rate)
+            w.writeframes(bytes(out))
+        return buffer.getvalue()
+
+
 def replace_once(pattern, replacement, text, what):
     new, count = pattern.subn(replacement, text)
     if count != 1:
@@ -1138,6 +1241,42 @@ DERIVED = {
         "56ad8d3411d31ddd026caade6d1e15e0ac31210ad923932841a0582578e7f15d",
         LeadTrim(1440, 22),
     ),
+    # Psytrance's Lead (Classic sign-off 1, #497): 057 FM Lead with its first modulator an octave lower (+12, not +24)
+    # and its low-pass at 18 (was about 24). 057's top notes were shrill: with the modulator at four times the note, a
+    # 1.2 kHz D#6 put its sidebands at about 4-8 kHz, and every pitch's band over 4 kHz sat within 2-4 dB of its whole
+    # level. Halving its Brightness range alone moved that band by under 1 dB (notes/497.md).
+    "SYNTHS/GENERATIVE/GEN FM Lead Soft.XML": Derived(
+        "SYNTHS/057 FM Lead.XML",
+        "842d4f6ccabc77c834f5c60985175db9730335fc215a818cbd1c49e70157cdcb",
+        Transpose("modulator1", PSY_LEAD["modulator1"]),
+        Field("lpfFrequency", knob(PSY_LEAD["lpf"])),
+    ),
+    # Psytrance's kicks (Classic sign-off 1, #497): Dean Daughters' Psy set's three, each held for 60 ms and faded out
+    # by 130 ms (a raised cosine), so the tail is 20 dB down by 110-115 ms (195-255 ms in the factory files) and gone
+    # before the rolling bass's first 16th (the e, from 105 ms at 143 BPM) speaks: it sat 2-6 dB under the beat there
+    # and masked the bass. A folder of their own and a tag the factory files don't hold (PSYKICK-), so only
+    # Psytrance's Psy kit reaches them; without the pack it plays the factory files.
+    **{
+        f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav": Derived(
+            f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav",
+            sha,
+            TailFade(60, 130),
+        )
+        for name, sha in (
+            (
+                "Bonus01",
+                "459f95e312938dcb3dd3755c835e8ba1894bad9922989ef114e49cf8a53fe42c",
+            ),
+            (
+                "Radar",
+                "44e1761f6faa6ab3403b9a1c5baf832c771ade43b0e6213ced0585052e0e9c57",
+            ),
+            (
+                "Silence",
+                "1aaaad60a8199951878401c26af4d314097dcef6ac68a50a15e9df9fdd001326",
+            ),
+        )
+    },
 }
 
 
