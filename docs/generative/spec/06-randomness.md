@@ -20,7 +20,7 @@ The same Recipe, seed and takes, with the same steering at the same positions, g
 ### 6.4 What the seed covers
 
 - The seed covers only the music the Generator makes: patterns, notes, chords, Arc section lengths, fills, Drop-outs, Ornaments, Velocity spread and drift.
-- Musical facts, variant picks ([§3.6](03-recipe.md#36-variant-sets)) and sound picks are rolled from fresh entropy and stored as concrete values, so NEW SEED keeps them. A Recipe and seed reproduce exactly only on a card with the same files and on the same genre version.
+- Musical facts, variant picks ([§3.6](03-recipe.md#36-variant-sets)) and sound picks are rolled from fresh entropy and stored as concrete values, so NEW SEED keeps them. A set that changes at a Drop draws each change from the seed (`Purpose::VariantChange`, appended last, so it moves no other draw), so NEW SEED keeps the picks a piece starts with and moves where it changes them. A Recipe and seed reproduce exactly only on a card with the same files and on the same genre version.
 - **No firmware chance.** Perform and Compose write notes at probability 100 with no iterance and no fill flags, and use no arp random modes and no firmware randomizer.
 
 ### 6.5 Seed source and display

@@ -310,7 +310,7 @@ public:
 		while (next(record)) {
 			replay(record);
 		}
-		decideLanded();
+		decideLanded(nullptr);
 	}
 
 	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
@@ -428,6 +428,11 @@ public:
 	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
 	/// A part's octave shift on the last decided step (spec §7.3): 0 for Drums and FX.
 	[[nodiscard]] int32_t octave(int32_t part) const { return recipe_.octave[part]; }
+	/// The variant each set plays, and the variants each allows, as of the last decided step (spec §3.6): the Recipe's,
+	/// moved by the Drops' changes and the live switches landed since the start.
+	[[nodiscard]] const VariantPicks& variants() const { return recipe_.variants; }
+	/// The variant a live switch waits to play in set `set` at the next Drop, or -1.
+	[[nodiscard]] int32_t variantWaiting(int32_t set) const { return waitingValue(CommandKind::SetVariant, set); }
 	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
 	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
 		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
@@ -464,8 +469,10 @@ public:
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
 	[[nodiscard]] int32_t queuedCount() const { return pending_.size(); }
 	[[nodiscard]] const Command& queued(int32_t i) const { return pending_.at(i); }
-	/// The step a waiting action lands on: its next line from nextStep().
+	/// The step a waiting action lands on: its next line from nextStep(), or kNoLine for a variant switch with no Drop
+	/// ahead as things stand.
 	[[nodiscard]] int32_t landsAt(const Command& command) const;
+	static constexpr int32_t kNoLine = INT32_MAX;
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
@@ -702,8 +709,13 @@ private:
 	void noteWaitingMoves();
 	/// One replayed record (decideReplayed()).
 	void replay(const LogRecord& record);
-	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide.
-	void decideLanded();
+	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide. A live
+	/// variant switch waiting for a Drop lands in it, logged to `log` (nullptr in replay, which applied it already).
+	void decideLanded(SteeringLog* log);
+	/// On a Drop's first step, after the Arc entered it (spec §3.6): a live switch waiting lands (logged to `log`),
+	/// each ChangeAt::Drop set not switched draws its change, and if any pick moved, the genre copy is applied again
+	/// from the constant genre with the new picks, before the step reads it.
+	void dropVariants(SteeringLog* log);
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
 	/// keeps its own note-off (spec §12.9). The new roster plays from here.
 	void endAtStop();
@@ -954,6 +966,7 @@ private:
 
 	int32_t nextStep_ = 0;
 	static constexpr int32_t kNever = INT32_MAX;
+	static_assert(kNever == kNoLine, "stepsToLine() gives kNever for a line not ahead, and landsAt() passes it on");
 	/// A landed transition's start step: nothing at or after it is decided. kNever otherwise.
 	int32_t stopAt_ = kNever;
 	Arc arc_;
@@ -967,6 +980,8 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
+	/// Variant sets a live switch landed on since the last Drop's changes: that Drop draws no change for them.
+	uint8_t switchedSets_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
 	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
@@ -1037,9 +1052,10 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, a restart, and a take, a mute, a solo, a "
-              "sound and an octave shift per part at once");
+static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts + kMaxVariantSets,
+              "the pending list holds a key change, a force, a transition, a restart, a take, a mute, a solo, a sound "
+              "and an octave shift per part, and a switch per variant set at once");
+static_assert(kMaxVariantSets <= 8, "Generator::switchedSets_ holds a bit per set");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

@@ -69,6 +69,12 @@ void drawVariants(const Genre& genre, const VariantPicks& narrowed, EntropyStrea
 /// left out or a pick it didn't know, spec §16.1), from `entropy`. The others keep their picks.
 void drawUnsetVariants(Recipe& recipe, uint32_t entropy);
 
+/// The variant set `s` plays after the Drop that opens Groove `groove` (spec §3.6), for a ChangeAt::Drop `set` playing
+/// `pick` within `allowed`: a keyed draw (seed, kArcPart, VariantChange, the Groove, the set) against its
+/// changeChance decides whether it changes, and a second picks the new one by weight within `allowed`, leaving out
+/// `pick`. A set that allows nothing but `pick` keeps it.
+uint8_t dropChange(const VariantSet& set, uint8_t allowed, uint8_t pick, uint32_t seed, uint16_t groove, int32_t s);
+
 /// Whether `picks` patch anything: a picked variant of `genre` has an apply().
 bool patchesGenre(const Genre& genre, const VariantPicks& picks);
 
@@ -116,8 +122,8 @@ constexpr bool sameText(const char* a, const char* b) {
 
 /// The genre's variant sets hold the rules ADR 0008 sets (spec §4.4): at most kMaxVariantSets, each with 2 to
 /// kMaxVariants variants of weight above 0, stable names that are there (a variant's at most kMaxVariantNameChars)
-/// and unique in their list, and OLED names that
-/// fit a menu row.
+/// and unique in their list, OLED names that fit a menu row, and a change chance of 1 to 1000 per mille for a set that
+/// changes at a Drop (0 for one that never does).
 constexpr bool variantSetsValid(const Genre& genre) {
 	if (genre.variantSets.size() > kMaxVariantSets) {
 		return false;
@@ -126,7 +132,8 @@ constexpr bool variantSetsValid(const Genre& genre) {
 		const VariantSet& set = genre.variantSets[s];
 		if (set.variants.size() < 2 || set.variants.size() > kMaxVariants || detail::textLength(set.name) == 0
 		    || detail::textLength(set.oledName) == 0 || detail::textLength(set.oledName) > kMaxVariantSetOledName
-		    || set.changeAt != ChangeAt::Never) { // Drop changes aren't built yet (#495)
+		    || (set.changeAt == ChangeAt::Drop ? set.changeChance < 1 || set.changeChance > 1000
+		                                       : set.changeChance != 0)) {
 			return false;
 		}
 		for (size_t other = 0; other < s; other++) {

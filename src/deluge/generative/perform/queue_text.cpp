@@ -31,6 +31,11 @@ constexpr const char* kScaleNames[kNumScales] = {"MAJOR",      "MINOR",      "DO
 /// Indexed by SectionKind.
 constexpr const char* kSectionTags[kNumSectionKinds] = {"IN", "GR", "BR", "BU", "OU"};
 
+/// Ticks from `clock` to step `landsAt`, or kNoCountdown for an action whose line isn't ahead (Generator::kNoLine).
+int32_t ticksTo(int32_t landsAt, int32_t clock) {
+	return landsAt == Generator::kNoLine ? kNoCountdown : stepTick(landsAt) - clock;
+}
+
 const char* partName(const Genre& genre, uint8_t part) {
 	return part < partCount(genre) ? genre.parts[part].name : "?";
 }
@@ -82,6 +87,8 @@ const char* queueTag(const Command& command) {
 		return "CHG";
 	case CommandKind::Restart:
 		return "RST";
+	case CommandKind::SetVariant:
+		return "VAR";
 	case CommandKind::ForceSection:
 		return command.target < kNumSectionKinds ? kSectionTags[command.target] : "??";
 	default:
@@ -126,6 +133,9 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 	case CommandKind::Restart:
 		text.add("RESTART");
 		break;
+	case CommandKind::SetVariant:
+		text.add("VARIANT DROP"); // a live variant switch, at the next Drop (spec §13.6)
+		break;
 	default:
 		text.add("?");
 		break;
@@ -134,6 +144,10 @@ void queueLabel(const Command& command, const Genre& genre, std::span<char> out)
 
 void countdown(int32_t ticks, bool words, std::span<char> out) {
 	Text text(out);
+	if (ticks == kNoCountdown) {
+		text.add("--");
+		return;
+	}
 	if (ticks >= kTicksPerBar) {
 		const int32_t bars = (ticks + kTicksPerBar - 1) / kTicksPerBar;
 		text.add(bars);
@@ -157,7 +171,7 @@ void queueLines(std::span<const QueuedAction> actions, int32_t clock, const Genr
 	// Every action if they fit; otherwise one line fewer, and the last says how many more.
 	const int32_t shown = count <= QueueLines::kLines ? count : QueueLines::kLines - 1;
 	for (int32_t i = 0; i < shown; i++) {
-		countdown(stepTick(actions[i].landsAt) - clock, true, out.when[i]);
+		countdown(ticksTo(actions[i].landsAt, clock), true, out.when[i]);
 		// The label takes what the countdown and a space leave of the line.
 		size_t when = 0;
 		while (out.when[i][when] != '\0') {
@@ -177,7 +191,7 @@ void statusTag(std::span<const QueuedAction> actions, int32_t clock, std::span<c
 		return;
 	}
 	char count[8];
-	countdown(stepTick(actions[0].landsAt) - clock, false, count);
+	countdown(ticksTo(actions[0].landsAt, clock), false, count);
 	Text(out).add(">").add(queueTag(actions[0].command)).add(count).add(actions.size() > 1 ? "+" : "");
 }
 

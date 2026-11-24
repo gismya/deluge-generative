@@ -267,6 +267,19 @@ public:
 	/// player is told the shift is the lowest or highest the part takes.
 	[[nodiscard]] bool octaveAtEdge(int32_t part, int32_t direction) const;
 
+	// ---- Live variant switches (spec §3.6, §13.6) ----
+
+	/// VARIANTS ▸: live set `set` plays `variant` from the next Drop; the variant playing pressed again cancels the one
+	/// waiting. Stopped, it is the Recipe's at once (joining the set's allowed variants), and the next start plays it.
+	/// Nothing to do for a set that isn't live, one past the genre's, or a variant past the set's.
+	[[gnu::noinline]] PressOutcome pressVariant(uint8_t set, int32_t variant);
+	/// Set `set`'s variant as it goes on: its newest switch still in the steering queue, else the one waiting in the
+	/// core for the Drop, else the one playing. -1 past the roster genre's sets.
+	[[nodiscard, gnu::noinline]] int32_t variantAhead(int32_t set) const;
+	/// The variant set `set` plays now: the playing piece's (a Drop may have moved it), or the Recipe's while stopped.
+	/// -1 past the roster genre's sets.
+	[[nodiscard]] int32_t variantPlaying(int32_t set) const;
+
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing, and logs it.
@@ -377,7 +390,7 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
-	/// Octave shift presses, and BACK taps (which may cancel one), from any control, modulo 256.
+	/// Octave shift and variant switch presses, and BACK taps (which may cancel one), from any control, modulo 256.
 	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
 
 private:
@@ -582,6 +595,10 @@ void PerformSteering<Adapter>::recordLanded(const Generator& playing) {
 		recordTake(p, playing.take(p));
 		adapter().recipe().octave[p] = static_cast<int8_t>(playing.octave(p));
 	}
+	// The variants playing now, as Drops and live switches moved them: SAVE stores them (spec §3.6).
+	if (playing.recipe().genre == adapter().recipe().genre) {
+		adapter().recipe().variants = playing.variants();
+	}
 }
 
 template <typename Adapter>
@@ -709,7 +726,7 @@ void PerformSteering<Adapter>::beginAgainFrom(const PieceStart& began) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
-	// It may cancel a waiting key change, take or octave shift: menus showing one read it again.
+	// It may cancel a waiting key change, take, octave shift or variant switch: menus showing one read it again.
 	keyPresses_++;
 	octavePresses_++;
 	for (uint32_t& presses : takePresses_) {
@@ -873,6 +890,51 @@ int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
 	}
 	const int32_t waiting = piece->octaveWaiting(part);
 	return waiting != kNoOctaveWaiting ? waiting : piece->octave(part);
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressVariant(uint8_t set, int32_t variant) {
+	const Genre* genre = rosterGenre();
+	if (leaving_ || !entered_ || genre == nullptr || set >= genre->variantSets.size() || !genre->variantSets[set].live
+	    || variant < 0 || variant >= static_cast<int32_t>(genre->variantSets[set].variants.size())) {
+		return PressOutcome::NothingToDo;
+	}
+	octavePresses_++;
+	if (playing() != nullptr) {
+		return queued(queue_.push({CommandKind::SetVariant, set, variant}));
+	}
+	// Stopped: no Drop to wait for. The variant is the Recipe's, as a live switch landing makes it
+	// (Generator::apply()).
+	VariantPicks& picks = adapter().recipe().variants;
+	picks.pick[set] = static_cast<uint8_t>(variant);
+	picks.allowed[set] |= static_cast<uint8_t>(1U << variant);
+	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::variantAhead(int32_t set) const {
+	const Generator* piece = playing();
+	if (piece != nullptr && set >= 0 && set < kMaxVariantSets) {
+		// A press the core hasn't drained yet goes on as pushed: a switch waits, and the one playing cancels the wait.
+		if (const Command* queued = queue_.newest(CommandKind::SetVariant, static_cast<uint8_t>(set))) {
+			return queued->value;
+		}
+		const int32_t waiting = piece->variantWaiting(set);
+		if (waiting >= 0) {
+			return waiting;
+		}
+	}
+	return variantPlaying(set);
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::variantPlaying(int32_t set) const {
+	const Genre* genre = rosterGenre();
+	if (genre == nullptr || set < 0 || set >= static_cast<int32_t>(genre->variantSets.size())) {
+		return -1;
+	}
+	const Generator* piece = playing();
+	return (piece != nullptr ? piece->variants() : adapter().recipe().variants).pick[set];
 }
 
 template <typename Adapter>

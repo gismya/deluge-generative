@@ -39,15 +39,19 @@ struct QueuedAction {
 /// @return How many it wrote.
 int32_t queuedByTime(const Generator& generator, std::span<QueuedAction> out);
 
-/// The short tag of a queued action: MUT, SOL, KEY, TAK, SND, OCT, END, CHG (a transition), RST (a restart), or a
-/// forced Section's two letters (GR, BR, BU).
+/// The short tag of a queued action: MUT, SOL, KEY, TAK, SND, OCT, END, CHG (a transition), RST (a restart), VAR (a
+/// live variant switch), or a forced Section's two letters (GR, BR, BU).
 const char* queueTag(const Command& command);
 
-/// Names an action for QUEUE: "ACID MUTE", "DRUMS TAKE 2", "BREAK", "OUTRO", "KEY D DORIAN", "RESTART".
+/// Names an action for QUEUE: "ACID MUTE", "DRUMS TAKE 2", "BREAK", "OUTRO", "KEY D DORIAN", "RESTART",
+/// "VARIANT DROP".
 void queueLabel(const Command& command, const Genre& genre, std::span<char> out);
 
+/// countdown()'s `ticks` for such an action: it shows "--".
+constexpr int32_t kNoCountdown = INT32_MIN;
+
 /// The time left until an action lands, `ticks` Generator ticks away: whole bars rounded up, and under a bar whole
-/// beats rounded up, at least 1. Short: "3" and "2B"; in words: "3 BARS" and "2 BEATS".
+/// beats rounded up, at least 1. Short: "3" and "2B"; in words: "3 BARS" and "2 BEATS". kNoCountdown: "--".
 void countdown(int32_t ticks, bool words, std::span<char> out);
 
 /// A key root's name, "C" to "B", and a Scale's in capitals, as QUEUE and RECIPE show them.

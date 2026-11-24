@@ -116,11 +116,15 @@ enum class CommandKind : uint8_t {
 	/// value: the setting's value. Never pushed into SteeringQueue: written by NoteSink::logSettings() at the step
 	/// being decided, so a sample/wavetable path can follow as a kSettingPathTag (0x85) record.
 	SetSetting,
+	/// A live variant set's switch (spec §3.6, §13.6): target: the set, by index in the genre's list. value: the
+	/// variant. Waits for the next Drop and lands there, with the Drop's own changes, where the instance re-applies its
+	/// genre copy. Only a live set takes one. Picking the variant that plays cancels the one waiting.
+	SetVariant,
 };
 
 /// The last kind: a kind appended after it moves this too. The log packs a kind in 6 bits (steering_log.h), and
 /// steering_log_spec round-trips every kind up to here.
-constexpr CommandKind kLastCommandKind = CommandKind::SetSetting;
+constexpr CommandKind kLastCommandKind = CommandKind::SetVariant;
 
 /// A SetParam target: a song param, not a part's (song FX F1–F7 among them, spec §17.2).
 constexpr uint8_t kSongParams = 0xFF;
@@ -176,7 +180,7 @@ constexpr bool isQuantised(CommandKind kind) {
 	return kind == CommandKind::SetKey || kind == CommandKind::SetTake || kind == CommandKind::ForceSection
 	       || kind == CommandKind::End || kind == CommandKind::SetMute || kind == CommandKind::SetSolo
 	       || kind == CommandKind::SetSound || kind == CommandKind::Transition || kind == CommandKind::SetOctave
-	       || kind == CommandKind::Restart;
+	       || kind == CommandKind::Restart || kind == CommandKind::SetVariant;
 }
 
 struct Command {
@@ -285,12 +289,12 @@ private:
 /// The core's pending list (spec §2.6): quantised commands waiting in the instance state for their line. One slot for
 /// the key change, one per part's take, one for the force, one for a transition and one for a restart; a later command
 /// replaces the one in its slot, so turning the key editor detent by detent queues only where it stops. A part's mute,
-/// solo, sound and octave shift have a slot each.
+/// solo, sound and octave shift have a slot each, and so does a variant set's live switch.
 class PendingList {
 public:
-	/// A key change, a force or End, a transition, a restart, and every part's take, mute, solo, sound and octave
-	/// shift.
-	static constexpr int32_t kCapacity = 34;
+	/// A key change, a force or End, a transition, a restart, every part's take, mute, solo, sound and octave shift,
+	/// and every variant set's switch.
+	static constexpr int32_t kCapacity = 42;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.

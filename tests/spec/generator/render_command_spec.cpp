@@ -223,9 +223,10 @@ describe render_command("Rough render command", $ {
 		expect(rolled.recipe.variants.pick[0] == 1 && rolled.recipe.variants.allowed[0] == 0b10).to_be_true();
 		// The THEORY track's recipe line names it, for the listening tools' check.
 		const harness::render::Rendering rendering{rolled.recipe, {}, 1, 0, 1, {}, {}};
-		expect(harness::render::theoryText(rendering)[0].second.ends_with(" variant.skank=plain")).to_be_true();
+		expect(harness::render::theoryText(rendering)[0].second.find(" variant.skank=plain ") != std::string::npos).to_be_true();
 		expect(parse({"--genre", "dub", "--variant", "skank=jazz", "--out", "x"}).error)
-		    .to_equal(std::string("unknown variant for dub: skank=jazz (have skank=sevenths, skank=plain)"));
+		    .to_equal(std::string("unknown variant for dub: skank=jazz (have skank=sevenths, skank=plain, drums=onedrop, drums=rockers, "
+		                        "drums=steppers)"));
 		expect(parse({"--variant", "skank=plain", "--out", "x"}).error)
 		    .to_equal(std::string("unknown variant for techno-acid: skank=plain (have none)"));
 	});

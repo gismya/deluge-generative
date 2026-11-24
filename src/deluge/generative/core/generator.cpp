@@ -56,6 +56,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	waitingMoves_[0] = waitingMoves_[1] = Command{CommandKind::CancelNewest};
 	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
+	switchedSets_ = 0;
 	silent_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
@@ -287,7 +288,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	logWaitingMoves(log);
 	landPending(log);
 	noteWaitingMoves();
-	decideLanded();
+	decideLanded(log);
 }
 
 namespace {
@@ -354,7 +355,7 @@ GEN_STEP_CODE void Generator::beginDecision() {
 	cutParts_ = 0; // set again by a SetSound or SetKey landing on this step
 }
 
-GEN_STEP_CODE void Generator::decideLanded() {
+GEN_STEP_CODE void Generator::decideLanded(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
 		endAtStop(); // a cut landed: its line is the start step
@@ -366,6 +367,11 @@ GEN_STEP_CODE void Generator::decideLanded() {
 	step.tick = stepTick(n);
 	if (arc_.enterStep(*genre_, seed_, n, recipe_.macros)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
+	}
+	// Before anything reads the genre on this step: the chord walk's loop draw and voicing, the picks. A transition's
+	// new roster opening on a Drop plays the picks it was drawn with.
+	if (arc_.dropStartsHere() && n > 0) {
+		dropVariants(log);
 	}
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
