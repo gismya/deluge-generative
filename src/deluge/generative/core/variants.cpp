@@ -16,13 +16,14 @@
  */
 
 #include "generative/core/variants.h"
+#include "generative/core/types.h"
 
 namespace deluge::generative {
 
 namespace {
 
-/// A draw by weight within `allowed`, from `value`.
-uint8_t drawWithin(const VariantSet& set, uint8_t allowed, uint32_t value) {
+/// A draw by weight within `allowed`, from `value`. A Drop change draws with it in the step.
+GEN_STEP_CODE uint8_t drawWithin(const VariantSet& set, uint8_t allowed, uint32_t value) {
 	const int32_t picked = rollWeighted(
 	    static_cast<int32_t>(set.variants.size()),
 	    [&](int32_t v) { return (allowed >> v) & 1U ? static_cast<int32_t>(set.variants[v].weight) : int32_t{0}; },
@@ -59,7 +60,46 @@ void drawUnsetVariants(Recipe& recipe, uint32_t entropy) {
 	}
 }
 
-bool patchesGenre(const Genre& genre, const VariantPicks& picks) {
+namespace {
+
+/// A Drop change's draw fields (Purpose::VariantChange).
+constexpr int32_t kChangeWhether = 0;
+constexpr int32_t kChangeWhich = 1;
+constexpr int32_t kChangeMask = 2; ///< a live switch's ticks leave out the variant playing: which one plays
+
+} // namespace
+
+GEN_STEP_CODE uint8_t dropChange(const VariantSet& set, uint8_t allowed, uint8_t pick, uint32_t seed, uint16_t groove,
+                                 int32_t s) {
+	const uint8_t others = allowedIn(set, allowed) & static_cast<uint8_t>(~(1U << pick));
+	if (set.changeAt != ChangeAt::Drop || others == 0) {
+		return pick;
+	}
+	const DrawKey key = onPhrase(partKey(seed, kArcPart, Lane::None, 0, Purpose::VariantChange), groove,
+	                             static_cast<uint16_t>(s), fieldWord(0, kChangeWhether));
+	if (!drawChance(key, set.changeChance)) {
+		return pick;
+	}
+	return drawWithin(set, others, draw(withField(key, kChangeWhich)));
+}
+
+GEN_STEP_CODE bool switchable(const Genre& genre, int32_t set, uint8_t allowed) {
+	return set >= 0 && set < static_cast<int32_t>(genre.variantSets.size()) && genre.variantSets[set].live
+	       && allowed != 0 && (allowed & ~allVariants(genre.variantSets[set])) == 0;
+}
+
+GEN_STEP_CODE void landMask(const Genre& genre, VariantPicks& picks, int32_t s, uint8_t allowed, uint32_t seed,
+                            uint16_t groove) {
+	picks.allowed[s] = allowed;
+	if ((allowed >> picks.pick[s]) & 1U) {
+		return; // still ticked: it plays on
+	}
+	const DrawKey key = onPhrase(partKey(seed, kArcPart, Lane::None, 0, Purpose::VariantChange), groove,
+	                             static_cast<uint16_t>(s), fieldWord(0, kChangeMask));
+	picks.pick[s] = drawWithin(genre.variantSets[s], allowed, draw(key));
+}
+
+GEN_STEP_CODE bool patchesGenre(const Genre& genre, const VariantPicks& picks) {
 	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
 		if (pickedVariant(genre, picks, static_cast<int32_t>(s)).apply != nullptr) {
 			return true;
@@ -68,7 +108,7 @@ bool patchesGenre(const Genre& genre, const VariantPicks& picks) {
 	return false;
 }
 
-const Genre& resolveGenre(const Genre& genre, const VariantPicks& picks, ResolvedGenre* into) {
+GEN_STEP_CODE const Genre& resolveGenre(const Genre& genre, const VariantPicks& picks, ResolvedGenre* into) {
 	if (into == nullptr || !patchesGenre(genre, picks)) {
 		return genre;
 	}

@@ -26,6 +26,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
+#include "generative/perform/regenerate_page.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_popups.h"
 #include "hid/buttons.h"
@@ -248,6 +249,15 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			           static_cast<long>(generator_->octave(p)), static_cast<long>(landed),
 			           landed % kStepsPerBar == 0 ? "yes" : "no");
 		}
+	}
+	// A Drop changed a variant set, or a live switch landed there, on the last decided step (spec §3.6): the Current
+	// Recipe still has the picks before it.
+	if (generator_->recipe().genre == currentRecipe.recipe.genre
+	    && !std::ranges::equal(generator_->variants().pick, currentRecipe.recipe.variants.pick)) {
+		char picks[perform::kPicksTextChars];
+		perform::picksText(*generator_->recipe().genre, generator_->variants(), picks);
+		TEST_EVENT("gen_variants_landed step=%ld drop=%d %s", static_cast<long>(generator_->nextStep() - 1),
+		           generator_->arc().dropStartsHere() ? 1 : 0, picks);
 	}
 #endif
 	steering_.recordLanded(*generator_);

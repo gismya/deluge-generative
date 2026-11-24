@@ -206,7 +206,8 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			}
 			for (size_t k = 0; k < kinds.size(); k++) {
 				const auto kind = static_cast<CommandKind>(k);
-				if (kind != CommandKind::CancelNewest && kind != CommandKind::Restart) {
+				// SetVariantMask: Techno has no variant sets; Dub's live switch replays below.
+				if (kind != CommandKind::CancelNewest && kind != CommandKind::Restart && kind != CommandKind::SetVariantMask) {
 					expect(static_cast<bool>(kinds[k])).to_be_true();
 				}
 			}
@@ -284,6 +285,46 @@ describe capture_replay("Capture replay (spec §17.1, §21.2)", ${
 			}
 			expect(stabs.empty()).to_be_false();
 			expect(std::ranges::all_of(stabs, [](const auto& stab) { return stab.second.size() <= 3; })).to_be_true();
+		});
+
+		it("with Drop changes and live variant switches: Dub's drum styles and skank (spec §3.6, §13.6)", _ {
+			// Over a few seeds: each replays as it played, and between them a Drop changed the drums and a switch
+			// landed, logged where it landed.
+			bool changed = false;
+			bool switched = false;
+			for (uint32_t seed = 1; seed <= 4; seed++) {
+				auto run = std::make_unique<Steered>();
+				Run live;
+				live.recipe = newRecipe(genres::dub, seed);
+				live.seed = seed;
+				live.skipIntro = true;
+				live.log = &run->log.log;
+				// The skank switched early to plain: it waits for the first Drop. The drums' one drop unticked later: a Drop
+				// keyed draw picks within the other two if it played.
+				live.steer = [](int32_t step, SteeringQueue& queue) {
+					if (step == 20) {
+						queue.push({CommandKind::SetVariantMask, 0, 0b10});
+					}
+					if (step == 70 * kStepsPerBar) {
+						queue.push({CommandKind::SetVariantMask, 1, 0b110});
+					}
+				};
+				const uint8_t started = live.recipe.variants.pick[1];
+				live.watch = [&](const Generator& g) { changed = changed || g.variants().pick[1] != started; };
+				run->live = play(live, 140);
+				const PieceImage pieceImage = image(run->log.log, 0);
+				const SteeringLog::Piece piece = pieceImage.piece();
+				const std::vector<LogRecord> read = recordsOf(piece);
+				switched = switched || hasRecord(read, RecordKind::Command, CommandKind::SetVariantMask);
+				auto replayed = replay(piece);
+				expect(replayed->done).to_be_true();
+				const int32_t cut = agreedTick(piece);
+				const std::vector<Note> notes = notesBefore(pairNotes(run->live.events), cut);
+				expect(notes.size()).to_be_greater_than(1000U);
+				expect(notesBefore(replayed->writer.notes, cut) == notes).to_be_true();
+			}
+			expect(changed).to_be_true();
+			expect(switched).to_be_true();
 		});
 
 		it("with forces, End and holds pressed mid-phrase", _ {

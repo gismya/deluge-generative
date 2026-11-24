@@ -63,6 +63,8 @@ enum class Purpose : uint8_t {
 	ChordLoop,     ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
 	               ///< length, chord). Part kArcPart. Never keyed on the take
 	AlternateLane, ///< position: held bar index. Whether a Drums lane swaps to its alternate lane for a Groove bar
+	VariantChange, ///< position: Groove occurrence at a Drop, variant set, field (whether, which). Part kArcPart.
+	               ///< Never keyed on the take
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

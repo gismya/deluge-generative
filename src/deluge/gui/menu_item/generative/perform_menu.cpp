@@ -579,8 +579,8 @@ Submenu& keyScaleMenu = keyScaleMenuItem;
 
 PLACE_SDRAM_BSS Submenu performMenu{
     l10n::String::STRING_FOR_PERFORM,
-    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &keyScaleMenuItem, &glideItem, &seedTakesMenu,
-     &octavesMenu, &resetPartBiasItem, &restartMenu, &captureMenu, &browserPreviewItem},
+    {&cancelChangeItem, &transitionGenres.menu(), &regenerateItem, &performVariantsMenu, &keyScaleMenuItem, &glideItem,
+     &seedTakesMenu, &octavesMenu, &resetPartBiasItem, &restartMenu, &captureMenu, &browserPreviewItem},
 };
 
 void refreshPerformMenu() {
@@ -589,7 +589,7 @@ void refreshPerformMenu() {
 	for (int32_t part = 0; part < deluge::generative::kMaxParts; part++) {
 		presses += performAdapter.steering().takePresses(part);
 	}
-	presses += performAdapter.steering().octavePresses();
+	presses += performAdapter.steering().listPresses(); // octave shifts, and VARIANTS' ticks
 	// CANCEL CHANGE shows only while a transition can be cancelled: its phase moves it too.
 	presses += static_cast<uint32_t>(transitions.phase()) << 24;
 	// CAPTURE's rows move with the marks (RECORD under the menu), the pieces and each piece opened.
@@ -604,7 +604,7 @@ void refreshPerformMenu() {
 	MenuItem* item = soundEditor.getCurrentMenuItem();
 	bool ours = item == &performMenu || item == &transitionGenres.menu() || item == &keyScaleMenuItem
 	            || item == &keyItem || item == &scaleItem || item == &seedTakesMenu || item == &octavesMenu
-	            || item == &captureMenu;
+	            || item == &captureMenu || showsVariants(item);
 	for (TakeItem& take : takeItems) {
 		ours = ours || item == &take;
 	}

@@ -37,6 +37,20 @@ constexpr Pattern kKick[] = {
     {"....X.......X..7", "................", 1},
 };
 
+/// Rockers (#460 S5 C): the kick anchored on 2 and 4, and on 1 and 3 at importance 8, so Density takes those away
+/// first. As many entries as kKick, each as long, so a frozen Drums part keeps its pick across a Drop that changes the
+/// style.
+constexpr Pattern kKickRockers[] = {
+    {"8...X...8...X...", "................", 0, 2},
+    {"8...X...8...X..7", "................", 1},
+};
+
+/// Steppers (#460 S5 C): the kick on every 8th, 2 and 4 anchored.
+constexpr Pattern kKickSteppers[] = {
+    {"8.8.X.8.8.8.X.8.", "................", 0, 2},
+    {"8.8.X.8.8.8.X.87", "................", 1},
+};
+
 /// The cross-stick on beats 2 and 4, anchored, at every tier: the Rim holds the backbeat and the Snare never does in
 /// its step tables (it has none), so exactly one of them is on the drop at each tier. Beat 4 falls in the last beat so
 /// the drum and Rim drop-outs' Throws always have a hit to spike on.
@@ -181,6 +195,20 @@ constexpr LaneSpec kDrumLanes[] = {
      .expression = {.spread = 10}},
 };
 
+/// The Drums lanes with another Kick pool: a drum style (#460 S5 C).
+template <size_t N>
+constexpr std::array<LaneSpec, N> withKick(const LaneSpec (&lanes)[N], std::span<const Pattern> kick) {
+	std::array<LaneSpec, N> out{};
+	for (size_t i = 0; i < N; i++) {
+		out[i] = lanes[i];
+	}
+	out[0].pool = kick;
+	return out;
+}
+static_assert(kDrumLanes[0].lane == Lane::Kick);
+constexpr auto kRockersLanes = withKick(kDrumLanes, kKickRockers);
+constexpr auto kSteppersLanes = withKick(kDrumLanes, kKickSteppers);
+
 /// FX lanes have no pools: only section rules play them (spec §5.4). The Siren holds one note for 2 bars on a Break's
 /// first step and on a Drop, gated at 30: at the default macros it sounds on Drops, whose lift takes Density to 33
 /// (spec §9.5). Its release always throws, into its own echo.
@@ -220,6 +248,7 @@ constexpr LoopSpec kBassLoop{
 /// Chord positions: mostly the root, the 3rd and the 5th, the 7th and the note under the root now and then.
 constexpr LineWeight kMelodicaPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 1}};
 
+constexpr int32_t kDrumsPart = 0;
 constexpr int32_t kBassPart = 1;
 constexpr int32_t kSkankPart = 2;
 constexpr int32_t kMelodicaPart = 3;
@@ -272,6 +301,7 @@ constexpr PartSpec kParts[] = {
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
+static_assert(kParts[kDrumsPart].role == Role::Drums);
 static_assert(kParts[kBassPart].role == Role::Bass);
 static_assert(kParts[kSkankPart].role == Role::Chords && kParts[kSkankPart].flavour == Flavour::Stab);
 static_assert(kParts[kMelodicaPart].role == Role::Lead && kParts[kMelodicaPart].flavour == Flavour::Motif);
@@ -354,7 +384,8 @@ constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBi
 
 /// The skank's chord (Q359, #359; ADR 0008): the 7ths every Skank stab played at the default Complexity before the
 /// set, or plain triads (no Extension above the floor). The owner kept both ("both are good"), so they draw evenly.
-/// It patches the genre's harmony, so the Melodica's chord tones lose the 7th with it.
+/// It patches the genre's harmony, so the Melodica's chord tones lose the 7th with it. Live: the Extensions are read
+/// only where a bar line voices the chord, and nothing reads them across a Drop's line before it (#495).
 constexpr Variant kSkankVariants[] = {
     {.name = "sevenths", .oledName = "7THS", .weight = 1},
     {.name = "plain",
@@ -363,14 +394,35 @@ constexpr Variant kSkankVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.extensionCeiling = 0; }},
 };
 
+/// The drum style (#460 S5 C, ADR 0008): the one drop it played before the set, rockers or steppers, by the Kick's
+/// pool. It may change at each Drop, never inside a Section; Perform may switch it there too. The weights 2:1:1 keep
+/// the one drop the most common style (tuning).
+constexpr Variant kDrumVariants[] = {
+    {.name = "onedrop", .oledName = "ONE DROP", .weight = 2},
+    {.name = "rockers",
+     .oledName = "ROCKERS",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kRockersLanes; }},
+    {.name = "steppers",
+     .oledName = "STEPPERS",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kSteppersLanes; }},
+};
+
 constexpr VariantSet kVariantSets[] = {
-    {.name = "skank", .oledName = "SKANK", .variants = kSkankVariants},
+    {.name = "skank", .oledName = "SKANK", .variants = kSkankVariants, .live = true},
+    {.name = "drums",
+     .oledName = "DRUMS",
+     .variants = kDrumVariants,
+     .live = true,
+     .changeAt = ChangeAt::Drop,
+     .changeChance = 400}, // per mille at each Drop (tuning)
 };
 
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 7,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 8,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,

@@ -47,7 +47,7 @@ constexpr bool validTake(const Command& command, const Genre& genre) {
 }
 
 /// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
-constexpr bool validOctave(const Command& command, const Genre& genre) {
+GEN_STEP_CODE bool validOctave(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
 	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
@@ -276,6 +276,16 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		return false;
 	case CommandKind::SetStutter:
 		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
+	case CommandKind::SetVariantMask: {
+		// It lands on a Drop's first step, where dropVariants() applies the genre copy again with it (spec §3.6).
+		if (!switchable(*recipe_.genre, command.target, static_cast<uint8_t>(command.value))) {
+			return false;
+		}
+		// dropVariants() keeps or draws the pick within it, keyed on the Drop.
+		recipe_.variants.allowed[command.target] = static_cast<uint8_t>(command.value);
+		switchedSets_ |= static_cast<uint8_t>(1U << command.target);
+		return true;
+	}
 	case CommandKind::SetPunch:
 		if (!punch_.set(command)) {
 			return false;
@@ -377,6 +387,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 		}
 		break;
 	}
+	case CommandKind::SetVariantMask:
+		if (!switchable(*recipe_.genre, command.target, static_cast<uint8_t>(command.value))) {
+			return true;
+		}
+		// The ticks the set allows now cancel the switch waiting, as the take that plays does (spec §13.6).
+		if (allowedIn(recipe_.genre->variantSets[command.target], recipe_.variants.allowed[command.target])
+		    == command.value) {
+			pending_.cancel(command);
+			return true;
+		}
+		break;
 	case CommandKind::SetSound:
 		if (command.target < partCount(*genre_) && command.value == kNoSound) {
 			pending_.cancel(command); // the driver frees the sound it preloaded
@@ -484,6 +505,12 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
 		           ? arc_.stepsToStart(SectionKind::Build, command.value)
 		           : arc_.stepsToPhraseLine();
+	case CommandKind::SetVariantMask: {
+		// The next Drop as things stand (Arc::ahead(), from the last decided step), or kNever with none ahead: a held
+		// Groove, an Outro, Motion 0. dropVariants() lands it on the Drop itself, whenever that comes (spec §3.6).
+		const int32_t drop = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove()).drop;
+		return drop == Arc::kNotAhead ? kNever : std::max<int32_t>(drop - 1, 0);
+	}
 	default:
 		// Key changes, takes and End land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
 		return arc_.stepsToPhraseLine();
@@ -493,7 +520,8 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 void Generator::landPending(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	pending_.land([&](const Command& command) {
-		if (stepsToLine(command) != 0) {
+		// A live variant switch lands with the Drop's changes, once the Arc is on the Drop (dropVariants()).
+		if (command.kind == CommandKind::SetVariantMask || stepsToLine(command) != 0) {
 			return false;
 		}
 		if (apply(command)) {
@@ -512,7 +540,46 @@ void Generator::landPending(SteeringLog* log) {
 }
 
 int32_t Generator::landsAt(const Command& command) const {
-	return nextStep_ + stepsToLine(command);
+	const int32_t steps = stepsToLine(command);
+	return steps == kNever ? kNoLine : nextStep_ + steps;
+}
+
+GEN_STEP_CODE void Generator::dropVariants(SteeringLog* log) {
+	const Genre& genre = *recipe_.genre;
+	if (genre.variantSets.empty()) {
+		return;
+	}
+	const int32_t n = nextStep_;
+	pending_.land([&](const Command& command) {
+		if (command.kind != CommandKind::SetVariantMask) {
+			return false;
+		}
+		if (apply(command) && log != nullptr) {
+			log->append(n, command);
+		}
+		return true;
+	});
+	// A switch landed in replay came through apply() before this decision, as it did live on this step.
+	bool moved = false;
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		uint8_t& pick = recipe_.variants.pick[s];
+		if ((switchedSets_ >> s) & 1U) {
+			// The player's ticks are this Drop's change: the pick stays if ticked, else is drawn within them.
+			const uint8_t before = pick;
+			landMask(genre, recipe_.variants, static_cast<int32_t>(s), recipe_.variants.allowed[s], seed_,
+			         arc_.occurrence());
+			moved = moved || pick != before;
+			continue;
+		}
+		const uint8_t changed = dropChange(genre.variantSets[s], recipe_.variants.allowed[s], pick, seed_,
+		                                   arc_.occurrence(), static_cast<int32_t>(s));
+		moved = moved || changed != pick;
+		pick = changed;
+	}
+	switchedSets_ = 0;
+	if (moved) {
+		genre_ = &resolveGenre(genre, recipe_.variants, resolved_);
+	}
 }
 
 GEN_STEP_CODE bool Generator::moveAt(const Command& command, Arc::Move& out) const {

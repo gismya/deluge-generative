@@ -891,9 +891,13 @@ struct VariantSet {
 	const char* name = "";             ///< Stable, for Recipe files: "skank". Never reused within its genre.
 	const char* oledName = "";         ///< At most kMaxVariantSetOledName characters: "SKANK".
 	std::span<const Variant> variants; ///< 2 to kMaxVariants. The first is the genre as it played before the set.
-	bool live = false;                 ///< Perform may switch it at a Drop (ADR 0008; not built yet).
+	/// Perform's VARIANTS menu may switch it, at the next Drop (spec §13.6). Its patches keep to what a Drop reads
+	/// afresh (spec §3.6).
+	bool live = false;
+	/// Drop: it may change at each Drop, by a keyed draw (spec §3.6), within its allowed variants. Its patches keep to
+	/// what a Drop reads afresh, as a live set's do.
 	ChangeAt changeAt = ChangeAt::Never;
-	int16_t changeChance = 0; ///< Per mille at each Drop, for ChangeAt::Drop (not built yet).
+	int16_t changeChance = 0; ///< Per mille at each Drop, 1 to 1000, for ChangeAt::Drop; 0 for Never.
 };
 
 /// The OLED names fit a menu row (ADR 0008): a set's name, and a variant's, in characters.

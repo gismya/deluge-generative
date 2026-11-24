@@ -196,6 +196,7 @@
     "STRING_FOR_TRANSITION_CUT": "Cut",
     "STRING_FOR_VARIANTS": "Variants",
     "STRING_FOR_VARIANTS_SUBSET": "%d of %d",
+    "STRING_FOR_AT_REGEN": "At regen",
     "STRING_FOR_GO": "Go",
     "STRING_FOR_CHANGE_PENDING": "Change pending",
     "STRING_FOR_AS_IT_IS": "As it is",

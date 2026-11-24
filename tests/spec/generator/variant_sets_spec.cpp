@@ -56,6 +56,10 @@ void longerRoll(ResolvedGenre& resolved) {
 void fewerRepicks(ResolvedGenre& resolved) {
 	resolved.genre.repickChance = 50;
 }
+/// The Bass's pool cut to its first entry: a frozen Bass's pick could point past it.
+void shorterPool(ResolvedGenre& resolved) {
+	resolved.parts[1].pool = resolved.parts[1].pool.first(1);
+}
 
 /// A made-up set of weights 1 and 3, and one of 2, 1 and 1.
 constexpr Variant kOneThree[] = {{.name = "a", .oledName = "A", .weight = 1},
@@ -102,7 +106,29 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	return same;
 }
 
-/// Every set of `genre` that may change mid-piece (live, or at a Drop) keeps the look-ahead in each of its variants.
+/// Two pools a pick reads the same way: as many entries, each as long.
+bool samePickRange(std::span<const Pattern> a, std::span<const Pattern> b) {
+	return std::ranges::equal(a, b, [](const Pattern& x, const Pattern& y) { return x.length == y.length; });
+}
+
+/// What a pick held across a Drop reads (a frozen part keeps its pool entry, spec §6.7): each part's lanes, in their
+/// order, and every pool, as many entries, each as long. True when `a` and `b` agree on them.
+bool samePicks(const Genre& a, const Genre& b) {
+	bool same = partCount(a) == partCount(b);
+	for (int32_t p = 0; same && p < partCount(a); p++) {
+		const PartSpec& x = a.parts[p];
+		const PartSpec& y = b.parts[p];
+		same = samePickRange(x.pool, y.pool) && x.lanes.size() == y.lanes.size();
+		for (size_t l = 0; same && l < x.lanes.size(); l++) {
+			same = x.lanes[l].lane == y.lanes[l].lane && samePickRange(x.lanes[l].pool, y.lanes[l].pool)
+			       && samePickRange(x.lanes[l].fillPool, y.lanes[l].fillPool);
+		}
+	}
+	return same;
+}
+
+/// Every set of `genre` that may change mid-piece (live, or at a Drop) keeps the look-ahead, and what a pick held
+/// across the Drop reads, in each of its variants.
 bool patchesKeepLookAhead(const Genre& genre) {
 	for (size_t s = 0; s < genre.variantSets.size(); s++) {
 		const VariantSet& set = genre.variantSets[s];
@@ -113,7 +139,8 @@ bool patchesKeepLookAhead(const Genre& genre) {
 			VariantPicks picks;
 			picks.pick[s] = static_cast<uint8_t>(v);
 			auto copy = std::make_unique<ResolvedGenre>();
-			if (!sameLookAhead(genre, resolveGenre(genre, picks, copy.get()))) {
+			const Genre& resolved = resolveGenre(genre, picks, copy.get());
+			if (!sameLookAhead(genre, resolved) || !samePicks(genre, resolved)) {
 				return false;
 			}
 		}
@@ -331,7 +358,7 @@ describe variant_sets("Variant sets", $ {
 				expect(patchesKeepLookAhead(*genre)).to_be_true();
 			}
 		});
-		it("catches a live set that moves the Arc's lengths, offsets or roll, or a Register, and lets one that moves the repicks by", _ {
+		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register or a pool's size, and lets one that moves the repicks by", _ {
 			static constexpr Variant kArc[] = {{.name = "a", .oledName = "A"},
 			                                   {.name = "b", .oledName = "B", .apply = longerGrooves}};
 			static constexpr Variant kRegister[] = {{.name = "a", .oledName = "A"},
@@ -342,6 +369,8 @@ describe variant_sets("Variant sets", $ {
 			                                       {.name = "b", .oledName = "B", .apply = deeperBreak}};
 			static constexpr Variant kRoll[] = {{.name = "a", .oledName = "A"},
 			                                    {.name = "b", .oledName = "B", .apply = longerRoll}};
+			static constexpr Variant kPool[] = {{.name = "a", .oledName = "A"},
+			                                    {.name = "b", .oledName = "B", .apply = shorterPool}};
 			static constexpr VariantSet kLive[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kArc, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRegister, .live = true}},
@@ -349,6 +378,7 @@ describe variant_sets("Variant sets", $ {
 			    {{.name = "s", .oledName = "S", .variants = kArc}}, // not live: Regenerate takes it
 			    {{.name = "s", .oledName = "S", .variants = kOffsets, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRoll, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kPool, .changeAt = ChangeAt::Drop, .changeChance = 10}},
 			};
 			std::vector<bool> kept;
 			for (const auto& sets : kLive) {
@@ -356,7 +386,7 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				kept.push_back(patchesKeepLookAhead(genre));
 			}
-			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false});
+			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false});
 		});
 	});
 
@@ -409,14 +439,14 @@ describe variant_sets("Variant sets", $ {
 	context("Dub's skank (Q359, #359)", _ {
 		it("lists the skank set: the 7ths it played before, first, and plain triads, evenly", _ {
 			const Genre& dub = genres::dub;
-			expect(dub.variantSets.size()).to_equal(size_t{1});
+			expect(dub.variantSets.size()).to_equal(size_t{2}); // and the drum styles (#495, drop_changes_spec)
 			const VariantSet& skank = dub.variantSets[0];
 			expect(std::string(skank.name)).to_equal(std::string("skank"));
 			expect(std::string(skank.variants[0].name)).to_equal(std::string("sevenths"));
 			expect(skank.variants[0].apply == nullptr).to_be_true();
 			expect(std::string(skank.variants[1].name)).to_equal(std::string("plain"));
 			expect(skank.variants[0].weight).to_equal(skank.variants[1].weight);
-			expect(skank.live).to_be_false();
+			expect(skank.live).to_be_true(); // #495: no look-ahead reads the Extensions across a Drop
 		});
 		it("plays 7th chords on the Skank with sevenths, and never more than a triad with plain", _ {
 			Recipe recipe = newRecipe(genres::dub, 0);

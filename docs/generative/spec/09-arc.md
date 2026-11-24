@@ -9,7 +9,7 @@ The **Arc** is the Generator's movement through **Sections** around the Recipe's
 - Intro, Groove, Break and Outro are whole phrases long, using the genre's phrase length. A Build is a set number of bars that ends on a phrase line ([§9.3](#93-section-lengths)). A Build shorter than a phrase takes the end of the phrase before it, so the phrase grid never moves.
 - **Groove** is home, where the macros sit at the Recipe centre.
 - A **Gap** isn't a Section. It is an optional Build ending (none, 1 beat or 1 bar, set by the genre) where the mix cuts out.
-- A **Drop** isn't a Section. It is the event where a Build lands back in Groove: everything plays, and effective Energy and Density lift, then decay back to the centre over the genre's Drop decay ([§9.3](#93-section-lengths)).
+- A **Drop** isn't a Section. It is the event where a Build lands back in Groove: everything plays, and effective Energy and Density lift, then decay back to the centre over the genre's Drop decay ([§9.3](#93-section-lengths)). It is also the only place a variant set changes mid-piece: a set that changes at a Drop draws there, and a live switch waiting lands there ([§3.6](03-recipe.md#36-variant-sets)).
 
 ### 9.2 Automatic cycle
 
