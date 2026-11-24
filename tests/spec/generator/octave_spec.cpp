@@ -175,7 +175,7 @@ describe octave("Octave shift", $ {
 		expect(octaveRange(genres::technoDub.parts[partNamed(genres::technoDub, "SUB")]).highest).to_equal(2);
 		const PartSpec& lead = genres::psytranceClassic.parts[partNamed(genres::psytranceClassic, "LEAD")];
 		expect(octaveRange(lead).lowest).to_equal(-2);
-		expect(octaveRange(lead).highest).to_equal(1);
+		expect(octaveRange(lead).highest).to_equal(2);
 		expect(octaveRange(genres::technoAcid.parts[kDrums]).lowest).to_equal(0);
 		expect(octaveRange(genres::technoAcid.parts[kDrums]).highest).to_equal(0);
 		for (const Genre* genre : allGenres()) {
