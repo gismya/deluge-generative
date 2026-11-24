@@ -351,26 +351,10 @@ def runaway_delay(xml):
     return any(value >= RUNAWAY_DELAY_FEEDBACK for value in delay_feedbacks(xml))
 
 
-# GEN Psy Roll Bass's tuning (#497), set against delugemu captures (Song 3's Drop, the Bass alone, notes/497.md):
-# its 120 Hz-1 kHz band within 1 dB of the Arp's at 75 % (the old preset sat 3.7 dB under; with LPF 22 and no
-# clipping this one sat 14.8 under). A little clipping on the top gives the mids most of that. Release 2: at 3 the
-# clipped tail of each bar's last 16th rang into the kick's 16th, 5 dB under it; at 2 it is 49 dB under.
-PSY_ROLL = {
-    "lpf": 44,
-    "resonance": 14,
-    "env1": (0, 11, 0, 2),
-    "env2": (0, 8, 0, 3),
-    "env2_lpf": 20,
-    "sine": 50,
-    "saw": 50,
-    "hpf": 6,
-    "duck": 7,
-    "clipping": 4,
-}
-
-
-# GEN FM Lead Soft's edits to 057 (#497), set against delugemu captures (notes/497.md).
-PSY_LEAD = {"modulator1": 12, "lpf": 18}
+# The firmware's sidechain envelope rates (attackRateTable[6] * 4, releaseRateTable[12] * 8): attack about 0.5 ms,
+# release about 64 ms at 44.1 kHz, unsynced.
+SIDECHAIN_ATTACK_FAST = 386472
+SIDECHAIN_RELEASE_64_MS = 2976
 
 
 def preset(
@@ -760,31 +744,34 @@ PRESETS = {
         volume=50,
     ),
     # Psytrance's rolling bass since Classic sign-off 1 (#313, #497): a sine sub and a saw top, both at the note (the
-    # old preset's square an octave down sat at 19 Hz in D#), each 16th a short pluck: amp decay about 70 ms, sustain 0,
-    # a short release; a fast env2 opening the 24 dB low-pass about an octave over its 600 Hz-1 kHz home for the
-    # "brrp", a little clipping for its mids; the high-pass at about 30 Hz. Its own sidechain envelope (attack about 0.3 ms, release 64 ms: back within
-    # the 105 ms 16th at 143 BPM) ducks it 2-4 dB under the Kick, which sends at full (spec §10.4). Velocity moves its
-    # volume a little. No reverb.
+    # old preset's square an octave down sat at 19 Hz in D#), each 16th a short pluck: amp decay about 70 ms, sustain
+    # 0, a short release; a fast env2 opening the resonant 24 dB low-pass for the "brrp", a little clipping for its
+    # mids, the high-pass at about 30 Hz. Its own sidechain envelope (attack about 0.5 ms, release 64 ms: back within
+    # the 105 ms 16th at 143 BPM) ducks it a little under the Kick, which sends at full (spec §10.4), while the bass
+    # rests on the beat. Velocity moves its volume a little. No reverb. Set against delugemu captures (Song 3's Drop,
+    # the Bass alone, notes/497.md): its 120 Hz-1 kHz band within 1 dB of the Arp's at 75 % (the old preset sat 3.7 dB
+    # under; with the low-pass at 22 and no clipping this one sat 14.8 under), most of it from the clipping. Release 2:
+    # at 3 the clipped tail of each bar's last 16th rang into the kick's 16th, 5 dB under it; at 2 it is 49 dB under.
     "SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML": lambda: preset(
         "sine",
         "saw",
         noise=0,
-        lpf=PSY_ROLL["lpf"],
-        resonance=PSY_ROLL["resonance"],
-        env1=PSY_ROLL["env1"],
-        env2=PSY_ROLL["env2"],
+        lpf=44,
+        resonance=14,
+        env1=(0, 11, 0, 2),
+        env2=(0, 8, 0, 3),
         cables=[
             ("velocity", "volume", 20),
-            ("envelope2", "lpfFrequency", PSY_ROLL["env2_lpf"]),
-            ("compressor", "volumePostReverbSend", PSY_ROLL["duck"]),
+            ("envelope2", "lpfFrequency", 20),
+            ("compressor", "volumePostReverbSend", 7),
         ],
-        osc1_volume=PSY_ROLL["sine"],
-        osc2_volume=PSY_ROLL["saw"],
-        hpf=PSY_ROLL["hpf"],
-        clipping=PSY_ROLL["clipping"],
+        osc1_volume=50,
+        osc2_volume=50,
+        hpf=6,
+        clipping=4,
         reverb=0,
         volume=50,
-        sidechain=(386472, 2976),
+        sidechain=(SIDECHAIN_ATTACK_FAST, SIDECHAIN_RELEASE_64_MS),
     ),
     # The dub siren (spec §10.5, §18.2): a square and a saw a fifth apart, a triangle LFO sweeping the pitch up and
     # down about twice a second, a slow-ish attack and a long release that rings into its release Throw. Velocity
@@ -1244,18 +1231,19 @@ DERIVED = {
     # Psytrance's Lead (Classic sign-off 1, #497): 057 FM Lead with its first modulator an octave lower (+12, not +24)
     # and its low-pass at 18 (was about 24). 057's top notes were shrill: with the modulator at four times the note, a
     # 1.2 kHz D#6 put its sidebands at about 4-8 kHz, and every pitch's band over 4 kHz sat within 2-4 dB of its whole
-    # level. Halving its Brightness range alone moved that band by under 1 dB (notes/497.md).
+    # level. Halving its Brightness range alone moved that band by under 1 dB; this copy puts it 7.6-8.2 dB under
+    # (delugemu captures, notes/497.md).
     "SYNTHS/GENERATIVE/GEN FM Lead Soft.XML": Derived(
         "SYNTHS/057 FM Lead.XML",
         "842d4f6ccabc77c834f5c60985175db9730335fc215a818cbd1c49e70157cdcb",
-        Transpose("modulator1", PSY_LEAD["modulator1"]),
-        Field("lpfFrequency", knob(PSY_LEAD["lpf"])),
+        Transpose("modulator1", 12),
+        Field("lpfFrequency", knob(18)),
     ),
     # Psytrance's kicks (Classic sign-off 1, #497): Dean Daughters' Psy set's three, each held for 60 ms and faded out
     # by 130 ms (a raised cosine), so the tail is 20 dB down by 110-115 ms (195-255 ms in the factory files) and gone
     # before the rolling bass's first 16th (the e, from 105 ms at 143 BPM) speaks: it sat 2-6 dB under the beat there
-    # and masked the bass. A folder of their own and a tag the factory files don't hold (PSYKICK-), so only
-    # Psytrance's Psy kit reaches them; without the pack it plays the factory files.
+    # and masked the bass. A folder of their own and a tag no factory file holds (PSYKICK-): the Psy kit and
+    # Psytrance's Kick lane list name it. Without the pack the lane list's Deep Sky Kick HQ plays instead.
     **{
         f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav": Derived(
             f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav",

@@ -309,17 +309,37 @@ class TailFadeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "frames"):
             derived.make(self.tmp)
 
-    def test_the_psy_kicks_are_down_20_db_before_the_bass_speaks(self):
+    def test_the_pack_psy_kicks_are_20_db_down_before_the_bass_speaks(self):
+        """The committed copies, measured: from 115 ms on, every 5 ms window is 20 dB under the loudest, and nothing
+        sounds past 130 ms (the bass's first 16th starts at 105 ms at 143 BPM)."""
         for name in ("Bonus01", "Radar", "Silence"):
-            derived = make_pack.DERIVED[
-                f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav"
-            ]
-            fade = derived.edits[0]
-            # Gone by 130 ms, the e 16th starting at 105 ms at 143 BPM (the capture check is in notes/497.md).
-            self.assertLessEqual(fade.end_ms, 130)
+            path = f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav"
             self.assertEqual(
-                derived.source, f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav"
+                make_pack.DERIVED[path].source,
+                f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav",
             )
+            with wave.open(os.path.join(make_pack.PACK, path)) as w:
+                channels, width, rate = (
+                    w.getnchannels(),
+                    w.getsampwidth(),
+                    w.getframerate(),
+                )
+                raw = w.readframes(w.getnframes())
+            frame = channels * width
+            left = [
+                int.from_bytes(raw[i : i + width], "little", signed=True)
+                for i in range(0, len(raw), frame)
+            ]
+            step = rate * 5 // 1000
+            power = [
+                sum(v * v for v in left[i : i + step]) / step
+                for i in range(0, len(left) - step + 1, step)
+            ]
+            loudest = max(power)
+            for k, p in enumerate(power):
+                if k * 5 >= 115:
+                    self.assertLess(p, loudest / 100, f"{name} at {k * 5} ms")
+            self.assertLessEqual(len(left), rate * 130 // 1000 + 1, name)
 
 
 class DelayFeedbackTest(unittest.TestCase):

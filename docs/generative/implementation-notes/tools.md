@@ -131,8 +131,9 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
 - The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
   function and the page free of anything a Proxy stub can't stand in for at load.
-- The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
-  `pack/` alone prints `-` for every drum lane.
+- The pack holds few drum samples (the GEN rides, claps and brushes, Dub's snare, Psytrance's `GEN PSYKICK-` kicks):
+  most of a kit's lanes come from the card folder, so `generator_render --list-sounds` over `pack/` alone prints `-`
+  for most drum lanes.
 - A clip's timeline strip (`listening/timeline.py`, #513) names each part's sound from `generator_render
   --list-sounds`: the harness's palette roll over `pack/` and the stock card, not what the capture loaded. A capture
   on a palette-override card (`listen.py card --palette`) plays other presets: give the clip's timeline `sounds`

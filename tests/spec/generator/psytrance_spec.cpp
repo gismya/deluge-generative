@@ -1306,6 +1306,26 @@ describe psytrance("Psytrance", $ {
 			    .to_be_true();
 		});
 
+		it("falls back to the factory 057 when GEN FM Lead Soft is missing, a card without the pack (#497)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN FM Lead Soft.XML"};
+			const SoundLoad lead = loadPartSound(*psyGenre.palette, psyGenre.parts[kLeadPart],
+			                                     "SYNTHS/GENERATIVE/GEN FM Lead Soft.XML", loader);
+			expect(lead.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/057 FM Lead.XML"));
+		});
+
+		it("rolls the Kick lane's own list from the short copies and Deep Sky alone, never a factory Psy kick (#497)", _ {
+			FakeCard card = harness::factoryCardWithPack();
+			const auto picks = harness::lanePicks(psyGenre, card, 400, {}, false);
+			bool shortKick = false;
+			for (const std::string& path : picks.at(Lane::Kick)) {
+				expect(path.rfind("SAMPLES/Artists/Dean Daughters/Psy/", 0) == 0).to_be_false();
+				shortKick = shortKick || path.rfind("SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-", 0) == 0;
+			}
+			expect(shortKick).to_be_true();
+		});
+
 		it("loads the Drone at 55 % of its preset's volume, louder than round 1's 40 (round 2, H3)", _ {
 			expect(psyGenre.parts[kDronePart].volume).to_equal(55);
 		});
