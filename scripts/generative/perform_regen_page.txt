@@ -85,9 +85,10 @@ encoder 3 -1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=2
+expect event gen_variants_menu open sets=3
 expect event gen_variants_row SKANK Random
 expect event gen_variants_row DRUMS Random
+expect event gen_variants_row BREAK Random
 # SKANK's multi-select, from the top (a list remembers its row) on 7THS: untick it, so only PLAIN is allowed (mask 2)
 button SELECT_ENC down
 wait 50
