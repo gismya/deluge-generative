@@ -47,7 +47,7 @@ constexpr bool validTake(const Command& command, const Genre& genre) {
 }
 
 /// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
-constexpr bool validOctave(const Command& command, const Genre& genre) {
+GEN_STEP_CODE bool validOctave(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
 	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
