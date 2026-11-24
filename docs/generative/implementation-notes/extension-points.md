@@ -111,7 +111,6 @@ otherwise.
   called last in `newRecipe()`, after #498's swing roll. The menus (#494) edit `Recipe::variants.allowed`
   and pass it as `newRecipe()`'s `narrowed` (the Compose screen's REGENERATE already does,
   `CurrentRecipe::regenerate()`; Perform's `rollPending()` passes none: its page opens on RANDOM). Drop changes and
-  live switches (#495): `VariantSet::live`, `changeAt` and `changeChance` are in the data, refused by
-  `variantSetsValid()` while `changeAt` isn't Never; re-resolving is `resolveGenre()` into the instance's
-  `resolved_` at a Drop's first decision, and the patch-diff rule is `variant_sets_spec`'s `patchesKeepLookAhead()`.
-  The tools' `--variant SET=NAME` is `fixVariant()`.
+  live switches (#495): a set's `changeAt = Drop` + `changeChance`, or `live`, is all a retune adds; the draw is
+  `dropChange()`, the landing `Generator::dropVariants()`, the patch-diff rule `variant_sets_spec`'s
+  `patchesKeepLookAhead()` (look-ahead fields and pool sizes). The tools' `--variant SET=NAME` is `fixVariant()`.

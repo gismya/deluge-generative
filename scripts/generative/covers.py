@@ -176,6 +176,16 @@ BUILDERS = {
         "src/deluge/generative/perform/regenerate_page.*",
         *_L10N,
     ),  # a set's OLED name, what its row shows
+    "gen_perform_variants_row": (
+        "src/deluge/generative/core/genres/dub.cpp",
+    ),  # a set's OLED name and its playing variant's
+    "gen_variants_landed": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText()
+    "gen_variants_live": (
+        "src/deluge/generative/core/genres/dub.cpp",
+    ),  # a set's stable name
     "gen_compose_seed": ("src/deluge/generative/perform/clip_page.*",),  # seedCode()
     "gen_compose_song": (
         *_GENRE,

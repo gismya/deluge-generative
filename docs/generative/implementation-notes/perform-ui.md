@@ -242,3 +242,8 @@ otherwise.
 - Trap (#413 part 2, merging #437): the restart's two flags and `stutterOn_` share the last padding byte before
   `fillSent_`; they are 1-bit bitfields there. Another flag in that run grows the steering by 4 and breaks the pinned
   size (Release build only): find padding elsewhere, or make it a bit beside them.
+- Perform's VARIANTS ▸ (#495) sits after REGENERATE and shows only for a genre with sets, so in Dub every Perform
+  menu row below REGENERATE is one further down than in a genre without sets: a probe script that counts rows from
+  the top in Dub counts it. Its rows are stock `Selection`s: a live row enters its list (`shouldEnterSubmenu()`), a
+  turn there is the press (`pressVariant()`), as OCTAVES' turns are; a row that isn't live returns `false` and its
+  `selectButtonPress()` shows AT REGEN.
