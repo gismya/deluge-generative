@@ -4,9 +4,11 @@
 #pragma once
 
 #include "core_walk.h"
+#include "generative/core/variants.h"
 #include "harness.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <set>
 #include <span>
@@ -27,6 +29,14 @@ inline Recipe movingRecipe(const Genre& genre, uint32_t entropy, int32_t density
 	recipe.macros.set(Macro::Complexity, macroPoints(complexity));
 	return recipe;
 }
+/// `recipe` with its genre's variant sets fixed by `fixes`, `set=name` each (the tuning tools' --variant, spec §3.6).
+inline Recipe withVariants(Recipe recipe, std::initializer_list<const char*> fixes) {
+	for (const char* fix : fixes) {
+		fixVariant(recipe.variants, parseVariantFix(*recipe.genre, fix).value());
+	}
+	return recipe;
+}
+
 /// movingRecipe() in `scale`.
 inline Recipe movingRecipe(const Genre& genre, Scale scale, uint32_t entropy, int32_t density = 25,
                            int32_t complexity = 25) {

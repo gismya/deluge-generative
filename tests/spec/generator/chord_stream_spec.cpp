@@ -158,6 +158,39 @@ Recipe recipeFor(const Genre& genre, Scale scale = Scale::Minor) {
 	return recipe;
 }
 
+/// kLoops with a new loop on every Drop, going back to an earlier one at `returnChance` (House S1, #496).
+struct LoopingWith {
+	ChordGraph graph = kLooping;
+	Genre genre = kLoops;
+	explicit LoopingWith(int16_t returnChance) {
+		graph.loopChance = 1000;
+		graph.returnChance = returnChance;
+		genre.harmony.graph = &graph;
+	}
+	LoopingWith(const LoopingWith&) = delete;
+	LoopingWith& operator=(const LoopingWith&) = delete;
+};
+
+/// The share, in percent, of a loop change from the second on that plays an earlier loop's chords, over `seeds`
+/// 400-bar pieces of `genre`, whose every Drop changes the loop.
+int32_t earlierLoopShare(const Genre& genre, uint32_t seeds) {
+	int32_t changes = 0;
+	int32_t returns = 0;
+	for (uint32_t seed = 1; seed <= seeds; seed++) {
+		const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(genre), seed, 400 * kStepsPerBar));
+		for (size_t i = 2; i < spans.size(); i++) {
+			changes++;
+			for (size_t j = 0; j + 1 < i; j++) {
+				if (spans[j].signature() == spans[i].signature()) {
+					returns++;
+					break;
+				}
+			}
+		}
+	}
+	return changes > 150 ? returns * 100 / changes : -1; // -1: too few changes to measure
+}
+
 } // namespace
 
 // clang-format off
@@ -460,7 +493,7 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			expect(wholes).to_be_greater_than(halves);
 		});
 
-		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before", _ {
+		it("draws a new loop on about 1 Drop in 3, and never goes back to one heard before when returnChance is 0", _ {
 			int32_t drops = 0;
 			int32_t changes = 0;
 			int32_t returns = 0;
@@ -484,6 +517,28 @@ describe chord_stream("The Chord-graph walk in the Generator", $ {
 			// A new loop can draw the chords of the one before, or of one before that: the shares are approximate.
 			expect(changes * 100 / drops).to_be_between(20, 40);
 			expect(returns * 100 / drops).to_be_less_than(5);
+		});
+
+		it("goes back to the loop before on every change after the second loop when returnChance is 1000 (House S1, #496)", _ {
+			const LoopingWith back(1000);
+			int32_t checked = 0;
+			for (uint32_t seed = 1; seed <= 12; seed++) {
+				const std::vector<LoopSpan> spans = loopSpans(walk(recipeFor(back.genre), seed, 400 * kStepsPerBar));
+				// Loop 0, a new loop 1, then back and forth: 0, 1, 0, 1...
+				for (size_t i = 2; i < spans.size(); i++) {
+					expect(spans[i].signature() == spans[i - 2].signature()).to_be_true();
+					checked++;
+				}
+			}
+			expect(checked).to_be_greater_than(20);
+		});
+
+		it("goes back to an earlier loop on about returnChance of the changes once there is one, else draws a new loop", _ {
+			// A new loop can draw the chords of one heard before: that share comes on top of the returns.
+			const int32_t chance = earlierLoopShare(LoopingWith(0).genre, 40);
+			const int32_t returned = earlierLoopShare(LoopingWith(333).genre, 40);
+			expect(chance >= 0 && returned >= 0).to_be_true();
+			expect(returned - chance).to_be_between(33 * (100 - chance) / 100 - 10, 33 * (100 - chance) / 100 + 10);
 		});
 
 		it("keeps one 4-bar loop for the whole piece when loopChance is 0 and halfLoopChance is 1000 (Dub, spec §7.4)", _ {
