@@ -646,6 +646,14 @@ class Times(Base):
         )
         self.assertEqual(parts[1][1], hs.LOAD_SECONDS + 60 + 3000 + 600)
 
+    def test_split_balances_its_parts(self):
+        # Greedy filling gave 5000 + 1000 s here; balanced, it's 3000 + 3000 (plus the load each).
+        scripts = [f"s{i}.txt" for i in range(6)]
+        times = {name: 1000 for name in scripts}
+        parts = hs.split_sessions(scripts, times, 5000 + hs.LOAD_SECONDS)
+        self.assertEqual([p for p, _ in parts], [scripts[:3], scripts[3:]])
+        self.assertEqual([t for _, t in parts], [hs.LOAD_SECONDS + 3000] * 2)
+
     def test_an_untimed_script_counts_the_default(self):
         parts = hs.split_sessions(["a.txt"], {}, 5400)
         self.assertEqual(

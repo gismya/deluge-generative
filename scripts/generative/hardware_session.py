@@ -644,22 +644,39 @@ def script_seconds(script, times):
 def split_sessions(scripts, times, limit_seconds):
     """Splits `scripts` (paths, run in this order) into parts, each estimated under `limit_seconds`: LOAD_SECONDS plus
     each script's last time (script_seconds()). The parts keep the order; the smoke script, if it's among them, starts
-    every part, as a session's first script. A script longer than the limit alone gets a part of its own. Returns
-    [(scripts, estimated seconds)]."""
+    every part, as a session's first script. A script longer than the limit alone gets a part of its own. As few parts
+    as the limit allows, balanced: the longest part is as short as those parts can make it, so no part runs close to
+    the limit when it needn't (120 min split as 61 + 59, not 89 + 34). Returns [(scripts, estimated seconds)]."""
     smoke = [s for s in scripts if os.path.basename(s) == SMOKE_SCRIPT][:1]
     rest = [s for s in scripts if s not in smoke]
     base = LOAD_SECONDS + sum(script_seconds(s, times) for s in smoke)
-    parts, current, total = [], [], base
-    for script in rest:
-        seconds = script_seconds(script, times)
-        if current and total + seconds > limit_seconds:
+
+    def fill(cap):
+        parts, current, total = [], [], base
+        for script in rest:
+            seconds = script_seconds(script, times)
+            if current and total + seconds > cap:
+                parts.append((smoke + current, total))
+                current, total = [], base
+            current.append(script)
+            total += seconds
+        if current or not parts:
             parts.append((smoke + current, total))
-            current, total = [], base
-        current.append(script)
-        total += seconds
-    if current or not parts:
-        parts.append((smoke + current, total))
-    return parts
+        return parts
+
+    parts = fill(limit_seconds)
+    # The smallest cap that still fills no more parts: no part can be shorter than base plus its longest script.
+    low = base + max((script_seconds(s, times) for s in rest), default=0.0)
+    high = float(limit_seconds)
+    if low >= high:
+        return parts
+    for _ in range(40):
+        middle = (low + high) / 2
+        if len(fill(middle)) <= len(parts):
+            high = middle
+        else:
+            low = middle
+    return fill(high)
 
 
 def session_command(args, scripts, part=None):
