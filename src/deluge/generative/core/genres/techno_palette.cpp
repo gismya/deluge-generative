@@ -133,9 +133,9 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
-/// Acid's Impact: its own boom, 1 dB under the others' (#472 impact round 3). The owner took the boom 3 dB louder, and
-/// at that level Acid's hot Drop (the distorted 909 kick under the acid line) reached full scale; at +2 dB it peaks at
-/// -0.1 dBFS (delugemu, the pack card).
+/// Acid's Impact: its own boom, 1.6 dB under the others' (#472 impact round 3). The owner took the boom 3 dB louder,
+/// and at that level Acid's hot Drop (the distorted 909 kick under the acid line) reached full scale, at +2 dB too at
+/// one Recipe; at +1.4 dB its Drops peak at -0.1 to -1.3 dBFS over four Recipes (delugemu, the pack card).
 constexpr PaletteEntry kAcidImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML"},
                                               {"SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML"}};
 

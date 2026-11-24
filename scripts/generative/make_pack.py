@@ -329,9 +329,12 @@ def cable(value):
 
 
 def delay_feedbacks(xml):
-    """Every delay feedback a preset's XML saves, in 0–50 menu units (knob()'s inverse, rounded)."""
+    """Every delay feedback a preset's XML saves, in 0–50 menu units (knob()'s inverse, rounded): a sound's
+    `<delayFeedback>` param and a kit's `<delay ... feedback="...">` attribute."""
     values = []
-    for raw in re.findall(r"<delayFeedback>(0x[0-9A-Fa-f]{8})</delayFeedback>", xml):
+    params = re.findall(r"<delayFeedback>(0x[0-9A-Fa-f]{8})</delayFeedback>", xml)
+    attributes = re.findall(r"<delay\b[^>]*\bfeedback=\"(0x[0-9A-Fa-f]{8})\"", xml)
+    for raw in params + attributes:
         param = int(raw, 16)
         param -= 2**32 if param >= 2**31 else 0
         values.append(round((param + 2**31) / 85899345))
@@ -516,9 +519,9 @@ def sample_preset(
 ):
     """A preset playing one or two factory samples once through (loopMode 1, ONCE), with an open filter, full
     sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob at `volume`
-    (full by default), `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
-    about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples stay on the factory
-    card: the pack holds only the preset."""
+    (full by default), `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume.
+    Velocity is bipolar about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples
+    stay on the factory card: the pack holds only the preset."""
     oscillators = []
     for name, path in (("osc1", osc1), ("osc2", osc2)):
         if path is None:
@@ -636,19 +639,20 @@ PRESETS = {
     # (`clippingAmount`) caps a voice at a fixed level, under round 2's boom peak, so it lifts only the wash.
     # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz) on both
     # oscillators, in phase: +6.0 dB. Impact round 3 (owner) took it 3 dB louder again everywhere it plays, by a
-    # velocity cable of 30 (+3.0 dB peak, the FX part alone, at an Impact's velocity).
+    # velocity cable of 30: +3.0 dB peak (the FX part alone) at an Impact's top velocity, 94; about +1.8 dB at 80.
     "SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         velocity=30,
     ),
-    # Acid techno's boom: the same at a velocity cable of 22 (+2.0 dB over round 2's build, peak, the FX part alone).
-    # At the others' +3 dB, Acid's Drop mix reached full scale (8 samples clipped, seed 1, entropy 5); at 22 it peaks at
-    # -0.1 dBFS, at 18 (+1.4 dB) -0.3 (impact round 3, delugemu).
+    # Acid techno's boom: the same at a velocity cable of 18, +1.4 dB over round 2's build (peak, the FX part alone, at
+    # velocity 94; about +0.8 dB at 80). At the others' +3 dB, Acid's Drop mix reached full scale (8 samples clipped,
+    # seed 1, entropy 5), and at 22 (+2.0 dB) still at entropy 3 (2 samples); at 18 its Drops peak at -0.1 to -1.3 dBFS
+    # over four Recipes (impact round 3, delugemu).
     "SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
-        velocity=22,
+        velocity=18,
     ),
     # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
     # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
@@ -680,8 +684,8 @@ PRESETS = {
     # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo and some
     # reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8, about -1.9 dB), so the echo dies within
     # about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4); its first build's 26 held the echo
-    # at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators are taken, so a velocity cable of 50
-    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
+    # at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators are taken, so a velocity cable
+    # of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
     # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
     # Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(

@@ -258,7 +258,7 @@ describe acid_techno("Acid techno", $ {
 					expect(own.synths.data() == theirs.synths.data()).to_be_true();
 				}
 			}
-			// Acid's boom is 1 dB under the others' (#472 impact round 3): at their +3 dB its Drop's mix clipped.
+			// Acid's boom is 1.6 dB under the others' (#472 impact round 3): at their +3 dB its Drop's mix clipped.
 			const LaneSounds& impact = *acid.palette->laneSounds(Lane::Impact);
 			expect(impact.synths.size()).to_equal(size_t{2});
 			expect(std::string(impact.synths[0].path)).to_equal(std::string("SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML"));

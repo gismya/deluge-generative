@@ -19,7 +19,7 @@ differs from what it would write, and any file here it doesn't write.
 | `SYNTHS/GENERATIVE/FX/GEN Fall.XML` | Fall lane synth fallback: a bright hit whose pitch and filter sink as it decays |
 | `SYNTHS/GENERATIVE/FX/GEN Impact.XML` | Impact lane synth fallback: a sine boom with a fast pitch drop and a noise crack |
 | `SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML` | Impact for Techno, Psytrance and House: the factory `808 Kick sustained.wav` on both oscillators, played once through (the preset only: the sample is the factory card's) |
-| `SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML` | Acid techno's Impact: `GEN Impact Boom` 1 dB quieter, so its Drop doesn't clip (the preset only) |
+| `SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML` | Acid techno's Impact: `GEN Impact Boom` 1.6 dB quieter, so its Drop doesn't clip (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML` | Impact for Techno: white noise and a quiet square and detuned saw through a swept resonant low-pass, a short splash into reverb and a dotted 8th ping-pong echo |
 | `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the factory `DDD1 Snare wet.wav` and `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML` | Dub's Impact: the factory `808 Kick.wav` and `808 Cymbal.wav` layered into some reverb (the preset only) |

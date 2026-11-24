@@ -37,7 +37,7 @@
 			<patchCable>
 				<source>velocity</source>
 				<destination>volume</destination>
-				<amount>0x1C28F5B8</amount>
+				<amount>0x170A3D68</amount>
 			</patchCable>
 		</patchCables>
 	</defaultParams>

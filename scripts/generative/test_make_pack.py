@@ -205,6 +205,11 @@ class DelayFeedbackTest(unittest.TestCase):
         )
         self.assertEqual(make_pack.delay_feedbacks(xml), [20, 26])
 
+    def test_reads_a_kits_delay_attribute(self):
+        xml = f'<kit><delay pingPong="1" feedback="{make_pack.knob(26)}" rate="0x00000000"/></kit>'
+        self.assertEqual(make_pack.delay_feedbacks(xml), [26])
+        self.assertTrue(make_pack.runaway_delay(xml))
+
     def test_flags_a_feedback_of_25_or_more(self):
         for value, runaway in (
             (0, False),
