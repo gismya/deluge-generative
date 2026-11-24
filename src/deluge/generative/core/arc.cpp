@@ -367,6 +367,9 @@ GEN_STEP_CODE RollStage rollStageOn(const ArcSpec& rules, const Arc& arc, int32_
 }
 
 GEN_STEP_CODE bool Keeps::lets(int32_t part, Lane lane) const {
+	if (lane == Lane::Riser && !riser) {
+		return false;
+	}
 	if (parts == nullptr || isFxLane(lane) || (lane != Lane::None && lane == rollLane)) {
 		return true;
 	}

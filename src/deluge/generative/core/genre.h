@@ -665,6 +665,7 @@ struct BuildRoll {
 struct Keeps {
 	const PartsAndLanes* parts = nullptr; ///< The Break or Build keeps, or nullptr: everything plays.
 	Lane rollLane = Lane::None;           ///< In a Build, the roll lane, which always plays; otherwise None.
+	bool riser = true;                    ///< Whether the Riser lane plays: false only in a Build without one.
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the section rules' own.
 	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
@@ -702,11 +703,16 @@ struct ArcSpec {
 	};
 	/// Parts and lanes still playing in a Break (spec §9.5). FX lanes are section rules' own and always play.
 	PartsAndLanes breakKeeps = kEverything;
-	/// The same for every Build. The roll lane and the Riser always play.
+	/// The same for every Build. The roll lane always plays, and the Riser unless buildRiser is false.
 	PartsAndLanes buildKeeps = kSameAsBreakKeeps;
 	/// Parts and lanes that stop for the Build's last buildCutBars bars (0: no cut).
 	PartsAndLanes buildCut = {.lanes = laneBit(Lane::Kick)};
 	uint8_t buildCutBars = 0;
+	/// The cut the other way round: buildCut holds from the Build's start until its last buildCutBars bars, so what it
+	/// holds enters there and leads into the Drop (House's filter Build brings the Bass in a bar early).
+	bool buildCutLeads = false;
+	/// Whether the Build's Riser plays (spec §9.5): false for a Build that rises by its filters alone.
+	bool buildRiser = true;
 	GapLength gap = GapLength::None;
 	BuildRoll roll;
 	/// The lane a Phrase accent hits (spec §9.5), or None: always on a Drop, and on other Groove phrase starts with
@@ -723,7 +729,7 @@ struct ArcSpec {
 			return {&breakKeeps};
 		}
 		if (kind == SectionKind::Build) {
-			return {buildKeeps == kSameAsBreakKeeps ? &breakKeeps : &buildKeeps, roll.lane};
+			return {buildKeeps == kSameAsBreakKeeps ? &breakKeeps : &buildKeeps, roll.lane, buildRiser};
 		}
 		return {};
 	}
