@@ -239,6 +239,16 @@ constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollSta
 	return maySound(spec, gates, test) || rollsIn(spec, rollLane, roll);
 }
 
+/// The mode a part yielding by `yield` plays in on a step of `arc` (spec §5.6): None in a Build, when it yields to
+/// no one, or when the part it yields to doesn't sound there (`targetSounds`, by the Arc's rules alone). The
+/// Generator (updateSilent()) and the Arc plan (ArcPlanner::advance()) both ask it.
+constexpr YieldMode yieldOn(const YieldSpec& yield, const Arc& arc, bool targetSounds) {
+	if (yield.part < 0 || !targetSounds || arc.section() == SectionKind::Build) {
+		return YieldMode::None;
+	}
+	return arc.inDrop() ? yield.inDrops : yield.outside;
+}
+
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
@@ -558,7 +568,8 @@ private:
 	[[nodiscard]] bool barBeforeAutoFill() const;
 	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
-	/// Whether section rules or a drop-out keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	/// Whether section rules, a drop-out or a Rest yield keep a part's notes on `lane` (Lane::None for a pitched part)
+	/// from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
 	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
@@ -985,6 +996,9 @@ private:
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
 	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
+	/// Bit p: part p yields on the last decided step (spec §5.6), resting (in silent_ too) or keeping its 8ths.
+	uint8_t yieldRest_ = 0;
+	uint8_t yieldEighths_ = 0;
 	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
 	PunchIns punch_;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.

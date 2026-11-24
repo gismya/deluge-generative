@@ -322,7 +322,7 @@ bool Generator::barBeforeAutoFill() const {
 }
 
 GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
-	if (step.gap || step.cut.has(part, lane) || step.dropOut.has(part, lane)) {
+	if (step.gap || step.cut.has(part, lane) || step.dropOut.has(part, lane) || (yieldRest_ & partBit(part)) != 0) {
 		return true;
 	}
 	return !step.keeps.lets(part, lane);
@@ -330,10 +330,25 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 
 void Generator::updateSilent(const Step& step) {
 	silent_ = 0;
+	yieldRest_ = 0;
+	yieldEighths_ = 0;
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		const bool plays = mayPlay(genre_->parts[p], parts_[p].gates, genre_->arc.roll.lane, step.buildRoll.stage,
 		                           [&](Lane lane) { return !silenced(step, p, lane); });
 		silent_ |= plays ? 0 : partBit(p);
+	}
+	// Then the yields, on what the parts yielded to play by the Arc's rules (no part yielded to yields itself,
+	// yieldValid()): a resting part is silenced from here on, in silenced() too.
+	for (int32_t p = 0; p < partCount(*genre_); p++) {
+		const YieldSpec& yield = genre_->parts[p].yield;
+		const YieldMode mode = yieldOn(yield, arc_, yield.part >= 0 && !partSilenced(yield.part));
+		if (mode == YieldMode::Rest) {
+			yieldRest_ |= partBit(p);
+			silent_ |= partBit(p);
+		}
+		else if (mode == YieldMode::Eighths) {
+			yieldEighths_ |= partBit(p);
+		}
 	}
 }
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {

@@ -88,6 +88,10 @@ GEN_STEP_CODE bool Generator::plays(const Pattern& pattern, int32_t patternStep,
 	if (importance == kAnchor) {
 		return true;
 	}
+	// A part yielding by its 8ths leaves out the e's and the a's (spec §5.6).
+	if ((yieldEighths_ & partBit(part)) != 0 && (patternStep & 1) != 0) {
+		return false;
+	}
 	// Each step's jittered importance is fixed while the pick holds, so more Density only ever adds hits.
 	DrawKey key = partKey(seed_, part, lane, takes_.take[part], Purpose::DensityJitter);
 	key = onPick(key, state, 0, static_cast<uint32_t>(patternStep));

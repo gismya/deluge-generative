@@ -114,3 +114,9 @@ otherwise.
   live switches (#495): a set's `changeAt = Drop` + `changeChance`, or `live`, is all a retune adds; the draw is
   `dropChange()`, the landing `Generator::dropVariants()`, the patch-diff rule `variant_sets_spec`'s
   `patchesKeepLookAhead()` (look-ahead fields and pool sizes). The tools' `--variant SET=NAME` is `fixVariant()`.
+- **Yield and the jump mask (#497).** `PartSpec::yield` (`YieldSpec`: the part yielded to, a mode in Drops and one
+  elsewhere) is worked out in `Generator::updateSilent()`, in a second pass after every part's own silence: Rest
+  goes into `yieldRest_` (read by `silenced()`, so the part is silenced and its MUTE dims) and `silent_`, Eighths into
+  `yieldEighths_` (read by `plays()`). The Arc plan asks the same `yieldOn()` (`ArcPlanner::advance()`). A new mode
+  adds to `YieldMode` and those two readers. `LoopSpec::jumpSteps` is applied in `rollLineStep()` after the draws, so
+  a mask never moves a keyed draw; Rotate Answers still move the line a beat.
