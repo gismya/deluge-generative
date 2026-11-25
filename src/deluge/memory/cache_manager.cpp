@@ -108,7 +108,7 @@ uintptr_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNee
 			}
 
 			// Ok, we've got one Stealable
-			auto* __restrict__ header = std::bit_cast<uintptr_t*>((uintptr_t)stealable - 4);
+			auto* __restrict__ header = std::bit_cast<uint32_t*>((uintptr_t)stealable - 4);
 			spaceSize = (*header & SPACE_SIZE_MASK);
 
 			stealable->lastTraversalNo = currentTraversalNo;

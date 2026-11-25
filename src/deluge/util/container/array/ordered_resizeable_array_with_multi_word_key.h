@@ -34,5 +34,53 @@ public:
 	int32_t insertAtKeyMultiWord(uint32_t* __restrict__ keyWords, int32_t rangeBegin = 0, int32_t rangeEnd = -1);
 	bool deleteAtKeyMultiWord(uint32_t* __restrict__ keyWords);
 	void testSequentiality(char const* errorCode);
+
+	/// Like search() on the first key word alone, comparing it as searchMultiWord() does.
+	[[gnu::always_inline]] int32_t searchFirstWord(uint32_t firstWord, int32_t comparison, int32_t rangeBegin = 0,
+	                                               int32_t rangeEnd = -1) {
+		if (rangeEnd == -1) {
+			rangeEnd = numElements;
+		}
+		if constexpr (kUnsignedKeyWords) {
+			return searchFirstWordUnsigned(firstWord, false, rangeBegin, rangeEnd) + comparison;
+		}
+		else {
+			return search((int32_t)firstWord, comparison, rangeBegin, rangeEnd);
+		}
+	}
+
+	/// The first index from `rangeBegin` whose first key word is past `pointerWord`, a pointer's low 32 bits: the end
+	/// of that pointer's run of elements.
+	[[gnu::always_inline]] int32_t searchPastPointerWord(uint32_t pointerWord, int32_t rangeBegin) {
+		if constexpr (kUnsignedKeyWords) {
+			return searchFirstWordUnsigned(pointerWord, true, rangeBegin, numElements);
+		}
+		else {
+			// The next address a 4-byte-aligned object could have.
+			return search((int32_t)(pointerWord + 4), GREATER_OR_EQUAL, rangeBegin);
+		}
+	}
+
 	int32_t numWordsInKey;
+
+	/// On the Deluge, key words compare as the signed difference of the two words, which orders addresses only while
+	/// they are below 0x80000000 and within 2 GiB of each other, as all of the Deluge's RAM is. Where a pointer is
+	/// wider than a key word, its low word can be anything, so key words compare unsigned.
+	static constexpr bool kUnsignedKeyWords = sizeof(void*) > sizeof(uint32_t);
+
+private:
+	/// The first index in [rangeBegin, rangeEnd) whose first key word is at least `firstWord` (`past`: more than).
+	int32_t searchFirstWordUnsigned(uint32_t firstWord, bool past, int32_t rangeBegin, int32_t rangeEnd) {
+		while (rangeBegin != rangeEnd) {
+			int32_t proposedIndex = (rangeBegin + rangeEnd) >> 1;
+			uint32_t wordHere = *(uint32_t*)getElementAddress(proposedIndex);
+			if (wordHere < firstWord || (past && wordHere == firstWord)) {
+				rangeBegin = proposedIndex + 1;
+			}
+			else {
+				rangeEnd = proposedIndex;
+			}
+		}
+		return rangeBegin;
+	}
 };

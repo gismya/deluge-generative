@@ -2861,8 +2861,8 @@ bool Sound::learnKnob(MIDICable* cable, ParamDescriptor paramDescriptor, uint8_t
 void Sound::ensureInaccessibleParamPresetValuesWithoutKnobsAreZero(Song* song) {
 
 	// We gotta do this for any backedUpParamManagers too!
-	int32_t i = song->backedUpParamManagers.search((uint32_t)(uintptr_t)(ModControllableAudio*)this,
-	                                               GREATER_OR_EQUAL); // Search by first word only.
+	int32_t i = song->backedUpParamManagers.searchFirstWord((uint32_t)(uintptr_t)(ModControllableAudio*)this,
+	                                                        GREATER_OR_EQUAL); // Search by first word only.
 
 	while (true) {
 		if (i >= song->backedUpParamManagers.getNumElements()) {

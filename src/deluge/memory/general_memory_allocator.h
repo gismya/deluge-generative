@@ -125,7 +125,7 @@ private:
 // String::set. A host build (DELUGE_HOST) replaces this allocator at link time and defines this with it.
 #if !DELUGE_HOST
 inline bool GeneralMemoryAllocator::isNonAudioExternal(void const* address) {
-	auto value = (uint32_t)address;
+	auto value = (uintptr_t)address;
 	return EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_ALLOCATOR < value && value < EXTERNAL_MEMORY_END;
 }
 #endif
