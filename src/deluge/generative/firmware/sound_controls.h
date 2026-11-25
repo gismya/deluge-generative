@@ -75,6 +75,7 @@ public:
 	void forget() {
 		setCount_ = 0;
 		boundCount_ = 0;
+		mirror_ = Mirror{};
 		forgetOutgoing();
 	}
 	/// A transition's start step, before begin() binds the new roster (spec §12.9): keeps the Space params of the
