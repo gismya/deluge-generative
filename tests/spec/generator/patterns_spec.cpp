@@ -3,6 +3,7 @@
 // bar's hits name the entry playing.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -371,7 +372,8 @@ describe patterns("Patterns", $ {
 			int32_t bars = genre->phraseBars * (genre->arc.introPhrases + genre->arc.groovePhrases.low);
 			for (uint32_t seed = 1; seed <= 5; seed++) {
 				Run run;
-				run.recipe = newRecipe(*genre, seed);
+				// As written: a variant may patch back what the copy took out (Dub's MIX, its drop-outs).
+				run.recipe = withFirstVariants(newRecipe(*genre, seed));
 				run.recipe.macros.set(Macro::Density, 0);
 				run.seed = seed;
 				auto ons = only(play(run, bars).events, EventKind::NoteOn);

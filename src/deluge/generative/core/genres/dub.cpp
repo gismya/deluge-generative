@@ -121,6 +121,43 @@ constexpr Pattern kBassLine[] = {
     {"X.8.7.8.7.8.8.8.X..8.7.8.7.8.8..", "....g...g............g...g......", 2},
 };
 
+/// The BASS set's rolling line (variant ideas 1): a fuller 8th-note line, onsets on the 8ths only so each 40-tick note
+/// ends before the next (`longLoopNotesFit`). As many entries as the bursts pool, in the same tiers, so a frozen pick
+/// reads the same entry across a live switch.
+constexpr Pattern kBassRolling[] = {
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 0, 2},
+    {"X.8.8.8.8...8.8.X.8.8.8.8...8.8.", "................................", 0, 2},
+    {"X.8.8...8.8.8.8.X.8.8...8.8.8.8.", "................................", 0},
+    {"X...8.8.8.8.8.8.X...8.8.8.8.8.8.", "................................", 0},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 1},
+    {"X.8.8.8.8...8.8.X.8.8.8.8.8.8.8.", "................................", 1},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 1, 2},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 1, 2},
+    {"X.8.8.8.8.8.8.8.X.8.8.8...8.8.8.", "................................", 1},
+    {"X.8.8...8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 1},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 1},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 2},
+    {"X.8.8.8.8.8.8.8.X.8.8.8.8.8.8.8.", "................................", 2},
+};
+
+/// The BASS set's heavy line (variant ideas 1): sparse long notes, onsets at least a beat apart so each 88-tick note
+/// ends before the next. As many entries as the bursts pool, in the same tiers.
+constexpr Pattern kBassHeavy[] = {
+    {"X.......8.......X.......8.......", "................................", 0, 2},
+    {"X...........8...X...........8...", "................................", 0, 2},
+    {"X.......8.......X...............", "................................", 0},
+    {"X.......8...8...X.......8...8...", "................................", 0},
+    {"X.......8.......X.......8.......", "................................", 1},
+    {"X...........8...X...........8...", "................................", 1},
+    {"X.......8.......X...........8...", "................................", 1, 2},
+    {"X...............X...............", "................................", 1, 2},
+    {"X.......8...8...X.......8.......", "................................", 1},
+    {"X...........8...X.......8.......", "................................", 1},
+    {"X.......8.......X.......8...8...", "................................", 1},
+    {"X.......8...8...X.......8.......", "................................", 2},
+    {"X...8...8.......X.......8...8...", "................................", 2},
+};
+
 /// The skank: every &, anchored so a dip keeps it and the last & spikes its drop-out's Throw; its "chk-a" double on
 /// the a after each as Complexity rises (round 2 S1).
 constexpr Pattern kSkank[] = {
@@ -244,6 +281,18 @@ constexpr LoopSpec kBassLoop{
     .answerBars = 8,
     .gateTicks = 40,
 };
+
+/// The heavy line's Loop: the root and the 5th only, each note held 88 ticks (5.5 steps, the most
+/// `longLoopNotesFit` allows with onsets a beat apart). The gate is read per note (`decideLoop()`, Avoid's plain gate);
+/// the degrees with the line, rolled again at the Drop (a frozen Bass keeps its line until it thaws). So a live switch
+/// changes only the notes after the Drop.
+constexpr LineWeight kHeavyDegrees[] = {{0, 5}, {4, 4}};
+constexpr LoopSpec kHeavyLoop = [] {
+	LoopSpec loop = kBassLoop;
+	loop.degrees = kHeavyDegrees;
+	loop.gateTicks = 88;
+	return loop;
+}();
 
 /// Chord positions: mostly the root, the 3rd and the 5th, the 7th and the note under the root now and then.
 constexpr LineWeight kMelodicaPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 1}};
@@ -382,6 +431,31 @@ constexpr WeightedBars kBuildBars[] = {{1, 1}};
 /// The Break's drum and bass: the Kick, the Rim and the Bass (spec §4.5).
 constexpr PartsAndLanes kBreakKeeps{.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick) | laneBit(Lane::Rim)};
 
+/// The MIX set's tubby table (variant ideas 1): long drum-and-bass passages, the bass out more often, and everything
+/// but the bass weighted up.
+constexpr DropOutEntry kDropOutsTubby[] = {
+    {.mask = kSkankOnly, .bars = 2, .weight = 1, .throwTarget = kSkankOnly},
+    {.mask = kMelodicaOnly, .bars = 4, .weight = 2, .throwTarget = kMelodicaOnly},
+    {.mask = kTopsAndFx, .bars = 4, .weight = 4, .throwTarget = kSkankOnly},
+    {.mask = kTopsAndFx, .bars = 8, .weight = 3, .throwTarget = kSkankOnly},
+    {.mask = {.lanes = kDrumsButKick}, .bars = 2, .weight = 2, .throwTarget = kRimOnly},
+    {.mask = {.parts = partBit(kBassPart)}, .bars = 2, .weight = 3},
+    {.mask = kRimOnly, .bars = 1, .weight = 1, .throwTarget = kRimOnly},
+    {.mask = {.parts = partBit(kSkankPart) | partBit(kMelodicaPart),
+              .lanes = kDrumsButKick | laneBit(Lane::Kick) | kAllFxLanes},
+     .bars = 4,
+     .weight = 4,
+     .throwTarget = kMelodicaOnly},
+};
+
+/// The MIX set's light table (variant ideas 1): mostly 1-bar spot echoes.
+constexpr DropOutEntry kDropOutsLight[] = {
+    {.mask = kRimOnly, .bars = 1, .weight = 4, .throwTarget = kRimOnly},
+    {.mask = kSkankOnly, .bars = 1, .weight = 4, .throwTarget = kSkankOnly},
+    {.mask = kMelodicaOnly, .bars = 1, .weight = 2, .throwTarget = kMelodicaOnly},
+    {.mask = kSkankOnly, .bars = 2, .weight = 1, .throwTarget = kSkankOnly},
+};
+
 /// The skank's chord (Q359, #359; ADR 0008): the 7ths every Skank stab played at the default Complexity before the
 /// set, or plain triads (no Extension above the floor). The owner kept both ("both are good"), so they draw evenly.
 /// It patches the genre's harmony, so the Melodica's chord tones lose the 7th with it. Live: the Extensions are read
@@ -420,6 +494,48 @@ constexpr Variant kBreakVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.genre.arc.breakPhrases = {2, 2}; }},
 };
 
+/// How hard the mix is cut (variant ideas 1, #532): the version as written, tubby (long drum-and-bass passages, chance
+/// 450) or light (spot echoes, chance 120), 3:3:2 (the owner: often, often, sometimes). Live: the drop-out table and
+/// its chance are read afresh at each draw, a bar ahead in a Groove, and no drop-out runs over a Drop's line.
+constexpr Variant kMixVariants[] = {
+    {.name = "version", .oledName = "VERSION", .weight = 3},
+    {.name = "tubby",
+     .oledName = "TUBBY",
+     .weight = 3,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.dropOuts = kDropOutsTubby;
+	         resolved.genre.dropOutChance = 450; // (tuning)
+         }},
+    {.name = "light",
+     .oledName = "LIGHT",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.dropOuts = kDropOutsLight;
+	         resolved.genre.dropOutChance = 120; // (tuning)
+         }},
+};
+
+/// The bass line's style (variant ideas 1, #532): bursts as written, a rolling 8th-note line, or heavy long notes on
+/// the root and the 5th, evenly (the owner: often each). Live: each pool keeps the bursts pool's 13 entries in their
+/// tiers and lengths; the Loop's gate is read per note, its degrees with the line, rolled again at the Drop.
+constexpr Variant kBassVariants[] = {
+    {.name = "bursts", .oledName = "BURSTS", .weight = 3},
+    {.name = "rolling",
+     .oledName = "ROLLING",
+     .weight = 3,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kBassPart].pool = kBassRolling; }},
+    {.name = "heavy",
+     .oledName = "HEAVY",
+     .weight = 3,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.parts[kBassPart].pool = kBassHeavy;
+	         resolved.parts[kBassPart].loop = kHeavyLoop;
+         }},
+};
+
 constexpr VariantSet kVariantSets[] = {
     {.name = "skank", .oledName = "SKANK", .variants = kSkankVariants, .live = true},
     {.name = "drums",
@@ -429,12 +545,14 @@ constexpr VariantSet kVariantSets[] = {
      .changeAt = ChangeAt::Drop,
      .changeChance = 400}, // per mille at each Drop (tuning)
     {.name = "break", .oledName = "BREAK", .variants = kBreakVariants},
+    {.name = "mix", .oledName = "MIX", .variants = kMixVariants, .live = true},
+    {.name = "bass", .oledName = "BASS", .variants = kBassVariants, .live = true},
 };
 
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 9,            // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 10,           // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,

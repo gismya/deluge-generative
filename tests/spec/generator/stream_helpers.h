@@ -37,6 +37,14 @@ inline Recipe withVariants(Recipe recipe, std::initializer_list<const char*> fix
 	return recipe;
 }
 
+/// `recipe` with every variant set of its genre fixed to its first variant: the genre as written (spec §3.6).
+inline Recipe withFirstVariants(Recipe recipe) {
+	for (size_t s = 0; s < recipe.genre->variantSets.size() && s < static_cast<size_t>(kMaxVariantSets); s++) {
+		fixVariant(recipe.variants, {.set = static_cast<int32_t>(s), .variant = 0});
+	}
+	return recipe;
+}
+
 /// movingRecipe() in `scale`.
 inline Recipe movingRecipe(const Genre& genre, Scale scale, uint32_t entropy, int32_t density = 25,
                            int32_t complexity = 25) {

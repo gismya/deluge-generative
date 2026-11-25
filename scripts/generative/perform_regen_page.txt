@@ -85,10 +85,12 @@ encoder 3 -1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=3
+expect event gen_variants_menu open sets=5
 expect event gen_variants_row SKANK Random
 expect event gen_variants_row DRUMS Random
 expect event gen_variants_row BREAK Random
+expect event gen_variants_row MIX Random
+expect event gen_variants_row BASS Random
 # SKANK's multi-select, from the top (a list remembers its row) on 7THS: untick it, so only PLAIN is allowed (mask 2)
 button SELECT_ENC down
 wait 50
@@ -120,7 +122,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm dub style=0 result=0
 expect event gen_transition_preload done error=0 within=20
-expect event /^gen_pending_variants skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/
+expect event /^gen_pending_variants skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
 expect event gen_transition start style=0 within=60
 # Dub's echo can ring on in the outgoing Outputs until their phrase cap (perform_transition.txt says why)
 expect event gen_transition phase=idle within=60
@@ -146,5 +148,5 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0
-expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/ within=20
+expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
 expect event gen_transition start style=0 within=60

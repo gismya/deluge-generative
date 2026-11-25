@@ -27,6 +27,7 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <string>
@@ -48,6 +49,8 @@ constexpr VariantSet kChanging{
 /// Dub's sets, by index in its list.
 constexpr int32_t kSkank = 0;
 constexpr int32_t kDrums = 1;
+constexpr int32_t kMix = 3;
+constexpr int32_t kBass = 4;
 constexpr int32_t kOneDrop = 0;
 constexpr int32_t kRockers = 1;
 constexpr int32_t kSteppers = 2;
@@ -123,6 +126,18 @@ struct DubPiece : StepwisePiece<> {
 		return false;
 	}
 };
+
+/// A moving Dub piece of 160 bars, every set on its first variant, with set `set`'s ticks switched to `mask` before
+/// step 4, so it lands on the first Drop.
+Stepped switchedAtFirstDrop(int32_t set, uint8_t mask, uint32_t seed) {
+	Recipe recipe = withFirstVariants(newRecipe(genres::dub, seed));
+	recipe.macros.set(Macro::Motion, macroPoints(50));
+	return stepThrough(recipe, seed, 160 * kStepsPerBar, [set, mask](int32_t step, SteeringQueue& queue) {
+		if (step == 4) {
+			queue.push({CommandKind::SetVariantMask, static_cast<uint8_t>(set), mask});
+		}
+	});
+}
 
 /// Dub with `sets` instead of its own.
 Genre dubWithSets(std::span<const VariantSet> sets) {
@@ -443,6 +458,58 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			expect(drums.live).to_be_true();
 			expect(drums.changeAt == ChangeAt::Drop).to_be_true();
 			expect(genres::dub.variantSets[kSkank].live).to_be_true(); // #495: no look-ahead reads the Extensions
+		});
+	});
+
+	context("Dub's MIX and BASS, switched live (variant ideas 1, #532)", _ {
+		it("plays light's drop-outs after a switch from the version, whichever entry the version last drew", _ {
+			// Light's table has 4 entries and the version's 10: the last drop-out's entry, read for its Throw on every
+			// step, must not index light's table with the version's (the harness asserts the index in updateControls()).
+			int32_t switched = 0;
+			for (uint32_t seed = 1; seed <= 16; seed++) {
+				const Stepped run = switchedAtFirstDrop(kMix, 0b100, seed);
+				if (run.drops.empty()) {
+					continue;
+				}
+				switched++;
+				expect(static_cast<int32_t>(run.picks[run.drops[0] - 1].pick[kMix])).to_equal(0);
+				expect(static_cast<int32_t>(run.picks.back().pick[kMix])).to_equal(2);
+			}
+			expect(switched).to_be_greater_than(10);
+		});
+
+		it("holds heavy's notes 88 ticks from the Drop it lands on, the bursts' 40 before it", _ {
+			int32_t longBefore = 0;
+			int32_t longAfter = 0;
+			for (uint32_t seed = 1; seed <= 8; seed++) {
+				const Stepped run = switchedAtFirstDrop(kBass, 0b100, seed);
+				if (run.drops.empty()) {
+					continue;
+				}
+				const int32_t dropTick = run.drops[0] * kTicksPerStep;
+				std::vector<Event> notes;
+				std::ranges::copy_if(run.events, std::back_inserter(notes), [](const Event& e) {
+					return e.kind == EventKind::NoteOn || e.kind == EventKind::NoteOff;
+				});
+				for (const Held& note : heldNotes(notes, 1)) {
+					const int32_t length = note.off - note.on;
+					if (note.off == INT32_MAX) {
+						continue;
+					}
+					// A note starting before the Drop keeps the gate it started with.
+					longBefore += note.on < dropTick && length > 40 ? 1 : 0;
+					longAfter += note.on >= dropTick && length > 80 ? 1 : 0;
+				}
+			}
+			expect(longBefore).to_equal(0);
+			expect(longAfter).to_be_greater_than(20);
+		});
+
+		it("lists both live, so Perform may switch them at a Drop, and neither changes there on its own", _ {
+			for (const int32_t set : {kMix, kBass}) {
+				expect(genres::dub.variantSets[set].live).to_be_true();
+				expect(genres::dub.variantSets[set].changeAt == ChangeAt::Never).to_be_true();
+			}
 		});
 	});
 });

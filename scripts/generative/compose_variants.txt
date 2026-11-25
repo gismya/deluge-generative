@@ -34,7 +34,7 @@ wait 50
 button SELECT_ENC up
 wait 300
 expect event gen_recipe_roll genre done within=30
-expect event /^gen_compose_variants rolled skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/
+expect event /^gen_compose_variants rolled skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
 
 # ---- VARIANTS ▸, after SCALE: SKANK on RANDOM; untick 7THS ----
 encoder 3 -20
@@ -42,10 +42,12 @@ encoder 3 7
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=3
+expect event gen_variants_menu open sets=5
 expect event gen_variants_row SKANK Random
 expect event gen_variants_row DRUMS Random
 expect event gen_variants_row BREAK Random
+expect event gen_variants_row MIX Random
+expect event gen_variants_row BASS Random
 # SKANK's multi-select, from the top (a list remembers its row): untick 7THS
 button SELECT_ENC down
 wait 50
@@ -57,7 +59,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_variants set=skank allowed=2 shows=PLAIN
 # The variant playing is kept while it's ticked, and drawn again within the ticks when it isn't: PLAIN either way
-expect event /^gen_compose_variants toggled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/
+expect event /^gen_compose_variants toggled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
 button BACK down
 wait 50
 button BACK up
@@ -80,7 +82,7 @@ wait 50
 button SELECT_ENC up
 wait 300
 expect event gen_recipe_roll regenerate done within=30
-expect event /^gen_compose_variants rolled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/
+expect event /^gen_compose_variants rolled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
 encoder 3 -20
 encoder 3 1
 button SELECT_ENC down
@@ -93,7 +95,7 @@ wait 50
 button SELECT_ENC up
 wait 300
 expect event gen_recipe_roll regenerate done within=30
-expect event /^gen_compose_variants rolled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3$/
+expect event /^gen_compose_variants rolled skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
 
 # ---- FROM ▸ GENRE ▸ ACID: no VARIANTS row (row 8 is ENERGY). FROM's list remembers its row: GENRE from the bottom ----
 encoder 3 -20
