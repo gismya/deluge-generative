@@ -3,6 +3,8 @@
 # Each time the Riser's sample starts late and ends within a 16th of its note-off on the Drop, timed on the audio
 # clock. Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
+# BUILD is pinned to ROLL (#531) through the Regenerate page's VARIANTS (BUILD isn't live), so each Build is 8 or 16
+# bars; the last case narrows it to HARD's 4 or 8 bars, which the lane's 6 s and 4 s Risers still fit (spec §10.5).
 # gen_riser_on sample_ms=N at the Riser's note-on (0: a synth Riser); gen_riser ok=0|1 sample_ms= to_drop_ms=
 # sixteenth_ms= at its note-off. ok=1 needs a sample, ending within a 16th of the note-off. Listening: the same run.
 # needs: pack risers in SAMPLES/FX/Riser (the Deluge's card; delugemu's has none), so check_all.py skips it
@@ -13,9 +15,63 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/playback/playback_handler.*
 # covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
+# covers: src/deluge/generative/core/genres/dub.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
+
+# ---- Stopped, REGENERATE with BUILD on ROLL alone: VARIANTS is one up from GO, BUILD the third set; its
+# multi-select from the top is ROLL, LONG, NO ROLL, HARD ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=13
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=9
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=1 shows=ROLL
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
 
 # ---- SHIFT+PLAY: Groove from the first bar, then force a Build (SECTION pad y 5) ----
 button SHIFT down
@@ -53,7 +109,8 @@ expect no_event gen_riser_on within=2
 expect event gen_riser_on sample_ms= within=40
 expect event gen_riser ok=1 within=40
 
-# ---- REGENERATE → DROP: the Build's tempo glides to the incoming Recipe's ----
+# ---- REGENERATE → DROP: the Build's tempo glides to the incoming Recipe's. The page opens on RANDOM again: BUILD
+# on ROLL ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -61,6 +118,43 @@ wait 50
 button SELECT_ENC up
 expect ui=sound_editor
 expect event gen_regen_page open
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=13
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=9
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=1 shows=ROLL
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -73,6 +167,78 @@ expect event gen_transition start style=0 within=40
 expect event gen_riser ok=1 within=5
 expect event gen_transition phase=idle within=40
 
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+
+# ---- HARD's Build (4 or 8 bars, 7.1 s or more): stopped, REGENERATE with BUILD on HARD alone, then a forced Build.
+# The lane's Risers are 6 s and 4 s (not the 8 s one, #531), so the Riser still starts late and ends on the Drop ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=14
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=12
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=8 shows=HARD
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 within=5
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_section BUILD within=60
+expect event gen_riser_on sample_ms= within=40
+expect event gen_section GROOVE within=40
+expect event gen_riser ok=1 within=5
 button PLAY down
 wait 50
 button PLAY up

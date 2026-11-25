@@ -31,13 +31,14 @@ describe techno_palette("Acid techno's palette", $ {
 		expect(harness::partPresetsMissing(techno, card).empty()).to_be_true();
 	});
 
-	it("gives every lane Techno plays at least 3 files after tag filtering, its kit aside, and the Impact its 2 presets",
+	it("gives every lane Techno plays at least 3 files after tag filtering, its kit aside, the Riser its 2 that fit and "
+	   "the Impact its 2 presets",
 	   _ {
 		   FakeCard card = harness::factoryCardWithPack();
 		   auto picks = harness::lanePicks(techno, card, 800, {}, false);
 		   for (const PartSpec& part : techno.parts) {
 			   for (const LaneSpec& lane : part.lanes) {
-				   if (lane.lane != Lane::Impact) {
+				   if (lane.lane != Lane::Impact && lane.lane != Lane::Riser) {
 					   expect(picks[lane.lane].size()).to_be_greater_than(size_t{2});
 				   }
 			   }
@@ -49,7 +50,7 @@ describe techno_palette("Acid techno's palette", $ {
 		   expect(picks[Lane::Impact].contains("SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML")).to_be_true();
 	   });
 
-	it("plays an FX part whose Riser picks only pack risers", _ {
+	it("plays an FX part whose Riser picks only the pack risers that fit the hard Build (4 bars, 7.1 s at 135 BPM, #531)", _ {
 		bool hasFx = false;
 		for (const PartSpec& part : techno.parts) {
 			hasFx = hasFx || part.role == Role::FX;
@@ -57,10 +58,10 @@ describe techno_palette("Acid techno's palette", $ {
 		expect(hasFx).to_be_true();
 		FakeCard card = harness::factoryCardWithPack();
 		auto picks = harness::lanePicks(techno, card, 800);
-		expect(picks[Lane::Riser].size()).to_be_greater_than(size_t{2});
-		for (const std::string& riser : picks[Lane::Riser]) {
-			expect(riser.rfind("SAMPLES/FX/Riser/GEN ", 0)).to_equal(size_t{0});
-		}
+		// The 6 s and 4 s risers; not the 8 s one, which a sample Riser can't start partway into (spec §9.5).
+		expect(picks[Lane::Riser]
+		       == std::set<std::string>{"SAMPLES/FX/Riser/GEN Riser 2.wav", "SAMPLES/FX/Riser/GEN Riser 3.wav"})
+		    .to_be_true();
 	});
 
 	it("gives every FX lane a pack synth preset for a card without samples", _ {

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -167,10 +168,22 @@ std::string riserLanes() {
 		}
 		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
 		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
-		// bars over an 8-bar phrase.
-		const std::span<const WeightedBars> builds = genre->arc.buildBars;
-		const int32_t buildBars =
-		    builds.empty() ? genre->phraseBars : std::ranges::min(builds, {}, &WeightedBars::bars).bars;
+		// bars over an 8-bar phrase. Over the genre as written and each of its variants, since a set may patch the
+		// Build (Techno's hard Build, 4 bars, #531).
+		auto shortestIn = [](const Genre& g) {
+			const std::span<const WeightedBars> builds = g.arc.buildBars;
+			return builds.empty() ? static_cast<int32_t>(g.phraseBars)
+			                      : static_cast<int32_t>(std::ranges::min(builds, {}, &WeightedBars::bars).bars);
+		};
+		int32_t buildBars = shortestIn(*genre);
+		auto copy = std::make_unique<ResolvedGenre>();
+		for (size_t s = 0; s < genre->variantSets.size(); s++) {
+			for (size_t v = 0; v < genre->variantSets[s].variants.size(); v++) {
+				VariantPicks picks;
+				picks.pick[s] = static_cast<uint8_t>(v);
+				buildBars = std::min(buildBars, shortestIn(resolveGenre(*genre, picks, copy.get())));
+			}
+		}
 		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
 		const LaneSounds none{.lane = Lane::Riser};

@@ -106,7 +106,10 @@ constexpr KitSwap kDetroitSwaps[] = {{Lane::Kick, "SAMPLES/DRUMS/Kick/808 Kick.w
 
 // ---- FX lanes (spec §10.5) ----
 
-// Riser: only pack risers, from its default folder SAMPLES/FX/Riser.
+/// Riser: the pack's 6 s and 4 s risers from the default SAMPLES/FX/Riser. Not the 8 s one: the BUILD set's hard
+/// Build (4 bars, #531) lasts 7.1 s at 135 BPM, and a sample Riser can't start partway in, so it would overshoot the
+/// Drop (spec §9.5, §10.5); the Riser fit catches it. The pack's synth Riser if they're missing.
+constexpr TagWeight kRiserTags[] = {{"GEN Riser 2", 1}, {"GEN Riser 3", 1}};
 constexpr PaletteEntry kRiserSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Riser.XML"}};
 constexpr const char* const kFallFolders[] = {"SAMPLES/Artists/Danny Taurus/MoDrama"};
 constexpr TagWeight kFallTags[] = {{"Downer", 3}};
@@ -128,7 +131,7 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Tom, .tags = kTomTags},
     {.lane = Lane::Perc1, .folders = kPerc1Folders, .tags = kPerc1Tags},
     {.lane = Lane::Perc2, .folders = kPerc2Folders},
-    {.lane = Lane::Riser, .synths = kRiserSynths},
+    {.lane = Lane::Riser, .tags = kRiserTags, .synths = kRiserSynths},
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
     {.lane = Lane::Impact, .synths = kImpactSynths},
 };

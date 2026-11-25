@@ -5,13 +5,13 @@
 A sample Riser longer than the Build would start on the Build's first step and overshoot the Drop, and starting
 partway into the file isn't built, so each genre's Riser lane lists only Risers that fit its shortest Build at the
 top of its tempo range. `generator_render --list-risers` prints each built-in genre's lane from the genre tables:
-the shortest Build in ms, the lane's folders and its tags. This reads the WAVs in those folders under pack/ that the
-tags reach (any file when the lane has none; a tag matches anywhere in the name, ignoring case, and one holding a
-'/' names one file, ignoring case too, as the firmware's do; each file counts once) and fails on one longer than the
-Build, on an AIFF (it can't measure one), and on a lane that reaches no pack Riser at all. Riser lanes list only
-pack Risers (spec §10.5), so the factory card isn't read. check_all.py runs it after the harness build. Exit 0 when
-every Riser fits, 1 otherwise, 2 when it can't run.
-"""
+the shortest Build in ms (over the genre as written and each of its variants, #531), the lane's folders and its
+tags. This reads the WAVs in those folders under pack/ that the tags reach (any file when the lane has none; a tag
+matches anywhere in the name, ignoring case, and one holding a '/' names one file, ignoring case too, as the
+firmware's do; each file counts once) and fails on one longer than the Build, on an AIFF (it can't measure one), and
+on a lane that reaches no pack Riser at all. Riser lanes list only pack Risers (spec §10.5), so the factory card
+isn't read. check_all.py runs it after the harness build. Exit 0 when every Riser fits, 1 otherwise, 2 when it can't
+run."""
 
 import argparse
 import os
