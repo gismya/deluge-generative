@@ -66,7 +66,15 @@ private:
 };
 
 /// Define a `StringBuf` that uses an array placed on the stack.
+#if defined(__clang__)
+// clang rejects an initializer on a variable-length array, and two callers size theirs at run time. GCC keeps the
+// initializer so the firmware's code doesn't change.
 #define DEF_STACK_STRING_BUF(name, capacity)                                                                           \
 	char name##__buf[capacity];                                                                                        \
 	memset(name##__buf, 0, sizeof(name##__buf));                                                                       \
 	StringBuf name = {name##__buf, capacity}
+#else
+#define DEF_STACK_STRING_BUF(name, capacity)                                                                           \
+	char name##__buf[capacity] = {0};                                                                                  \
+	StringBuf name = {name##__buf, capacity}
+#endif
