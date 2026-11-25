@@ -140,7 +140,7 @@ void String::set(String const* otherString) {
 	// if the other string has memory and it's not in the non audio region. Sharing it would have beenCloned() write a
 	// reason count into memory we don't own
 	if (sm != nullptr) {
-		if (!(EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_ALLOCATOR < (uint32_t)sm && (uint32_t)sm < EXTERNAL_MEMORY_END)) {
+		if (!GeneralMemoryAllocator::isNonAudioExternal(sm)) {
 			FREEZE_WITH_ERROR("S001");
 			return;
 		}
