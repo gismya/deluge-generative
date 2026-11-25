@@ -194,11 +194,13 @@ public:
 		char text[kAllowedTextChars];
 		TEST_EVENT("gen_variants set=%s allowed=%u shows=%s", set().name, static_cast<unsigned>(mask()),
 		           allowedText(set(), mask(), text));
+#if ENABLE_SYSEX_TEST
 		if (target.recipe != nullptr) {
 			char picks[gen::perform::kPicksTextChars];
 			gen::perform::picksText(*target.genre, target.recipe->variants, picks);
 			TEST_EVENT("gen_compose_variants toggled %s", picks);
 		}
+#endif
 	}
 
 private:
@@ -308,6 +310,7 @@ public:
 			            : gen::firmware::transitions.change(*genre, choice.style, choice.narrowed);
 		});
 		refusedWithPopup(gen::perform::pressOutcome(request));
+#if ENABLE_SYSEX_TEST
 		char masks[gen::perform::kPicksTextChars];
 		gen::perform::masksText(*genre, choice.narrowed, masks);
 		TEST_EVENT("gen_confirm %s style=%d result=%d working=%d allowed=%s",
@@ -316,6 +319,7 @@ public:
 		                               : genre->name,
 		           static_cast<int>(choice.style), static_cast<int>(request),
 		           gen::firmware::workingAnimationShown() ? 1 : 0, masks);
+#endif
 		return NO_NAVIGATION;
 	}
 };

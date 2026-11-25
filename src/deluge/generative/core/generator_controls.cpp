@@ -20,6 +20,7 @@
 #include "generative/core/generator.h"
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <iterator>
 
 namespace deluge::generative {
@@ -457,6 +458,9 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 	ThrowLine line = throwLine();
 	line.sirenReleased = sirenReleases(step);
 	if (dropOut_.entry >= 0) {
+#ifdef GENERATOR_TEST_SEAMS
+		assert(static_cast<size_t>(dropOut_.entry) < genre_->dropOuts.size()); // dropVariants() forgets a swapped one
+#endif
 		const int32_t to = dropOut_.to();
 		line.dropOutTarget = genre_->dropOuts[dropOut_.entry].throwTarget;
 		line.dropOutNear = inThrowWindow(dropOut_.from - step.index);

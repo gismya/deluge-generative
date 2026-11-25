@@ -1,7 +1,7 @@
 # dub's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre dub version 9
+genre dub version 10
 recipe entropy 0: G minor, 70.00 BPM, swing 13, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 BASS, 2 SKANK, 3 MELODICA, 4 FX
 fingerprint c1085b85bad6bc7a, 2072960 events, 0 lost (60 pieces with random macros, scales, keys and seeds)

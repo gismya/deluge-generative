@@ -680,7 +680,9 @@ int32_t checkKey(uint8_t* data, int32_t len) {
 // loop, each after the last has gone). In SDRAM: test builds only.
 constexpr uint32_t kEventQueueSize = 64;
 static_assert((kEventQueueSize & (kEventQueueSize - 1)) == 0, "a power of two: % stays right as the counters wrap");
-constexpr size_t kEventLength = 120;
+// A line holds its timestamp and a Recipe's variant picks after the event's own fields (Dub's five sets: 80 chars;
+// regenerate_page_spec keeps every genre's picks text within 100).
+constexpr size_t kEventLength = 160;
 PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
 uint32_t eventTail = 0;

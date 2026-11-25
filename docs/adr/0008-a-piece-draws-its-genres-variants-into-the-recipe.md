@@ -47,6 +47,8 @@ struct VariantSet {
 | Psytrance ACCENTS (#497) | the Arp's `LoopSpec::jumpSteps` | yes |
 | Dub Q359: 7th or plain skank | the skank's chord Extensions | probably |
 | Dub S5: drum style (#460) | the Drums lanes' pools, `ChangeAt::Drop` | yes |
+| Dub MIX (#532): version, tubby, light | `dropOuts` and `dropOutChance` | yes: drawn a bar ahead in a Groove, and no drop-out runs over a Drop; the switch forgets the last drop-out's entry, which indexed the old table |
+| Dub BASS (#532): bursts, rolling, heavy | the Bass part's pool (13 entries in their tiers) and, for heavy, its `LoopSpec` (degrees, gate) | yes: the gate is read per note, the degrees with the line, rolled again at the Drop |
 
 Psytrance's live `extensionCeiling` patch is safe as Dub's skank's is (#495): only a bar line's voicing reads the Extensions, and nothing reads them across a Drop's line before it. A live flavour switch is safe because the flavour and its line or walk data are read step by step, and the pool, the only thing a held pick reads across the Drop, stays the same.
 

@@ -300,10 +300,16 @@ otherwise.
   either way. `stepsToLine()` for a `SetVariantMask` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
   Drop ahead, which `landsAt()` passes on as `Generator::kNoLine`. Re-resolving writes the copy in place, so a
   patched pool must keep its entry count and lengths: a frozen part's `PatternState::entry` indexes the new pool.
+- Trap: `DropOutState::entry` outlives its drop-out (the Throw reads `genre_->dropOuts[entry]` on every step), so a
+  live set that swaps the drop-out table (Dub's MIX, #532) could index a shorter table with the old entry.
+  `dropVariants()` forgets the entry when the table changed: at a Drop the last drop-out and its Throw's fall are over
+  (asserted in the harness, as is the index in `updateControls()`).
 - Trap: once a genre has variant sets, a spec's `newRecipe()` or `movingRecipe()` draws them, so a spec of the
   table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
   `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the
-  Lead) until pinned (#497).
+  Lead) until pinned (#497). The same holds for a spec that fixes one set and measures it: pin the sets that change
+  what it measures too. House's S1 loop-move shares fixed only `loops` and fell under their bounds once a reweight
+  made `vamp` the chords set's likelier draw, since a two-chord vamp often redraws the loop it left (#536).
 - Trap: every built-in genre has variant sets since Techno's (#531), Acid techno, the default, among them. The
   harness's `acidRecipe()` (and so `Start`, `playSteered()`) pins each set to its first variant (`writtenVariants()`);
   a spec that edits a genre's Build or pools on a copy clears its `variantSets`, or a set's patch undoes the edit
