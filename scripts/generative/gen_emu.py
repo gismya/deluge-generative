@@ -1219,6 +1219,18 @@ def send_recipe(emu, lines):
     emu.port.wait_idle()
 
 
+RECIPE_SETTLE_S = 3  # virtual seconds a test port exchange of a capture may take
+
+
+def settle(emu, ns, what):
+    """Runs the VM to `ns`: where a test port exchange that took a host-dependent time ends. Raises if it ran past."""
+    if emu.t > ns:
+        raise RuntimeError(
+            f"{what} took past {RECIPE_SETTLE_S} s of virtual time ({(emu.t - ns) / SEC:.2f} s over)"
+        )
+    emu.run_to(ns)
+
+
 def check_recipe_taken(emu):
     """Raises unless the entry's roll took the "next recipe" lines (its gen_next_recipe taken event), then stops the
     test events, so none goes out while the capture plays."""
@@ -1654,10 +1666,16 @@ def capture_one(args, elf, mutes, harness=None, end=None):
     try:
         emu = boot(args, elf, out, tag, test_port=True)
         try:
+            # The test port's exchanges run the VM for as long as the host takes to answer, so each ends at a fixed
+            # virtual time: entry and PLAY land where they always do, and the same arguments give the same WAV.
+            booted = emu.t
             send_recipe(emu, recipe_lines(args))
+            settle(emu, booted + RECIPE_SETTLE_S * SEC, "sending the Recipe")
             if not enter_perform(emu):
                 raise RuntimeError("Perform's song never finished loading")
+            entered = emu.t
             check_recipe_taken(emu)
+            settle(emu, entered + RECIPE_SETTLE_S * SEC, "the entry's events")
             pcm = check_perform_plays(
                 emu,
                 args.seconds,

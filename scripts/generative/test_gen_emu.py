@@ -1240,6 +1240,16 @@ class RecipeOverTestPort(unittest.TestCase):
         port.events.insert(0, "8.09: gen_next_recipe taken")
         gen_emu.check_recipe_taken(mock.Mock(port=port))
 
+    def test_an_exchange_ends_at_a_fixed_virtual_time_or_fails(self):
+        emu = FakeEmu()
+        emu.run_to = lambda ns: setattr(emu, "t", max(emu.t, ns))
+        emu.t = 1 * gen_emu.SEC
+        gen_emu.settle(emu, 3 * gen_emu.SEC, "x")
+        self.assertEqual(emu.t, 3 * gen_emu.SEC)
+        emu.t = 4 * gen_emu.SEC
+        with self.assertRaises(RuntimeError):
+            gen_emu.settle(emu, 3 * gen_emu.SEC, "x")
+
     def test_the_link_runs_the_vm_until_a_message_comes(self):
         link = gen_emu.IcountLink()
         self.addCleanup(link.close)
@@ -1270,7 +1280,7 @@ class CaptureOne(unittest.TestCase):
             for n in (1, 2):
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".s32"))
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".log"))
-            return mock.Mock()
+            return mock.Mock(t=0)
 
         with (
             mock.patch.object(gen_emu, "boot", side_effect=boot),
@@ -1280,6 +1290,7 @@ class CaptureOne(unittest.TestCase):
                 side_effect=lambda emu, lines: self.sent.append(lines),
             ),
             mock.patch.object(gen_emu, "check_recipe_taken"),
+            mock.patch.object(gen_emu, "settle"),
             mock.patch.object(gen_emu, "enter_perform", return_value=True),
             mock.patch.object(gen_emu, "check_perform_plays", return_value=pcm),
             mock.patch.object(gen_emu, "log") as log,
