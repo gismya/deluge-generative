@@ -37,14 +37,15 @@ otherwise.
   its check either way (a Riser's doesn't, above): a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
   of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
   `card.txt` of `copy pack -> /`.
-- A capture build (`-DGENERATIVE_CAPTURE=ON`) holds no Recipe: it plays the `CaptureRecipe` in
-  `generative/firmware/current_recipe.cpp`, an `extern "C"` object `generative_capture_recipe` in `.data`, and
-  `gen_emu.py capture` writes the Recipe's bytes (`CAPTURE_LAYOUT`) into a copy of the ELF beside the WAV, found by that
-  symbol and checked by its magic, before it boots that copy. So a new Recipe builds nothing (#401). The two layouts
-  must agree: change both, and the test's `RECIPE_LAYOUT`. The object is `volatile` (else LTO folds the build's
-  defaults into the code and the patch does nothing) and `used, externally_visible` (else LTO makes it local and may
-  rename it, and gen_emu can't find it). A file on the card image was the other way: the image is shared and booted
-  with `-snapshot`, so each capture would need its own 445 MB copy or a FAT write.
+- `gen_emu.py capture` boots the test-port build (`-DENABLE_SYSEX_TEST=ON`, in `--build-dir`) and sends the Recipe
+  and seed as the test port's `next recipe` lines (seam S7, spec §21.3) before it enters Perform, so a new Recipe
+  builds nothing (#523). delugemu's DIN MIDI goes to a UDP socket (run.sh's `--midi`, which
+  `DelugeSession.launch()` has no argument for, so `launch_with_midi()` starts run.sh itself). Under icount the VM
+  moves only in `run_to()`, so `IcountLink.receive()` runs it 10 ms of virtual time a look while it waits for a
+  reply. The capture checks the entry's `gen_next_recipe taken` event, then stops the test events before PLAY. The
+  older route, a `-DGENERATIVE_CAPTURE=ON` build whose `CaptureRecipe` gen_emu patched into a copy of the ELF (#401),
+  stays in the firmware for M5's variant captures until S7 carries variant sets (ADR 0008): its `RECIPE_LAYOUT`
+  and its notes are in git history.
 - A capture's WAV is a function of its arguments *and the firmware's code*: delugemu's audio follows the instruction
   count, so any code change gives different bytes for the same Recipe (a no-op 100-iteration loop in
   `rollFromGenre` did). Compare captures from one build only. To check two builds play the same Recipe, compare
