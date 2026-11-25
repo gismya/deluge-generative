@@ -1,0 +1,135 @@
+# The FX Kit's fallback Riser (spec §9.5, §10.5) over the sysex test port, on a card whose only pack Riser in
+# SAMPLES/FX/Riser is the 8 s one and whose only shorter one is the 2 s GEN Riser Short. Stopped, REGENERATE narrows
+# BUILD to HARD (4 or 8 bars), so the FX Kit loads the fallback beside the 8 s Riser; at 240 BPM or more even an 8-bar
+# Build (8 s or less) is no longer than 8 s, so the forced Build plays the 2 s fallback, which starts late. At its note-on the
+# fallback row's filters stand where the drawn row's do: the Riser lane's controls (its Rise's Brightness and Thin)
+# move both rows. Delugemu or a Deluge; the card overlay is fixtures/perform_riser_fallback.
+#
+# gen_riser_fallback loaded part= path=|none part=: the fallback an FX Kit loaded. gen_riser_on sample_ms=N at the
+# Riser's note-on; gen_riser_rows lpf=<drawn>/<fallback> hpf=<drawn>/<fallback>: both rows' LPF and HPF frequency
+# params as the fallback starts.
+# needs: card fixtures/perform_riser_fallback
+# covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/output_sink.cpp
+# covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/perform/riser_timing.h
+# covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/generative/perform/regenerate_page.*
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/gui/l10n/english.json
+# covers: src/deluge/gui/l10n/g_english.cpp src/deluge/generative/firmware/transitions.*
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/playback/playback_handler.* src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/core/types.h
+start_state
+include perform_open.txt
+include perform_confirm.txt
+
+# ---- Stopped, REGENERATE with BUILD on HARD alone: the rebuilt FX Kit loads the 2 s fallback ----
+mark
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=14
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=12
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=8 shows=HARD
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
+expect event gen_riser_fallback loaded part=FX path=SAMPLES/FX/Riser/Short/GEN Riser Short.wav since=mark
+
+# ---- SHIFT+PLAY, the tempo up 16 coarse steps with the tempo encoder pushed (a 16th of an octave each, to 240 BPM or more), then a forced Build: the fallback plays, its filters on the drawn row's ----
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_section GROOVE 0 within=5
+encoder 2 1
+expect event gen_tempo_popup Tempo:
+button TEMPO_ENC down
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+encoder 2 1
+wait 50
+button TEMPO_ENC up
+expect event /^gen_tempo_popup Tempo: (2[4-9]\d|3\d\d)/ within=5
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_section BUILD within=60
+expect event /^gen_riser_on sample_ms=(19\d\d|20\d\d)$/ within=40
+expect event /^gen_riser_rows lpf=(-?\d+)/\1 hpf=(-?\d+)/\2$/ within=1
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false

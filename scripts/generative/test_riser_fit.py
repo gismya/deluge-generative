@@ -65,14 +65,18 @@ class RiserFit(unittest.TestCase):
     def test_passes_a_riser_longer_than_the_shortest_build_whose_fallback_fits(self):
         write_wav(os.path.join(self.pack, RISERS, "GEN Riser 2.wav"), 6.0)
         listing = f"fallback\t{RISERS}/GEN Riser 2.wav\t6000\ntechno-acid\t7111\t{RISERS}\tGEN Riser 1\n"
-        ok, lines, count = riser_fit.check(listing, self.pack)
+        ok, lines, count = riser_fit.check(
+            listing, self.pack, fallback_for=lambda took: f"{RISERS}/GEN Riser 2.wav"
+        )
         self.assertTrue(ok, lines)
         self.assertEqual(count, 1)
 
     def test_fails_a_longer_riser_whose_fallback_doesnt_fit_either(self):
         write_wav(os.path.join(self.pack, RISERS, "GEN Riser 2.wav"), 6.0)
         listing = f"fallback\t{RISERS}/GEN Riser 2.wav\t6000\ntechno-acid\t5000\t{RISERS}\tGEN Riser 1\n"
-        ok, lines, _ = riser_fit.check(listing, self.pack)
+        ok, lines, _ = riser_fit.check(
+            listing, self.pack, fallback_for=lambda took: f"{RISERS}/GEN Riser 2.wav"
+        )
         self.assertFalse(ok)
         self.assertTrue(lines[0].endswith("and no fallback fits"), lines)
 

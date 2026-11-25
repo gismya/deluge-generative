@@ -4,7 +4,8 @@
 
 A sample Riser longer than the Build would overshoot the Drop, and starting partway into the file isn't built, so the
 firmware plays a fallback in such a Build: the longest pack short Riser shorter than the drawn one, if that fits, else
-no Riser (spec §9.5). `generator_render --list-risers` prints the fallbacks (path and length, longest first) and each
+no Riser (spec §9.5); `generator_render --riser-fallback MICROS` names the one it picks. `--list-risers` prints the
+fallbacks (path and length, longest first) and each
 built-in genre's lane: the shortest Build in ms at the top of its tempo range (over the genre as written and each of
 its variants), the lane's folders and its tags. This reads the WAVs in those folders under pack/ that the tags reach
 (any file when the lane has none; a tag matches anywhere in the name, ignoring case, and one holding a '/' names one
@@ -127,13 +128,10 @@ def candidates(pack, folders, tags):
     return out
 
 
-def fallback_for(fallbacks, took):
-    """The fallback the firmware loads beside a Riser `took` seconds long: the longest one shorter, or None."""
-    return next((f for f in fallbacks if f.ms < took * 1000), None)
-
-
-def check(listing, pack, length=seconds):
-    """(ok, report lines, Risers checked) for a --list-risers listing against pack/."""
+def check(listing, pack, length=seconds, fallback_for=lambda took: None):
+    """(ok, report lines, Risers checked) for a --list-risers listing against pack/. `fallback_for(took)`: the card
+    path of the fallback the firmware loads beside a Riser `took` seconds long, or None (generator_render
+    --riser-fallback, so the rule isn't copied here)."""
     ok = True
     lines = []
     count = 0
@@ -171,12 +169,8 @@ def check(listing, pack, length=seconds):
             if took * 1000 <= ms:
                 continue
             # Longer than the shortest Build: the firmware plays its fallback there, which must fit (spec §9.5).
-            fallback = fallback_for(fallbacks, took)
-            if (
-                fallback is not None
-                and fallback.path in measured
-                and measured[fallback.path] * 1000 <= ms
-            ):
+            fallback = fallback_for(took)
+            if fallback in measured and measured[fallback] * 1000 <= ms:
                 continue
             ok = False
             lines.append(
@@ -212,8 +206,24 @@ def main(argv=None):
             file=sys.stderr,
         )
         return 2
+
+    def fallback_for(took):
+        """The firmware's own choice of fallback beside a Riser `took` seconds long (perform::fallbackFor())."""
+        asked = subprocess.run(
+            [render, "--riser-fallback", str(int(took * 1_000_000))],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if asked.returncode != 0:
+            raise CantCheck(
+                f"{render} --riser-fallback exited {asked.returncode}: {asked.stderr.strip()}"
+            )
+        path = asked.stdout.strip()
+        return None if path in ("", "-") else path
+
     try:
-        ok, lines, count = check(listed.stdout, args.pack)
+        ok, lines, count = check(listed.stdout, args.pack, fallback_for=fallback_for)
     except CantCheck as error:
         print(f"riser_fit: {error}", file=sys.stderr)
         return 2

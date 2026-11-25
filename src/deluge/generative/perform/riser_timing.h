@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "generative/core/event.h"
 #include "generative/core/recipe.h"
 #include "generative/core/types.h"
 #include <algorithm>
@@ -36,38 +37,49 @@ constexpr int32_t stepMicros(int32_t tempo) {
 	return kStepMicrosAtOneHundredth / std::max<int32_t>(tempo, kMinTempo);
 }
 
-/// The tick a sample `micros` long starts on so that it ends on `dropTick`, at the tempo `tempoAt(tick)` plans for each
-/// tick; never before `earliest`, the note's own tick, so a sample longer than that starts there. Walks back from the
-/// Drop a beat at a time, at the tempo planned for the beat's middle: a planned glide moves slowly enough that this is
-/// within a millisecond or so, and outside a glide it is exact. Integer math; one divide a beat.
-template <typename TempoAt>
-int32_t riserStart(int32_t earliest, int32_t dropTick, int32_t micros, TempoAt tempoAt) {
-	constexpr int32_t kBeatSteps = kStepsPerBar / 4;
-	constexpr int32_t kBeatTicks = kBeatSteps * kTicksPerStep;
-	int32_t left = micros;
-	for (int32_t line = dropTick; line > earliest; line -= kBeatTicks) {
-		const int32_t beat = stepMicros(tempoAt(line - kBeatTicks / 2)) * kBeatSteps;
-		if (beat >= left) {
-			const int64_t into = (int64_t{left} * kBeatTicks + beat / 2) / beat;
-			return std::max<int32_t>(earliest, line - static_cast<int32_t>(into));
+/// Walks the beats from `to` back to `from`, a beat at a time at the tempo `tempoAt(tick)` plans for the beat's middle,
+/// handing each `visit(line, ticks, beatMicros)`: the beat's later line, how many of its ticks lie after `from`, and a
+/// whole beat's length in microseconds. Stops when `visit` returns false. A planned glide moves slowly enough that this
+/// is within a millisecond or so, and outside a glide it is exact. Integer math; one divide a beat.
+template <typename TempoAt, typename Visit>
+void walkBeats(int32_t from, int32_t to, TempoAt tempoAt, Visit visit) {
+	constexpr int32_t kBeatTicks = kStepsPerBar / 4 * kTicksPerStep;
+	for (int32_t line = to; line > from; line -= kBeatTicks) {
+		const int32_t beat = stepMicros(tempoAt(line - kBeatTicks / 2)) * (kStepsPerBar / 4);
+		if (!visit(line, std::min<int32_t>(kBeatTicks, line - from), beat)) {
+			return;
 		}
-		left -= beat;
 	}
-	return earliest; // longer than the Build: it starts with it, as a synth Riser does
 }
 
-/// The time from `from` to `to`, in microseconds, at the tempo `tempoAt(tick)` plans for each tick: a beat at a time
-/// from `to` back, at the tempo planned for the beat's middle, as riserStart() reads it.
+/// The tick a sample `micros` long starts on so that it ends on `dropTick`, at the tempo `tempoAt(tick)` plans for each
+/// tick (walkBeats()); never before `earliest`, the note's own tick, so a sample longer than that starts there.
+template <typename TempoAt>
+int32_t riserStart(int32_t earliest, int32_t dropTick, int32_t micros, TempoAt tempoAt) {
+	constexpr int32_t kBeatTicks = kStepsPerBar / 4 * kTicksPerStep;
+	int32_t left = micros;
+	int32_t start = earliest; // longer than the Build: it starts with it, as a synth Riser does
+	walkBeats(earliest, dropTick, tempoAt, [&](int32_t line, int32_t /*ticks*/, int32_t beat) {
+		if (beat >= left) {
+			const int64_t into = (int64_t{left} * kBeatTicks + beat / 2) / beat;
+			start = std::max<int32_t>(earliest, line - static_cast<int32_t>(into));
+			return false;
+		}
+		left -= beat;
+		return true;
+	});
+	return start;
+}
+
+/// The time from `from` to `to`, in microseconds, as riserStart() plans it (walkBeats()).
 template <typename TempoAt>
 int64_t plannedMicros(int32_t from, int32_t to, TempoAt tempoAt) {
-	constexpr int32_t kBeatSteps = kStepsPerBar / 4;
-	constexpr int32_t kBeatTicks = kBeatSteps * kTicksPerStep;
+	constexpr int32_t kBeatTicks = kStepsPerBar / 4 * kTicksPerStep;
 	int64_t total = 0;
-	for (int32_t line = to; line > from; line -= kBeatTicks) {
-		const int32_t beat = stepMicros(tempoAt(line - kBeatTicks / 2)) * kBeatSteps;
-		const int32_t ticks = std::min<int32_t>(kBeatTicks, line - from);
+	walkBeats(from, to, tempoAt, [&](int32_t /*line*/, int32_t ticks, int32_t beat) {
 		total += int64_t{beat} * ticks / kBeatTicks;
-	}
+		return true;
+	});
 	return total;
 }
 
@@ -126,8 +138,26 @@ RiserPick pickRiser(int32_t earliest, int32_t dropTick, int32_t drawnMicros, int
 	if (drawnMicros <= build) {
 		return RiserPick::Drawn;
 	}
-	return fallbackMicros > 0 && fallbackMicros < drawnMicros && fallbackMicros <= build ? RiserPick::Fallback
-	                                                                                     : RiserPick::None;
+	// The fallback is shorter than the drawn sample (fallbackFor()), so one that fits is never the longer.
+	return fallbackMicros > 0 && fallbackMicros <= build ? RiserPick::Fallback : RiserPick::None;
+}
+
+/// Picks `noteOn`'s sample (pickRiser()) for a sample Riser `micros` long with a fallback `fallbackMicros` long, its
+/// Drop on `dropTick`: marks the note-on for the fallback's row and gives `micros` its length where that plays. False
+/// when no Riser fits, so the note isn't played. Perform's driver and Compose's share it.
+template <typename TempoAt>
+bool pickRiserSample(Event& noteOn, int32_t dropTick, int32_t& micros, int32_t fallbackMicros, TempoAt tempoAt) {
+	switch (pickRiser(noteOn.tick, dropTick, micros, fallbackMicros, tempoAt)) {
+	case RiserPick::Drawn:
+		return true;
+	case RiserPick::Fallback:
+		noteOn.pitch = kRiserFallbackPitch;
+		micros = fallbackMicros;
+		return true;
+	case RiserPick::None:
+		break;
+	}
+	return false;
 }
 
 } // namespace deluge::generative::perform

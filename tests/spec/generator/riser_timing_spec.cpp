@@ -365,6 +365,25 @@ describe riser_timing("Riser timing", $ {
 		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
 	});
 
+	it("never sounds when its part's sound swaps while it waits as the fallback: the swap ends the part's notes", _ {
+		// A 16-bar Build (30.7 s) is shorter than the 40 s sample: the 4 s fallback waits until bar 14, and the swap
+		// lands on bar 8's phrase line.
+		Piece p(BuildOf<16>::genre, 12500, 40 * kSeconds);
+		p.sink.fallback = 4 * kSeconds;
+		p.reachBuild();
+		const int32_t buildAt = p.build().at;
+		p.runToTick(buildAt + 2 * kStepsPerBar * kTicksPerStep);
+		const auto fx = static_cast<uint8_t>(partCount(BuildOf<16>::genre) - 1);
+		p.push({CommandKind::SetSound, fx, 1});
+		p.runBars(32);
+		bool swapped = false;
+		for (const Played& played : p.sink.played) {
+			swapped = swapped || (played.event.kind == EventKind::Sound && played.event.part == fx && played.at < p.drop().at);
+		}
+		expect(swapped).to_be_true();
+		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
+	});
+
 	it("counts a tempo under the lowest (a Glide still at 0) as the lowest, so a beat of 16ths fits 32 bits", _ {
 		expect(perform::stepMicros(0)).to_equal(perform::stepMicros(kMinTempo));
 		expect(perform::stepMicros(1) * kStepsPerBeat).to_be_greater_than(0);

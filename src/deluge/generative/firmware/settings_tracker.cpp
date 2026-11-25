@@ -19,6 +19,7 @@
 #include "definitions.h"
 #include "dsp/reverb/reverb.hpp"
 #include "generative/core/genre.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/ui/sound_editor.h"
 #include "gui/ui/ui.h"
 #include "io/midi/test_port.h"
@@ -162,8 +163,12 @@ struct TargetRefs {
 	bool isSong = false;
 };
 
-TargetRefs resolveTarget(uint8_t output, Lane lane, const Roster& roster, const Genre& genre, Song* song) {
+TargetRefs resolveTarget(uint8_t output, Lane lane, const Roster& roster, const Genre& genre, Song* song,
+                         bool fallback = false) {
 	TargetRefs refs;
+	if (fallback && lane != Lane::Riser) {
+		return refs; // only the Riser lane has a fallback row (spec §9.5)
+	}
 	if (output == kSongParams) {
 		if (song != nullptr) {
 			refs.mod = &song->globalEffectable;
@@ -193,7 +198,7 @@ TargetRefs resolveTarget(uint8_t output, Lane lane, const Roster& roster, const 
 		}
 		return refs;
 	}
-	Drum* drum = part.drums[laneRow(lane)];
+	Drum* drum = part.drums[fallback ? perform::kRiserFallbackRow : laneRow(lane)];
 	if (drum == nullptr || drum->type != DrumType::SOUND) {
 		return refs;
 	}
@@ -402,9 +407,24 @@ int32_t slotIndexFor(uint8_t output, Lane lane) {
 
 } // namespace
 
+namespace {
+bool applySettingTo(const TargetRefs& refs, OutputSetting setting, int32_t value, Song& song, bool songIsCurrent);
+} // namespace
+
 bool applyOutputSetting(OutputSetting setting, int32_t value, uint8_t target, Lane lane, const Roster& roster,
                         const Genre& genre, Song& song, bool songIsCurrent) {
-	const TargetRefs refs = resolveTarget(target, lane, roster, genre, &song);
+	// The setting's row, and for the Riser lane the fallback Riser's row, which plays its notes in some Builds (spec
+	// §9.5). A sample path isn't one: the fallback keeps its own sample.
+	const bool applied =
+	    applySettingTo(resolveTarget(target, lane, roster, genre, &song), setting, value, song, songIsCurrent);
+	if (applied && !isPathSetting(setting)) {
+		applySettingTo(resolveTarget(target, lane, roster, genre, &song, true), setting, value, song, songIsCurrent);
+	}
+	return applied;
+}
+
+namespace {
+bool applySettingTo(const TargetRefs& refs, OutputSetting setting, int32_t value, Song& song, bool songIsCurrent) {
 	if (refs.mod == nullptr) {
 		return false;
 	}
@@ -735,6 +755,8 @@ bool applyOutputSetting(OutputSetting setting, int32_t value, uint8_t target, La
 	return false;
 }
 
+} // namespace
+
 bool applyOutputSettingPath(OutputSetting setting, const char* path, int32_t length, uint8_t target, Lane lane,
                             const Roster& roster, const Genre& genre, Song& song) {
 	if (!isPathSetting(setting)) {
@@ -784,10 +806,12 @@ bool applyOutputSettingPath(OutputSetting setting, const char* path, int32_t len
 }
 
 void finalizeSoundSettings(uint8_t target, Lane lane, const Roster& roster, const Genre& genre, Song& song) {
-	const TargetRefs refs = resolveTarget(target, lane, roster, genre, &song);
-	if (refs.sound != nullptr && refs.manager != nullptr) {
-		refs.sound->setupPatchingForAllParamManagers(&song);
-		refs.sound->patcher.performInitialPatching(*refs.sound, *refs.manager);
+	for (const bool fallback : {false, true}) { // a Riser's fallback row too (spec §9.5)
+		const TargetRefs refs = resolveTarget(target, lane, roster, genre, &song, fallback);
+		if (refs.sound != nullptr && refs.manager != nullptr) {
+			refs.sound->setupPatchingForAllParamManagers(&song);
+			refs.sound->patcher.performInitialPatching(*refs.sound, *refs.manager);
+		}
 	}
 }
 
@@ -1047,6 +1071,15 @@ void SettingsTracker::scanSlot(int32_t slotIndex, const Roster& roster, const Ge
 			slot.values[id] = live[id];
 			const auto setting = static_cast<OutputSetting>(id);
 			slot.editedMask |= settingBit(setting);
+			if (slot.lane == Lane::Riser) {
+				// The fallback Riser's row plays the lane's notes in some Builds: it takes the player's edit too (spec
+				// §9.5).
+				const TargetRefs fallback = resolveTarget(slot.output, slot.lane, roster, genre, &song, true);
+				if (applySettingTo(fallback, setting, live[id], song, true) && fallback.sound != nullptr
+				    && fallback.manager != nullptr) {
+					fallback.sound->patcher.performInitialPatching(*fallback.sound, *fallback.manager);
+				}
+			}
 			if (playing) {
 				enqueueScalar(slot.output, slot.lane, setting, live[id]);
 			}

@@ -19,7 +19,9 @@ otherwise.
 - A sample Riser's timing lives in the Perform driver, not the core (§9.5, §10.5): the core places the note from the
   Build's first step to the Drop, and `PerformDriver::playDue()` holds its note-on back (`holdRiser()`) when the sink
   says it's a sample (`NoteSink::sampleMicros()`, the adapter's `OutputSink`: the row's first range at the system
-  rate, for a ONCE or CUT row). `riserStart()` (`perform/riser_timing.h`) walks back from the Drop a beat at a time at
+  rate, for a ONCE or CUT row). First `pickRiserSample()` picks the drawn sample, the FX Kit's fallback
+  (`NoteSink::fallbackMicros()`) or none, from `plannedMicros()` to the Drop (spec §9.5). `riserStart()`
+  (`perform/riser_timing.h`, both on `walkBeats()`) walks back from the Drop a beat at a time at
   `plannedTempo()`: a running glide, then a transition's planned glide across its Build. Each change to that plan
   (`setTempo`, `glideTempo`, the transition's window, a cancel) times it again; a note-off that comes first (a forced
   Section, a jump) drops it. Under an external clock (`NoteSink::tempoFollowsMaster()`, read each `advance()`) the

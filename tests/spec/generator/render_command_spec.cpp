@@ -429,6 +429,13 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("house\t15238\tSAMPLES/FX/Riser\tGEN Riser 2|GEN Riser 3\n")).not_().to_equal(std::string::npos);
 	});
 
+	it("tells the fallback Riser the firmware loads beside a sample with --riser-fallback, for riser_fit.py", _ {
+		expect(parse({"--riser-fallback", "8000000"}).riserFallbackFor).to_equal(int64_t{8000000});
+		expect(parse({"--riser-fallback"}).error.empty()).to_be_false();
+		expect(parse({"--riser-fallback", "x"}).error.empty()).to_be_false();
+		expect(parse({"--riser-fallback", "8000000", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
+	});
+
 	it("lists a Recipe's sound picks with --list-sounds: a line per part and per lane of a Drums or FX part", _ {
 		harness::render::Parsed parsed = parse({"--list-sounds", "--genre", "dub", "--entropy", "12", "--seed", "3"});
 		expect(parsed.error).to_equal(std::string{});

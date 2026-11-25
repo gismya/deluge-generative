@@ -32,6 +32,8 @@
 #include "model/model_stack.h"
 #include "model/note/note_row.h"
 #include "model/song/song.h"
+#include "modulation/params/param.h"
+#include "modulation/params/param_set.h"
 #include "playback/playback_handler.h"
 #include "processing/engines/audio_engine.h"
 #include "processing/sound/sound_drum.h"
@@ -173,11 +175,9 @@ int32_t OutputSink::sampleMicros(const Event& noteOn) {
 }
 
 int32_t OutputSink::fallbackMicros(const Event& noteOn) {
-	if (noteOn.part >= kMaxParts || noteOn.lane != Lane::Riser) {
-		return 0;
-	}
-	const PartOutput& part = roster.parts[noteOn.part];
-	return sampleRowMicros(part.output != nullptr ? part.drums[perform::kRiserFallbackRow] : nullptr);
+	Event onFallback = noteOn;
+	onFallback.pitch = perform::kRiserFallbackPitch; // kitRowOf() reads the fallback's row for a Riser
+	return noteOn.lane == Lane::Riser ? sampleMicros(onFallback) : 0;
 }
 
 bool OutputSink::tempoFollowsMaster() {
@@ -218,6 +218,26 @@ void OutputSink::reportRiserTiming(const Event& event) {
 		riserOnSampleTime = AudioEngine::audioSampleTimer | 1; // never 0, which means none sounding
 		riserSampleMicros = sampleMicros(event);
 		TEST_EVENT("gen_riser_on sample_ms=%ld", static_cast<long>(riserSampleMicros / 1000));
+		if (event.pitch == perform::kRiserFallbackPitch && event.part < kMaxParts) {
+			// The fallback row mirrors the Riser lane's controls (spec §9.5): its filters stand where the drawn row's
+			// do.
+			const PartOutput& part = roster.parts[event.part];
+			auto filters = [&](int32_t row, int32_t param) -> long {
+				NoteRow* noteRow = part.clip != nullptr && part.drums[row] != nullptr
+				                       ? part.clip->getNoteRowForDrum(part.drums[row])
+				                       : nullptr;
+				return noteRow != nullptr
+				           ? static_cast<long>(noteRow->paramManager.getPatchedParamSet()->getValue(param))
+				           : -1;
+			};
+			const int32_t drawn = laneRow(Lane::Riser);
+			const int32_t fallback = perform::kRiserFallbackRow;
+			TEST_EVENT("gen_riser_rows lpf=%ld/%ld hpf=%ld/%ld",
+			           filters(drawn, deluge::modulation::params::LOCAL_LPF_FREQ),
+			           filters(fallback, deluge::modulation::params::LOCAL_LPF_FREQ),
+			           filters(drawn, deluge::modulation::params::LOCAL_HPF_FREQ),
+			           filters(fallback, deluge::modulation::params::LOCAL_HPF_FREQ));
+		}
 		return;
 	}
 	if (riserOnSampleTime == 0) {

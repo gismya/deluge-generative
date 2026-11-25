@@ -20,6 +20,7 @@
 #include "generative/core/lane_names.h"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
@@ -189,7 +190,26 @@ struct Build {
 	Chunks& chunks;
 	/// Parts on the default synth and played lanes left silent: one warning covers them all (spec §10.1).
 	int32_t missing = 0;
+	const Genre* genre = nullptr;
+	/// The piece's variant picks, where known: an FX Kit loads a fallback Riser only where its Builds need one.
+	const VariantPicks* variants = nullptr;
 };
+
+/// The shortest Build a Riser plays in, in microseconds at the top of `genre`'s tempo range, with `variants` applied
+/// (spec §9.5): INT64_MAX when its Builds play no Riser. A ResolvedGenre on the stack, once per FX Kit build.
+int64_t shortestRiserBuild(const Genre& genre, const VariantPicks& variants) {
+	ResolvedGenre resolved;
+	const Genre& played = resolveGenre(genre, variants, &resolved);
+	if (!played.arc.buildRiser) {
+		return INT64_MAX;
+	}
+	const std::span<const WeightedBars> builds = played.arc.buildBars;
+	int32_t bars = builds.empty() ? played.phraseBars : builds[0].bars;
+	for (const WeightedBars& build : builds) {
+		bars = std::min<int32_t>(bars, build.bars);
+	}
+	return int64_t{bars} * kStepsPerBar * perform::stepMicros(int32_t{played.facts.tempoHighBpm} * 100);
+}
 
 /// Frees a drum that never joined a Kit, with any ParamManager backed up for it.
 void deleteLooseDrum(Song* song, SoundDrum* drum) {
@@ -321,13 +341,9 @@ bool plays(const PartSpec& part, Lane lane) {
 	return laneIndexOf(part, lane) >= 0;
 }
 
-/// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
-/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
-/// `rangesOut`.
-Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
-	Song* song = build.song;
-	ParamManagerForTimeline paramManager;
-	Error error = paramManager.setupWithPatching();
+/// A new sample drum with its params set up in `paramManager`, for a Kit row to load into.
+Error newSampleDrum(ParamManagerForTimeline& paramManager, SoundDrum** out) {
+	const Error error = paramManager.setupWithPatching();
 	if (error != Error::NONE) {
 		return error;
 	}
@@ -337,6 +353,21 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 	Sound::initParams(&paramManager);
 	drum->setupAsSample(&paramManager);
+	*out = drum;
+	return Error::NONE;
+}
+
+/// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
+/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
+/// `rangesOut`.
+Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
+	Song* song = build.song;
+	ParamManagerForTimeline paramManager;
+	SoundDrum* drum = nullptr;
+	Error error = newSampleDrum(paramManager, &drum);
+	if (error != Error::NONE) {
+		return error;
+	}
 
 	RowLoader loader(song, drum);
 	bool played = plays(part, lane);
@@ -407,27 +438,32 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 }
 
 /// Adds the FX Kit's fallback Riser row (spec §9.5, §10.5) when its Riser row plays a sample: the longest pack short
-/// Riser shorter than it, which the driver plays in a Build the drawn one is longer than. A missing file adds no row:
-/// the driver then plays no Riser in such a Build.
+/// Riser shorter than it that the card has, which the driver plays in a Build the drawn one is longer than. With none
+/// on the card it adds no row: the driver then plays no Riser in such a Build.
 Error buildFallbackRiser(Build& build, Kit* kit, const PartSpec& part, PartOutput* out) {
-	const perform::PackRiser* fallback = perform::fallbackFor(sampleRowMicros(out->drums[laneRow(Lane::Riser)]));
+	const int32_t drawn = sampleRowMicros(out->drums[laneRow(Lane::Riser)]);
+	const perform::PackRiser* fallback = perform::fallbackFor(drawn);
 	if (fallback == nullptr || !plays(part, Lane::Riser) || previewBuild()) {
 		return Error::NONE;
 	}
+	if (build.variants != nullptr && build.genre != nullptr
+	    && drawn <= shortestRiserBuild(*build.genre, *build.variants)) {
+		return Error::NONE; // every Build of the piece fits the drawn Riser
+	}
 	Song* song = build.song;
 	ParamManagerForTimeline paramManager;
-	Error error = paramManager.setupWithPatching();
+	SoundDrum* drum = nullptr;
+	Error error = newSampleDrum(paramManager, &drum);
 	if (error != Error::NONE) {
 		return error;
 	}
-	auto* drum = static_cast<SoundDrum*>(StorageManager::createNewDrum(DrumType::SOUND));
-	if (drum == nullptr) {
-		return Error::INSUFFICIENT_RAM;
-	}
-	Sound::initParams(&paramManager);
-	drum->setupAsSample(&paramManager);
+	// The longest shorter one the card has: kPackRisers is longest first.
 	RowLoader loader(song, drum);
-	if (loader.loadSample(fallback->path) != LoadOutcome::Loaded) {
+	const perform::PackRiser* end = std::end(perform::kPackRisers);
+	while (fallback != end && loader.loadSample(fallback->path) != LoadOutcome::Loaded) {
+		fallback++;
+	}
+	if (fallback == end) {
 		deleteLooseDrum(song, drum);
 		TEST_EVENT("gen_riser_fallback none part=%s", part.name);
 		return Error::NONE; // no fallback: a card without the pack
@@ -657,7 +693,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	const Genre& genre = *recipe.genre;
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		int32_t missing = 0;
-		error = buildPartOutput(song, genre, p, sounds, palette, &roster->parts[p], chunks, &missing);
+		error = buildPartOutput(song, genre, p, sounds, palette, &roster->parts[p], chunks, &missing, &recipe.variants);
 		if (soundsMissing != nullptr) {
 			*soundsMissing += missing;
 		}
@@ -676,10 +712,16 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 }
 
 Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
-                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing) {
+                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing, const VariantPicks* variants) {
 	*out = PartOutput{};
 	CardFolders folders(&chunks);
-	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
+	Build build{.song = song,
+	            .sounds = sounds,
+	            .palette = palette,
+	            .folders = folders,
+	            .chunks = chunks,
+	            .genre = &genre,
+	            .variants = variants};
 	const PartSpec& spec = genre.parts[part];
 	const Error error = spec.synth() ? loadSynth(build, part, spec, out) : buildKit(build, spec, out);
 	if (soundsMissing != nullptr) {

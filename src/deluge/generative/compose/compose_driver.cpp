@@ -381,15 +381,7 @@ bool ComposeDriver::timeRiser(Event& noteOn) {
 	}
 	// Compose's song plays the Recipe's tempo throughout; a replay's, the tempo the log's glides plan (spec §17.6).
 	auto tempoAt = [this](int32_t tick) { return replaying_ ? tempoPlan_.at(tick) : tempo_; };
-	const int32_t fallback = writer_->fallbackMicros(noteOn);
-	switch (perform::pickRiser(noteOn.tick, drop, micros, fallback, tempoAt)) {
-	case perform::RiserPick::Drawn:
-		break;
-	case perform::RiserPick::Fallback:
-		noteOn.pitch = perform::kRiserFallbackPitch; // the note goes on the fallback's row
-		micros = fallback;
-		break;
-	case perform::RiserPick::None:
+	if (!perform::pickRiserSample(noteOn, drop, micros, writer_->fallbackMicros(noteOn), tempoAt)) {
 		return false;
 	}
 	noteOn.tick = perform::riserStart(noteOn.tick, drop, micros, tempoAt);

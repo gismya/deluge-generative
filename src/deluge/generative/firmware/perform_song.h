@@ -78,8 +78,11 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 /// does for each part. `song` may be the current one, playing: a sound re-roll's preload (spec §10.7) builds the new
 /// Output beside the old one, and links it in one chunk at the end, silent until notes go to it. Reads the card;
 /// runs in a runner job. On failure nothing is left allocated. `soundsMissing` counts what fell back to nothing.
+/// `variants`, the piece's picks where the caller knows them, let an FX Kit skip its fallback Riser where no Build of
+/// the piece needs it (spec §9.5); without them it loads one wherever the drawn Riser could need it.
 Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
-                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing = nullptr);
+                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing = nullptr,
+                      const VariantPicks* variants = nullptr);
 
 /// How long a Kit row's sample plays, in microseconds: a sample row loads as ONCE or CUT, so it plays its file to the
 /// end. 0 for a row with no sample (none loaded, or an FX lane's synth preset), or no row.

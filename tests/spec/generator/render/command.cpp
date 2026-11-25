@@ -66,6 +66,8 @@ const char* const kUsage =
     "--list-risers prints the pack's fallback Risers, one \"fallback<TAB>path<TAB>ms\" a line, longest first, then\n"
     "each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its shortest Build in ms at\n"
     "the top of its tempo range, its variants' Builds counted, and the lane's folders and tags, each |-separated, for\n"
+    "scripts/generative/riser_fit.py.\n"
+    "--riser-fallback MICROS prints the fallback Riser the firmware loads beside a sample MICROS long, or -, for\n"
     "scripts/generative/riser_fit.py.\n";
 
 namespace {
@@ -263,6 +265,15 @@ Parsed parseArgs(int argc, const char* const* argv) {
 				return fail("--list-risers takes no other arguments");
 			}
 			parsed.listRisers = true;
+			return parsed;
+		}
+		if (flag == "--riser-fallback") {
+			char* end = nullptr;
+			const long long micros = argc == 3 ? std::strtoll(argv[2], &end, 10) : -1;
+			if (argc != 3 || end == argv[2] || *end != 0 || micros < 0 || micros > INT32_MAX) {
+				return fail("--riser-fallback takes one length in microseconds");
+			}
+			parsed.riserFallbackFor = micros;
 			return parsed;
 		}
 		int32_t macro = -1;

@@ -203,8 +203,15 @@ private:
 	void bindThrowDelay(Set& set, const Genre& genre);
 	/// Binds every set of `part` after the ones bound already, with homes read from its Output now.
 	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
+	/// writeNode() on one set.
+	bool writeNodeOn(Set& set, SoundControl control, bool throwDelay, int32_t tick, int32_t offset, bool interpolated);
+	/// A player edit of `bound` on `edited`, to `value`, copied to a fallback Riser's mirror of its lane (spec §9.5).
+	void mirrorEdit(const Set& edited, const Bound& bound, int32_t value);
 	/// Sets up `part`'s set for its lane `l` (an FX part's lanes each have one). False if it has nothing to move.
-	static bool makeSet(const Roster& roster, const Genre& genre, int32_t part, int32_t l, Set& set);
+	/// With `fallback`, the set is the FX Kit's fallback Riser row's (spec §9.5): it mirrors the Riser lane's, so every
+	/// write for the lane moves both rows.
+	static bool makeSet(const Roster& roster, const Genre& genre, int32_t part, int32_t l, Set& set,
+	                    bool fallback = false);
 	/// Hands each target `control` moves on `set`'s preset to `moved(range)`, with the range the preset's palette entry
 	/// gives it (`ranges`, spec §11.1): only targets the preset uses, and none if the control's range is 0. Stops when
 	/// `moved` returns false.
@@ -263,16 +270,18 @@ private:
 	/// restoreHomes() on `sets`, whose params are in `params`.
 	static void restoreIn(const Set* sets, int32_t count, const Bound* params);
 
-	Set sets_[kMaxControlSets];
+	/// The roster's sets, and the fallback Riser row's mirror of its Riser lane's (spec §9.5).
+	static constexpr int32_t kMaxSets = kMaxControlSets + 1;
+	Set sets_[kMaxSets];
 	int32_t setCount_ = 0;
-	Bound bound_[kMaxControlSets * kMaxParamsPerSet];
+	Bound bound_[kMaxSets * kMaxParamsPerSet];
 	int32_t boundCount_ = 0;
 	/// The outgoing roster's sets after a start step, each with only its Space params (keepOutgoingSpace()).
 	static constexpr int32_t kMaxSpaceParams = perform::maxParamsFor(SoundControl::Space, kMaxNumPatchCables);
 	static_assert(perform::throwDelayFits(kMaxNumPatchCables), "a set's delay Throw fits its Space and set params");
-	Set outgoingSets_[kMaxControlSets];
+	Set outgoingSets_[kMaxSets];
 	int32_t outgoingSetCount_ = 0;
-	Bound outgoingBound_[kMaxControlSets * kMaxSpaceParams];
+	Bound outgoingBound_[kMaxSets * kMaxSpaceParams];
 	int32_t outgoingBoundCount_ = 0;
 	/// setHome() is writing the param: the player edit it makes keeps the home it set.
 	bool settingHome_ = false;

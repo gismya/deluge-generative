@@ -370,16 +370,8 @@ bool PerformDriver::holdRiser(Event& noteOn, NoteSink& sink) {
 		return false;
 	}
 	// A sample longer than the Build plays the part's fallback if that fits, else nothing (spec §9.5).
-	auto tempoAt = [this](int32_t tick) { return plannedTempo(tick); };
-	const int32_t fallback = sink.fallbackMicros(noteOn);
-	switch (pickRiser(noteOn.tick, drop, micros, fallback, tempoAt)) {
-	case RiserPick::Drawn:
-		break;
-	case RiserPick::Fallback:
-		noteOn.pitch = kRiserFallbackPitch;
-		micros = fallback;
-		break;
-	case RiserPick::None:
+	if (!pickRiserSample(noteOn, drop, micros, sink.fallbackMicros(noteOn),
+	                     [this](int32_t tick) { return plannedTempo(tick); })) {
 		return true; // its note-off finds nothing sounding
 	}
 	riser_ = {noteOn, drop, micros, noteOn.tick, true};

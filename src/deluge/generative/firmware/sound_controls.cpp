@@ -18,6 +18,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "definitions.h"
 #include "generative/firmware/perform_song.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/l10n/l10n.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
@@ -118,7 +119,7 @@ l10n::String controlName(SoundControl control) {
 	return kNames[static_cast<int32_t>(control)];
 }
 
-bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p, int32_t l, Set& set) {
+bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p, int32_t l, Set& set, bool fallback) {
 	const PartSpec& spec = genre.parts[p];
 	const PartOutput& part = roster.parts[p];
 	if (part.output == nullptr || part.clip == nullptr) {
@@ -128,9 +129,12 @@ bool SoundControls::makeSet(const Roster& roster, const Genre& genre, int32_t p,
 	set.part = static_cast<uint8_t>(p);
 	set.clip = part.clip;
 	set.lane = controlSetLane(spec, l);
+	if (fallback && set.lane != Lane::Riser) {
+		return false;
+	}
 	if (set.lane != Lane::None) {
-		// A Drums or FX lane's row controls.
-		Drum* drum = part.drums[laneRow(set.lane)];
+		// A Drums or FX lane's row controls; the fallback Riser's row for its mirror.
+		Drum* drum = part.drums[fallback ? perform::kRiserFallbackRow : laneRow(set.lane)];
 		int32_t row = -1;
 		NoteRow* noteRow = drum != nullptr ? part.clip->getNoteRowForDrum(drum, &row) : nullptr;
 		if (noteRow == nullptr || drum->type != DrumType::SOUND) {
@@ -171,9 +175,10 @@ void SoundControls::begin(const Roster& roster, const Genre& genre) {
 }
 
 void SoundControls::bindPart(const Roster& roster, const Genre& genre, int32_t part) {
-	for (int32_t l = 0; l < controlSetsOf(genre.parts[part]) && setCount_ < kMaxControlSets; l++) {
+	// Each lane's set, then for the Riser lane the fallback row's mirror, so the Riser's controls move both rows.
+	for (int32_t i = 0; i < 2 * controlSetsOf(genre.parts[part]) && setCount_ < kMaxSets; i++) {
 		Set set;
-		if (!makeSet(roster, genre, part, l, set)) {
+		if (!makeSet(roster, genre, part, i / 2, set, (i & 1) != 0)) {
 			continue;
 		}
 		const ControlRanges ranges = roster.parts[part].rangesOf(set.lane);
@@ -321,18 +326,22 @@ void SoundControls::moveToClip(int32_t part, InstrumentClip* clip) {
 }
 
 std::optional<int32_t> SoundControls::moveHome(uint8_t part, Lane lane, uint16_t key, int32_t home) {
-	const Set* set = setOf(part, lane);
-	if (set == nullptr) {
-		return std::nullopt;
-	}
-	for (int32_t b = set->first[0]; b < set->first[kNumSoundControls]; b++) {
-		if (paramKey(bound_[b]) == key) {
-			const int32_t old = bound_[b].home;
-			bound_[b].home = home;
-			return old;
+	// The lane's set, and a fallback Riser's mirror: the first one's old home is the answer.
+	std::optional<int32_t> old;
+	for (int32_t i = 0; i < setCount_; i++) {
+		const Set& set = sets_[i];
+		if (set.part != part || set.lane != lane) {
+			continue;
+		}
+		for (int32_t b = set.first[0]; b < set.first[kNumSoundControls]; b++) {
+			if (paramKey(bound_[b]) == key) {
+				old = old ? old : std::optional<int32_t>(bound_[b].home);
+				bound_[b].home = home;
+				break;
+			}
 		}
 	}
-	return std::nullopt;
+	return old;
 }
 
 bool SoundControls::uses(const Set& set, Needs needs) {
@@ -472,7 +481,7 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 
 void SoundControls::bindParam(const Set& set, const TargetRange& range, Collection collection, uint8_t param,
                               PatchSource source) {
-	if (boundCount_ >= kMaxControlSets * kMaxParamsPerSet) {
+	if (boundCount_ >= kMaxSets * kMaxParamsPerSet) {
 		return; // never: kMaxParamsPerSet counts the most each table entry can expand into
 	}
 	Bound bound;
@@ -626,36 +635,62 @@ void SoundControls::forEachComposed(Set& set, SoundControl control, bool throwDe
 
 bool SoundControls::writeNode(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t tick,
                               int32_t offset, bool interpolated) {
-	Set* set = setOf(part, lane);
-	if (set == nullptr) {
-		return true; // nothing loaded there to move
+	bool written = true;
+	// The lane's set, and a fallback Riser's mirror, whose row plays the lane's notes in some Builds (spec §9.5).
+	for (int32_t i = 0; i < setCount_ && written; i++) {
+		if (sets_[i].part == part && sets_[i].lane == lane) {
+			written = writeNodeOn(sets_[i], control, throwDelay, tick, offset, interpolated);
+		}
 	}
+	return written;
+}
+
+bool SoundControls::writeNodeOn(Set& set, SoundControl control, bool throwDelay, int32_t tick, int32_t offset,
+                                bool interpolated) {
 	bool written = true;
 	forEachComposed(
-	    *set, control, throwDelay, offset, [&](const Bound& bound, AutoParam& param, int32_t slot, int32_t value) {
+	    set, control, throwDelay, offset, [&](const Bound& bound, AutoParam& param, int32_t slot, int32_t value) {
 		    if (param.setNodeAtPos(tick, value, interpolated) < 0) {
 			    written = false;
 			    return false;
 		    }
 		    // The param's automated bit, as ParamSet::paramHasAutomationNow() and patch_cable_set.cpp's flagCable()
 		    // set it (setNodeAtPos() doesn't).
-		    ParamCollectionSummary& summary = set->paramManager->summaries[static_cast<int32_t>(bound.collection)];
+		    ParamCollectionSummary& summary = set.paramManager->summaries[static_cast<int32_t>(bound.collection)];
 		    summary.whichParamsAreAutomated[slot >> 5] |= 1U << (slot & 31);
 		    return true;
 	    });
 	return written;
 }
 
-void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t offset) {
-	Set* set = setOf(part, lane);
-	if (set == nullptr) {
-		return;
+void SoundControls::mirrorEdit(const Set& edited, const Bound& bound, int32_t value) {
+	const uint16_t key = paramKey(bound);
+	for (int32_t i = 0; i < setCount_; i++) {
+		const Set& mirror = sets_[i];
+		if (mirror.part != edited.part || mirror.lane != edited.lane || mirror.paramManager == edited.paramManager) {
+			continue;
+		}
+		for (int32_t b = mirror.first[0]; b < mirror.first[kNumSoundControls]; b++) {
+			if (paramKey(bound_[b]) == key) {
+				bound_[b].home = bound.home;
+				snap(mirror, bound_[b], value);
+				break;
+			}
+		}
 	}
-	forEachComposed(*set, control, throwDelay, offset,
-	                [](const Bound& /*bound*/, AutoParam& param, int32_t /*slot*/, int32_t value) {
-		                param.setCurrentValueBasicForSetup(value);
-		                return true;
-	                });
+}
+
+void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t offset) {
+	for (int32_t i = 0; i < setCount_; i++) {
+		if (sets_[i].part != part || sets_[i].lane != lane) {
+			continue; // else the lane's set, or a fallback Riser's mirror
+		}
+		forEachComposed(sets_[i], control, throwDelay, offset,
+		                [](const Bound& /*bound*/, AutoParam& param, int32_t /*slot*/, int32_t value) {
+			                param.setCurrentValueBasicForSetup(value);
+			                return true;
+		                });
+	}
 }
 
 void SoundControls::repatch() {
@@ -714,7 +749,7 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 				armRamp(set, bound, value, rampTicks);
 			}
 		}
-		return;
+		// On to a fallback Riser's mirror of the lane's set, if any (spec §9.5).
 	}
 }
 
@@ -762,6 +797,7 @@ std::optional<SoundControls::HomeEdit> SoundControls::playerEdited(const ModelSt
 		                 ? perform::throwDelayHomeFor(bound.range, value, set.offset[c], set.restSpace, set.throwDelay)
 		                 : perform::homeFor(bound.range, value, set.offset[c]);
 	}
+	mirrorEdit(set, bound, value); // a fallback Riser's row plays as the player set its lane (spec §9.5)
 	TEST_EVENT("gen_edit part=%u lane=%d control=%s", static_cast<unsigned>(set.part),
 	           set.lane == Lane::None ? -1 : static_cast<int>(set.lane), UpperName(static_cast<SoundControl>(c)).text);
 	return HomeEdit{set.part, set.lane, paramKey(bound), bound.home};
@@ -781,6 +817,7 @@ void SoundControls::setHome(const ModelStackWithAutoParam& stack, int32_t home) 
 	if (const std::optional<Match> match = find(stack)) {
 		match->bound.home = home;
 		value = valueOf(match->set, match->bound, match->set.offset[match->control]);
+		mirrorEdit(match->set, match->bound, value);
 	}
 	settingHome_ = true;
 	stack.autoParam->setCurrentValueInResponseToUserInput(value, &stack);

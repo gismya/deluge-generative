@@ -27,6 +27,7 @@
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
 #include "generative/perform/regenerate_page.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_popups.h"
 #include "hid/buttons.h"
@@ -35,6 +36,7 @@
 #include "model/model_stack.h"
 #include "model/song/song.h"
 #include "playback/playback_handler.h"
+#include "processing/sound/sound_drum.h"
 #include "storage/flash_storage.h"
 #include <algorithm>
 
@@ -451,6 +453,21 @@ void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t 
 		else if (output >= 0) {
 			static_assert(kMaxParts <= 8, "edited_.parts holds a bit a part");
 			edited_.parts |= static_cast<uint8_t>(1U << output);
+		}
+	}
+	if (active() && !leaving() && song_ != nullptr && currentRecipe.recipe.genre != nullptr) {
+		// The FX Kit's fallback Riser row plays the Riser lane's notes in some Builds: it takes the player's edit to
+		// the lane's row too, playing or stopped (spec §9.5).
+		const auto edit = paramEdit(stack, value, sink_.roster, *currentRecipe.recipe.genre, *song_);
+		if (edit && edit->lane == Lane::Riser) {
+			if (const auto fallback = loggedParam(*edit, sink_.roster, *currentRecipe.recipe.genre, *song_, true)) {
+				fallback->param->setCurrentValueBasicForSetup(value);
+				Drum* row = sink_.roster.parts[edit->target].drums[perform::kRiserFallbackRow];
+				if (row != nullptr && row->type == DrumType::SOUND) {
+					auto* sound = static_cast<SoundDrum*>(row);
+					sound->patcher.performInitialPatching(*sound, *fallback->manager);
+				}
+			}
 		}
 	}
 	if (!active() || leaving() || !driver_.running()) {
