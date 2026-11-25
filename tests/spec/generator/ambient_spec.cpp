@@ -34,11 +34,44 @@ constexpr int32_t kDronePart = 3;
 constexpr int32_t kLeadPart = 4;
 constexpr int32_t kFxPart = 5;
 
-Recipe ambientRecipe(Scale scale = Scale::Major, uint8_t keyRoot = 2, uint32_t entropy = 0) {
-	Recipe recipe = newRecipe(ambientGenre, entropy);
+Recipe ambientRecipe(Scale scale = Scale::Major, uint8_t keyRoot = 2, uint32_t entropy = 0,
+                     std::initializer_list<const char*> fixes = {"colour=add9", "motion=drift"}) {
+	Recipe recipe = withVariants(newRecipe(ambientGenre, entropy), fixes);
 	recipe.keyRoot = keyRoot;
 	recipe.scale = scale;
 	return recipe;
+}
+
+/// Over `seeds` pieces of 96 bars in `scale` with `fixes`, the Pad's pitch classes (from the key's root) on bars the
+/// home chord holds.
+std::set<int32_t> padClassesOnHome(Scale scale, std::initializer_list<const char*> fixes, uint32_t seeds = 6) {
+	std::set<int32_t> out;
+	for (uint32_t seed = 1; seed <= seeds; seed++) {
+		const Recipe recipe = ambientRecipe(scale, static_cast<uint8_t>(seed % 12), seed, fixes);
+		const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
+		for (const Event& e : walked.noteOns) {
+			const size_t step = std::min<size_t>(e.tick / kTicksPerStep, walked.steps.size() - 1);
+			if (e.part == kPadPart && walked.steps[step].chord == kI) {
+				out.insert(pitchClass(e.pitch - recipe.keyRoot + 12));
+			}
+		}
+	}
+	return out;
+}
+
+/// Over 8 pieces of 192 bars in `scale` with `fixes`: the chords played, and how many times the chord changed.
+std::pair<std::set<int32_t>, int32_t> chordsPlayed(Scale scale, std::initializer_list<const char*> fixes) {
+	std::set<int32_t> chords;
+	int32_t changes = 0;
+	for (uint32_t seed = 1; seed <= 8; seed++) {
+		const Walked walked = walk(ambientRecipe(scale, static_cast<uint8_t>(seed % 12), seed, fixes), seed,
+		                           192 * kStepsPerBar, {}, true);
+		for (const Walked::Step& step : walked.steps) {
+			chords.insert(step.chord);
+		}
+		changes += static_cast<int32_t>(walked.changes().size());
+	}
+	return {chords, changes};
 }
 
 /// The pitch classes of `chord` (scale steps from the tonic) in the key.
@@ -226,7 +259,7 @@ describe ambient("Ambient", $ {
 		expect(std::string(ambientGenre.name)).to_equal(std::string("ambient"));
 		expect(std::string(ambientGenre.oledName)).to_equal(std::string("AMBIENT"));
 		expect(ambientGenre.parent == nullptr).to_be_true();
-		expect(ambientGenre.version).to_equal(3);
+		expect(ambientGenre.version).to_equal(4);
 		expect(findGenre("ambient") == &ambientGenre).to_be_true();
 		expect(partCount(ambientGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -1023,6 +1056,74 @@ describe ambient("Ambient", $ {
 		expect(kept[kPadPart]).to_be_greater_than(0);
 		expect(kept[kDronePart]).to_be_greater_than(0);
 		expect(kept[kLeadPart]).to_be_greater_than(0);
+	});
+
+	context("its COLOUR and MOTION sets (variant ideas 1, #533)", _ {
+		it("lists the colour set: add9 as written, pure triads and lush 7/9, 3:2:3, live", _ {
+			const VariantSet& set = ambientGenre.variantSets[0];
+			expect(std::string(set.name)).to_equal(std::string("colour"));
+			expect(std::string(set.oledName)).to_equal(std::string("COLOUR"));
+			expect(set.variants.size()).to_equal(size_t{3});
+			const std::vector<std::tuple<std::string, std::string, int>> variants = {
+			    {"add9", "ADD9", 3}, {"pure", "PURE", 2}, {"lush", "LUSH 7/9", 3}};
+			for (size_t v = 0; v < variants.size(); v++) {
+				expect(std::string(set.variants[v].name)).to_equal(std::get<0>(variants[v]));
+				expect(std::string(set.variants[v].oledName)).to_equal(std::get<1>(variants[v]));
+				expect(static_cast<int>(set.variants[v].weight)).to_equal(std::get<2>(variants[v]));
+			}
+			expect(set.variants[0].apply == nullptr).to_be_true();
+			expect(set.live).to_be_true();
+			expect(set.changeAt == ChangeAt::Never).to_be_true();
+		});
+
+		it("voices I on the Pad as a triad with pure, adds the 9th and sus4 but never the 7th with add9, and the 7th with lush", _ {
+			const std::set<int32_t> pure = padClassesOnHome(Scale::Major, {"colour=pure", "motion=drift"});
+			const std::set<int32_t> add9 = padClassesOnHome(Scale::Major, {"colour=add9", "motion=drift"});
+			const std::set<int32_t> lush = padClassesOnHome(Scale::Major, {"colour=lush", "motion=drift"});
+			expect(pure == std::set<int32_t>{0, 4, 7}).to_be_true();
+			expect(add9.contains(2)).to_be_true();
+			expect(add9.contains(11)).to_be_false();
+			expect(lush.contains(11)).to_be_true();
+			expect(lush.contains(2)).to_be_true();
+		});
+
+		it("lists the motion set: the graph as written, still and wander, 3:1:3, not live: the walk reads the graph ahead", _ {
+			const VariantSet& set = ambientGenre.variantSets[1];
+			expect(std::string(set.name)).to_equal(std::string("motion"));
+			expect(std::string(set.oledName)).to_equal(std::string("MOTION"));
+			expect(set.variants.size()).to_equal(size_t{3});
+			const std::vector<std::tuple<std::string, std::string, int>> variants = {
+			    {"drift", "DRIFT", 3}, {"still", "STILL", 1}, {"wander", "WANDER", 3}};
+			for (size_t v = 0; v < variants.size(); v++) {
+				expect(std::string(set.variants[v].name)).to_equal(std::get<0>(variants[v]));
+				expect(std::string(set.variants[v].oledName)).to_equal(std::get<1>(variants[v]));
+				expect(static_cast<int>(set.variants[v].weight)).to_equal(std::get<2>(variants[v]));
+			}
+			expect(set.variants[0].apply == nullptr).to_be_true();
+			expect(set.live).to_be_false();
+			expect(set.changeAt == ChangeAt::Never).to_be_true();
+		});
+
+		it("moves less with still, among I, IV and vi only, and further with wander, in Major", _ {
+			const auto drift = chordsPlayed(Scale::Major, {"colour=add9", "motion=drift"});
+			const auto still = chordsPlayed(Scale::Major, {"colour=add9", "motion=still"});
+			const auto wander = chordsPlayed(Scale::Major, {"colour=add9", "motion=wander"});
+			expect(still.first == std::set<int32_t>{kI, kIV, kVI}).to_be_true();
+			expect(still.second * 2).to_be_less_than(drift.second);
+			expect(wander.second).to_be_greater_than(drift.second);
+		});
+
+		it("still moves in every scale: Lydian's guard closes I–IV and Dorian's I–vi, and their colour moves stay open", _ {
+			// Lydian: I, its colour move's II, and vi (its IV is #iv°). Dorian: I and IV (its vi is vi°).
+			expect(chordsPlayed(Scale::Lydian, {"colour=add9", "motion=still"}).first
+			       == std::set<int32_t>{kI, kII, kVI})
+			    .to_be_true();
+			expect(chordsPlayed(Scale::Dorian, {"colour=add9", "motion=still"}).first == std::set<int32_t>{kI, kIV})
+			    .to_be_true();
+			for (const Scale scale : {Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian}) {
+				expect(chordsPlayed(scale, {"colour=add9", "motion=still"}).second).to_be_greater_than(8);
+			}
+		});
 	});
 
 	it("never drops an event or evicts a note across whole pieces at every corner", _ {
