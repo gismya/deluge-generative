@@ -351,4 +351,18 @@ TEST(MemoryAllocation, stealableAllocations) {
 	CHECK(efficiency > 0.994);
 	mock().checkExpectations();
 };
+
+// String::set only shares string memory the allocator says is non-audio external: the top
+// RESERVED_EXTERNAL_ALLOCATOR bytes of SDRAM, ends excluded.
+TEST_GROUP(NonAudioExternal){};
+
+TEST(NonAudioExternal, topOfSdramOnly) {
+	auto at = [](uint32_t address) { return GeneralMemoryAllocator::isNonAudioExternal((void const*)address); };
+	CHECK(!at(0));
+	CHECK(!at(EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_ALLOCATOR));
+	CHECK(at(EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_ALLOCATOR + 1));
+	CHECK(at(EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_SMALL_ALLOCATOR));
+	CHECK(at(EXTERNAL_MEMORY_END - 1));
+	CHECK(!at(EXTERNAL_MEMORY_END));
+};
 } // namespace
