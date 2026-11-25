@@ -24,6 +24,60 @@ start_state
 include perform_open.txt
 include perform_confirm.txt
 
+# ---- Stopped, REGENERATE with BUILD on ROLL alone (#531): the Arc below needs Builds of a phrase or more, which a
+# hard Build (4 bars) isn't. BUILD isn't live, so only the Regenerate page narrows it: VARIANTS is one up from GO,
+# BUILD the third set; its multi-select from the top is ROLL, LONG, NO ROLL, HARD ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=13
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=9
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=1 shows=ROLL
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
+
 # ---- Stopped: part focus works, the map is dark; status line shows the held part's name ----
 pad 3 6 down
 expect event gen_focus part=1 locked=-1
@@ -57,10 +111,8 @@ expect event gen_press force BREAK
 expect event gen_arcplan first=0
 expect event /^gen_arcmap .*q=\.\.\.\.x\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...n.
-# A 1-phrase Break before a Build shorter than a phrase (Techno's hard Build, #531) shares its phrase with the Build,
-# which tags the box and is the next change the page names
-expect event /^gen_arcpage GR (BR|BU)/
-expect event /^gen_arcpage .*\|NEXT B(REAK|UILD)/
+expect event gen_arcpage GR BR
+expect event /^gen_arcpage .*\|NEXT BREAK/
 # BACK tap cancels it: the plan goes back to Groove
 button BACK down
 wait 50

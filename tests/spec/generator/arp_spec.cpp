@@ -211,6 +211,10 @@ describe arp("The Arp flavour", $ {
 			expect(barPitches(result, 0) == cycled({57, 69})).to_be_true();
 			Result seventh = play(runOf(OneArp<ArpOrder::Pulse, 2, 1, 1>::genre), 1); // the 7th in the chord
 			expect(barPitches(seventh, 0) == cycled({57, 69})).to_be_true();
+			// D minor's root at the top of the octave the Register starts in: D4 (62), 11 above E♭3, and D5 above it.
+			Run high = runOf(OneArp<ArpOrder::Pulse, 2>::genre);
+			high.recipe.keyRoot = 2;
+			expect(barPitches(play(high, 1), 0) == cycled({62, 74})).to_be_true();
 		});
 
 		it("climbs as many octaves as its pool entry spans", _ {

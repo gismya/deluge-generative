@@ -18,6 +18,7 @@
 // Variant sets (spec §3.6, ADR 0008): the data rules, the per-piece draw and its shares, the copy an instance plays,
 // the validity and patch-diff rules over every genre's variants, the Capture header, and Dub's skank (Q359).
 
+#include "generative/core/arc.h"
 #include "generative/core/capacity.h"
 #include "generative/core/golden_case.h"
 #include "generative/core/recipe_overrides.h"
@@ -118,8 +119,9 @@ bool sameChordLines(const ChordGraph* a, const ChordGraph* b) {
 }
 
 /// The fields a live or Drop-changing set's patch may never touch (ADR 0008): what the Arc's look-ahead reads across
-/// a Drop's line, the Arc's lengths, its Section offsets, the Build (with its roll), the Break and the Registers, and
-/// the chord lines (sameChordLines()). True when `a` and `b` agree on them.
+/// a Drop's line, the Arc's lengths, its Section offsets, the Build (with its roll), the Break and the Registers, the
+/// chord lines (sameChordLines()), and the lowest Density gate the Intro's floor reads (lowestGate()). True when `a`
+/// and `b` agree on them.
 bool sameLookAhead(const Genre& a, const Genre& b) {
 	const ArcSpec& x = a.arc;
 	const ArcSpec& y = b.arc;
@@ -133,7 +135,7 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	            && x.buildRiser == y.buildRiser && x.gap == y.gap && a.phraseBars == b.phraseBars
 	            && x.roll.lane == y.roll.lane && x.roll.top == y.roll.top
 	            && std::ranges::equal(x.roll.stageFraction, y.roll.stageFraction)
-	            && sameChordLines(a.harmony.graph, b.harmony.graph);
+	            && sameChordLines(a.harmony.graph, b.harmony.graph) && lowestGate(a) == lowestGate(b);
 	for (int32_t k = 0; k < kNumSectionKinds; k++) {
 		const SectionOffsets& o = x.offsets[k];
 		const SectionOffsets& q = y.offsets[k];

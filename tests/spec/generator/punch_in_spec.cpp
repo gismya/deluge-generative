@@ -70,12 +70,11 @@ std::vector<Event> without(const std::vector<Event>& events, int32_t part, Lane 
 	return out;
 }
 
-/// `events` sorted within each tick: events due on one tick may leave the buffer in another order when a lane's
-/// notes around them change (Techno's running hats under a roll, #531).
+/// `events` sorted within each tick by part and lane, keeping each lane's own order: events due on one tick may leave
+/// the buffer in another order when a lane's notes around them change (Techno's running hats under a roll, #531).
 std::vector<Event> tickSorted(std::vector<Event> events) {
 	std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
-		return std::tuple(a.tick, a.kind, a.part, a.lane, a.pitch)
-		       < std::tuple(b.tick, b.kind, b.part, b.lane, b.pitch);
+		return std::tuple(a.tick, a.part, a.lane) < std::tuple(b.tick, b.part, b.lane);
 	});
 	return events;
 }

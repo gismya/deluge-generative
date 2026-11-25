@@ -110,9 +110,11 @@ std::set<int32_t> buildLengths(const Genre& genre, const char* fix) {
 	return out;
 }
 
-/// The steps of each Build's last beat, and of its whole, in `walked`.
+/// The steps of each Build's last beat, its last bar, the bar before, and its whole, in `walked`.
 struct BuildSteps {
 	std::set<int32_t> lastBeat;
+	std::set<int32_t> lastBar;
+	std::set<int32_t> barBefore;
 	std::set<int32_t> all;
 };
 BuildSteps buildSteps(const Walked& walked) {
@@ -123,8 +125,12 @@ BuildSteps buildSteps(const Walked& walked) {
 		}
 		out.all.insert(static_cast<int32_t>(n));
 		if (walked.steps[n + 1].drop) {
-			for (int32_t k = 0; k < kStepsPerBeat; k++) {
-				out.lastBeat.insert(static_cast<int32_t>(n) - k);
+			for (int32_t k = 0; k < kStepsPerBar; k++) {
+				if (k < kStepsPerBeat) {
+					out.lastBeat.insert(static_cast<int32_t>(n) - k);
+				}
+				out.lastBar.insert(static_cast<int32_t>(n) - k);
+				out.barBefore.insert(static_cast<int32_t>(n) - kStepsPerBar - k);
 			}
 		}
 	}
@@ -330,7 +336,20 @@ describe techno_variants("Techno's variant sets", $ {
 			expect(rises("arp=down")).to_be_less_than(0);
 		});
 
-		it("thins with sparse: notes a dotted 8th apart, fewer than the walks as written play", _ {
+		it("thins with sparse: notes on its dotted-8th grid only, fewer than the walks as written play", _ {
+			// Steps no sparse pattern plays: its onsets fall a dotted 8th apart (0, 3, 6, 9, 12), with a few pickups.
+			const std::set<int32_t> offGrid{1, 4, 5, 7, 11, 13};
+			auto offGridNotes = [&](const char* fix) {
+				int32_t count = 0;
+				for (const std::vector<Event>& bar : arpBars(fix)) {
+					for (const Event& e : bar) {
+						count += offGrid.contains(stepOf(e) % kStepsPerBar) ? 1 : 0;
+					}
+				}
+				return count;
+			};
+			expect(offGridNotes("arp=sparse")).to_equal(0);
+			expect(offGridNotes("arp=rising")).to_be_greater_than(0);
 			auto perBar = [&](const char* fix) {
 				const auto bars = arpBars(fix);
 				size_t notes = 0;
@@ -344,8 +363,8 @@ describe techno_variants("Techno's variant sets", $ {
 	});
 
 	context("BUILD, the Build's shape (every subgenre)", _ {
-		it("draws the roll Build 8 or 16 bars, long 16 or 32, no roll 8, and hard 4 or 8", _ {
-			for (const Genre* genre : {&genres::technoAcid, &genres::technoMelodic}) {
+		it("draws the roll Build 8 or 16 bars, long 16 or 32, no roll 8, and hard 4 or 8, in every subgenre", _ {
+			for (const Genre* genre : {&genres::technoAcid, &genres::technoMelodic, &genres::technoDub, &genres::technoDetroit}) {
 				expect(buildLengths(*genre, "build=roll") == std::set<int32_t>{8, 16}).to_be_true();
 				expect(buildLengths(*genre, "build=long") == std::set<int32_t>{16, 32}).to_be_true();
 				expect(buildLengths(*genre, "build=noroll") == std::set<int32_t>{8}).to_be_true();
@@ -353,28 +372,43 @@ describe techno_variants("Techno's variant sets", $ {
 			}
 		});
 
-		it("rolls the snare in every Build but no roll's, and leaves the Gap's beat out of hard's", _ {
-			for (const Genre* genre : {&genres::technoAcid, &genres::technoDetroit}) {
-				auto inBuilds = [&](const char* fix) {
+		it("rolls the snare in every Build but no roll's, leaves the Gap's beat out of hard's, and cuts long's kick for 2 bars", _ {
+			for (const Genre* genre : {&genres::technoAcid, &genres::technoMelodic, &genres::technoDub, &genres::technoDetroit}) {
+				struct InBuilds {
 					int32_t snares = 0;
-					int32_t lastBeat = 0;
+					int32_t lastBeat = 0;  ///< drum hits but the snare's in the Build's last beat
+					int32_t barBefore = 0; ///< kicks in the bar before the Build's last
+					int32_t lastBar = 0;   ///< kicks in the Build's last bar
+				};
+				auto inBuilds = [&](const char* fix) {
+					InBuilds out;
 					for (uint32_t seed = 1; seed <= 4; seed++) {
 						const Walked walked = walk(with(*genre, {fix}, seed), seed, 200 * kStepsPerBar);
 						const BuildSteps steps = buildSteps(walked);
 						for (const Event& e : walked.noteOns) {
 							const int32_t step = stepOf(e);
-							const bool drums = e.part == kDrumsPart;
-							snares += drums && e.lane == Lane::Snare && steps.all.contains(step) ? 1 : 0;
-							lastBeat += drums && e.lane != Lane::Snare && steps.lastBeat.contains(step) ? 1 : 0;
+							if (e.part != kDrumsPart || e.muted) {
+								continue;
+							}
+							out.snares += e.lane == Lane::Snare && steps.all.contains(step) ? 1 : 0;
+							out.lastBeat += e.lane != Lane::Snare && steps.lastBeat.contains(step) ? 1 : 0;
+							out.barBefore += e.lane == Lane::Kick && steps.barBefore.contains(step) ? 1 : 0;
+							out.lastBar += e.lane == Lane::Kick && steps.lastBar.contains(step) ? 1 : 0;
 						}
 					}
-					return std::pair{snares, lastBeat};
+					return out;
 				};
-				const auto roll = inBuilds("build=roll");
-				expect(roll.first).to_be_greater_than(0);
-				expect(roll.second).to_equal(0); // the Gap: a beat of silence before the Drop
-				expect(inBuilds("build=noroll").first).to_equal(0);
-				expect(inBuilds("build=hard").second).to_be_greater_than(0);
+				const InBuilds roll = inBuilds("build=roll");
+				expect(roll.snares).to_be_greater_than(0);
+				expect(roll.lastBeat).to_equal(0); // the Gap: a beat of silence before the Drop
+				expect(roll.lastBar).to_equal(0);  // the kick cut for the last bar
+				expect(inBuilds("build=noroll").snares).to_equal(0);
+				expect(inBuilds("build=hard").lastBeat).to_be_greater_than(0);
+				// Only Acid techno's Builds keep the kick (the others keep their Break's parts and lanes): the roll
+				// Build plays it up to its last bar, and long's cuts it for its last 2.
+				expect(roll.barBefore > 0).to_equal(genre == &genres::technoAcid);
+				const InBuilds longBuild = inBuilds("build=long");
+				expect(longBuild.lastBar + longBuild.barBefore).to_equal(0);
 			}
 		});
 	});
