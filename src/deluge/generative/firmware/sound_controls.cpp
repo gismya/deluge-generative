@@ -232,7 +232,7 @@ void SoundControls::forEachTarget(const Set& set, const ControlRanges& ranges, S
 		return; // the control moves nothing on this preset
 	}
 	for (const TargetRange& range : perform::controlTargets(control, set.engine)) {
-		if (uses(set, range.needs) && !moved(perform::scaledRange(range, percent))) {
+		if (uses(set, range.needs) && !moved(perform::scaledRange(set.engine, range, percent))) {
 			return;
 		}
 	}

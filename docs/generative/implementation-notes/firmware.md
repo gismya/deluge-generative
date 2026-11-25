@@ -66,14 +66,16 @@ otherwise.
   (`processing/sound/sound.cpp:2537`), and Thin crosses it on subtractive and Ringmod parts (`kThin` has no
   `Needs::HpfInUse`); its level step isn't measured. Before adding a target, measure the level at its first step with
   a delugemu capture pair (`gen_emu.py capture`, the part alone, with and without the target).
-- A Kit's affect-entire params are unpatched, and their exp scale is steeper than a Sound's: `GlobalEffectable` takes
-  `UNPATCHED_LPF_FREQ` through `cableToExpParamShortcut` (>> 2) into `getExp` (an octave per 2^26), so a menu unit
-  is 16/50 of an octave, against 0.22 for a Sound's `LOCAL_LPF_FREQ` (`paramRanges`' 1.4 × 2^29). From fully open the
-  first ~9 units do nothing audible, then a few more bury anything bright. Kit-level Brightness at −20 played a
-  House Break of closed hats alone at −54 dBFS (32 dB down, #524), while the harness, which models no filter, played
-  8 hats a bar; `gen_emu.py capture`'s silence check caught it (Drums alone: `--mute` every other part). Measure a
-  kit-level range on a Break of hats alone. Kit-level Thin (HPF 0..+25, 8 octaves at full) is on the same scale and
-  unmeasured: a Build's Rise takes it most of the way.
+- A Kit's affect-entire LPF moves further per menu unit than a Sound's. `GlobalEffectable` takes its unpatched exp
+  params through `cableToExpParamShortcut` (>> 2) into `getExp` (an octave per 2^26): 16/50 of an octave a unit. A
+  Sound's exp params mostly move the same (`paramRanges`' default 2^30), but its `LOCAL_LPF_FREQ` has 1.4 × 2^29,
+  0.22 an octave, and its delay rate 2^29. So the Kit's LPF and delay rate are the steeper ones; its HPF matches a
+  Sound's. From fully open the Kit LPF's first ~9 units do nothing audible, then a few more bury anything bright.
+  Kit-level Brightness at −20 played a House Break of closed hats alone at −54 dBFS (32 dB down, #524), while the
+  harness, which models no filter, played 8 hats a bar; `gen_emu.py capture`'s silence check caught it (Drums alone:
+  `--mute` every other part). It is −14 now, and `scaledRange(engine, ...)` clamps a widened kit-level range there.
+  Measure a kit-level LPF range on a Break of hats alone. Kit-level Thin (HPF 0..+25) moves 0.32 an octave a unit
+  like a Sound's HPF (0..+20), over a wider range.
 - A lane sample of 2 s or more loads in CUT mode (`perform/one_shot.h`, §10.4), so its note-off stops it: a lane's
   note length is what you hear, not the file's. Before #423 the Fall's 6-tick note cut the 8 s Downers to a beat
   while the rough render, which played every sample out, rendered all 8 s. The render now follows the same rule, so a

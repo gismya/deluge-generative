@@ -105,9 +105,21 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 		it("never darkens a whole Kit past 4.5 octaves: at 6.4 a Break of closed hats played near silent (#524)", _ {
 			// The affect-entire LPF is unpatched: cableToExpParamShortcut's >> 2, then getExp's octave per 2^26, make
-			// a menu unit 2^32 / 50 / 4 / 2^26 = 16/50 of an octave. Tenths of an octave, at full Brightness:
-			const int32_t tenths = -rangeOf(SoundControl::Brightness, Engine::KitLevel, Target::LpfFrequency).low * 160 / 50;
-			expect(tenths).to_be_less_than(46);
+			// a menu unit 2^32 / 50 / 4 / 2^26 = 16/50 of an octave. Tenths of an octave below a fully open home:
+			const auto darkening = [](int32_t percent, int32_t offset) {
+				for (const TargetRange& range : controlTargets(SoundControl::Brightness, Engine::KitLevel)) {
+					const TargetRange scaled = scaledRange(Engine::KitLevel, range, percent);
+					const int64_t below = int64_t{INT32_MAX} - targetValue(scaled, INT32_MAX, offset);
+					return static_cast<int32_t>(below * 32 / (int64_t{85899345} * 10));
+				}
+				return int32_t{0};
+			};
+			expect(darkening(100, -kControlFull)).to_be_greater_than(40); // it still darkens
+			expect(darkening(100, -kControlFull)).to_be_less_than(46);
+			expect(darkening(100, -90)).to_be_less_than(46); // a House Break: Close -50 and the dip's -40
+			expect(darkening(100, -50)).to_be_less_than(darkening(100, -90));
+			expect(darkening(200, -kControlFull)).to_be_less_than(46); // a widened range is clamped
+			expect(darkening(150, -kControlFull)).to_be_less_than(46);
 		});
 	});
 
