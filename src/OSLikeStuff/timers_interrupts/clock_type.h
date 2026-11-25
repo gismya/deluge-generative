@@ -16,6 +16,11 @@ typedef int64_t dTime;
 #ifdef __cplusplus
 } // end of extern C section
 
+// scheduler_api.h includes this file inside its own extern "C" block, and libc++'s <compare> needs C++ linkage.
+extern "C++" {
+#include <compare>
+}
+
 constexpr double rollTime = ((double)(UINT32_MAX) / DELUGE_CLOCKS_PERf);
 class Time {
 	dTime time{0};

@@ -67,5 +67,6 @@ private:
 
 /// Define a `StringBuf` that uses an array placed on the stack.
 #define DEF_STACK_STRING_BUF(name, capacity)                                                                           \
-	char name##__buf[capacity] = {0};                                                                                  \
+	char name##__buf[capacity];                                                                                        \
+	memset(name##__buf, 0, sizeof(name##__buf));                                                                       \
 	StringBuf name = {name##__buf, capacity}

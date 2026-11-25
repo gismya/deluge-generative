@@ -67,7 +67,6 @@
 #include "util/misc.h"
 #include <algorithm>
 #include <array>
-#include <bits/ranges_algo.h>
 #include <cstdint>
 #include <cstring>
 #include <etl/vector.h>
