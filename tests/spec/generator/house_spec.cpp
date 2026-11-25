@@ -147,13 +147,14 @@ std::vector<std::vector<int32_t>> grooveChords(const Walked& walked) {
 	return out;
 }
 
-/// The share, in percent, of Drops whose Groove plays other chords than the one before, over 30 pieces of S1's `fix`.
+/// The share, in percent, of Drops whose Groove plays other chords than the one before, over 30 pieces of S1's `fix`,
+/// on the graph's loops: the vamp, the chords set's heavier pick (feel-2 G4), often draws the loop it left.
 int32_t loopMoveShare(const char* fix) {
 	int32_t drops = 0;
 	int32_t moves = 0;
 	for (uint32_t seed = 1; seed <= 30; seed++) {
-		const std::vector<std::vector<int32_t>> grooves =
-		    grooveChords(walk(withVariants(movingRecipe(houseGenre, seed), {fix}), seed, 300 * kStepsPerBar));
+		const std::vector<std::vector<int32_t>> grooves = grooveChords(
+		    walk(withVariants(movingRecipe(houseGenre, seed), {fix, "chords=loop"}), seed, 300 * kStepsPerBar));
 		for (size_t i = 1; i < grooves.size(); i++) {
 			drops++;
 			moves += grooves[i] != grooves[i - 1] ? 1 : 0;
@@ -201,7 +202,7 @@ describe house("House", $ {
 		expect(std::string(houseGenre.name)).to_equal(std::string("house"));
 		expect(std::string(houseGenre.oledName)).to_equal(std::string("HOUSE"));
 		expect(houseGenre.parent == nullptr).to_be_true();
-		expect(houseGenre.version).to_equal(7);
+		expect(houseGenre.version).to_equal(8);
 		expect(findGenre("house") == &houseGenre).to_be_true();
 		expect(partCount(houseGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {
@@ -976,13 +977,13 @@ describe house("House", $ {
 			}
 			expect(names).to_equal(std::vector<std::string>{"loops", "build", "bass", "chords"});
 			expect(variants).to_equal(std::vector<std::vector<std::string>>{{"third", "half", "every", "never"},
-			                                                                 {"full", "nolead", "cut2", "nokick", "filter"},
+			                                                                 {"full", "nolead", "nokick", "filter"},
 			                                                                 {"riff", "fifth", "root", "pickups"},
 			                                                                 {"loop", "vamp"}});
-			// The filter Build as heavy as the four roll Builds, the riff 3 to 1 over the offbeat lines, the loop 3 to 1
-			// over the vamp (feel-1).
+			// The filter Build 5 to the three roll Builds' 4, the riff 3 to 1 over the offbeat lines (feel-1), the vamp 2
+			// to 1 over the loop (feel-2 G4).
 			expect(weights).to_equal(
-			    std::vector<std::vector<int32_t>>{{1, 6, 1, 1}, {2, 1, 1, 1, 5}, {9, 1, 1, 1}, {3, 1}});
+			    std::vector<std::vector<int32_t>>{{1, 6, 1, 1}, {2, 1, 1, 5}, {9, 1, 1, 1}, {1, 2}});
 			expect(sets[0].live).to_be_true();
 			expect(sets[1].live).to_be_false(); // the Build is read ahead of its line
 			expect(sets[2].live).to_be_false(); // the pools differ in size
@@ -1042,17 +1043,12 @@ describe house("House", $ {
 			expect(differs).to_be_greater_than(0);
 		});
 
-		it("S4a: the Build with everything, with no Lead, with the kick and Bass cut for its last 2 bars, or with no kick", _ {
+		it("S4a: the Build with everything, with no Lead, or with no kick (feel-2 G2 dropped the 2-bar cut)", _ {
 			const BuildNotes full = buildNotes("build=full", kDrumsPart, Lane::Kick, 2);
 			expect(full.early).to_be_greater_than(0);
 			expect(full.late).to_be_greater_than(0);
 			expect(buildNotes("build=nolead", kLeadPart, Lane::None, 0).early).to_equal(0);
 			expect(buildNotes("build=full", kLeadPart, Lane::None, 0).early).to_be_greater_than(0);
-			for (const int32_t part : {kDrumsPart, kBassPart}) {
-				const BuildNotes cut = buildNotes("build=cut2", part, Lane::Kick, 2);
-				expect(cut.early).to_be_greater_than(0);
-				expect(cut.late).to_equal(0);
-			}
 			const BuildNotes kick = buildNotes("build=nokick", kDrumsPart, Lane::Kick, 2);
 			expect(kick.early + kick.late).to_equal(0);
 			expect(buildNotes("build=nokick", kStabPart, Lane::None, 0).early).to_be_greater_than(0);
