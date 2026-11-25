@@ -283,8 +283,9 @@ constexpr LoopSpec kBassLoop{
 };
 
 /// The heavy line's Loop: the root and the 5th only, each note held 88 ticks (5.5 steps, the most
-/// `longLoopNotesFit` allows with onsets a beat apart). Both are read per note (`decideLoop()`, Avoid's plain gate),
-/// so a live switch changes only the notes after the Drop.
+/// `longLoopNotesFit` allows with onsets a beat apart). The gate is read per note (`decideLoop()`, Avoid's plain gate);
+/// the degrees with the line, rolled again at the Drop (a frozen Bass keeps its line until it thaws). So a live switch
+/// changes only the notes after the Drop.
 constexpr LineWeight kHeavyDegrees[] = {{0, 5}, {4, 4}};
 constexpr LoopSpec kHeavyLoop = [] {
 	LoopSpec loop = kBassLoop;
@@ -504,7 +505,7 @@ constexpr Variant kMixVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.genre.dropOuts = kDropOutsTubby;
-	         resolved.genre.dropOutChance = 450;
+	         resolved.genre.dropOutChance = 450; // (tuning)
          }},
     {.name = "light",
      .oledName = "LIGHT",
@@ -512,13 +513,13 @@ constexpr Variant kMixVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.genre.dropOuts = kDropOutsLight;
-	         resolved.genre.dropOutChance = 120;
+	         resolved.genre.dropOutChance = 120; // (tuning)
          }},
 };
 
 /// The bass line's style (variant ideas 1, #532): bursts as written, a rolling 8th-note line, or heavy long notes on
 /// the root and the 5th, evenly (the owner: often each). Live: each pool keeps the bursts pool's 13 entries in their
-/// tiers and lengths, and the Loop's degrees and gate are read per note.
+/// tiers and lengths; the Loop's gate is read per note, its degrees with the line, rolled again at the Drop.
 constexpr Variant kBassVariants[] = {
     {.name = "bursts", .oledName = "BURSTS", .weight = 3},
     {.name = "rolling",

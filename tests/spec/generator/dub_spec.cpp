@@ -36,6 +36,10 @@ constexpr int32_t kSkankPart = 2;
 constexpr int32_t kMelodicaPart = 3;
 constexpr int32_t kFxPart = 4;
 
+/// Dub's MIX and BASS sets, by index in its list.
+constexpr size_t kMixSet = 3;
+constexpr size_t kBassSet = 4;
+
 constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
 constexpr int32_t kDropBeat2 = 4;  // beat 2: the recounted one drop (listening round 2, S1)
 constexpr int32_t kDropBeat4 = 12; // beat 4
@@ -900,7 +904,7 @@ describe dub("Dub", $ {
 
 	context("its MIX and BASS sets (variant ideas 1, #532)", _ {
 		it("lists the mix set: the version as written, tubby and light, 3:3:2, live", _ {
-			const VariantSet& set = dubGenre.variantSets[3];
+			const VariantSet& set = dubGenre.variantSets[kMixSet];
 			expect(std::string(set.name)).to_equal(std::string("mix"));
 			expect(std::string(set.oledName)).to_equal(std::string("MIX"));
 			expect(set.variants.size()).to_equal(size_t{3});
@@ -938,7 +942,7 @@ describe dub("Dub", $ {
 		});
 
 		it("lists the bass set: bursts as written, rolling and heavy, evenly, live", _ {
-			const VariantSet& set = dubGenre.variantSets[4];
+			const VariantSet& set = dubGenre.variantSets[kBassSet];
 			expect(std::string(set.name)).to_equal(std::string("bass"));
 			expect(std::string(set.oledName)).to_equal(std::string("BASS"));
 			expect(set.variants.size()).to_equal(size_t{3});

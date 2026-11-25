@@ -29,6 +29,7 @@
 
 #include "cppspec.hpp"
 
+#include <cstring>
 #include <string>
 #include <string_view>
 
@@ -112,6 +113,25 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			expect(std::string(text)).to_equal(std::string("skank=plain:2 drums=onedrop:7 break=seven:3 mix=version:7 bass=bursts:7"));
 			picksText(genres::technoAcid, VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
+		});
+
+		it("fit every built-in genre's longest picks text in kPicksTextChars, within 100 chars for the test port's line", _ {
+			// The test port's 160-char event line holds a timestamp and the event's fields before the picks.
+			for (const Genre* genre : allGenres()) {
+				VariantPicks picks = allRandom(*genre);
+				for (size_t s = 0; s < genre->variantSets.size(); s++) {
+					const VariantSet& set = genre->variantSets[s];
+					for (size_t v = 0; v < set.variants.size(); v++) {
+						if (std::strlen(set.variants[v].name) > std::strlen(set.variants[picks.pick[s]].name)) {
+							picks.pick[s] = static_cast<uint8_t>(v);
+						}
+					}
+				}
+				char wide[512];
+				picksText(*genre, picks, wide);
+				expect(std::strlen(wide)).to_be_less_than(size_t{101});
+				expect(std::strlen(wide)).to_be_less_than(kPicksTextChars);
+			}
 		});
 
 		it("name each set's allowed mask for GO's event, or - for a genre with no sets", _ {

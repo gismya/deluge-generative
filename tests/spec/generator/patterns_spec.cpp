@@ -372,10 +372,8 @@ describe patterns("Patterns", $ {
 			int32_t bars = genre->phraseBars * (genre->arc.introPhrases + genre->arc.groovePhrases.low);
 			for (uint32_t seed = 1; seed <= 5; seed++) {
 				Run run;
-				run.recipe = newRecipe(*genre, seed);
-				if (builtIn == &genres::dub) {
-					run.recipe = withVariants(run.recipe, {"mix=version"}); // tubby and light patch drop-outs back in
-				}
+				// As written: a variant may patch back what the copy took out (Dub's MIX, its drop-outs).
+				run.recipe = withFirstVariants(newRecipe(*genre, seed));
 				run.recipe.macros.set(Macro::Density, 0);
 				run.seed = seed;
 				auto ons = only(play(run, bars).events, EventKind::NoteOn);
