@@ -9,6 +9,7 @@
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/core/variants.h"
+#include "generative/perform/riser_timing.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -62,8 +63,9 @@ const char* const kUsage =
     "file order can differ from the render's, so a capture can pick another file from the same entropy.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
     "line, for scripts/generative/osc_octaves.py.\n"
-    "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
-    "shortest Build in ms at the top of its tempo range, and the lane's folders and tags, each |-separated, for\n"
+    "--list-risers prints the pack's fallback Risers, one \"fallback<TAB>path<TAB>ms\" a line, longest first, then\n"
+    "each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its shortest Build in ms at\n"
+    "the top of its tempo range, its variants' Builds counted, and the lane's folders and tags, each |-separated, for\n"
     "scripts/generative/riser_fit.py.\n";
 
 namespace {
@@ -159,6 +161,10 @@ std::string pitchedPalettePresets() {
 
 std::string riserLanes() {
 	std::string out;
+	// The fallbacks a Riser lane loads beside a longer drawn sample (spec §9.5), for the check to measure.
+	for (const perform::PackRiser& riser : perform::kPackRisers) {
+		out += std::string("fallback\t") + riser.path + "\t" + std::to_string(riser.ms) + "\n";
+	}
 	for (const Genre* genre : allGenres()) {
 		const bool hasRiser = std::ranges::any_of(genre->parts, [](const PartSpec& part) {
 			return std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.lane == Lane::Riser; });

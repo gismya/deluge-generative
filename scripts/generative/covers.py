@@ -153,6 +153,10 @@ BUILDERS = {
         *_L10N,
     ),  # laneName() + MUTE, or punch-in l10n name
     "gen_compose": (),  # the outcome's name
+    "gen_riser_fallback": (
+        *_GENRE,
+        "src/deluge/generative/perform/riser_timing.h",
+    ),  # the part's name and the fallback's path (kPackRisers)
     "gen_compose_pick": (
         *_GENRE,
         "src/deluge/generative/core/lane_names.h",

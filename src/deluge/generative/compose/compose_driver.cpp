@@ -225,8 +225,8 @@ bool ComposeDriver::endsHere() {
 void ComposeDriver::writeDue(int32_t upTo) {
 	Event event;
 	while (generator_->popDue(upTo, &event)) {
-		if (event.kind == EventKind::NoteOn && !event.muted && event.lane == Lane::Riser) {
-			timeRiser(event);
+		if (event.kind == EventKind::NoteOn && !event.muted && event.lane == Lane::Riser && !timeRiser(event)) {
+			continue; // no Riser fits this Build: its note-off finds no note to end
 		}
 		if (replaying_) {
 			shape(event);
@@ -369,19 +369,31 @@ int8_t ComposeDriver::centreOf(const Automated& automated) const {
 	return static_cast<int8_t>(generator_->centreLayer(automated.part, automated.lane, automated.control));
 }
 
-void ComposeDriver::timeRiser(Event& noteOn) {
+bool ComposeDriver::timeRiser(Event& noteOn) {
 	// As PerformDriver::holdRiser() does.
 	const int32_t drop = generator_->riserDropTick();
 	if (drop < 0) {
-		return;
+		return true;
 	}
-	const int32_t micros = writer_->sampleMicros(noteOn);
+	int32_t micros = writer_->sampleMicros(noteOn);
 	if (micros <= 0) {
-		return;
+		return true;
 	}
 	// Compose's song plays the Recipe's tempo throughout; a replay's, the tempo the log's glides plan (spec §17.6).
-	noteOn.tick = perform::riserStart(noteOn.tick, drop, micros,
-	                                  [this](int32_t tick) { return replaying_ ? tempoPlan_.at(tick) : tempo_; });
+	auto tempoAt = [this](int32_t tick) { return replaying_ ? tempoPlan_.at(tick) : tempo_; };
+	const int32_t fallback = writer_->fallbackMicros(noteOn);
+	switch (perform::pickRiser(noteOn.tick, drop, micros, fallback, tempoAt)) {
+	case perform::RiserPick::Drawn:
+		break;
+	case perform::RiserPick::Fallback:
+		noteOn.pitch = perform::kRiserFallbackPitch; // the note goes on the fallback's row
+		micros = fallback;
+		break;
+	case perform::RiserPick::None:
+		return false;
+	}
+	noteOn.tick = perform::riserStart(noteOn.tick, drop, micros, tempoAt);
+	return true;
 }
 
 void ComposeDriver::finish() {

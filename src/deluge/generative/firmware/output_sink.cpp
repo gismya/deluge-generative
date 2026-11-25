@@ -169,7 +169,15 @@ int32_t OutputSink::sampleMicros(const Event& noteOn) {
 		return 0;
 	}
 	const PartOutput& part = roster.parts[noteOn.part];
-	return sampleRowMicros(part.output != nullptr ? part.drums[laneRow(noteOn.lane)] : nullptr);
+	return sampleRowMicros(part.output != nullptr ? part.drums[perform::kitRowOf(noteOn.lane, noteOn.pitch)] : nullptr);
+}
+
+int32_t OutputSink::fallbackMicros(const Event& noteOn) {
+	if (noteOn.part >= kMaxParts || noteOn.lane != Lane::Riser) {
+		return 0;
+	}
+	const PartOutput& part = roster.parts[noteOn.part];
+	return sampleRowMicros(part.output != nullptr ? part.drums[perform::kRiserFallbackRow] : nullptr);
 }
 
 bool OutputSink::tempoFollowsMaster() {
@@ -320,18 +328,22 @@ void OutputSink::playNote(const PartOutput& part, const Event& event, bool on) {
 	int16_t mpeValues[kNumExpressionDimensions] = {};
 
 	if (event.lane != Lane::None) {
-		// Every Kit has a row per lane in the fixed order, so the lane's kind gives its drum (spec §5.4, §12.8).
-		Drum* drum = part.drums[laneRow(event.lane)];
-		ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum);
-		if (withDrum == nullptr) {
-			return;
-		}
+		// Every Kit has a row per lane in the fixed order, so the lane's kind gives its drum (spec §5.4, §12.8); a
+		// Riser note the driver gave the fallback plays the FX Kit's fallback row (spec §9.5).
+		Drum* drum = part.drums[perform::kitRowOf(event.lane, event.pitch)];
 		auto* kit = static_cast<Kit*>(part.output);
 		if (on) {
-			kit->noteOnPreKitArp(withDrum, drum, event.velocity, mpeValues);
+			if (ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, drum)) {
+				kit->noteOnPreKitArp(withDrum, drum, event.velocity, mpeValues);
+			}
+			return;
 		}
-		else {
-			kit->noteOffPreKitArp(withDrum, drum);
+		// The core's note-off doesn't know which row its Riser played: it ends both.
+		Drum* fallback = event.lane == Lane::Riser ? part.drums[perform::kRiserFallbackRow] : nullptr;
+		for (Drum* row : {drum, fallback}) {
+			if (ModelStackWithThreeMainThings* withDrum = drumModelStack(modelStack, part.clip, row)) {
+				kit->noteOffPreKitArp(withDrum, row);
+			}
 		}
 		return;
 	}

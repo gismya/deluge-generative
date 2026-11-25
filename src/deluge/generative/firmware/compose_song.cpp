@@ -20,6 +20,7 @@
 #include "generative/firmware/log_header.h"
 #include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/perform/riser_timing.h"
 #include "generative/runner/runner.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
@@ -209,7 +210,7 @@ void ComposeSong::note(const compose::Note& note) {
 	InstrumentClip* clip = segment->clip;
 	NoteRow* row = nullptr;
 	if (note.lane != Lane::None) {
-		Drum* drum = segment->drums[laneRow(note.lane)];
+		Drum* drum = segment->drums[perform::kitRowOf(note.lane, note.pitch)];
 		row = drum != nullptr ? clip->getNoteRowForDrum(drum) : nullptr;
 		if (row == nullptr) {
 			return; // a lane with nothing loaded plays nothing, as in Perform
@@ -258,7 +259,12 @@ void ComposeSong::base(const compose::Automated& automated, int8_t value) {
 
 int32_t ComposeSong::sampleMicros(const Event& noteOn) {
 	const PartOutput& part = roster_->parts[noteOn.part];
-	return noteOn.lane == Lane::None ? 0 : sampleRowMicros(part.drums[laneRow(noteOn.lane)]);
+	return noteOn.lane == Lane::None ? 0 : sampleRowMicros(part.drums[perform::kitRowOf(noteOn.lane, noteOn.pitch)]);
+}
+
+int32_t ComposeSong::fallbackMicros(const Event& noteOn) {
+	const PartOutput& part = roster_->parts[noteOn.part];
+	return noteOn.lane == Lane::Riser ? sampleRowMicros(part.drums[perform::kRiserFallbackRow]) : 0;
 }
 
 bool ComposeSong::finishClip(Segment& segment, int32_t position, int32_t length, bool synth) {

@@ -83,8 +83,9 @@ private:
 	[[nodiscard]] bool endsHere();
 	/// Writes every event due at or before `upTo`, in play order, as Perform's playDue() plays them.
 	void writeDue(int32_t upTo);
-	/// The sample Riser's note-on starts late, so its file ends on the Drop, at the Recipe's tempo (spec §9.5).
-	void timeRiser(Event& noteOn);
+	/// The sample Riser's note-on starts late, so its file ends on the Drop, at the Recipe's tempo (spec §9.5); the
+	/// fallback's where only that fits. False when no Riser fits its Build, so it isn't written.
+	bool timeRiser(Event& noteOn);
 	void finish();
 	/// Replay: the logged entries stamped on the next step, applied in its decision, with what the driver does
 	/// with them.

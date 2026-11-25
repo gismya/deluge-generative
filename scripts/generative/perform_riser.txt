@@ -4,7 +4,9 @@
 # clock. Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
 # BUILD is pinned to ROLL (#531) through the Regenerate page's VARIANTS (BUILD isn't live), so each Build is 8 or 16
-# bars; the last case narrows it to HARD's 4 or 8 bars, which the lane's 6 s and 4 s Risers still fit (spec §10.5).
+# bars; the last case narrows it to HARD's 4 or 8 bars. A 4-bar Build (7.1 to 7.7 s) is shorter than the 8 s Riser, so
+# there it plays the FX Kit's 6 s fallback, which still ends on the Drop (spec §9.5, §10.5); the 6 s and 4 s Risers fit
+# it themselves. gen_riser_fallback loaded part= path=|none part=: the fallback a Kit loaded beside its sample Riser.
 # gen_riser_on sample_ms=N at the Riser's note-on (0: a synth Riser); gen_riser ok=0|1 sample_ms= to_drop_ms=
 # sixteenth_ms= at its note-off. ok=1 needs a sample, ending within a 16th of the note-off. Listening: the same run.
 # needs: pack risers in SAMPLES/FX/Riser (the Deluge's card; delugemu's has none), so check_all.py skips it
@@ -15,7 +17,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/playback/playback_handler.*
 # covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
-# covers: src/deluge/generative/core/genres/dub.cpp
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/generative/firmware/perform_song.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -173,7 +175,9 @@ button PLAY up
 expect playing=false
 
 # ---- HARD's Build (4 or 8 bars, 7.1 s or more): stopped, REGENERATE with BUILD on HARD alone, then a forced Build.
-# The lane's Risers are 6 s and 4 s (not the 8 s one, #531), so the Riser still starts late and ends on the Drop ----
+# Whichever Riser the piece drew, the one that plays (the 8 s one's 6 s fallback in a 4-bar Build) starts late and ends
+# on the Drop. The script can't choose the drawn Riser, so it checks the outcome every draw has; the harness checks the
+# fallback itself (riser_timing_spec, compose_driver_spec) ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
@@ -236,7 +240,7 @@ pad 17 5 down
 wait 50
 pad 17 5 up
 expect event gen_section BUILD within=60
-expect event gen_riser_on sample_ms= within=40
+expect event /^gen_riser_on sample_ms=[1-9]/ within=40
 expect event gen_section GROOVE within=40
 expect event gen_riser ok=1 within=5
 button PLAY down

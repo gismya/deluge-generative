@@ -192,3 +192,9 @@ otherwise.
   is no longer the newest want. It used to cancel on any frame mid-build, so a build longer than a frame
   was cancelled and resubmitted forever (`gen_preset_preview cancelled` every ~45 ms). It showed once #488 made the FX
   Kit's Impact pick a pack preset: on a card without the pack, the missing preset's lookup made the build span frames.
+- The FX Kit's fallback Riser (spec §9.5, #551) is a row past the lane rows, `perform::kRiserFallbackRow`, loaded by
+  `buildFallbackRiser()` when the Riser row plays a sample longer than a pack short Riser (`kPackRisers`), so every
+  owner of `buildPerformSong()` gets it: Perform, Compose and Capture. A Riser note-on the driver gave the fallback
+  carries `kRiserFallbackPitch`; route a laned note by `kitRowOf(lane, pitch)`, never `laneRow(lane)` alone. The core's
+  note-off doesn't know which row played, so `OutputSink::playNote()` ends both; Compose's ClipBuilder pairs by lane
+  and writes the note-on's pitch, so its note lands on the fallback's row by itself.

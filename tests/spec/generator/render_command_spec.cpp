@@ -411,7 +411,7 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("\tFX\t")).to_equal(std::string::npos);
 	});
 
-	it("lists each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
+	it("lists the fallback Risers and each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
 		harness::render::Parsed parsed = parse({"--list-risers"});
 		expect(parsed.error).to_equal(std::string{});
 		expect(parsed.listRisers).to_be_true();
@@ -420,8 +420,10 @@ describe render_command("Rough render command", $ {
 		const std::string listing = harness::render::riserLanes();
 		// Dub's 1-bar Build at 80 BPM is 3,000 ms; its lane reads the short riser's own folder.
 		expect(listing.find("dub\t3000\tSAMPLES/FX/Riser/Short\t\n")).not_().to_equal(std::string::npos);
-		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
-		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
+		// Acid techno's shortest Build is the BUILD set's hard one, 4 bars at 135 BPM (#531), every file in the default
+		// folder; the fallbacks come first, longest first.
+		expect(listing.find("techno-acid\t7111\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+		expect(listing.rfind("fallback\tSAMPLES/FX/Riser/GEN Riser 2.wav\t6000\n", 0)).to_equal(size_t{0});
 		expect(listing.find("psytrance-classic\t13150\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
 	});
 

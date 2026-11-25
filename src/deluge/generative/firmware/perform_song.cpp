@@ -24,6 +24,7 @@
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/perform/one_shot.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -405,6 +406,42 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	return Error::NONE;
 }
 
+/// Adds the FX Kit's fallback Riser row (spec §9.5, §10.5) when its Riser row plays a sample: the longest pack short
+/// Riser shorter than it, which the driver plays in a Build the drawn one is longer than. A missing file adds no row:
+/// the driver then plays no Riser in such a Build.
+Error buildFallbackRiser(Build& build, Kit* kit, const PartSpec& part, PartOutput* out) {
+	const perform::PackRiser* fallback = perform::fallbackFor(sampleRowMicros(out->drums[laneRow(Lane::Riser)]));
+	if (fallback == nullptr || !plays(part, Lane::Riser) || previewBuild()) {
+		return Error::NONE;
+	}
+	Song* song = build.song;
+	ParamManagerForTimeline paramManager;
+	Error error = paramManager.setupWithPatching();
+	if (error != Error::NONE) {
+		return error;
+	}
+	auto* drum = static_cast<SoundDrum*>(StorageManager::createNewDrum(DrumType::SOUND));
+	if (drum == nullptr) {
+		return Error::INSUFFICIENT_RAM;
+	}
+	Sound::initParams(&paramManager);
+	drum->setupAsSample(&paramManager);
+	RowLoader loader(song, drum);
+	if (loader.loadSample(fallback->path) != LoadOutcome::Loaded) {
+		deleteLooseDrum(song, drum);
+		TEST_EVENT("gen_riser_fallback none part=%s", part.name);
+		return Error::NONE; // no fallback: a card without the pack
+	}
+	applySyncDefaults(drum, song);
+	applySoundSettings(*drum, paramManager, laneSoundSettings(part, Lane::Riser), *song);
+	song->backUpParamManager(drum, nullptr, &paramManager, true);
+	kit->addDrum(drum); // the Kit owns it from here
+	drum->drumName = "RISER FALLBACK";
+	out->drums[perform::kRiserFallbackRow] = drum;
+	TEST_EVENT("gen_riser_fallback loaded part=%s path=%s", part.name, fallback->path);
+	return Error::NONE;
+}
+
 /// Assembles a Kit with one sound per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed order,
 /// so laneRow() holds. Lanes the genre doesn't play, or with nothing loadable, are silent sample rows.
 Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
@@ -430,6 +467,12 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
 		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row], fx ? &out->ranges[row] : nullptr);
 		// A row's loads (its fallback chain included) are one chunk; then the runner job yields (spec §12.10).
+		if (error == Error::NONE && build.chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+		}
+	}
+	if (fx && error == Error::NONE) {
+		error = buildFallbackRiser(build, kit, part, out);
 		if (error == Error::NONE && build.chunks.boundary()) {
 			error = Error::ABORTED_BY_USER;
 		}

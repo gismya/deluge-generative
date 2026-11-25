@@ -1,4 +1,5 @@
-"""Tests for riser_fit.py: every pack Riser a genre's Riser lane can pick fits its shortest Build (spec §10.5).
+"""Tests for riser_fit.py: every pack Riser a genre's Riser lane can pick fits its shortest Build, or its fallback does
+(spec §9.5, §10.5).
 
 python3 scripts/generative/test_riser_fit.py
 """
@@ -60,6 +61,32 @@ class RiserFit(unittest.TestCase):
             lines[0].startswith("LONG dub: SAMPLES/FX/Riser/GEN Riser 1.wav is 8.00 s"),
             lines,
         )
+
+    def test_passes_a_riser_longer_than_the_shortest_build_whose_fallback_fits(self):
+        write_wav(os.path.join(self.pack, RISERS, "GEN Riser 2.wav"), 6.0)
+        listing = f"fallback\t{RISERS}/GEN Riser 2.wav\t6000\ntechno-acid\t7111\t{RISERS}\tGEN Riser 1\n"
+        ok, lines, count = riser_fit.check(listing, self.pack)
+        self.assertTrue(ok, lines)
+        self.assertEqual(count, 1)
+
+    def test_fails_a_longer_riser_whose_fallback_doesnt_fit_either(self):
+        write_wav(os.path.join(self.pack, RISERS, "GEN Riser 2.wav"), 6.0)
+        listing = f"fallback\t{RISERS}/GEN Riser 2.wav\t6000\ntechno-acid\t5000\t{RISERS}\tGEN Riser 1\n"
+        ok, lines, _ = riser_fit.check(listing, self.pack)
+        self.assertFalse(ok)
+        self.assertTrue(lines[0].endswith("and no fallback fits"), lines)
+
+    def test_fails_a_fallback_missing_from_the_pack_or_listed_at_another_length(self):
+        ok, lines, _ = riser_fit.check(
+            f"fallback\t{RISERS}/GEN Riser 9.wav\t6000\n", self.pack
+        )
+        self.assertFalse(ok)
+        self.assertTrue(lines[0].startswith("FALLBACK"), lines)
+        ok, lines, _ = riser_fit.check(
+            f"fallback\t{RISERS}/GEN Riser Short.wav\t2000\n", self.pack
+        )
+        self.assertFalse(ok)  # it is 2.5 s
+        self.assertTrue(lines[0].startswith("FALLBACK"), lines)
 
     def test_fails_a_lane_that_reaches_no_pack_riser(self):
         ok, lines, count = riser_fit.check(f"dub\t3000\t{RISERS}\tSiren\n", self.pack)

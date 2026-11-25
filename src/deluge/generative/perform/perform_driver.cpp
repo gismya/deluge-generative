@@ -358,23 +358,36 @@ void PerformDriver::playDue(NoteSink& sink, int32_t upTo) {
 	releaseRiser(sink, upTo);
 }
 
-bool PerformDriver::holdRiser(const Event& noteOn, NoteSink& sink) {
+bool PerformDriver::holdRiser(Event& noteOn, NoteSink& sink) {
 	// The note the core placed runs from the Build's first step to its Drop, so a synth Riser shapes itself to the
 	// Build. A sample has its own length: it starts late, so its file ends on the Drop.
 	const int32_t drop = generator_->riserDropTick();
 	if (drop < 0) {
 		return false;
 	}
-	const int32_t micros = sink.sampleMicros(noteOn);
+	int32_t micros = sink.sampleMicros(noteOn);
 	if (micros <= 0) {
 		return false;
+	}
+	// A sample longer than the Build plays the part's fallback if that fits, else nothing (spec §9.5).
+	auto tempoAt = [this](int32_t tick) { return plannedTempo(tick); };
+	const int32_t fallback = sink.fallbackMicros(noteOn);
+	switch (pickRiser(noteOn.tick, drop, micros, fallback, tempoAt)) {
+	case RiserPick::Drawn:
+		break;
+	case RiserPick::Fallback:
+		noteOn.pitch = kRiserFallbackPitch;
+		micros = fallback;
+		break;
+	case RiserPick::None:
+		return true; // its note-off finds nothing sounding
 	}
 	riser_ = {noteOn, drop, micros, noteOn.tick, true};
 	timeRiser();
 	if (riser_.startTick > noteOn.tick) {
 		return true;
 	}
-	dropRiser(); // longer than the Build: it starts with it
+	dropRiser(); // exactly as long as the Build: it starts with it
 	return false;
 }
 
