@@ -303,6 +303,8 @@ otherwise.
 - Trap: once a genre has variant sets, a spec's `newRecipe()` or `movingRecipe()` draws them, so a spec of the
   table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
   `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the
-  Lead) until pinned (#497).
+  Lead) until pinned (#497). The same holds for a spec that fixes one set and measures it: pin the sets that change
+  what it measures too. House's S1 loop-move shares fixed only `loops` and fell under their bounds once a reweight
+  made `vamp` the chords set's likelier draw, since a two-chord vamp often redraws the loop it left (#536).
 - Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
   the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).
