@@ -1059,7 +1059,10 @@ def build_capture(args):
         with open(cache) as fh:
             lines = fh.read().splitlines()
         if variants:
-            configured = "GENERATIVE_CAPTURE:BOOL=ON" in lines
+            configured = (
+                "GENERATIVE_CAPTURE:BOOL=ON" in lines
+                and "ENABLE_SYSEX_TEST:BOOL=ON" not in lines
+            )
         else:
             configured = (
                 "ENABLE_SYSEX_TEST:BOOL=ON" in lines

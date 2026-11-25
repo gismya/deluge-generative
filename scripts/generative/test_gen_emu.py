@@ -489,8 +489,13 @@ class BuildCapture(unittest.TestCase):
         self.assertIn("-variants", first)
         calls, _ = self.build("GENERATIVE_CAPTURE:BOOL=ON\n", variant=True)
         self.assertEqual(calls, [["cmake", "--build"]])
-        calls, _ = self.build("ENABLE_SYSEX_TEST:BOOL=ON\n", variant=True)
-        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+        for cache in (
+            "ENABLE_SYSEX_TEST:BOOL=ON\n",
+            "ENABLE_SYSEX_TEST:BOOL=ON\nGENERATIVE_CAPTURE:BOOL=ON\n",
+        ):
+            with self.subTest(cache=cache):
+                calls, _ = self.build(cache, variant=True)
+                self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
 
 
 class PatchedElf(unittest.TestCase):
@@ -1554,20 +1559,26 @@ class CaptureOne(unittest.TestCase):
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".log"))
             return mock.Mock(t=0)
 
+        def write_elf(src, dst, recipe):
+            self.patched = (src, dst, recipe)
+            touch(dst, recipe)
+
         with (
             mock.patch.object(gen_emu, "boot", side_effect=boot),
+            mock.patch.object(gen_emu, "write_capture_elf", side_effect=write_elf),
             mock.patch.object(
                 gen_emu,
                 "send_recipe",
                 side_effect=lambda emu, lines: self.sent.append(lines),
             ),
-            mock.patch.object(gen_emu, "check_recipe_taken"),
+            mock.patch.object(gen_emu, "check_recipe_taken") as taken,
             mock.patch.object(gen_emu, "settle"),
             mock.patch.object(gen_emu, "enter_perform", return_value=True),
             mock.patch.object(gen_emu, "check_perform_plays", return_value=pcm),
             mock.patch.object(gen_emu, "log") as log,
         ):
             wav, fails = gen_emu.capture_one(args, "fw.elf", [], harness)
+        self.taken = taken.call_count
         return tmp, wav, fails, [c.args[0] for c in log.call_args_list]
 
     def test_a_whole_capture_leaves_only_its_wav(self):
@@ -1584,6 +1595,23 @@ class CaptureOne(unittest.TestCase):
         self.assertEqual(self.booted, ("fw.elf", gen_emu.capture_tag(wav), True))
         args = gen_emu.parser().parse_args(["capture", "--seed", "5"])
         self.assertEqual(self.sent, [gen_emu.recipe_lines(args)])
+        self.assertEqual(self.taken, 1)
+
+    def test_a_variant_capture_boots_its_patched_elf_without_the_test_port(self):
+        # S7 has no variant lines (#548): the GENCAP2 Recipe is patched into <out>/<tag>.elf, deleted after
+        parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
+        argv = ["--seed", "5", "--variant", "build=long"]
+        tmp, wav, fails, _ = self.run_one(bars_pcm([0.3] * 4), (parts, STEP_S), argv)
+        self.assertEqual(fails, [])
+        tag = gen_emu.capture_tag(wav)
+        patched = os.path.join(tmp, tag + ".elf")
+        args = gen_emu.parser().parse_args(["capture", *argv])
+        self.assertEqual(
+            self.patched, ("fw.elf", patched, gen_emu.capture_recipe(args))
+        )
+        self.assertEqual(self.booted, (patched, tag, False))
+        self.assertEqual((self.sent, self.taken), ([], 0))
+        self.assertEqual(os.listdir(tmp), [os.path.basename(wav)])
 
     def test_a_bad_capture_keeps_its_logs(self):
         parts = [Part(Note(0, 6))]
@@ -1607,15 +1635,26 @@ class CaptureOne(unittest.TestCase):
         self.assertIn("WARNING silent from 0.0 s to 2.0 s", lines)
 
     def test_a_capture_that_raises_removes_its_claimed_wav(self):
-        tmp = self.enterContext(tempfile.TemporaryDirectory())
-        out = os.path.join(tmp, "out")
-        args = gen_emu.parser().parse_args(["capture", "--out", out])
-        with (
-            mock.patch.object(gen_emu, "boot", side_effect=RuntimeError("no boot")),
-            self.assertRaises(RuntimeError),
-        ):
-            gen_emu.capture_one(args, "fw.elf", [], None)
-        self.assertEqual(os.listdir(out), [])
+        # and a --variant capture its patched ELF
+        for variant in ([], ["--variant", "build=long"]):
+            with self.subTest(variant=variant):
+                tmp = self.enterContext(tempfile.TemporaryDirectory())
+                out = os.path.join(tmp, "out")
+                args = gen_emu.parser().parse_args(["capture", "--out", out, *variant])
+                with (
+                    mock.patch.object(
+                        gen_emu, "boot", side_effect=RuntimeError("no boot")
+                    ),
+                    mock.patch.object(
+                        gen_emu,
+                        "write_capture_elf",
+                        side_effect=lambda src, dst, recipe: touch(dst, recipe),
+                    ) as write,
+                    self.assertRaises(RuntimeError),
+                ):
+                    gen_emu.capture_one(args, "fw.elf", [], None)
+                self.assertEqual(write.call_count, 1 if variant else 0)
+                self.assertEqual(os.listdir(out), [])
 
 
 class CheckCommand(unittest.TestCase):
