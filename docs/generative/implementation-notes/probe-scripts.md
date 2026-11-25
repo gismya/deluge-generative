@@ -180,3 +180,8 @@ otherwise.
   moves `gen_sound` expects: since #488 an FX lane with no sample picks one of its presets per piece (`pick ...
   SYNTHS/...`, not `fallback`), and on delugemu's factory card, which has no pack, the Impact is `silent` and counts
   in `gen_sound_missing` as the Riser does. A script that runs on both cards matches either.
+- Seam S7's `next recipe` lines (spec §21.3) are queued like presses, so they land in order with the script's other
+  lines. `NextRecipe` lives in `.sdram_bss`, zero-filled, not constructed: the first field a line sets calls `clear()`
+  to put its defaults in (`macroPoints` -1, `swing` kept). A pick's path is the rest of its line and waits in
+  `songPath`, the one slot `load song` uses, so `kLineLength` covers `kMaxSoundPath`. A roll that uses them draws its
+  fresh entropy first, in the order it always did, then replaces the draws: `hold entropy` sequences stay the same.
