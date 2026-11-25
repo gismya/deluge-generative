@@ -1230,8 +1230,8 @@ void routine_task() {
 #if ENABLE_SYSEX_TEST
 // Generative mode (spec §20): the audio output's margin, in frames of the TX ring
 constexpr uint32_t kTxFrameBytes = 4 * NUM_MONO_OUTPUT_CHANNELS;
-uint32_t txFrame(uint32_t address) {
-	return (address - (uint32_t)getTxBufferStart()) / kTxFrameBytes;
+uint32_t txFrame(uintptr_t address) {
+	return (address - (uintptr_t)getTxBufferStart()) / kTxFrameBytes;
 }
 #endif
 
@@ -1250,7 +1250,7 @@ void routine() {
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
 #if ENABLE_SYSEX_TEST
-		TestPort::audioRoutineEntered(txFrame((uint32_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
+		TestPort::audioRoutineEntered(txFrame((uintptr_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
 #endif
 		while (doSomeOutputting() && numRoutines < 2) {
 
@@ -1323,7 +1323,7 @@ void routine() {
 #if ENABLE_SYSEX_TEST
 	{
 		// After an offline stem export's render too, as it writes the ring: the next entry's margin counts from here.
-		const auto dma = (uint32_t)getTxBufferCurrentPlace();
+		const auto dma = (uintptr_t)getTxBufferCurrentPlace();
 		TestPort::audioRoutineLeft(
 		    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
 		    txFrame(dma));
