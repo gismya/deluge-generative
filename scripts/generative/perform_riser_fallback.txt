@@ -11,6 +11,7 @@
 # Riser's note-on; gen_capture_begin, gen_capture_end: as in perform_capture_leave.txt; gen_riser_rows lpf=<drawn>/<fallback> hpf=<drawn>/<fallback>: both rows' LPF and HPF frequency
 # params as the fallback starts.
 # needs: card fixtures/perform_riser_fallback
+# writes: SONGS/GEN ACID TECHNO *
 # covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/firmware/sound_controls.* src/deluge/generative/perform/riser_timing.h
 # covers: src/deluge/generative/perform/perform_driver.* src/deluge/generative/core/genres/techno.cpp
