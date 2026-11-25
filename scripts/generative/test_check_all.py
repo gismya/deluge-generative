@@ -91,6 +91,8 @@ class Plan(unittest.TestCase):
             "fat_image.py": "import struct\n",
             "check_all.py": "import covers\n",
             "covers.py": "import os\n",
+            # an icount check of its own (ICOUNT_CHECKS), picked by its covers line as a probe script is
+            "preset_emu.py": "# covers: src/c.cpp\nimport gen_emu\n",
         }
         scripts["test_port_smoke.txt"] = "start_state\ninclude perform_open.txt\n"
         for name, text in scripts.items():
@@ -211,6 +213,31 @@ class Plan(unittest.TestCase):
         plan = self.plan(["scripts/generative/perform_a.txt"])
         self.assertIsNone(plan.skip_firmware)
         self.assertEqual(self.names(plan), ["test_port_smoke.txt", "perform_a.txt"])
+
+    def icount(self, plan):
+        return [os.path.basename(s) for s in plan.icount]
+
+    def test_an_icount_check_runs_for_a_change_its_covers_line_names(self):
+        plan = self.plan(["src/c.cpp"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.icount(plan), ["preset_emu.py"])
+        self.assertEqual(self.names(plan), ["test_port_smoke.txt"])
+
+    def test_a_changed_icount_check_runs_with_the_firmware(self):
+        plan = self.plan(["scripts/generative/preset_emu.py"])
+        self.assertIsNone(plan.skip_firmware)
+        self.assertEqual(self.icount(plan), ["preset_emu.py"])
+
+    def test_an_icount_check_waits_for_what_it_covers(self):
+        for changed in (["src/b.cpp"], ["docs/x.md"]):
+            with self.subTest(changed=changed):
+                self.assertEqual(self.icount(self.plan(changed)), [])
+
+    def test_full_and_no_merge_base_run_the_icount_checks(self):
+        self.assertEqual(
+            self.icount(self.plan(["docs/x.md"], full=True)), ["preset_emu.py"]
+        )
+        self.assertEqual(self.icount(self.plan(None)), ["preset_emu.py"])
 
     def test_full_runs_everything_whatever_changed(self):
         plan = self.plan(["docs/x.md"], full=True)
