@@ -89,6 +89,9 @@ public:
 		missing_ = 0;
 		replaced_ = 0;
 		submitted_ = getSystemTicks();
+#if ENABLE_SYSEX_TEST
+		appliedNext_ = false;
+#endif
 	}
 
 	JobOutcome run(Chunks& chunks) override {
@@ -176,6 +179,11 @@ public:
 				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
 				           static_cast<int>(pendingRecipe.recipe.keyRoot),
 				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
+#if ENABLE_SYSEX_TEST
+				if (appliedNext_) {
+					TestPort::nextRecipeTaken(); // its roster loaded: the pending Recipe will play
+				}
+#endif
 			}
 			if (replaced_ > 0 && transitions.newest(request_)) {
 				showSoundsReplaced(replaced_); // spec §16.6
@@ -222,8 +230,9 @@ private:
 			return false;
 		}
 #if ENABLE_SYSEX_TEST
-		// The genre is the one picked, and the live macros win at the handover.
-		takeNextRecipe(pendingRecipe.recipe, pendingRecipe.sounds);
+		// The genre is the one picked, and the live macros win at the handover. The lines are taken only once the
+		// roster has loaded (finished()): a cancel or a card error leaves them for the next roll.
+		appliedNext_ = applyNextRecipe(pendingRecipe.recipe, pendingRecipe.sounds);
 #endif
 		return true;
 	}
@@ -258,6 +267,9 @@ private:
 	int32_t missing_ = 0;
 	int32_t replaced_ = 0; ///< A LOAD's missing sounds, re-rolled (spec §16.6)
 	uint32_t submitted_ = 0;
+#if ENABLE_SYSEX_TEST
+	bool appliedNext_ = false; ///< rollPending() applied seam S7's lines: see finished()
+#endif
 };
 
 namespace {

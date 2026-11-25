@@ -116,6 +116,7 @@ enum NextField : uint8_t {
 	kNextSwing,
 	kNextMacro
 };
+constexpr int32_t kPitchClasses = 12; ///< A "next recipe key" is one of them, 0 = C
 
 struct Entry {
 	Kind kind;
@@ -483,9 +484,11 @@ bool parseNextRecipe(char* rest, Entry* entry, const char** path) {
 		*entry = {Kind::NextRecipe, kNextGenre,
 		          static_cast<int32_t>(std::ranges::find(genres, findGenre(t.token[1])) - genres.begin())};
 	}
-	else if (t.count == 2 && (strcmp(field, "seed") == 0 || strcmp(field, "entropy") == 0)
-	         && parseUint32(t.token[1], &number)) {
-		*entry = {Kind::NextRecipe, field[0] == 's' ? kNextSeed : kNextEntropy, static_cast<int32_t>(number)};
+	else if (t.count == 2 && strcmp(field, "seed") == 0 && parseUint32(t.token[1], &number)) {
+		*entry = {Kind::NextRecipe, kNextSeed, static_cast<int32_t>(number)};
+	}
+	else if (t.count == 2 && strcmp(field, "entropy") == 0 && parseUint32(t.token[1], &number)) {
+		*entry = {Kind::NextRecipe, kNextEntropy, static_cast<int32_t>(number)};
 	}
 	else if (t.count == 3 && strcmp(field, "macro") == 0 && parseInt(t.token[1], 0, kNumMacros - 1, &value)
 	         && parseInt(t.token[2], 0, kMacroPoints, &points)) {
@@ -498,7 +501,7 @@ bool parseNextRecipe(char* rest, Entry* entry, const char** path) {
 			int32_t min, max;
 		};
 		constexpr Number kNumbers[] = {{"tempo", kNextTempo, kMinTempo, kMaxTempo},
-		                               {"key", kNextKey, 0, 11},
+		                               {"key", kNextKey, 0, kPitchClasses - 1},
 		                               {"scale", kNextScale, 0, kNumScales - 1},
 		                               {"swing", kNextSwing, -kMaxSwing, kMaxSwing}};
 		const Number* row = std::ranges::find_if(kNumbers, [&](const Number& n) { return strcmp(n.name, field) == 0; });
@@ -1036,12 +1039,12 @@ void setNextRecipeSound(uint8_t slot, const char* path) {
 
 /// "reset recipe": puts the Current Recipe back as after boot (forgetCurrentRecipe()), so the next Perform entry's
 /// GENRE ▸ opens on the default genre (techno-acid) and rolls a fresh Recipe, seed and sound picks for it, whatever
-/// genre the last script left playing. start_state sends it once it has left Perform. Sends gen_recipe_reset done,
+/// genre the last script left playing, and forgets seam S7's "next recipe" lines. start_state sends it once it has left
+/// Perform. Sends gen_recipe_reset done,
 /// or gen_recipe_reset refused with why: perform (Perform is open or still holds its generator, which plays the
 /// Recipe; nothing changed) or busy (a runner job, which may still commit a Recipe, hasn't ended; nothing changed).
 void resetRecipe() {
 	using namespace deluge::generative::firmware;
-	nextRecipeArmed = false;
 	if (rootUIIsGenerativePerform() || performAdapter.active()) {
 		event("gen_recipe_reset refused why=perform");
 		return;
@@ -1051,6 +1054,7 @@ void resetRecipe() {
 		return;
 	}
 	forgetCurrentRecipe();
+	nextRecipeArmed = false;
 	event("gen_recipe_reset done");
 }
 

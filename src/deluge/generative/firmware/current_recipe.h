@@ -127,14 +127,16 @@ uint32_t freshEntropy();
 
 #if ENABLE_SYSEX_TEST
 /// Seam S7 (spec §21.3): a roll's fresh draws, replaced by what the test port's "next recipe" lines set in their place
-/// (TestPort::nextRecipe()) until takeNextRecipe() takes them: the entropy of the facts and the sounds, the seed, the
-/// genre an entry or genre pick rolls. A roll draws its fresh entropy first, so "hold entropy" sequences stay the same.
+/// (TestPort::nextRecipe()) until a roll that applied them calls TestPort::nextRecipeTaken(): the entropy of the facts
+/// and the sounds, the seed, the genre an entry or genre pick rolls. A roll draws its fresh entropy first, so "hold
+/// entropy" sequences stay the same.
 uint32_t nextEntropy(uint32_t fresh);
 uint32_t nextSeed(uint32_t fresh);
 const Genre& nextGenre(const Genre& genre);
-/// The lines' macros, facts and sound picks over a roll that has succeeded, and they are forgotten. A roll that fails
-/// or is cancelled leaves them for the next one.
-void takeNextRecipe(Recipe& recipe, SoundPicks& sounds);
+/// The lines' macros, facts and sound picks over a roll. False, and nothing changed, when no lines are set. The roll
+/// calls TestPort::nextRecipeTaken() once its Recipe is the one that plays: one that fails or is cancelled leaves the
+/// lines for the next roll.
+bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds);
 #else
 inline uint32_t nextEntropy(uint32_t fresh) {
 	return fresh;
