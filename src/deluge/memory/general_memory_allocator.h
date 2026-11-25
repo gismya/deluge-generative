@@ -98,6 +98,9 @@ public:
 	void checkStack(char const* caller);
 	void testShorten(int32_t i);
 	int32_t getRegion(void* address);
+	/// Whether address is in non-audio external memory, where String::set may share a string's memory. Callers ask
+	/// this instead of comparing with fixed addresses, so an allocator that replaces this one answers for its memory.
+	static bool isNonAudioExternal(void const* address);
 	void testMemoryDeallocated(void* address);
 
 	void putStealableInQueue(Stealable* stealable, StealableQueue q);
@@ -116,6 +119,16 @@ public:
 private:
 	void checkEverythingOk(char const* errorString);
 };
+
+// The Deluge's answer: the top RESERVED_EXTERNAL_ALLOCATOR bytes of SDRAM, ends excluded (the small external region
+// and the top of the external one). Inline, so the Release build is the same as with the comparison written out in
+// String::set. A host build (DELUGE_HOST) replaces this allocator at link time and defines this with it.
+#if !DELUGE_HOST
+inline bool GeneralMemoryAllocator::isNonAudioExternal(void const* address) {
+	auto value = (uint32_t)address;
+	return EXTERNAL_MEMORY_END - RESERVED_EXTERNAL_ALLOCATOR < value && value < EXTERNAL_MEMORY_END;
+}
+#endif
 
 extern "C" {
 void* delugeAlloc(unsigned int requiredSize, bool mayUseOnChipRam = true);
