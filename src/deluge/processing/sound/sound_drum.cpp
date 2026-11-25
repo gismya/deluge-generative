@@ -167,10 +167,18 @@ void SoundDrum::choke(ModelStackWithSoundFlags* modelStack) {
 void SoundDrum::setSkippingRendering(bool newSkipping) {
 	if (kit != nullptr && newSkipping != skippingRendering) {
 		if (newSkipping) {
-			kit->drumsWithRenderingActive.deleteAtKey((int32_t)(Drum*)this);
+			kit->drumsWithRenderingActive.deleteAtKey((int32_t)(uintptr_t)(Drum*)this);
 		}
 		else {
-			kit->drumsWithRenderingActive.insertAtKey((int32_t)(Drum*)this);
+			Drum* drum = this;
+			int32_t i = kit->drumsWithRenderingActive.insertAtKey((int32_t)(uintptr_t)drum);
+			// The key holds only the pointer's low 32 bits. Where a pointer is wider, store all of it in the
+			// element: Kit::renderGlobalEffectableForClip() reads it back.
+			if constexpr (sizeof(Drum*) > sizeof(int32_t)) {
+				if (i >= 0) {
+					memcpy(kit->drumsWithRenderingActive.getElementAddress(i), &drum, sizeof(Drum*));
+				}
+			}
 		}
 	}
 

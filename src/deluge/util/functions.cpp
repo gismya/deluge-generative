@@ -1841,7 +1841,7 @@ bool doesFilenameFitPrefixFormat(char const* fileName, char const* filePrefix, i
 		return false;
 	}
 
-	int32_t dotPos = (uint32_t)dotAddress - (uint32_t)fileName;
+	int32_t dotPos = (uintptr_t)dotAddress - (uintptr_t)fileName;
 	if (dotPos < prefixLength + 3) {
 		return false;
 	}

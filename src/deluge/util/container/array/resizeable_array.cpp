@@ -210,14 +210,14 @@ void ResizeableArray::attemptMemoryShorten() {
 	if (staticMemoryAllocationSize) {
 		return;
 	}
-	if ((uint32_t)memoryAllocationStart >= (uint32_t)INTERNAL_MEMORY_BEGIN) {
+	if ((uintptr_t)memoryAllocationStart >= (uintptr_t)INTERNAL_MEMORY_BEGIN) {
 		return;
 	}
 
 	uint32_t allocatedSize = GeneralMemoryAllocator::get().getAllocatedSize(memoryAllocationStart);
 
 	if (allocatedSize > (memorySize + maxNumEmptySpacesToKeep) * elementSize) {
-		int32_t extraSpaceLeft = (uint32_t)memory - (uint32_t)memoryAllocationStart;
+		int32_t extraSpaceLeft = (uintptr_t)memory - (uintptr_t)memoryAllocationStart;
 
 		int32_t extraSpaceRight = allocatedSize - extraSpaceLeft - memorySize * elementSize;
 
@@ -499,14 +499,14 @@ tryAgain:
 	uint32_t allocatedSize = GeneralMemoryAllocator::get().getAllocatedSize(memoryAllocationStart);
 
 	// Try expanding left into existing memory
-	uint32_t extraSpaceLeft = (uint32_t)memory - (uint32_t)memoryAllocationStart;
+	uint32_t extraSpaceLeft = (uintptr_t)memory - (uintptr_t)memoryAllocationStart;
 	uint32_t extraElementsLeft = extraSpaceLeft / elementSize;
 	memory = (char* __restrict__)memory - extraElementsLeft * elementSize;
 	memoryStart += extraElementsLeft;
 	memorySize += extraElementsLeft;
 
 	// Try expanding right into existing memory
-	extraSpaceLeft = (uint32_t)memory - (uint32_t)memoryAllocationStart; // Updates it
+	extraSpaceLeft = (uintptr_t)memory - (uintptr_t)memoryAllocationStart; // Updates it
 	memorySize = (uint32_t)(allocatedSize - extraSpaceLeft) / elementSize;
 
 	int32_t memoryIncreasedBy = memorySize - oldMemorySize;
@@ -639,7 +639,7 @@ bool ResizeableArray::attemptMemoryExpansion(int32_t minNumToExtend, int32_t ide
 
 startAgain:
 	// If we actually had a bit more already, left...
-	uint32_t extraBytesLeft = (uint32_t)memory - (uint32_t)memoryAllocationStart;
+	uint32_t extraBytesLeft = (uintptr_t)memory - (uintptr_t)memoryAllocationStart;
 	if (extraBytesLeft >= elementSize) {
 		int32_t extraElementsLeft =
 		    extraBytesLeft / elementSize; // See how many extra elements there are space for on the left

@@ -148,6 +148,8 @@ public:
 	Drum* firstDrum;
 	Drum* selectedDrum;
 
+	/// Each element is a whole Drum*. Its key, the first 32 bits, is the pointer's low 32 bits on a little-endian
+	/// build of any pointer width, so search it with `(int32_t)(uintptr_t)drum`.
 	OrderedResizeableArrayWith32bitKey drumsWithRenderingActive;
 
 	ModelStackWithAutoParam* getModelStackWithParam(ModelStackWithTimelineCounter* modelStack, Clip* clip,

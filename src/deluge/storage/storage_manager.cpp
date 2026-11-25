@@ -139,7 +139,7 @@ cutFolderPathAndTryCreating:
 			if (!slashAddr) {
 				return std::unexpected(Error::UNSPECIFIED); // Shouldn't happen
 			}
-			int32_t slashPos = (uint32_t)slashAddr - (uint32_t)folderPathChars;
+			int32_t slashPos = (uintptr_t)slashAddr - (uintptr_t)folderPathChars;
 
 			error = folderPath.shorten(slashPos);
 			if (error != Error::NONE) {

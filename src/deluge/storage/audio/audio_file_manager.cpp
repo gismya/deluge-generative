@@ -467,7 +467,7 @@ Error AudioFileManager::setupAlternateAudioFilePath(String& newPath, int32_t dir
 		if (!slashAddress) {
 			break;
 		}
-		int32_t slashPos = (uint32_t)slashAddress - (uint32_t)newPathChars;
+		int32_t slashPos = (uintptr_t)slashAddress - (uintptr_t)newPathChars;
 		Error error = newPath.setChar('_', slashPos);
 		if (error != Error::NONE) {
 			return error;
@@ -976,7 +976,7 @@ getOutEarly:
 	}
 
 #if ALPHA_OR_BETA_VERSION
-	if ((uint32_t)cluster.data & 0b11) {
+	if ((uintptr_t)cluster.data & 0b11) {
 		D_PRINTLN("SD read address misaligned by  %d", (int32_t)((uint32_t)cluster.data & 0b11));
 	}
 #endif

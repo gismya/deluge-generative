@@ -3231,15 +3231,16 @@ Error NoteRow::readFromFile(Deserializer& reader, int32_t* minY, InstrumentClip*
 		}
 
 		else if (!strcmp(tagName, "drumIndex")) {
-			drum = (Drum*)reader.readTagOrAttributeValueInt(); // Sneaky - we store an integer in place of this pointer,
-			                                                   // then swap it back to something meaningful later
+			drum = (Drum*)(intptr_t)
+			           reader.readTagOrAttributeValueInt(); // Sneaky - we store an integer in place of this pointer,
+			                                                // then swap it back to something meaningful later
 		}
 
 		else if (!strcmp(tagName, "gateOutput")) {
 			int32_t gateChannel = reader.readTagOrAttributeValueInt();
 			gateChannel = std::clamp<int32_t>(gateChannel, 0, NUM_GATE_CHANNELS - 1);
 
-			drum = (Drum*)(0xFFFFFFFE - gateChannel);
+			drum = (Drum*)(uintptr_t)(0xFFFFFFFE - gateChannel);
 		}
 
 		else if (!strcmp(tagName, "muteMidiCommand")) {
@@ -3270,7 +3271,8 @@ Error NoteRow::readFromFile(Deserializer& reader, int32_t* minY, InstrumentClip*
 			// already had some loading done by the Drum
 			if (song_firmware_version < FirmwareVersion::official({1, 2, 0}) && parentClip->output) {
 
-				SoundDrum* actualDrum = (SoundDrum*)((Kit*)parentClip->output)->getDrumFromIndex((int32_t)drum);
+				SoundDrum* actualDrum =
+				    (SoundDrum*)((Kit*)parentClip->output)->getDrumFromIndex((int32_t)(intptr_t)drum);
 
 				if (actualDrum) {
 					ParamManager* existingParamManager =

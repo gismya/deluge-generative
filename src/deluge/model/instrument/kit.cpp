@@ -457,7 +457,7 @@ void Kit::drumRemoved(Drum* drum) {
 
 	// The Drum is usually about to be deallocated, so it must not stay in the render list, or
 	// renderGlobalEffectableForClip() would use it after it's freed. Remove it in all builds.
-	int32_t i = drumsWithRenderingActive.searchExact((int32_t)drum);
+	int32_t i = drumsWithRenderingActive.searchExact((int32_t)(uintptr_t)drum);
 	if (i != -1) {
 		if constexpr (ALPHA_OR_BETA_VERSION) {
 			FREEZE_WITH_ERROR("E321");
@@ -539,7 +539,7 @@ bool Kit::renderGlobalEffectableForClip(ModelStackWithTimelineCounter* modelStac
 	bool rendered = false;
 	// Render Drums. Traverse backwards, in case one stops rendering (removing itself from the list) as we render it
 	for (int32_t d = drumsWithRenderingActive.getNumElements() - 1; d >= 0; d--) {
-		Drum* thisDrum = (Drum*)drumsWithRenderingActive.getKeyAtIndex(d);
+		Drum* thisDrum = *(Drum**)drumsWithRenderingActive.getElementAddress(d);
 
 		// Only SoundDrums may be in this list - don't render anything else as one
 		if (thisDrum->type != DrumType::SOUND) {

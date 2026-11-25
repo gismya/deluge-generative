@@ -77,11 +77,11 @@ int32_t OpenAddressingHashTable::getBucketIndex(uint32_t key) {
 }
 
 void* OpenAddressingHashTable::getBucketAddress(int32_t b) {
-	return (void*)((uint32_t)memory + b * elementSize);
+	return (void*)((uintptr_t)memory + b * elementSize);
 }
 
 void* OpenAddressingHashTable::secondaryMemoryGetBucketAddress(int32_t b) {
-	return (void*)((uint32_t)secondaryMemory + b * elementSize);
+	return (void*)((uintptr_t)secondaryMemory + b * elementSize);
 }
 
 void* OpenAddressingHashTable::insert(uint32_t key, bool* onlyIfNotAlreadyPresent) {

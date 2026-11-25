@@ -1320,10 +1320,10 @@ float Sample::determinePitch(bool doingSingleCycle, float minFreqHz, float maxFr
 		return 0;
 	}
 
-	ne10_fft_cpx_int32_t* fftOutput = (ne10_fft_cpx_int32_t*)((uint32_t)fftInput + fftInputSize);
+	ne10_fft_cpx_int32_t* fftOutput = (ne10_fft_cpx_int32_t*)((uintptr_t)fftInput + fftInputSize);
 	int32_t* fftHeights = fftInput; // We'll overwrite the original input with this data
 
-	float* floatIndexTable = (float*)((uint32_t)fftInput + fftInputSize + fftOutputSize);
+	float* floatIndexTable = (float*)((uintptr_t)fftInput + fftInputSize + fftOutputSize);
 	// Only written at peaks, so clear out whatever the allocator left here
 	memset(floatIndexTable, 0, floatIndexTableSize);
 
