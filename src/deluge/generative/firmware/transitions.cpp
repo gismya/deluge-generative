@@ -55,8 +55,10 @@ using perform::PendingRecipe;
 // Both objects are aligned to 8, so the two copies of the sound picks differ in their address modulo 8 when their
 // offsets do: the Current Recipe's follow its Recipe, the pending one's start the struct. If a new field breaks this,
 // move `sounds` so that the two offsets differ modulo 8 again.
+#if defined(__arm__) // newlib's memcpy on the Deluge is the reason; 64-bit hosts lay it out differently
 static_assert((offsetof(CurrentRecipe, sounds) - offsetof(PendingRecipe, sounds)) % 8 != 0,
               "commitPending()'s copy of the sound picks must not have the same address modulo 8 at both ends");
+#endif
 alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;

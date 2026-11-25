@@ -488,9 +488,11 @@ void PerformAdapter::incomingStarts(Roster& incoming, const perform::PendingReci
 	// (#303).
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#if defined(__arm__) // newlib's memcpy on the Deluge is the reason; 64-bit hosts lay it out differently
 	static_assert((Transitions::incomingOffset() - (offsetof(PerformAdapter, sink_) + offsetof(OutputSink, roster))) % 8
 	                  != 0,
 	              "the start step's copy of the roster must not have the same address modulo 8 at both ends");
+#endif
 #pragma GCC diagnostic pop
 	sink_.outgoing = sink_.roster;
 	takeRoster(incoming, pending.recipe.genre);
