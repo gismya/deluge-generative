@@ -43,7 +43,7 @@ void SampleLowLevelReader::unassignAllReasons(bool wontBeUsedAgain) {
 int32_t SampleLowLevelReader::getPlayByteLowLevel(Sample* sample, SamplePlaybackGuide* guide,
                                                   bool compensateForInterpolationBuffer) {
 	if (clusters[0] != nullptr) {
-		uint32_t withinCluster = (uint32_t)currentPlayPos - (uint32_t)&clusters[0]->data + 4
+		uint32_t withinCluster = (uintptr_t)currentPlayPos - (uintptr_t)&clusters[0]->data + 4
 		                         - sample->byteDepth; // Remove deliberate misalignment
 
 		if (compensateForInterpolationBuffer && interpolationBufferSizeLastTime) {
@@ -55,7 +55,7 @@ int32_t SampleLowLevelReader::getPlayByteLowLevel(Sample* sample, SamplePlayback
 		return (clusters[0]->clusterIndex << Cluster::size_magnitude) + withinCluster;
 	}
 	// Hopefully this won't go negative, cos we're returning as unsigned...
-	return (int32_t)guide->endPlaybackAtByte + (int32_t)(uint32_t)currentPlayPos * guide->playDirection;
+	return (int32_t)guide->endPlaybackAtByte + (int32_t)(uintptr_t)currentPlayPos * guide->playDirection;
 }
 
 void SampleLowLevelReader::setupForPlayPosMovedIntoNewCluster(SamplePlaybackGuide* guide, Sample* sample,
@@ -111,7 +111,7 @@ bool SampleLowLevelReader::reassessReassessmentLocation(SamplePlaybackGuide* gui
 			return false;
 		}
 
-		int32_t bytePosWithinCluster = (uint32_t)currentPlayPos - (uint32_t)clusters[0]->data;
+		int32_t bytePosWithinCluster = (uintptr_t)currentPlayPos - (uintptr_t)clusters[0]->data;
 		bytePosWithinCluster += (clusterIndex - finalClusterIndex) * Cluster::size;
 
 		currentPlayPos = finalCluster->data + bytePosWithinCluster;
@@ -338,7 +338,7 @@ bool SampleLowLevelReader::moveOnToNextCluster(SamplePlaybackGuide* guide, Sampl
 
 	int32_t oldClusterIndex = clusters[0]->clusterIndex;
 
-	int32_t bytePosWithinOldCluster = (uint32_t)currentPlayPos - (uint32_t)&clusters[0]->data;
+	int32_t bytePosWithinOldCluster = (uintptr_t)currentPlayPos - (uintptr_t)&clusters[0]->data;
 	audioFileManager.removeReasonFromCluster(*clusters[0], "E035");
 
 	for (int32_t l = 0; l < kNumClustersLoadedAhead - 1; l++) {
@@ -408,7 +408,7 @@ bool SampleLowLevelReader::changeClusterIfNecessary(SamplePlaybackGuide* guide, 
 
 	while (true) {
 		int32_t byteOvershoot =
-		    (int32_t)((uint32_t)currentPlayPos - (uint32_t)reassessmentLocation) * guide->playDirection;
+		    (int32_t)((uintptr_t)currentPlayPos - (uintptr_t)reassessmentLocation) * guide->playDirection;
 
 		if (byteOvershoot < 0) {
 			break;
@@ -468,7 +468,7 @@ void SampleLowLevelReader::fillInterpolationBufferRetrospectively(Sample* sample
 	for (int32_t i = startI; i < bufferSize; i++) {
 		// At each iteration through this loop, we need to jump one sample backwards in time.
 		thisPlayPos = thisPlayPos - playDirection * sample->numChannels * sample->byteDepth;
-		int32_t bytesPastClusterStart = ((int32_t)thisPlayPos - (int32_t)clusterStartLocation) * playDirection;
+		int32_t bytesPastClusterStart = ((intptr_t)thisPlayPos - (intptr_t)clusterStartLocation) * playDirection;
 
 		// If there was valid audio data there...
 		if (bytesPastClusterStart >= 0) {
@@ -497,7 +497,7 @@ bool SampleLowLevelReader::fillInterpolationBufferForward(SamplePlaybackGuide* g
 			interpolator_.buffer_l[i] = 0;
 			interpolator_.buffer_r[i] = 0;
 			currentPlayPos++;
-			if ((uint32_t)currentPlayPos >= interpolationBufferSize) {
+			if ((uintptr_t)currentPlayPos >= interpolationBufferSize) {
 				return false;
 			}
 			continue;
@@ -520,7 +520,7 @@ void SampleLowLevelReader::jumpBackSamples(Sample* sample, int32_t numToJumpBack
 
 		// Jump back 1 sample
 		char* newPlayPos = currentPlayPos - playDirection * sample->numChannels * sample->byteDepth;
-		int32_t bytesPastClusterStart = ((int32_t)newPlayPos - (int32_t)clusterStartLocation) * playDirection;
+		int32_t bytesPastClusterStart = ((intptr_t)newPlayPos - (intptr_t)clusterStartLocation) * playDirection;
 
 		// If there was no valid audio data there...
 		if (bytesPastClusterStart < 0) {
@@ -575,7 +575,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 
 			if (ALPHA_OR_BETA_VERSION && clusters[0]) {
 				int32_t bytesLeftWhichMayBeRead =
-				    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+				    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 				if (bytesLeftWhichMayBeRead < 0) {
 					FREEZE_WITH_ERROR("E222");
 				}
@@ -590,7 +590,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 
 				if (ALPHA_OR_BETA_VERSION && clusters[0]) {
 					int32_t bytesLeftWhichMayBeRead =
-					    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+					    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 					if (bytesLeftWhichMayBeRead < 0) {
 						FREEZE_WITH_ERROR("E305");
 					}
@@ -610,7 +610,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 
 				if (ALPHA_OR_BETA_VERSION && clusters[0]) {
 					int32_t bytesLeftWhichMayBeRead =
-					    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+					    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 					if (bytesLeftWhichMayBeRead < 0) {
 						FREEZE_WITH_ERROR("E306");
 					}
@@ -622,7 +622,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 
 				if (ALPHA_OR_BETA_VERSION && clusters[0]) {
 					int32_t bytesLeftWhichMayBeRead =
-					    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+					    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 					if (bytesLeftWhichMayBeRead < 0) {
 						FREEZE_WITH_ERROR("E308");
 					}
@@ -655,7 +655,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 
 				if (ALPHA_OR_BETA_VERSION && clusters[0]) {
 					int32_t bytesLeftWhichMayBeRead =
-					    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+					    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 					if (bytesLeftWhichMayBeRead < 0) {
 						FREEZE_WITH_ERROR("E221");
 					}
@@ -687,7 +687,7 @@ bool SampleLowLevelReader::considerUpcomingWindow(SamplePlaybackGuide* guide, Sa
 				if (!clusters[0]) {
 doZeroes:
 					bufferZeroForInterpolation(sample->numChannels);
-					if (!allowEndlessSilenceAtEnd && (uint32_t)currentPlayPos >= interpolationBufferSize) {
+					if (!allowEndlessSilenceAtEnd && (uintptr_t)currentPlayPos >= interpolationBufferSize) {
 						return false;
 					}
 				}
@@ -710,7 +710,8 @@ doZeroes:
 						}
 
 						int32_t bytesLeftWhichMayBeRead =
-						    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+						    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos)
+						    * guide->playDirection;
 						if (bytesLeftWhichMayBeRead <= 0) {
 							FREEZE_WITH_ERROR("E226");
 						}
@@ -724,7 +725,8 @@ doZeroes:
 
 					if (ALPHA_OR_BETA_VERSION) {
 						int32_t bytesLeftWhichMayBeRead =
-						    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+						    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos)
+						    * guide->playDirection;
 						if (bytesLeftWhichMayBeRead < 0) {
 							FREEZE_WITH_ERROR("E185");
 						}
@@ -740,7 +742,7 @@ doZeroes:
 				// That should mean we've already read this one, so we definitely shouldn't be beyond the
 				// reassessmentLocation...
 				int32_t bytesLeftWhichMayBeRead =
-				    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+				    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 				if (bytesLeftWhichMayBeRead < 0) {
 					FREEZE_WITH_ERROR("E223");
 				}
@@ -763,14 +765,14 @@ doZeroes:
 				if (allowEndlessSilenceAtEnd) {
 					return true;
 				}
-				samplesLeftWhichMayBeRead = interpolationBufferSize - (uint32_t)currentPlayPos;
+				samplesLeftWhichMayBeRead = interpolationBufferSize - (uintptr_t)currentPlayPos;
 				shouldShorten = (samplesWeWantToReadThisWindow > samplesLeftWhichMayBeRead);
 			}
 
 			// Or if still going on waveform
 			else {
 				int32_t bytesLeftWhichMayBeRead =
-				    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+				    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 				if (bytesLeftWhichMayBeRead < 0) {
 					FREEZE_WITH_ERROR("E148");
 					return false; // Would otherwise lengthen numSamples past the output buffer
@@ -835,7 +837,7 @@ doZeroes:
 
 		// If the end is coming in this window, deal with it
 		int32_t bytesLeftWhichMayBeRead =
-		    (int32_t)((uint32_t)reassessmentLocation - (uint32_t)currentPlayPos) * guide->playDirection;
+		    (int32_t)((uintptr_t)reassessmentLocation - (uintptr_t)currentPlayPos) * guide->playDirection;
 
 		if (bytesLeftWhichMayBeRead <= 0) {
 			FREEZE_WITH_ERROR("E001");

@@ -56,8 +56,10 @@ using perform::PendingRecipe;
 // Both objects are aligned to 8, so the two copies of the sound picks differ in their address modulo 8 when their
 // offsets do: the Current Recipe's follow its Recipe, the pending one's start the struct. If a new field breaks this,
 // move `sounds` so that the two offsets differ modulo 8 again.
+#if defined(__arm__) // newlib's memcpy on the Deluge is the reason; 64-bit hosts lay it out differently
 static_assert((offsetof(CurrentRecipe, sounds) - offsetof(PendingRecipe, sounds)) % 8 != 0,
               "commitPending()'s copy of the sound picks must not have the same address modulo 8 at both ends");
+#endif
 alignas(8) PLACE_SDRAM_BSS PendingRecipe pendingRecipe;
 /// The incoming roster a preload builds. One is enough: a cancelled preload frees its own before the next one starts.
 PLACE_SDRAM_BSS Roster building;
@@ -91,6 +93,9 @@ public:
 		missing_ = 0;
 		replaced_ = 0;
 		submitted_ = getSystemTicks();
+#if ENABLE_SYSEX_TEST
+		appliedNext_ = false;
+#endif
 	}
 
 	JobOutcome run(Chunks& chunks) override {
@@ -181,6 +186,13 @@ public:
 				char picks[perform::kPicksTextChars];
 				perform::picksText(*pendingRecipe.recipe.genre, pendingRecipe.recipe.variants, picks);
 				TEST_EVENT("gen_pending_variants %s", picks);
+#if ENABLE_SYSEX_TEST
+				if (appliedNext_) {
+					// Its roster loaded. A CANCEL CHANGE while queued, or a full queue in loaded(), can still drop
+					// the change; the lines are taken anyway, as spec §21.3 says.
+					TestPort::nextRecipeTaken();
+				}
+#endif
 			}
 			if (replaced_ > 0 && transitions.newest(request_)) {
 				showSoundsReplaced(replaced_); // spec §16.6
@@ -213,19 +225,24 @@ private:
 			}
 		}
 		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
-		pendingRecipe.recipe =
-		    newRecipe(genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale}, &narrowed_);
+		pendingRecipe.recipe = newRecipe(genre, nextEntropy(freshEntropy()),
+		                                 Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale}, &narrowed_);
 		pendingRecipe.stagedPalette = change;
 		pendingRecipe.macros = perform::HandoverMacros::Live;
-		pendingRecipe.seed = freshEntropy();
+		pendingRecipe.seed = nextSeed(freshEntropy());
 		pendingRecipe.takes = Takes{};
 		pendingRecipe.sounds = currentRecipe.sounds;
 		pendingName.clear();
 		CardFolders folders(&chunks);
-		if (!rollIncomingSounds(genre, playing, palette, pendingRecipe.sounds, freshEntropy(), folders)) {
+		if (!rollIncomingSounds(genre, playing, palette, pendingRecipe.sounds, nextEntropy(freshEntropy()), folders)) {
 			error_ = folders.cancelled() ? Error::NONE : Error::SD_CARD;
 			return false;
 		}
+#if ENABLE_SYSEX_TEST
+		// The genre is the one picked, and the live macros win at the handover. The lines are taken only once the
+		// roster has loaded (finished()): a cancel or a card error leaves them for the next roll.
+		appliedNext_ = applyNextRecipe(pendingRecipe.recipe, pendingRecipe.sounds);
+#endif
 		return true;
 	}
 
@@ -260,6 +277,9 @@ private:
 	int32_t missing_ = 0;
 	int32_t replaced_ = 0; ///< A LOAD's missing sounds, re-rolled (spec §16.6)
 	uint32_t submitted_ = 0;
+#if ENABLE_SYSEX_TEST
+	bool appliedNext_ = false; ///< rollPending() applied seam S7's lines: see finished()
+#endif
 };
 
 namespace {

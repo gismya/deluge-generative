@@ -70,7 +70,7 @@ void* NamedThingVector::getElement(int32_t index) {
 }
 
 String* NamedThingVector::getName(void* namedThing) {
-	return (String*)((uint32_t)namedThing + stringOffset);
+	return (String*)((uintptr_t)namedThing + stringOffset);
 }
 
 // Returns error code

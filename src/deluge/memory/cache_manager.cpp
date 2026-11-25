@@ -10,8 +10,8 @@ extern bool skipConsistencyCheck;
 uint32_t currentTraversalNo = 0;
 
 // Size 0 means don't care, just get any memory.
-uint32_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeeded, void* thingNotToStealFrom,
-                                     int32_t* __restrict__ foundSpaceSize) {
+uintptr_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeeded, void* thingNotToStealFrom,
+                                      int32_t* __restrict__ foundSpaceSize) {
 
 #if TEST_GENERAL_MEMORY_ALLOCATION
 	skipConsistencyCheck = true; // Things will not be in an inspectable state during this function call
@@ -22,7 +22,7 @@ uint32_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeed
 	uint32_t traversalNumberBeforeQueues = currentTraversalNo;
 
 	Stealable* stealable = nullptr;
-	uint32_t newSpaceAddress = 0;
+	uintptr_t newSpaceAddress = 0;
 	uint32_t spaceSize = 0;
 
 	int32_t numberReassessed = 0;
@@ -108,7 +108,7 @@ uint32_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeed
 			}
 
 			// Ok, we've got one Stealable
-			auto* __restrict__ header = std::bit_cast<uintptr_t*>((uint32_t)stealable - 4);
+			auto* __restrict__ header = std::bit_cast<uint32_t*>((uintptr_t)stealable - 4);
 			spaceSize = (*header & SPACE_SIZE_MASK);
 
 			stealable->lastTraversalNo = currentTraversalNo;
@@ -116,7 +116,7 @@ uint32_t CacheManager::ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeed
 			// How much additional space would we need on top of this Stealable?
 			int32_t amountToExtend = totalSizeNeeded - spaceSize;
 
-			newSpaceAddress = (uint32_t)stealable;
+			newSpaceAddress = (uintptr_t)stealable;
 
 			// If that one Stealable alone was big enough, that's great
 			if (amountToExtend <= 0) {

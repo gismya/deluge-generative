@@ -960,7 +960,7 @@ void InstrumentClip::toggleNoteRowMute(ModelStackWithNoteRow* modelStack) {
 ModelStackWithNoteRow* InstrumentClip::getNoteRowOnScreen(int32_t yDisplay, ModelStackWithTimelineCounter* modelStack) {
 	int32_t noteRowIndex;
 	NoteRow* noteRow = getNoteRowOnScreen(yDisplay, modelStack->song, &noteRowIndex);
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	if (noteRow) {
 		noteRowId = getNoteRowId(noteRow, noteRowIndex);
 	}
@@ -992,7 +992,7 @@ NoteRow* InstrumentClip::getNoteRowOnScreen(int32_t yDisplay, Song* song, int32_
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForYNote(int32_t yNote, ModelStackWithTimelineCounter* modelStack) {
 	int32_t noteRowIndex;
 	NoteRow* noteRow = getNoteRowForYNote(yNote, &noteRowIndex);
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	if (noteRow) {
 		noteRowId = getNoteRowId(noteRow, noteRowIndex);
 	}
@@ -1018,7 +1018,7 @@ NoteRow* InstrumentClip::getNoteRowForYNote(int32_t yNote, int32_t* getIndex) {
 // May set noteRow to NULL, of course.
 // Will correctly do that if we're not a Kit Clip.
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForSelectedDrum(ModelStackWithTimelineCounter* modelStack) {
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	NoteRow* noteRow = nullptr;
 	if (output->type == OutputType::KIT) {
 		Kit* kit = (Kit*)output;
@@ -1030,7 +1030,7 @@ ModelStackWithNoteRow* InstrumentClip::getNoteRowForSelectedDrum(ModelStackWithT
 }
 
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForDrum(ModelStackWithTimelineCounter* modelStack, Drum* drum) {
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	NoteRow* noteRow = getNoteRowForDrum(drum, &noteRowId);
 	return modelStack->addNoteRow(noteRowId, noteRow);
 }
@@ -3936,14 +3936,14 @@ Error InstrumentClip::claimOutput(ModelStackWithTimelineCounter* modelStack) {
 			bool paramManagerCloned = false;
 
 			// Maybe we (cryptically) marked it as "no drum".
-			if ((uint32_t)thisNoteRow->drum == (uint32_t)0xFFFFFFFF) {
+			if ((uint32_t)(uintptr_t)thisNoteRow->drum == (uint32_t)0xFFFFFFFF) {
 				thisNoteRow->drum = nullptr;
 			}
 
 			// Or a gate drum from a pre-V2.0 Song file...
-			else if ((uint32_t)thisNoteRow->drum > (uint32_t)(0xFFFFFFFE - NUM_GATE_CHANNELS)) {
+			else if ((uint32_t)(uintptr_t)thisNoteRow->drum > (uint32_t)(0xFFFFFFFE - NUM_GATE_CHANNELS)) {
 
-				int32_t gateChannel = 0xFFFFFFFE - (uint32_t)thisNoteRow->drum;
+				int32_t gateChannel = 0xFFFFFFFE - (uint32_t)(uintptr_t)thisNoteRow->drum;
 
 				thisNoteRow->drum = kit->getGateDrumForChannel(gateChannel);
 
@@ -3967,7 +3967,7 @@ Error InstrumentClip::claimOutput(ModelStackWithTimelineCounter* modelStack) {
 
 				// Don't call setDrum(), because that would overwrite the NoteRow's paramManager. It already has the
 				// right one, loaded from file
-				Drum* drumFromIndex = kit->getDrumFromIndex((uint32_t)thisNoteRow->drum);
+				Drum* drumFromIndex = kit->getDrumFromIndex((uint32_t)(uintptr_t)thisNoteRow->drum);
 
 				ParamManagerForTimeline* otherParamManager;
 

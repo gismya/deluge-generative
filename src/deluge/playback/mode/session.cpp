@@ -91,7 +91,7 @@ const Colour defaultClipSectionColours[] = {RGB::fromHue(102), // bright light b
 static ArmState
 getSectionLaunchStopArmStateForActiveClip(Clip* clip,
                                           OpenAddressingHashTableWith32bitKey& outputsTakenBySectionLaunch) {
-	if (clip->type == ClipType::AUDIO && outputsTakenBySectionLaunch.lookup((uint32_t)clip->output)) {
+	if (clip->type == ClipType::AUDIO && outputsTakenBySectionLaunch.lookup((uint32_t)(uintptr_t)clip->output)) {
 		return ArmState::OFF;
 	}
 
@@ -331,7 +331,7 @@ void Session::doLaunch(bool isFillLaunch) {
 			}
 
 			bool alreadyLaunchedFor = false;
-			outputsLaunchedFor.insert((uint32_t)output, &alreadyLaunchedFor);
+			outputsLaunchedFor.insert((uint32_t)(uintptr_t)output, &alreadyLaunchedFor);
 
 			// If already seen another Clip to launch with same Output...
 			if (alreadyLaunchedFor) {
@@ -512,7 +512,7 @@ stopOnlyIfOutputTaken:
 				}
 
 				// If some other Clip is launching for this Output, we gotta stop
-				if (outputsLaunchedFor.lookup((uint32_t)output)) {
+				if (outputsLaunchedFor.lookup((uint32_t)(uintptr_t)output)) {
 
 					if (clip->launchStyle == LaunchStyle::FILL) {
 						// Must also disarm it if a fill clip to avoid it
@@ -1690,7 +1690,7 @@ void Session::armClipsToStartOrSoloWithQuantization(uint32_t pos, uint32_t quant
 			}
 
 			bool alreadyPickedAClip = false;
-			outputsTakenBySectionLaunch.insert((uint32_t)sectionClip->output, &alreadyPickedAClip);
+			outputsTakenBySectionLaunch.insert((uint32_t)(uintptr_t)sectionClip->output, &alreadyPickedAClip);
 		}
 
 		// Ok, we're going to do a big complex thing where we traverse just once (or occasionally twice) through all
@@ -1708,7 +1708,7 @@ void Session::armClipsToStartOrSoloWithQuantization(uint32_t pos, uint32_t quant
 				Output* output = thisClip->output;
 
 				bool alreadyPickedAClip = false;
-				outputsWeHavePickedAClipFor.insert((uint32_t)output, &alreadyPickedAClip);
+				outputsWeHavePickedAClipFor.insert((uint32_t)(uintptr_t)output, &alreadyPickedAClip);
 
 				// If we've already picked a Clip for this same Output...
 				if (alreadyPickedAClip) {
@@ -1810,7 +1810,7 @@ weWantThisClipInactive:
 
 						// If we've already picked a Clip for this same Output, we definitely don't want this one
 						// remaining active, so arm it to stop
-						if (outputsWeHavePickedAClipFor.lookup((uint32_t)thisClip->output)) {
+						if (outputsWeHavePickedAClipFor.lookup((uint32_t)(uintptr_t)thisClip->output)) {
 							thisClip->armState =
 							    getSectionLaunchStopArmStateForActiveClip(thisClip, outputsTakenBySectionLaunch);
 						}

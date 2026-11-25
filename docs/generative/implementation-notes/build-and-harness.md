@@ -4,12 +4,21 @@ Part of the [implementation notes](../implementation-notes.md). Paths are under 
 otherwise.
 
 - `set_source_files_properties` in `src/deluge/CMakeLists.txt` needs `TARGET_DIRECTORY deluge` to reach the target.
+- `DELUGE_HOST` is the host-build macro: set (to 1) only by deluge-engine, which compiles this source for macOS with
+  its own stand-ins for the hardware and the allocator. Firmware code that a host build must leave out or replace goes
+  under `#if !DELUGE_HOST` (first use: `GeneralMemoryAllocator::isNonAudioExternal`, deluge-engine#4). Later host
+  seams reuse this name rather than adding another.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it. The base also builds under `.cache/sizediff/base/`, so its `__FILE__` strings are longer: #283's
   run showed text −108 B (`.text` −84, `.sdram_rodata` −24) with only those two functions resized. To show a change
   to a file is a no-op, A/B it instead: build HEAD with the base's copy of the file (`git show BASE:PATH > PATH`,
   `./dbt build release`) and diff `arm-none-eabi-size -A` and `arm-none-eabi-nm -S` with HEAD's build.
+  Keep the SHA and the dirty state the same on both sides (an untracked file keeps a tree dirty): the version string
+  gets `-dirty`. Sizes and symbols can match while the image doesn't: moving a one-line check into an out-of-line
+  method reordered the linker's ARM/Thumb interworking veneers (`*_from_thumb`), 135 bytes, every symbol's address and
+  size the same; the same method inline in the header gave a byte-identical image (deluge-engine#4). For byte
+  identity, compare `arm-none-eabi-objcopy -O binary` of both ELFs (the build is deterministic).
 - A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
   stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
   out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.

@@ -148,6 +148,10 @@ public:
 	Drum* firstDrum;
 	Drum* selectedDrum;
 
+	/// Each element is a whole Drum*. Its key, the first 32 bits, is the pointer's low 32 bits (SoundDrum::
+	/// setSkippingRendering() asserts little-endian), so search it with `(int32_t)(uintptr_t)drum`. Where a pointer is
+	/// wider than the key, a search or delete by key alone can't tell apart two Drums whose addresses differ only above
+	/// bit 31, 4 GiB apart.
 	OrderedResizeableArrayWith32bitKey drumsWithRenderingActive;
 
 	ModelStackWithAutoParam* getModelStackWithParam(ModelStackWithTimelineCounter* modelStack, Clip* clip,
