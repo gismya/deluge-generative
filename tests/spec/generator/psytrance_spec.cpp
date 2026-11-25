@@ -129,7 +129,7 @@ describe psytrance("Psytrance", $ {
 		expect(std::string(psyGenre.name)).to_equal(std::string("psytrance-classic"));
 		expect(std::string(psyGenre.oledName)).to_equal(std::string("CLASSIC PSY"));
 		expect(std::string(psyGenre.shortName)).to_equal(std::string("CLASSIC"));
-		expect(psyGenre.version).to_equal(7);
+		expect(psyGenre.version).to_equal(8);
 		expect(findGenre("psytrance-classic") == &psyGenre).to_be_true();
 		// The parent is never played, and no Recipe names it: no alias maps the old name to Classic (spec §4.4).
 		expect(findGenre("psytrance") == nullptr).to_be_true();
@@ -917,7 +917,7 @@ describe psytrance("Psytrance", $ {
 			    {"lead", "LEAD", "drops", "grooves", "intro"},
 			    {"accents", "ACCENTS", "anywhere", "332", "offbeat"}});
 			expect(weights).to_equal(
-			    std::vector<std::vector<int32_t>>{{3, 1, 1, 1}, {2, 1, 1}, {1, 2, 2}, {1, 3, 1}, {1, 3, 2}});
+			    std::vector<std::vector<int32_t>>{{3, 2, 3, 2}, {3, 3, 2}, {3, 3, 2}, {1, 2, 2}, {2, 3, 3}});
 			expect(live).to_equal(std::vector<bool>{true, false, true, false, true});
 		});
 

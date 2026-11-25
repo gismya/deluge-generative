@@ -25,7 +25,9 @@ otherwise.
   It works a bar at a time: a bar within `kBarTolerance` (16) of the line across it keeps only its end, else every step
   line; then a cone (`kNodeTolerance`, 2) merges what lines up. The drift spec turns gestures, Section offsets, the
   Drop lift and Drop-outs off, and skips a lane's bar with a snap and the bar after it: Dub's Siren release Throw is
-  always on. Tolerances below 16 left two nodes in some bar of Ambient's Wobble at Motion 100.
+  always on. Its Recipe pins every set to variant 0: a variant's patch runs on the edited genre and can put back what
+  `driftOnly()` took out (#540: Psytrance's `break=lead` sets the Break's offsets, so the Break's step gave 2 nodes).
+  Tolerances below 16 left two nodes in some bar of Ambient's Wobble at Motion 100.
 - A bar is measured from the last point the cone took. After a long hold that point is bars back, and a ramp's start
   lies within 16 of the line to its end: the held bars then climb. So a ramp after a hold of a bar or more sends its
   start straight to the cone (`Track::move()`). Drift is not "every step": it holds a step or several often, and a bar

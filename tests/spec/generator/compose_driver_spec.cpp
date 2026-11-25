@@ -210,6 +210,9 @@ int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	auto edited = driftOnly(genre);
 	Run run;
 	run.recipe = newRecipe(edited->genre, 0);
+	// Each set on variant 0, the genre driftOnly() edited: a variant's patch can put back what it took out (Psytrance's
+	// break=lead sets the Break's offsets).
+	applyVariantOverrides(run.recipe, deluge::generative::golden_case::overrides().variant);
 	run.recipe.macros.set(Macro::Motion, macroPoints(motion));
 	run.skipIntro = true;
 	constexpr int32_t kBars = 64;

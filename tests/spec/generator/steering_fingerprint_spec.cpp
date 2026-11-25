@@ -1,8 +1,8 @@
 // What each signed-off genre plays under steering (spec §12.5, §13.4, §8.7, §9.6, §13.2): a stream fingerprint of
-// pieces with a mute, a solo, a SHIFT + mute, a held fill (the genre's held entry, a Rest in Techno, a Swap in Dub and
-// none in Ambient, and a fresh pick, checked), a force and End, each pressed and released. The goldens play without
-// steering, so this pins how the silencers combine with a mute, a solo, a held fill, a force and End. A retune that
-// moves a stream moves its fingerprint here too: update it with the genre's golden (spec §21.2).
+// pieces with a mute, a solo, a SHIFT + mute, a held fill (the genre's held entry, a Rest in Techno and Psytrance, a
+// Swap in Dub and none in Ambient, and a fresh pick, checked), a force and End, each pressed and released. The goldens
+// play without steering, so this pins how the silencers combine with a mute, a solo, a held fill, a force and End. A
+// retune that moves a stream moves its fingerprint here too: update it with the genre's golden (spec §21.2).
 
 #include "harness.h"
 #include "stream_fingerprint.h"
@@ -82,6 +82,8 @@ const Pinned kPinned[] = {
     {&genres::dub, 0xd875be1a6d1e427aULL, 107341, {0, kPieces}},
     // Ambient has no fills, so FILL holds nothing.
     {&genres::ambient, 0x891e6393c330e75bULL, 64643, {0, 0}},
+    // Psytrance's held entry is its 2-beat Rest on Kick and Bass, and it has no Swap.
+    {&genres::psytranceClassic, 0x80431cb5c79fff2fULL, 111242, {kPieces, 0}},
 };
 
 std::string hex(uint64_t value) {
