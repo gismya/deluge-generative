@@ -99,9 +99,15 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 		it("darkens and thins a whole Kit through its affect-entire filter", _ {
 			Found lpf = rangeOf(SoundControl::Brightness, Engine::KitLevel, Target::LpfFrequency);
-			expect(lpf.found && lpf.low == -20 && lpf.high == 0).to_be_true();
+			expect(lpf.found && lpf.low == -14 && lpf.high == 0).to_be_true();
 			Found hpf = rangeOf(SoundControl::Thin, Engine::KitLevel, Target::HpfFrequency);
 			expect(hpf.found && hpf.low == 0 && hpf.high == 25).to_be_true();
+		});
+		it("never darkens a whole Kit past 4.5 octaves: at 6.4 a Break of closed hats played near silent (#524)", _ {
+			// The affect-entire LPF is unpatched: cableToExpParamShortcut's >> 2, then getExp's octave per 2^26, make
+			// a menu unit 2^32 / 50 / 4 / 2^26 = 16/50 of an octave. Tenths of an octave, at full Brightness:
+			const int32_t tenths = -rangeOf(SoundControl::Brightness, Engine::KitLevel, Target::LpfFrequency).low * 160 / 50;
+			expect(tenths).to_be_less_than(46);
 		});
 	});
 

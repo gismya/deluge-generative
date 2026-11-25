@@ -148,7 +148,10 @@ inline constexpr TargetRange kKitRowDecay[] = {
 };
 inline constexpr TargetRange kReverbOnly[] = {{Target::ReverbSend, 0, 10}};
 
-inline constexpr TargetRange kKitLevelBrightness[] = {{Target::LpfFrequency, -20, 0}};
+// A Kit's affect-entire LPF is an unpatched param: it moves 16/50 of an octave per menu unit (a Sound's LPF 0.22), and
+// from fully open its top ~9 units sit above the audio. At -20 (6.4 octaves at full) a Break's Close and dip played a
+// Break of closed hats alone 32 dB down, near silent (#524); at -14 (4.5 octaves) the same Break plays them 9 dB down.
+inline constexpr TargetRange kKitLevelBrightness[] = {{Target::LpfFrequency, -14, 0}};
 inline constexpr TargetRange kKitLevelWobble[] = {{Target::ModFxDepth, -8, 8, Needs::ModFxInUse}};
 inline constexpr TargetRange kKitLevelThin[] = {{Target::HpfFrequency, 0, 25}};
 
