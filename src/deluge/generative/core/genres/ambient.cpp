@@ -275,7 +275,7 @@ constexpr ChordGraph kGraph{
 
 /// The MOTION set's still graph (variant ideas 1): I, IV and vi only, 16 bars a chord, a heavy repeat and home pull.
 /// The guard closes I–IV in Lydian (#iv°) and I–vi in Dorian (vi°), but each keeps a move: Lydian's colour move I–II
-/// and I–vi, Dorian's I–IV.
+/// and I–vi, Dorian's I–IV. A mode's colour moves widen it too: Mixolydian also plays its ♭VII.
 constexpr ChordMove kStillMoves[] = {
     {kI, kIV, 25},
     {kIV, kI, 25},
@@ -312,7 +312,7 @@ constexpr Scale kScales[] = {Scale::Major, Scale::Lydian, Scale::Dorian, Scale::
 constexpr WeightedBars kBuildBars[] = {{16, 1}};
 
 /// The chords' colour (variant ideas 1, #533): add9 as written (Extensions 1–2, the 9th and sus4 first), pure triads
-/// (no Extension) or lush 7/9 (Extensions 2–3, the 9th then the 7th), 3:2:3 (the owner: often, sometimes, often).
+/// (no Extension) or lush 7/9 (Extensions 2, the 9th then the 7th), 3:2:3 (the owner: often, sometimes, often).
 /// Live, as Dub's skank: only a bar line's voicing reads the Extensions, and nothing reads them across a Drop's line.
 constexpr Variant kColourVariants[] = {
     {.name = "add9", .oledName = "ADD9", .weight = 3},
@@ -330,7 +330,7 @@ constexpr Variant kColourVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.genre.harmony.extensionFloor = 2;
-	         resolved.genre.harmony.extensionCeiling = 3;
+	         resolved.genre.harmony.extensionCeiling = 2;
 	         resolved.genre.harmony.extensionOrder = kLushOrder;
          }},
 };

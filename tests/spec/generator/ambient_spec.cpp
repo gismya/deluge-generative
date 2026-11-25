@@ -42,11 +42,11 @@ Recipe ambientRecipe(Scale scale = Scale::Major, uint8_t keyRoot = 2, uint32_t e
 	return recipe;
 }
 
-/// Over `seeds` pieces of 96 bars in `scale` with `fixes`, the Pad's pitch classes (from the key's root) on bars the
-/// home chord holds.
-std::set<int32_t> padClassesOnHome(Scale scale, std::initializer_list<const char*> fixes, uint32_t seeds = 6) {
+/// Over 6 pieces of 96 bars in `scale` with `fixes`, the Pad's pitch classes (from the key's root) on bars the home
+/// chord holds.
+std::set<int32_t> padClassesOnHome(Scale scale, std::initializer_list<const char*> fixes) {
 	std::set<int32_t> out;
-	for (uint32_t seed = 1; seed <= seeds; seed++) {
+	for (uint32_t seed = 1; seed <= 6; seed++) {
 		const Recipe recipe = ambientRecipe(scale, static_cast<uint8_t>(seed % 12), seed, fixes);
 		const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
 		for (const Event& e : walked.noteOns) {
@@ -59,19 +59,29 @@ std::set<int32_t> padClassesOnHome(Scale scale, std::initializer_list<const char
 	return out;
 }
 
+/// What the chords did over some pieces.
+struct ChordsPlayed {
+	std::set<int32_t> chords; ///< Each chord played, by its root's scale step.
+	int32_t changes = 0;      ///< How many times the chord changed.
+};
+
 /// Over 8 pieces of 192 bars in `scale` with `fixes`: the chords played, and how many times the chord changed.
-std::pair<std::set<int32_t>, int32_t> chordsPlayed(Scale scale, std::initializer_list<const char*> fixes) {
-	std::set<int32_t> chords;
-	int32_t changes = 0;
+ChordsPlayed chordsPlayed(Scale scale, std::initializer_list<const char*> fixes) {
+	ChordsPlayed out;
 	for (uint32_t seed = 1; seed <= 8; seed++) {
 		const Walked walked = walk(ambientRecipe(scale, static_cast<uint8_t>(seed % 12), seed, fixes), seed,
 		                           192 * kStepsPerBar, {}, true);
 		for (const Walked::Step& step : walked.steps) {
-			chords.insert(step.chord);
+			out.chords.insert(step.chord);
 		}
-		changes += static_cast<int32_t>(walked.changes().size());
+		out.changes += static_cast<int32_t>(walked.changes().size());
 	}
-	return {chords, changes};
+	return out;
+}
+
+/// The pitch class, from the key's root, `steps` scale steps above the tonic in `scale`.
+int32_t classOfStep(int32_t steps, Scale scale) {
+	return pitchClass(semitonesOf(steps, scale));
 }
 
 /// The pitch classes of `chord` (scale steps from the tonic) in the key.
@@ -1076,15 +1086,20 @@ describe ambient("Ambient", $ {
 			expect(set.changeAt == ChangeAt::Never).to_be_true();
 		});
 
-		it("voices I on the Pad as a triad with pure, adds the 9th and sus4 but never the 7th with add9, and the 7th with lush", _ {
-			const std::set<int32_t> pure = padClassesOnHome(Scale::Major, {"colour=pure", "motion=drift"});
-			const std::set<int32_t> add9 = padClassesOnHome(Scale::Major, {"colour=add9", "motion=drift"});
-			const std::set<int32_t> lush = padClassesOnHome(Scale::Major, {"colour=lush", "motion=drift"});
-			expect(pure == std::set<int32_t>{0, 4, 7}).to_be_true();
-			expect(add9.contains(2)).to_be_true();
-			expect(add9.contains(11)).to_be_false();
-			expect(lush.contains(11)).to_be_true();
-			expect(lush.contains(2)).to_be_true();
+		it("voices I on the Pad as a triad with pure, adds the 9th but never the 7th with add9 at the default Complexity, and the 7th with lush, in every scale", _ {
+			for (const Scale scale : ambientGenre.facts.scales) {
+				const int32_t ninth = classOfStep(1, scale);
+				const int32_t seventh = classOfStep(6, scale);
+				const std::set<int32_t> triad{classOfStep(0, scale), classOfStep(2, scale), classOfStep(4, scale)};
+				const std::set<int32_t> pure = padClassesOnHome(scale, {"colour=pure", "motion=drift"});
+				const std::set<int32_t> add9 = padClassesOnHome(scale, {"colour=add9", "motion=drift"});
+				const std::set<int32_t> lush = padClassesOnHome(scale, {"colour=lush", "motion=drift"});
+				expect(pure == triad).to_be_true();
+				expect(add9.contains(ninth)).to_be_true();
+				expect(add9.contains(seventh)).to_be_false();
+				expect(lush.contains(seventh)).to_be_true();
+				expect(lush.contains(ninth)).to_be_true();
+			}
 		});
 
 		it("lists the motion set: the graph as written, still and wander, 3:1:3, not live: the walk reads the graph ahead", _ {
@@ -1104,25 +1119,29 @@ describe ambient("Ambient", $ {
 			expect(set.changeAt == ChangeAt::Never).to_be_true();
 		});
 
-		it("moves less with still, among I, IV and vi only, and further with wander, in Major", _ {
-			const auto drift = chordsPlayed(Scale::Major, {"colour=add9", "motion=drift"});
-			const auto still = chordsPlayed(Scale::Major, {"colour=add9", "motion=still"});
-			const auto wander = chordsPlayed(Scale::Major, {"colour=add9", "motion=wander"});
-			expect(still.first == std::set<int32_t>{kI, kIV, kVI}).to_be_true();
-			expect(still.second * 2).to_be_less_than(drift.second);
-			expect(wander.second).to_be_greater_than(drift.second);
+		it("moves less with still and further with wander than as written, in every scale; still among I, IV and vi in Major", _ {
+			for (const Scale scale : ambientGenre.facts.scales) {
+				const ChordsPlayed drift = chordsPlayed(scale, {"colour=add9", "motion=drift"});
+				const ChordsPlayed still = chordsPlayed(scale, {"colour=add9", "motion=still"});
+				const ChordsPlayed wander = chordsPlayed(scale, {"colour=add9", "motion=wander"});
+				expect(still.changes * 2).to_be_less_than(drift.changes);
+				expect(still.changes).to_be_greater_than(8); // it still moves
+				expect(wander.changes).to_be_greater_than(drift.changes);
+			}
+			expect(chordsPlayed(Scale::Major, {"colour=add9", "motion=still"}).chords == std::set<int32_t>{kI, kIV, kVI})
+			    .to_be_true();
 		});
 
-		it("still moves in every scale: Lydian's guard closes I–IV and Dorian's I–vi, and their colour moves stay open", _ {
-			// Lydian: I, its colour move's II, and vi (its IV is #iv°). Dorian: I and IV (its vi is vi°).
-			expect(chordsPlayed(Scale::Lydian, {"colour=add9", "motion=still"}).first
-			       == std::set<int32_t>{kI, kII, kVI})
+		it("widens still by a mode's colour moves and narrows it by the guard: Lydian I, II and vi, Dorian I and IV, Mixolydian adds ♭VII", _ {
+			// Lydian: its colour move's II, and vi (its IV is #iv°). Dorian: IV (its vi is vi°). Mixolydian: its colour
+			// move's ♭VII.
+			expect(chordsPlayed(Scale::Lydian, {"colour=add9", "motion=still"}).chords == std::set<int32_t>{kI, kII, kVI})
 			    .to_be_true();
-			expect(chordsPlayed(Scale::Dorian, {"colour=add9", "motion=still"}).first == std::set<int32_t>{kI, kIV})
+			expect(chordsPlayed(Scale::Dorian, {"colour=add9", "motion=still"}).chords == std::set<int32_t>{kI, kIV})
 			    .to_be_true();
-			for (const Scale scale : {Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian}) {
-				expect(chordsPlayed(scale, {"colour=add9", "motion=still"}).second).to_be_greater_than(8);
-			}
+			expect(chordsPlayed(Scale::Mixolydian, {"colour=add9", "motion=still"}).chords
+			       == std::set<int32_t>{kI, kIV, kVI, kVII})
+			    .to_be_true();
 		});
 	});
 

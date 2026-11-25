@@ -47,7 +47,7 @@ otherwise.
   (`sameChordLines()` in variant_sets_spec) checks it.
 - A graph variant's chords in a mode aren't its move list: the scale's colour moves (§7.4) add moves and the guard
   closes some. Ambient's `still` (#533) was read as stuck on I in Lydian and Dorian; it plays I, II and vi in Lydian
-  (colour move I–II) and I and IV in Dorian. Count the chords per scale in the harness (`chordsPlayed()`).
+  (colour move I–II) and I and IV in Dorian, and Mixolydian's colour move adds ♭VII to its I, IV and vi. Count the chords per scale in the harness (`chordsPlayed()`).
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
