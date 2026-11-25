@@ -392,8 +392,8 @@ void leadBreak(ResolvedGenre& resolved) {
 	resolved.genre.arc.breakKeeps = kLeadBreakKeeps;
 }
 
-/// S3, the Break (round 2: today, "but weighing today"): the Drone, the Arp and the closed hat (as written), the Lead
-/// in and the Arp out (B), or B without the hat (C). Not live: the Arc reads the Break ahead.
+/// S3, the Break (round 2): the Drone, the Arp and the closed hat (as written), the Lead in and the Arp out (B), or B
+/// without the hat (C). Sign-off 2 weighs the Arp and the Lead equal, 3:3:2. Not live: the Arc reads the Break ahead.
 constexpr Variant kBreakVariants[] = {
     {.name = "arp", .oledName = "ARP", .weight = 3},
     {.name = "lead", .oledName = "LEAD", .weight = 3, .apply = leadBreak},
@@ -407,9 +407,10 @@ constexpr Variant kBreakVariants[] = {
          }},
 };
 
-/// V1, the Arp while the Lead plays (Classic sign-off 1: "all three randomized, lower chance for both, especially
-/// outside the Drop"): dropboth (as written: both in a Drop; elsewhere the Arp keeps its 8ths), turns (the Arp rests),
-/// or the Arp's 8ths everywhere. Never in a Build (yieldOn()). Live: the yield is read step by step.
+/// V1, the Arp while the Lead plays (Classic sign-off 1): dropboth (as written: both in a Drop; elsewhere the Arp keeps
+/// its 8ths), turns (the Arp rests), or the Arp's 8ths everywhere. Sign-off 2 marked Both in a Drop often and in a
+/// Groove rarely: dropboth already plays Both only in Drops, so it weighs 3, as turns does. Never in a Build
+/// (yieldOn()). Live: the yield is read step by step.
 constexpr Variant kArpLeadVariants[] = {
     {.name = "dropboth", .oledName = "DROP BOTH", .weight = 3},
     {.name = "turns",

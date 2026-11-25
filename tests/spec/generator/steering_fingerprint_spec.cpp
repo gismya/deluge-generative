@@ -1,8 +1,8 @@
 // What each signed-off genre plays under steering (spec §12.5, §13.4, §8.7, §9.6, §13.2): a stream fingerprint of
-// pieces with a mute, a solo, a SHIFT + mute, a held fill (the genre's held entry, a Rest in Techno, a Swap in Dub and
-// none in Ambient, and a fresh pick, checked), a force and End, each pressed and released. The goldens play without
-// steering, so this pins how the silencers combine with a mute, a solo, a held fill, a force and End. A retune that
-// moves a stream moves its fingerprint here too: update it with the genre's golden (spec §21.2).
+// pieces with a mute, a solo, a SHIFT + mute, a held fill (the genre's held entry, a Rest in Techno and Psytrance, a
+// Swap in Dub and none in Ambient, and a fresh pick, checked), a force and End, each pressed and released. The goldens
+// play without steering, so this pins how the silencers combine with a mute, a solo, a held fill, a force and End. A
+// retune that moves a stream moves its fingerprint here too: update it with the genre's golden (spec §21.2).
 
 #include "harness.h"
 #include "stream_fingerprint.h"
