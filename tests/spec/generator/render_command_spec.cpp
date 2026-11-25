@@ -226,7 +226,7 @@ describe render_command("Rough render command", $ {
 		expect(harness::render::theoryText(rendering)[0].second.find(" variant.skank=plain ") != std::string::npos).to_be_true();
 		expect(parse({"--genre", "dub", "--variant", "skank=jazz", "--out", "x"}).error)
 		    .to_equal(std::string("unknown variant for dub: skank=jazz (have skank=sevenths, skank=plain, drums=onedrop, drums=rockers, "
-		                        "drums=steppers, break=seven, break=fifteen)"));
+		                        "drums=steppers, break=seven, break=fifteen, mix=version, mix=tubby, mix=light, bass=bursts, bass=rolling, bass=heavy)"));
 		expect(parse({"--variant", "skank=plain", "--out", "x"}).error)
 		    .to_equal(std::string("unknown variant for techno-acid: skank=plain (have none)"));
 	});

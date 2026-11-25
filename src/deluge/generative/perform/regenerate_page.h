@@ -68,8 +68,8 @@ void picksText(const Genre& genre, const VariantPicks& picks, std::span<char> ou
 /// Each set's allowed mask as test events show them: `<set>:<mask>` per set of `genre`, space-separated
 /// (`skank:2`), or `-` for a genre with no sets. Cut short to fit `out`.
 void masksText(const Genre& genre, const VariantPicks& picks, std::span<char> out);
-/// Room for picksText() or masksText() on a genre with a few sets, the NUL included.
-constexpr size_t kPicksTextChars = 64;
+/// Room for picksText() or masksText() on a genre with five or six sets, the NUL included (Dub's five: 80 chars).
+constexpr size_t kPicksTextChars = 128;
 
 // ---- The page ----
 

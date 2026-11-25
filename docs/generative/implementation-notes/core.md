@@ -300,6 +300,10 @@ otherwise.
   either way. `stepsToLine()` for a `SetVariantMask` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
   Drop ahead, which `landsAt()` passes on as `Generator::kNoLine`. Re-resolving writes the copy in place, so a
   patched pool must keep its entry count and lengths: a frozen part's `PatternState::entry` indexes the new pool.
+- Trap: `DropOutState::entry` outlives its drop-out (the Throw reads `genre_->dropOuts[entry]` on every step), so a
+  live set that swaps the drop-out table (Dub's MIX, #532) could index a shorter table with the old entry.
+  `dropVariants()` forgets the entry when the table changed: at a Drop the last drop-out and its Throw's fall are over
+  (asserted in the harness, as is the index in `updateControls()`).
 - Trap: once a genre has variant sets, a spec's `newRecipe()` or `movingRecipe()` draws them, so a spec of the
   table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
   `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the

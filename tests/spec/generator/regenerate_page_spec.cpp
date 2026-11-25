@@ -109,7 +109,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			fixVariant(picks, parseVariantFix(genres::dub, "skank=plain").value());
 			char text[kPicksTextChars];
 			picksText(genres::dub, picks, text);
-			expect(std::string(text)).to_equal(std::string("skank=plain:2 drums=onedrop:7 break=seven:3"));
+			expect(std::string(text)).to_equal(std::string("skank=plain:2 drums=onedrop:7 break=seven:3 mix=version:7 bass=bursts:7"));
 			picksText(genres::technoAcid, VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
 		});
@@ -118,7 +118,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			VariantPicks picks = allRandom(genres::dub);
 			char text[kPicksTextChars];
 			masksText(genres::dub, picks, text);
-			expect(std::string(text)).to_equal(std::string("skank:3 drums:7 break:3"));
+			expect(std::string(text)).to_equal(std::string("skank:3 drums:7 break:3 mix:7 bass:7"));
 			masksText(genres::technoAcid, VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
 		});

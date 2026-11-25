@@ -3,6 +3,7 @@
 // bar's hits name the entry playing.
 
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -372,6 +373,9 @@ describe patterns("Patterns", $ {
 			for (uint32_t seed = 1; seed <= 5; seed++) {
 				Run run;
 				run.recipe = newRecipe(*genre, seed);
+				if (builtIn == &genres::dub) {
+					run.recipe = withVariants(run.recipe, {"mix=version"}); // tubby and light patch drop-outs back in
+				}
 				run.recipe.macros.set(Macro::Density, 0);
 				run.seed = seed;
 				auto ons = only(play(run, bars).events, EventKind::NoteOn);
