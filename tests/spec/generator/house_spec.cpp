@@ -1027,7 +1027,8 @@ describe house("House", $ {
 		it("S1 is live: a switch to every Drop before the first Drop moves the loop on that Drop, as a piece drawn with it", _ {
 			int32_t differs = 0;
 			for (uint32_t seed = 1; seed <= 4; seed++) {
-				const Recipe never = withVariants(movingRecipe(houseGenre, seed), {"loops=never"});
+				// The loop's graph: the vamp, the chords set's heavier pick (feel-2 G4), often draws the loop it left.
+				const Recipe never = withVariants(movingRecipe(houseGenre, seed), {"loops=never", "chords=loop"});
 				const Walked switched = walk(never, seed, 160 * kStepsPerBar, [](int32_t n, const Generator&, SteeringQueue& queue) {
 					if (n == 0) {
 						queue.push({CommandKind::SetVariantMask, 0, 0b0100}); // loops: every
@@ -1169,6 +1170,31 @@ describe house("House", $ {
 			}
 			expect(vampChords == std::set<int32_t>{kI, kIV}).to_be_true();
 			expect(loopChords.contains(kVI) || loopChords.contains(kVII)).to_be_true();
+		});
+
+		it("played across Drops: each Drop's new loop stays i–iv in Minor and Dorian; Mixolydian's colour move adds ♭VII", _ {
+			// The Generator-wide colour row (chord_walk.h) adds I–♭VII to whichever graph plays in Mixolydian, so its
+			// vamp's loops are I–IV or I–♭VII, each two chords from home.
+			for (const Scale scale : {Scale::Minor, Scale::Dorian, Scale::Mixolydian}) {
+				std::set<int32_t> chords;
+				size_t grooves = 0;
+				for (uint32_t seed = 1; seed <= 6; seed++) {
+					Recipe recipe = movingRecipe(houseGenre, scale, seed);
+					recipe.keyRoot = 0;
+					const Walked walked = walk(withVariants(recipe, {"chords=vamp", "loops=every"}), seed, 300 * kStepsPerBar);
+					for (const std::vector<int32_t>& groove : grooveChords(walked)) {
+						grooves++;
+						const std::set<int32_t> played(groove.begin(), groove.end());
+						expect(played.size()).to_equal(size_t{2});
+						expect(played.contains(kI)).to_be_true();
+						chords.insert(groove.begin(), groove.end());
+					}
+				}
+				expect(grooves).to_be_greater_than(size_t{30});
+				const std::set<int32_t> expected =
+				    scale == Scale::Mixolydian ? std::set<int32_t>{kI, kIV, kVII} : std::set<int32_t>{kI, kIV};
+				expect(chords == expected).to_be_true();
+			}
 		});
 	});
 
