@@ -4421,7 +4421,7 @@ ModelStackWithNoteRow* InstrumentClipView::createNoteRowForYDisplay(ModelStackWi
 	InstrumentClip* clip = (InstrumentClip*)modelStack->getTimelineCounter();
 
 	NoteRow* noteRow = nullptr;
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 
 	// If *not* a kit
 	if (clip->output->type != OutputType::KIT) {
