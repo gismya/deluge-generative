@@ -1,5 +1,5 @@
 # Perform's VARIANTS ▸ and a live variant switch landing on a Drop (#495, spec §3.6, §13.6, ADR 0008 "Drop changes and
-# live steering") over the sysex test port: Acid techno shows no VARIANTS row; Acid cuts to ROOTS DUB, whose Perform
+# live steering") over the sysex test port: Acid techno shows its own VARIANTS (#531); Acid cuts to ROOTS DUB, whose Perform
 # menu has VARIANTS ▸ after REGENERATE, the Regenerate page's rows on the playing piece's ticks (SKANK and DRUMS on
 # RANDOM). DRUMS opens its multi-select: unticking ONE DROP, then ROCKERS, queues the ticks for the next Drop (VAR in
 # the status line), and a forced 1-bar Build lands them on the Drop: ONE DROP isn't ticked, so the Drop draws within
@@ -37,14 +37,17 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- Acid techno has no sets: the row under REGENERATE is KEY / SCALE, no VARIANTS ----
+# ---- Acid techno's sets (#531): the row under REGENERATE is VARIANTS, with DRUMS, ACID and BUILD ----
 include perform_transition_menu.txt
 encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 wait 200
-expect no_event gen_variants_menu within=1
+expect event gen_variants_menu open sets=3
+expect event gen_variants_row DRUMS Random
+expect event gen_variants_row ACID Random
+expect event gen_variants_row BUILD Random
 button BACK down
 wait 50
 button BACK up

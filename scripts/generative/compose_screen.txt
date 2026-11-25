@@ -10,8 +10,8 @@
 # gen_compose_recipe <why> genre= tempo= swing= key= scale= macros= and gen_compose_seed <why> seed= takes= length=:
 # the Current Recipe after an edit (why: the row, or opened/rolled/seed). gen_compose_pick <row> path=: a SOUNDS row's pick after it changed.
 # gen_recipe_roll <genre|regenerate|part|lane> done|cancelled|failed: a card-reading edit ended. Rows are chosen from
-# the top (encoder 3 -20): FROM, REGENERATE, SEED + TAKES, TEMPO, SWING, KEY, SCALE, ENERGY, DENSITY, COMPLEXITY,
-# MOTION, SOUNDS, LENGTH, BUILD.
+# the top (encoder 3 -20): FROM, REGENERATE, SEED + TAKES, TEMPO, SWING, KEY, SCALE, VARIANTS (Acid techno has sets,
+# #531), ENERGY, DENSITY, COMPLEXITY, MOTION, SOUNDS, LENGTH, BUILD.
 # covers: src/deluge/gui/menu_item/generative/compose_screen.* src/deluge/gui/menu_item/generative/row_value.h
 # covers: src/deluge/generative/firmware/compose_edits.* src/deluge/generative/firmware/current_recipe.*
 # covers: src/deluge/generative/compose/compose_screen.* src/deluge/generative/core/palette.*
@@ -123,7 +123,7 @@ expect ui=sound_editor
 
 # ---- The four macros: the continuous editor, 0-50 ----
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -199,7 +199,7 @@ wait 300
 
 # ---- SOUNDS ▸: DRUMS: n LANES ▸ → KICK re-rolls, SHIFT+push goes back; then ACID re-rolls ----
 encoder 3 -20
-encoder 3 11
+encoder 3 12
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -267,7 +267,7 @@ expect ui=sound_editor
 
 # ---- LENGTH: 1:00-20:00 in 30 s steps ----
 encoder 3 -20
-encoder 3 12
+encoder 3 13
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -284,7 +284,7 @@ wait 300
 # ---- A Recipe replaced outside the screen forgets the previous picks: KICK re-rolled here, then Perform (entered
 # from CURRENT RECIPE, which keeps them) and its REGENERATE, and back: SHIFT+push on KICK has none ----
 encoder 3 -20
-encoder 3 11
+encoder 3 12
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -383,7 +383,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_compose_screen opened
 encoder 3 -20
-encoder 3 11
+encoder 3 12
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -414,7 +414,7 @@ wait 300
 # ---- BUILD cancelled on COMPOSING: back on the screen, the player's song untouched ----
 hold compose
 encoder 3 -20
-encoder 3 13
+encoder 3 14
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -435,7 +435,7 @@ expect ui=sound_editor within=5
 
 # ---- BUILD → DISCARD SONG? → OK: COMPOSING, then the song in arranger view, stopped ----
 encoder 3 -20
-encoder 3 13
+encoder 3 14
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

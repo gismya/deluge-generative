@@ -23,4 +23,13 @@
 		take="0"
 		octave="0"
 		sound="SYNTHS/148 Warm 5th Pad.XML" />
+	<variant
+		set="drums"
+		pick="offbeat" />
+	<variant
+		set="acid"
+		pick="classic" />
+	<variant
+		set="build"
+		pick="roll" />
 </generativeRecipe>

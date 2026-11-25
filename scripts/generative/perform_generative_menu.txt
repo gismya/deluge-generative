@@ -91,7 +91,7 @@ wait 50
 button BACK up
 wait 300
 encoder 3 -20
-encoder 3 11
+encoder 3 12
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -169,7 +169,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 2
+encoder 3 3
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -229,7 +229,7 @@ button SELECT_ENC up
 expect event /^gen_compose_recipe opened genre=techno-acid tempo=13000 swing=-?\d+ key=0 scale=0 /
 expect event gen_compose_screen opened
 encoder 3 -20
-encoder 3 11
+encoder 3 12
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

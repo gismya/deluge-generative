@@ -26,4 +26,13 @@
 	<lane
 		name="kick"
 		sound="SAMPLES/DRUMS/Kick/Gone Kick.wav" />
+	<variant
+		set="drums"
+		pick="offbeat" />
+	<variant
+		set="acid"
+		pick="classic" />
+	<variant
+		set="build"
+		pick="roll" />
 </generativeRecipe>

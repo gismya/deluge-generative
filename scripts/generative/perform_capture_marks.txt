@@ -9,7 +9,7 @@
 # gen_mark marked|unmarked|log_full|no_piece piece= current= marks=: a press and what it did. gen_capture piece=
 # marked= full= marks=: the marks as the dot and the LED read them. gen_record_led off|on|blink. gen_peek_page and
 # gen_peek N LABEL|VALUE: the peek. Menus remember their last row, so a row is chosen from the top (encoder 3 -20
-# first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE, KEY / SCALE, GLIDE,
+# first); with no transition to cancel, the Perform menu's rows are GENRE, REGENERATE, VARIANTS (Techno has sets, #531), KEY / SCALE, GLIDE,
 # SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART, CAPTURE, BROWSER PREVIEW.
 # covers: src/deluge/generative/perform/capture.* src/deluge/generative/core/steering_log.*
 # covers: src/deluge/generative/perform/perform_driver.*
@@ -82,7 +82,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 8
+encoder 3 9
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
