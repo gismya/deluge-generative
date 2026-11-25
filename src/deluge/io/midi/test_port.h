@@ -37,6 +37,9 @@
 #include <optional>
 
 class MIDICable;
+namespace deluge::generative {
+struct NextRecipe;
+}
 
 namespace TestPort {
 
@@ -170,6 +173,11 @@ bool delaySetupsHeld();
 /// Test hook for pinning Perform's rolls: from a "hold entropy" line until "release entropy", gives freshEntropy() the
 /// next draw of a fixed sequence in *out and returns true; the hold starts the sequence again. Otherwise false.
 bool pinnedEntropy(uint32_t* out);
+/// Seam S7: the Recipe and seed "next recipe" lines set for the next roll (entry into Perform, a genre pick, a
+/// Regenerate), or nullptr when none is set. The roll calls nextRecipeTaken() once it has replaced the Current Recipe;
+/// later rolls draw fresh entropy again.
+const deluge::generative::NextRecipe* nextRecipe();
+void nextRecipeTaken();
 /// How long, in ms on the audio clock, the pad or button with PIC byte `value` has been held by an injected press, or
 /// -1 when no injected press holds it (or another was pressed after it): for a TEST_EVENT that reports a hold's
 /// length.

@@ -1,0 +1,99 @@
+# Seam S7 (gismya/deluge-engine#21, spec §21.3): "next recipe" lines set the Recipe and Seed the next roll takes. They
+# set Dub techno, its facts, a seed and two sound picks (paths with spaces: the rest of the line), and the entry
+# picks ACID: Perform enters on the line's Recipe, which the Compose screen then shows. The next roll, the Compose
+# screen's REGENERATE, draws fresh entropy again, and "next recipe clear" forgets fields that were set. Last, a
+# Regenerate in Perform takes the lines' facts but keeps its genre.
+# gen_next_recipe taken: a roll took the lines. gen_compose_recipe and gen_compose_seed: see compose_screen.txt.
+# covers: src/deluge/io/midi/test_port.* src/deluge/generative/core/recipe_overrides.h
+# covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/transitions.cpp
+# covers: src/deluge/generative/firmware/entry_leave.cpp src/deluge/generative/firmware/compose_edits.*
+# covers: src/deluge/gui/menu_item/generative/compose_screen.*
+start_state
+next recipe genre techno-dub
+next recipe seed 3
+next recipe entropy 7
+next recipe macro 0 40
+next recipe tempo 12345
+next recipe key 2
+next recipe scale 2
+next recipe swing 10
+next recipe part 3 SYNTHS/002 Basic Square Bass.XML
+next recipe lane 0 SAMPLES/DRUMS/Snare/909 Snare.wav
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_next_recipe taken since=mark
+expect event /^gen_sound DRUMS KICK pick .* SAMPLES/DRUMS/Snare/909 Snare\.wav$/ since=mark
+expect event /^gen_sound PAD - pick .* SYNTHS/002 Basic Square Bass\.XML / since=mark
+expect event gen_perform_entered techno-dub since=mark
+expect bpm=123.45
+include perform_leave.txt
+
+# ---- The Current Recipe is the line's: genre, facts, macros, seed ----
+compose screen
+expect event /^gen_compose_recipe opened genre=techno-dub tempo=12345 swing=10 key=2 scale=2 macros=40,/
+expect event /^gen_compose_seed opened seed=0000003 takes=0,0,0,0,0,0 /
+
+# ---- REGENERATE? → OK rolls from fresh entropy again: no line taken, another seed ----
+mark now
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll regenerate done within=30
+expect event /^gen_compose_seed rolled seed=(?!0000003 )\S+ /
+expect no_event gen_next_recipe since=mark within=1
+
+# ---- "next recipe clear" forgets what was set: the next REGENERATE rolls fresh ----
+next recipe seed 3
+next recipe tempo 12345
+next recipe clear
+mark now
+encoder 3 -20
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 300
+expect event gen_recipe_roll regenerate done within=30
+expect event /^gen_compose_recipe rolled genre=techno-dub tempo=(?!12345 )/
+expect event /^gen_compose_seed rolled seed=(?!0000003 )\S+ /
+expect no_event gen_next_recipe since=mark within=1
+
+# ---- In Perform, a Regenerate takes the lines too: their facts, but its own genre (Acid stays) ----
+start_state
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_perform_entered techno-acid since=mark
+next recipe genre techno-dub
+next recipe tempo 12600
+next recipe key 5
+mark now
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_next_recipe taken since=mark within=15
+expect event /^gen_pending_recipe tempo=12600 swing=-?\d+ interval=\d+ key=5 / within=15
+expect event gen_transition phase=idle within=30
+expect no_event gen_perform_entered techno-dub since=mark within=1
+include perform_leave.txt

@@ -341,6 +341,10 @@ def protocol_checks(port, check):
         "wait",
         "hold clip",
         "frobnicate 1 2",
+        "next recipe tempo 5",  # below kMinTempo
+        "next recipe genre nosuch",
+        "next recipe part 6 SYNTHS/A.XML",  # past the last part
+        "next recipe lane 0 " + "A" * 128,  # longer than a sound pick holds
     ):
         try:
             port.inject(line)

@@ -982,6 +982,9 @@ def run_script(port, lines, out=print, on_start_state=None):
       compose SECONDS [GENRE]                      queued too: a Compose build of that LENGTH under the COMPOSING
                                                    screen, of the Current Recipe or a fresh roll of GENRE (events
                                                    gen_compose done|cancelled|failed, or gen_compose refused)
+      next recipe FIELD VALUE | next recipe clear  queued too: sets one field of the Recipe and seed the next roll
+                                                   takes (entry, a genre pick, a Regenerate: seam S7), or forgets
+                                                   them; the roll sends gen_next_recipe taken. Fields: spec §21.3
       expect KEY=VALUE [within=S]                  polls the state JSON until KEY equals VALUE
       keep KEY...                                  keeps the state JSON's KEYs as they are once the queue is empty
                                                    (start_state drops them)
@@ -1242,6 +1245,7 @@ def _run_lines(
             "save",
             "compose",
             "check",
+            "next",
         ):
             port.inject(line)
         elif word == "start_state":

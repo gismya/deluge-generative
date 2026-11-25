@@ -208,19 +208,23 @@ private:
 			}
 		}
 		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
-		pendingRecipe.recipe =
-		    newRecipe(genre, freshEntropy(), Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
+		pendingRecipe.recipe = newRecipe(genre, nextEntropy(freshEntropy()),
+		                                 Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
 		pendingRecipe.stagedPalette = change;
 		pendingRecipe.macros = perform::HandoverMacros::Live;
-		pendingRecipe.seed = freshEntropy();
+		pendingRecipe.seed = nextSeed(freshEntropy());
 		pendingRecipe.takes = Takes{};
 		pendingRecipe.sounds = currentRecipe.sounds;
 		pendingName.clear();
 		CardFolders folders(&chunks);
-		if (!rollIncomingSounds(genre, playing, palette, pendingRecipe.sounds, freshEntropy(), folders)) {
+		if (!rollIncomingSounds(genre, playing, palette, pendingRecipe.sounds, nextEntropy(freshEntropy()), folders)) {
 			error_ = folders.cancelled() ? Error::NONE : Error::SD_CARD;
 			return false;
 		}
+#if ENABLE_SYSEX_TEST
+		// The genre is the one picked, and the live macros win at the handover.
+		takeNextRecipe(pendingRecipe.recipe, pendingRecipe.sounds);
+#endif
 		return true;
 	}
 

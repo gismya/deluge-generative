@@ -24,6 +24,7 @@
 #include "drivers/dmac/dmac.h"
 #include "extern.h"
 #include "generative/core/draw.h"
+#include "generative/core/recipe_overrides.h"
 #include "generative/firmware/capture_files.h"
 #include "generative/firmware/compose_job.h"
 #include "generative/firmware/current_recipe.h"
@@ -90,13 +91,31 @@ enum class Kind : uint8_t {
 	ResetRecipe,
 	PickGenre,
 	Compose,
-	ComposeScreen
+	ComposeScreen,
+	NextRecipe,     ///< A "next recipe" field: Entry::index a NextField, amount its value
+	NextRecipeSound ///< A "next recipe part|lane" pick: as SaveSong, its path waits in songPath
 };
 
-/// A "load song", "save song" or "check recipe" line: its path or name waits in songPath, one at a time.
+/// A "load song", "save song", "check recipe" or "next recipe part|lane" line: its path or name waits in songPath,
+/// one at a time.
 constexpr bool songFile(Kind kind) {
-	return kind == Kind::LoadSong || kind == Kind::SaveSong || kind == Kind::CheckRecipe;
+	return kind == Kind::LoadSong || kind == Kind::SaveSong || kind == Kind::CheckRecipe
+	       || kind == Kind::NextRecipeSound;
 }
+
+/// The fields of a "next recipe" line (Entry::index of a NextRecipe entry). A Macro's field is kNextMacro plus the
+/// Macro. A NextRecipeSound entry's index is the part, or kMaxParts plus the lane.
+enum NextField : uint8_t {
+	kNextClear,
+	kNextGenre,
+	kNextSeed,
+	kNextEntropy,
+	kNextTempo,
+	kNextKey,
+	kNextScale,
+	kNextSwing,
+	kNextMacro
+};
 
 struct Entry {
 	Kind kind;
@@ -109,7 +128,8 @@ struct Entry {
 	double arrived = 0; ///< getSystemTime() when the line arrived: input lag counts from here, or the wait before it
 };
 
-constexpr size_t kLineLength = 64; ///< The longest inject line, with its 0
+/// The longest inject line, with its 0: a "next recipe lane" line with a sound pick's longest path.
+constexpr size_t kLineLength = 32 + deluge::generative::kMaxSoundPath;
 
 /// The path of the queued "load song" entry, or the name of a "save song" one: one at a time, so a second waits as a
 /// full queue would.
@@ -417,6 +437,79 @@ bool parseInt(const char* s, int32_t min, int32_t max, int32_t* out) {
 	return true;
 }
 
+bool parseUint32(const char* s, uint32_t* out) {
+	const char* end = s + strlen(s);
+	auto [last, error] = std::from_chars(s, end, *out);
+	return error == std::errc{} && last == end;
+}
+
+/// `start` with the separators around it cut off, or nullptr if nothing is left: a path that is the rest of a line.
+const char* restOfLine(char* start) {
+	while (isSeparator(*start)) {
+		start++;
+	}
+	char* end = start + strlen(start);
+	while (end > start && isSeparator(end[-1])) {
+		*--end = 0;
+	}
+	return end == start ? nullptr : start;
+}
+
+/// A "next recipe" line, after its first two words: see parseLine().
+bool parseNextRecipe(char* rest, Entry* entry, const char** path) {
+	using namespace deluge::generative;
+	const bool part = strncmp(rest, "part ", 5) == 0;
+	if (part || strncmp(rest, "lane ", 5) == 0) {
+		char* number = rest + 5;
+		char* space = strchr(number, ' ');
+		int32_t slot;
+		if (space == nullptr || (*space = 0, !parseInt(number, 0, (part ? kMaxParts : kNumLanes) - 1, &slot))
+		    || (*path = restOfLine(space + 1)) == nullptr || strlen(*path) >= kMaxSoundPath) {
+			return false;
+		}
+		*entry = {Kind::NextRecipeSound, static_cast<uint8_t>(part ? slot : kMaxParts + slot), 0};
+		return true;
+	}
+	Tokens t = tokenize(rest);
+	const char* field = t.count >= 1 ? t.token[0] : "";
+	uint32_t number;
+	int32_t value;
+	int32_t points;
+	if (t.count == 1 && strcmp(field, "clear") == 0) {
+		*entry = {Kind::NextRecipe, kNextClear, 0};
+	}
+	else if (t.count == 2 && strcmp(field, "genre") == 0 && findGenre(t.token[1]) != nullptr) {
+		const auto genres = allGenres();
+		*entry = {Kind::NextRecipe, kNextGenre,
+		          static_cast<int32_t>(std::ranges::find(genres, findGenre(t.token[1])) - genres.begin())};
+	}
+	else if (t.count == 2 && (strcmp(field, "seed") == 0 || strcmp(field, "entropy") == 0)
+	         && parseUint32(t.token[1], &number)) {
+		*entry = {Kind::NextRecipe, field[0] == 's' ? kNextSeed : kNextEntropy, static_cast<int32_t>(number)};
+	}
+	else if (t.count == 3 && strcmp(field, "macro") == 0 && parseInt(t.token[1], 0, kNumMacros - 1, &value)
+	         && parseInt(t.token[2], 0, kMacroPoints, &points)) {
+		*entry = {Kind::NextRecipe, static_cast<uint8_t>(kNextMacro + value), points};
+	}
+	else {
+		struct Number {
+			const char* name;
+			NextField field;
+			int32_t min, max;
+		};
+		constexpr Number kNumbers[] = {{"tempo", kNextTempo, kMinTempo, kMaxTempo},
+		                               {"key", kNextKey, 0, 11},
+		                               {"scale", kNextScale, 0, kNumScales - 1},
+		                               {"swing", kNextSwing, -kMaxSwing, kMaxSwing}};
+		const Number* row = std::ranges::find_if(kNumbers, [&](const Number& n) { return strcmp(n.name, field) == 0; });
+		if (t.count != 2 || row == std::end(kNumbers) || !parseInt(t.token[1], row->min, row->max, &value)) {
+			return false;
+		}
+		*entry = {Kind::NextRecipe, row->field, value};
+	}
+	return true;
+}
+
 bool parseDown(const char* s, bool* down) {
 	if (strcmp(s, "down") == 0) {
 		*down = true;
@@ -476,27 +569,29 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///                               dmaRecordBootStates() and reportBootDma())
 ///   save song <name>            saves the current song as SONGS/<name>.XML (the rest of the line), see saveSong()
 ///   check recipe <name>|*       reads RECIPES/<name>.XML back against the Current Recipe, see checkRecipe()
-/// For a "load song" line, *path points at its path inside `line`; for "save song" and "check recipe", at the name.
+///   next recipe <field> <value> seam S7: sets one field of the Recipe and seed the next roll takes, see
+///                               setNextRecipe(): genre <name>, seed <n>, entropy <n> (0 to 2^32-1), macro <0-3>
+///                               <points 0-50>, tempo <hundredths of a BPM>, key <0-11>, scale <a Scale, 0-11>,
+///                               swing <-49-49>; part <0-5> <path> and lane <0-14> <path> (the rest of the line)
+///   next recipe clear           forgets the fields set
+/// For a "load song" or "next recipe part|lane" line, *path points at its path inside `line`; for "save song" and
+/// "check recipe", at the name.
 bool parseLine(char* line, Entry* entry, const char** path) {
 	constexpr char kLoadSong[] = "load song ";
 	constexpr char kSaveSong[] = "save song ";
 	constexpr char kCheckRecipe[] = "check recipe ";
+	constexpr char kNextRecipe[] = "next recipe ";
+	if (strncmp(line, kNextRecipe, sizeof(kNextRecipe) - 1) == 0) {
+		return parseNextRecipe(line + sizeof(kNextRecipe) - 1, entry, path);
+	}
 	static_assert(sizeof(kLoadSong) == sizeof(kSaveSong));
 	const bool save = strncmp(line, kSaveSong, sizeof(kSaveSong) - 1) == 0;
 	const bool check = strncmp(line, kCheckRecipe, sizeof(kCheckRecipe) - 1) == 0;
 	if (save || check || strncmp(line, kLoadSong, sizeof(kLoadSong) - 1) == 0) {
-		char* start = line + (check ? sizeof(kCheckRecipe) : sizeof(kLoadSong)) - 1;
-		while (isSeparator(*start)) {
-			start++;
-		}
-		char* end = start + strlen(start);
-		while (end > start && isSeparator(end[-1])) {
-			*--end = 0;
-		}
-		if (end == start) {
+		*path = restOfLine(line + (check ? sizeof(kCheckRecipe) : sizeof(kLoadSong)) - 1);
+		if (*path == nullptr) {
 			return false;
 		}
-		*path = start;
 		*entry = {save ? Kind::SaveSong : check ? Kind::CheckRecipe : Kind::LoadSong, 0, 0};
 		return true;
 	}
@@ -879,6 +974,66 @@ void loadSong(const char* path) {
 	}
 }
 
+/// Seam S7's Recipe and seed for the next roll, while nextRecipeArmed. Zero-filled at boot: the first field set clears
+/// it to its defaults.
+PLACE_SDRAM_BSS deluge::generative::NextRecipe nextRecipeValue;
+bool nextRecipeArmed = false;
+
+deluge::generative::NextRecipe& armNextRecipe() {
+	if (!nextRecipeArmed) {
+		nextRecipeValue.clear();
+		nextRecipeArmed = true;
+	}
+	return nextRecipeValue;
+}
+
+/// "next recipe <field> <value>": sets the field in the Recipe and seed the next roll takes (nextRecipe()); "next
+/// recipe clear" forgets them all, and so does "reset recipe". The roll that takes them sends gen_next_recipe taken.
+void setNextRecipe(uint8_t field, int32_t value) {
+	using namespace deluge::generative;
+	if (field == kNextClear) {
+		nextRecipeArmed = false;
+		return;
+	}
+	NextRecipe& next = armNextRecipe();
+	RecipeOverrides& overrides = next.overrides;
+	switch (field) {
+	case kNextGenre:
+		overrides.genre = allGenres()[value]->name;
+		break;
+	case kNextSeed:
+		overrides.seed = static_cast<uint32_t>(value);
+		next.seedSet = true;
+		break;
+	case kNextEntropy:
+		overrides.entropy = static_cast<uint32_t>(value);
+		next.entropySet = true;
+		break;
+	case kNextTempo:
+		overrides.tempo = value;
+		break;
+	case kNextKey:
+		overrides.keyRoot = static_cast<int8_t>(value);
+		break;
+	case kNextScale:
+		overrides.scale = static_cast<int8_t>(value);
+		break;
+	case kNextSwing:
+		overrides.swing = static_cast<int8_t>(value);
+		break;
+	default:
+		overrides.macroPoints[field - kNextMacro] = static_cast<int8_t>(value);
+	}
+}
+
+/// "next recipe part|lane <n> <path>": the sound pick the next roll takes for that part or lane.
+void setNextRecipeSound(uint8_t slot, const char* path) {
+	using namespace deluge::generative;
+	SoundPicks& sounds = armNextRecipe().sounds;
+	SoundPath& pick = slot < kMaxParts ? sounds.part[slot] : sounds.lane[slot - kMaxParts];
+	pick.set(path); // parseNextRecipe() refused a path too long for it
+}
+
 /// "reset recipe": puts the Current Recipe back as after boot (forgetCurrentRecipe()), so the next Perform entry's
 /// GENRE ▸ opens on the default genre (techno-acid) and rolls a fresh Recipe, seed and sound picks for it, whatever
 /// genre the last script left playing. start_state sends it once it has left Perform. Sends gen_recipe_reset done,
@@ -886,6 +1041,7 @@ void loadSong(const char* path) {
 /// Recipe; nothing changed) or busy (a runner job, which may still commit a Recipe, hasn't ended; nothing changed).
 void resetRecipe() {
 	using namespace deluge::generative::firmware;
+	nextRecipeArmed = false;
 	if (rootUIIsGenerativePerform() || performAdapter.active()) {
 		event("gen_recipe_reset refused why=perform");
 		return;
@@ -1105,6 +1261,15 @@ std::optional<HidEvent> takeHidEvent() {
 			songLoadQueued = false;
 			return std::nullopt;
 
+		case Kind::NextRecipe:
+			setNextRecipe(entry.index, entry.amount);
+			break;
+
+		case Kind::NextRecipeSound:
+			setNextRecipeSound(entry.index, songPath);
+			songLoadQueued = false;
+			break;
+
 		case Kind::Encoder:
 		case Kind::FastGold:
 			busyEncoder = entry.index;
@@ -1165,6 +1330,15 @@ void feedEncoderEdges() {
 
 bool entryHeld() {
 	return holdingEntry;
+}
+
+const deluge::generative::NextRecipe* nextRecipe() {
+	return nextRecipeArmed ? &nextRecipeValue : nullptr;
+}
+
+void nextRecipeTaken() {
+	nextRecipeArmed = false;
+	event("gen_next_recipe taken");
 }
 
 bool pinnedEntropy(uint32_t* out) {

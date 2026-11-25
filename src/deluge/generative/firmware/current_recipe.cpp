@@ -32,8 +32,10 @@
 #include <cstddef>
 #include <cstring>
 
-#ifdef GENERATIVE_CAPTURE
+#if defined(GENERATIVE_CAPTURE) || ENABLE_SYSEX_TEST
 #include "generative/core/recipe_overrides.h"
+#endif
+#ifdef GENERATIVE_CAPTURE
 #include <array>
 #endif
 
@@ -94,6 +96,34 @@ void forgetCurrentRecipe() {
 	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
 	currentRecipe.generation = generation;
 	currentRecipe.replaced();
+}
+#endif
+
+#if ENABLE_SYSEX_TEST
+uint32_t nextEntropy(uint32_t fresh) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	return next != nullptr && next->entropySet ? next->overrides.entropy : fresh;
+}
+
+uint32_t nextSeed(uint32_t fresh) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	return next != nullptr && next->seedSet ? next->overrides.seed : fresh;
+}
+
+const Genre& nextGenre(const Genre& genre) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	const Genre* named =
+	    next != nullptr && next->overrides.genre != nullptr ? findGenre(next->overrides.genre) : nullptr;
+	return named != nullptr ? *named : genre;
+}
+
+void takeNextRecipe(Recipe& recipe, SoundPicks& sounds) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	if (next != nullptr) {
+		applyOverrides(recipe, next->overrides);
+		next->applySounds(sounds);
+		TestPort::nextRecipeTaken();
+	}
 }
 #endif
 
@@ -179,9 +209,9 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	uint32_t rolledSeed = rolledRecipe.seed;
 	uint32_t soundEntropy = overrides.entropy;
 #else
-	Recipe rolled = newRecipe(genre, freshEntropy());
-	uint32_t rolledSeed = freshEntropy();
-	uint32_t soundEntropy = freshEntropy();
+	Recipe rolled = newRecipe(nextGenre(genre), nextEntropy(freshEntropy()));
+	uint32_t rolledSeed = nextSeed(freshEntropy());
+	uint32_t soundEntropy = nextEntropy(freshEntropy());
 #if ENABLE_SYSEX_TEST
 	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
 		rolled = newRecipe(genre, golden_case::kEntropy);
@@ -205,6 +235,9 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
+#if ENABLE_SYSEX_TEST && !defined(GENERATIVE_CAPTURE)
+	takeNextRecipe(rolled, stagedSounds_);
+#endif
 	activeOverride_ = 1 - activeOverride_;
 	overrideGenre_ = &rolledGenre;
 	recipe = rolled;
@@ -234,19 +267,22 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 		return Error::NONE;
 	}
 	const Genre& genre = *recipe.genre;
-	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale});
+	Recipe rolled = newRecipe(genre, nextEntropy(freshEntropy()), Key{recipe.keyRoot, recipe.scale});
 	rolled.macros = recipe.macros;
 	if (perform::keepsPartBias(perform::HandoverMacros::Live, rolled.genre, recipe.genre)) {
 		rolled.bias = recipe.bias; // always: a Regenerate keeps the roster
 	}
 	stagedSounds_ = sounds;
 	CardFolders folders(chunks);
-	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
+	if (!rerollSounds(genre, palette(), stagedSounds_, nextEntropy(freshEntropy()), folders)) {
 		return rollError(folders);
 	}
 	recipe = rolled;
 	sounds = stagedSounds_;
-	seed = freshEntropy();
+	seed = nextSeed(freshEntropy());
+#if ENABLE_SYSEX_TEST
+	takeNextRecipe(recipe, sounds);
+#endif
 	takes = Takes{};
 	replaced();
 	return Error::NONE;
