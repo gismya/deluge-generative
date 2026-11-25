@@ -425,6 +425,8 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("techno-acid\t7111\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
 		expect(listing.rfind("fallback\tSAMPLES/FX/Riser/GEN Riser 2.wav\t6000\n", 0)).to_equal(size_t{0});
 		expect(listing.find("psytrance-classic\t13150\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+		// House's filter Build plays no Riser, so it doesn't count: its shortest Riser Build is 8 bars at 126 BPM.
+		expect(listing.find("house\t15238\tSAMPLES/FX/Riser\tGEN Riser 2|GEN Riser 3\n")).not_().to_equal(std::string::npos);
 	});
 
 	it("lists a Recipe's sound picks with --list-sounds: a line per part and per lane of a Drums or FX part", _ {

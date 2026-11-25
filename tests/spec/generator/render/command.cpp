@@ -175,9 +175,13 @@ std::string riserLanes() {
 		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
 		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
 		// bars over an 8-bar phrase. Over the genre as written and each of its variants, since a set may patch the
-		// Build (Techno's hard Build, 4 bars, #531).
+		// Build (Techno's hard Build, 4 bars, #531). A variant whose Builds play no Riser (House's filter) doesn't
+		// count.
 		auto shortestIn = [](const Genre& g) {
 			const std::span<const WeightedBars> builds = g.arc.buildBars;
+			if (!g.arc.buildRiser) {
+				return INT32_MAX;
+			}
 			return builds.empty() ? static_cast<int32_t>(g.phraseBars)
 			                      : static_cast<int32_t>(std::ranges::min(builds, {}, &WeightedBars::bars).bars);
 		};
@@ -189,6 +193,9 @@ std::string riserLanes() {
 				picks.pick[s] = static_cast<uint8_t>(v);
 				buildBars = std::min(buildBars, shortestIn(resolveGenre(*genre, picks, copy.get())));
 			}
+		}
+		if (buildBars == INT32_MAX) {
+			continue; // no Build of it plays a Riser
 		}
 		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
