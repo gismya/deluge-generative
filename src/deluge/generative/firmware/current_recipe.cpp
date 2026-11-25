@@ -212,11 +212,14 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 #else
 	Recipe rolled = newRecipe(nextGenre(genre), nextEntropy(freshEntropy()));
 	uint32_t rolledSeed = nextSeed(freshEntropy());
-	uint32_t soundEntropy = nextEntropy(freshEntropy());
+	uint32_t soundEntropy = freshEntropy();
 #if ENABLE_SYSEX_TEST
-	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
+	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll, fresh
 		rolled = newRecipe(genre, golden_case::kEntropy);
 		rolledSeed = golden_case::kSeed;
+	}
+	else {
+		soundEntropy = nextEntropy(soundEntropy);
 	}
 #endif
 #endif
