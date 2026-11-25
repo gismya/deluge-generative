@@ -1,7 +1,7 @@
 # ambient's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre ambient version 3
+genre ambient version 4
 recipe entropy 0: G major, 60.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 BASS, 2 PAD, 3 DRONE, 4 BELLS, 5 FX
 fingerprint f5d4277c9b2d1593, 1252599 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
