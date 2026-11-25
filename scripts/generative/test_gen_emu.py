@@ -262,6 +262,8 @@ class CaptureBuild(unittest.TestCase):
         for bad in ("skank", "skank=", "=plain", "Skank=plain", "skank=plain,x=y"):
             with self.subTest(bad=bad), self.assertRaises(SystemExit):
                 gen_emu.parser().parse_args(["capture", "--variant", bad])
+        good = gen_emu.parser().parse_args(["capture", "--variant", "accents=332"])
+        self.assertEqual(good.variant, ["accents=332"])
         long = gen_emu.parser().parse_args(
             ["capture"] + ["--variant", "abcdefgh=ijklmnop"] * 4
         )

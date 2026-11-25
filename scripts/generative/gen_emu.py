@@ -1755,8 +1755,9 @@ def add_leak_args(p):
 
 
 def variant_arg(text):
-    """A --variant value: SET=NAME, stable names as the genre's data writes them (lowercase letters and digits)."""
-    if not re.fullmatch(r"[a-z][a-z0-9]*=[a-z][a-z0-9]*", text):
+    """A --variant value: SET=NAME, stable names as the genre's data writes them (lowercase letters and digits; a
+    variant's name may start with a digit, as Psytrance's accents=332)."""
+    if not re.fullmatch(r"[a-z][a-z0-9]*=[a-z0-9]+", text):
         raise argparse.ArgumentTypeError(f"takes SET=NAME, not {text!r}")
     return text
 
