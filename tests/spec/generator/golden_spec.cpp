@@ -278,7 +278,7 @@ describe golden("The goldens", $ {
 		});
 	}
 
-	it("has one golden per signed-off genre (each Techno subgenre, Dub), and none for anything else (dotfiles aside)", _ {
+	it("has one golden per signed-off genre (each Techno subgenre, Dub, Ambient), and none for anything else (dotfiles aside)", _ {
 		// After the goldens' own specs, so an update that adds a subgenre has written its golden by now.
 		const std::vector<const Genre*> genres = goldenGenres();
 		expect(genres.empty()).to_be_false();

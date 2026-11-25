@@ -648,7 +648,8 @@ describe compose_driver("The Compose driver", $ {
 				}
 				expect(end).to_be_greater_than((goldens::kBars - 1) * kStepsPerBar * kTicksPerStep);
 				const std::vector<Note> expected = notesBefore(pairNotes(golden.events), end);
-				expect(expected.size()).to_be_greater_than(100U);
+				// Ambient's 16 bars hold a few long notes: the Pad, the Drone, the Bass and the bells.
+				expect(expected.size()).to_be_greater_than(genre == &genres::ambient ? 20U : 100U);
 				expect(notesBefore(composed->writer.notes, end) == expected).to_be_true();
 			}
 		});
