@@ -57,8 +57,10 @@ expect event gen_press force BREAK
 expect event gen_arcplan first=0
 expect event /^gen_arcmap .*q=\.\.\.\.x\.\.\.\.\.\.\.\.\.\.\./
 expect event gen_arcrow 1 ...n.
-expect event gen_arcpage GR BR
-expect event /^gen_arcpage .*\|NEXT BREAK/
+# A 1-phrase Break before a Build shorter than a phrase (Techno's hard Build, #531) shares its phrase with the Build,
+# which tags the box and is the next change the page names
+expect event /^gen_arcpage GR (BR|BU)/
+expect event /^gen_arcpage .*\|NEXT B(REAK|UILD)/
 # BACK tap cancels it: the plan goes back to Groove
 button BACK down
 wait 50
