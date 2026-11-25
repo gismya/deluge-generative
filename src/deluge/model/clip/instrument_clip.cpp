@@ -960,7 +960,7 @@ void InstrumentClip::toggleNoteRowMute(ModelStackWithNoteRow* modelStack) {
 ModelStackWithNoteRow* InstrumentClip::getNoteRowOnScreen(int32_t yDisplay, ModelStackWithTimelineCounter* modelStack) {
 	int32_t noteRowIndex;
 	NoteRow* noteRow = getNoteRowOnScreen(yDisplay, modelStack->song, &noteRowIndex);
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	if (noteRow) {
 		noteRowId = getNoteRowId(noteRow, noteRowIndex);
 	}
@@ -992,7 +992,7 @@ NoteRow* InstrumentClip::getNoteRowOnScreen(int32_t yDisplay, Song* song, int32_
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForYNote(int32_t yNote, ModelStackWithTimelineCounter* modelStack) {
 	int32_t noteRowIndex;
 	NoteRow* noteRow = getNoteRowForYNote(yNote, &noteRowIndex);
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	if (noteRow) {
 		noteRowId = getNoteRowId(noteRow, noteRowIndex);
 	}
@@ -1018,7 +1018,7 @@ NoteRow* InstrumentClip::getNoteRowForYNote(int32_t yNote, int32_t* getIndex) {
 // May set noteRow to NULL, of course.
 // Will correctly do that if we're not a Kit Clip.
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForSelectedDrum(ModelStackWithTimelineCounter* modelStack) {
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	NoteRow* noteRow = nullptr;
 	if (output->type == OutputType::KIT) {
 		Kit* kit = (Kit*)output;
@@ -1030,7 +1030,7 @@ ModelStackWithNoteRow* InstrumentClip::getNoteRowForSelectedDrum(ModelStackWithT
 }
 
 ModelStackWithNoteRow* InstrumentClip::getNoteRowForDrum(ModelStackWithTimelineCounter* modelStack, Drum* drum) {
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 	NoteRow* noteRow = getNoteRowForDrum(drum, &noteRowId);
 	return modelStack->addNoteRow(noteRowId, noteRow);
 }
