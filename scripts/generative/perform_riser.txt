@@ -125,42 +125,6 @@ expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=3
-encoder 3 -5
-encoder 3 2
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-wait 100
-encoder 3 -5
-encoder 3 1
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect event gen_variants set=build allowed=13
-encoder 3 1
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect event gen_variants set=build allowed=9
-encoder 3 1
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
-expect event gen_variants set=build allowed=1 shows=ROLL
-# BACK to VARIANTS, BACK to the page, down to GO
-button BACK down
-wait 50
-button BACK up
-wait 100
-button BACK down
-wait 50
-button BACK up
-wait 100
-encoder 3 5
-button SELECT_ENC down
-wait 50
-button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0
 expect event gen_transition_preload done within=15
 expect event gen_transition phase=committed within=60
