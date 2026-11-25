@@ -539,7 +539,14 @@ bool Kit::renderGlobalEffectableForClip(ModelStackWithTimelineCounter* modelStac
 	bool rendered = false;
 	// Render Drums. Traverse backwards, in case one stops rendering (removing itself from the list) as we render it
 	for (int32_t d = drumsWithRenderingActive.getNumElements() - 1; d >= 0; d--) {
-		Drum* thisDrum = *(Drum**)drumsWithRenderingActive.getElementAddress(d);
+		// Where a pointer is wider than the key, the element holds all of it (SoundDrum::setSkippingRendering()).
+		Drum* thisDrum;
+		if constexpr (sizeof(Drum*) == sizeof(int32_t)) {
+			thisDrum = (Drum*)(intptr_t)drumsWithRenderingActive.getKeyAtIndex(d);
+		}
+		else {
+			thisDrum = *(Drum**)drumsWithRenderingActive.getElementAddress(d);
+		}
 
 		// Only SoundDrums may be in this list - don't render anything else as one
 		if (thisDrum->type != DrumType::SOUND) {
