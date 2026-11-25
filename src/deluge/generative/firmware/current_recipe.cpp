@@ -34,17 +34,19 @@
 #include <cstring>
 #include <string_view>
 
-#ifdef GENERATIVE_CAPTURE
+#if defined(GENERATIVE_CAPTURE) || ENABLE_SYSEX_TEST
 #include "generative/core/recipe_overrides.h"
+#endif
+#ifdef GENERATIVE_CAPTURE
 #include <array>
 #endif
 
 #ifdef GENERATIVE_CAPTURE
 namespace deluge::generative::firmware {
 
-/// The Recipe a capture build plays: a RecipeOverrides with the genre's name inline. scripts/generative/gen_emu.py
-/// capture writes it into a copy of the ELF before each boot (CAPTURE_LAYOUT there), so a new Recipe needs no build.
-/// The two layouts must agree.
+/// The Recipe a GENERATIVE_CAPTURE build plays: a RecipeOverrides with the genre's name inline. On m5-variants,
+/// gen_emu.py's --variant captures write it into a copy of the ELF before each boot (CAPTURE_LAYOUT there; the two
+/// layouts must agree). On generative, gen_emu.py capture uses seam S7's "next recipe" lines instead (#523).
 struct CaptureRecipe {
 	char magic[8];
 	char genre[32]; ///< NUL-terminated. Empty, or a name no genre has: the fallback genre.
@@ -99,6 +101,35 @@ void forgetCurrentRecipe() {
 	std::memset(static_cast<void*>(&currentRecipe), 0, sizeof(currentRecipe));
 	currentRecipe.generation = generation;
 	currentRecipe.replaced();
+}
+#endif
+
+#if ENABLE_SYSEX_TEST
+uint32_t nextEntropy(uint32_t fresh) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	return next != nullptr && next->entropySet ? next->overrides.entropy : fresh;
+}
+
+uint32_t nextSeed(uint32_t fresh) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	return next != nullptr && next->seedSet ? next->overrides.seed : fresh;
+}
+
+const Genre& nextGenre(const Genre& genre) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	const Genre* named =
+	    next != nullptr && next->overrides.genre != nullptr ? findGenre(next->overrides.genre) : nullptr;
+	return named != nullptr ? *named : genre;
+}
+
+bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds) {
+	const NextRecipe* next = TestPort::nextRecipe();
+	if (next == nullptr) {
+		return false;
+	}
+	applyOverrides(recipe, next->overrides);
+	next->applySounds(sounds);
+	return true;
 }
 #endif
 
@@ -198,13 +229,16 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	uint32_t rolledSeed = rolledRecipe.seed;
 	uint32_t soundEntropy = overrides.entropy;
 #else
-	Recipe rolled = newRecipe(genre, freshEntropy());
-	uint32_t rolledSeed = freshEntropy();
+	Recipe rolled = newRecipe(nextGenre(genre), nextEntropy(freshEntropy()));
+	uint32_t rolledSeed = nextSeed(freshEntropy());
 	uint32_t soundEntropy = freshEntropy();
 #if ENABLE_SYSEX_TEST
-	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll
+	if (TestPort::goldenHeld()) { // the firmware check's golden case (spec §21.3); the sounds still roll, fresh
 		rolled = rollWithOverrides(genre, golden_case::overrides()).recipe; // each variant set on its first
 		rolledSeed = golden_case::kSeed;
+	}
+	else {
+		soundEntropy = nextEntropy(soundEntropy);
 	}
 #endif
 #endif
@@ -224,6 +258,12 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
+#if ENABLE_SYSEX_TEST && !defined(GENERATIVE_CAPTURE)
+	// Not the golden case: it is the genre's default Recipe, and the lines stay for the next roll.
+	if (!TestPort::goldenHeld() && applyNextRecipe(rolled, stagedSounds_)) {
+		TestPort::nextRecipeTaken();
+	}
+#endif
 	activeOverride_ = 1 - activeOverride_;
 	overrideGenre_ = &rolledGenre;
 	recipe = rolled;
@@ -254,19 +294,24 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	}
 	const Genre& genre = *recipe.genre;
 	// Each variant set draws within the variants the Recipe allows (spec §3.6, §14.4).
-	Recipe rolled = newRecipe(genre, freshEntropy(), Key{recipe.keyRoot, recipe.scale}, &recipe.variants);
+	Recipe rolled = newRecipe(genre, nextEntropy(freshEntropy()), Key{recipe.keyRoot, recipe.scale}, &recipe.variants);
 	rolled.macros = recipe.macros;
 	if (perform::keepsPartBias(perform::HandoverMacros::Live, rolled.genre, recipe.genre)) {
 		rolled.bias = recipe.bias; // always: a Regenerate keeps the roster
 	}
 	stagedSounds_ = sounds;
 	CardFolders folders(chunks);
-	if (!rerollSounds(genre, palette(), stagedSounds_, freshEntropy(), folders)) {
+	if (!rerollSounds(genre, palette(), stagedSounds_, nextEntropy(freshEntropy()), folders)) {
 		return rollError(folders);
 	}
 	recipe = rolled;
 	sounds = stagedSounds_;
-	seed = freshEntropy();
+	seed = nextSeed(freshEntropy());
+#if ENABLE_SYSEX_TEST
+	if (applyNextRecipe(recipe, sounds)) {
+		TestPort::nextRecipeTaken();
+	}
+#endif
 	takes = Takes{};
 	replaced();
 	return Error::NONE;

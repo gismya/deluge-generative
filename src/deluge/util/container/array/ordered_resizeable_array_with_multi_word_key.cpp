@@ -47,12 +47,22 @@ int32_t OrderedResizeableArrayWithMultiWordKey::searchMultiWord(uint32_t* __rest
 		uint32_t* __restrict__ keyWord = keyWords;
 
 		while (true) {
-			int32_t difference = *wordsHere - *keyWord;
-			if (difference > 0) {
-				break;
+			if constexpr (kUnsignedKeyWords) {
+				if (*wordsHere > *keyWord) {
+					break;
+				}
+				if (*wordsHere < *keyWord) {
+					goto searchFurtherRight;
+				}
 			}
-			if (difference < 0) {
-				goto searchFurtherRight;
+			else {
+				int32_t difference = *wordsHere - *keyWord;
+				if (difference > 0) {
+					break;
+				}
+				if (difference < 0) {
+					goto searchFurtherRight;
+				}
 			}
 			if (keyWord == finalKeyWord) {
 				break;
@@ -132,7 +142,13 @@ void OrderedResizeableArrayWithMultiWordKey::testSequentiality(char const* error
 		uint32_t* __restrict__ wordsHere = (uint32_t*)getElementAddress(i);
 		uint32_t* __restrict__ lastWords = (uint32_t*)getElementAddress(i - 1);
 		for (int j = 0; j < numWordsInKey; j++) {
-			int32_t difference = wordsHere[j] - lastWords[j];
+			int32_t difference;
+			if constexpr (kUnsignedKeyWords) {
+				difference = (wordsHere[j] > lastWords[j]) - (wordsHere[j] < lastWords[j]);
+			}
+			else {
+				difference = wordsHere[j] - lastWords[j];
+			}
 			if (difference < 0) {
 				FREEZE_WITH_ERROR(errorCode);
 			}

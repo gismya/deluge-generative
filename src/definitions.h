@@ -76,10 +76,15 @@ extern void freezeWithError(char const* errmsg);
 
 #define MAX_NUM_USB_MIDI_DEVICES 6
 
+// Section names are ELF's: other object formats (Mach-O on a macOS host) get no placement.
+#if defined(__ELF__)
 // Paul: It seems this area is not executable, could not find a reason in the datasheet, marked NOLOAD now
 #define PLACE_INTERNAL_FRUNK __attribute__((__section__(".frunk_bss")))
+#else
+#define PLACE_INTERNAL_FRUNK
+#endif
 
-#ifndef IN_UNIT_TESTS
+#if !defined(IN_UNIT_TESTS) && defined(__ELF__)
 #define PLACE_SDRAM_BSS __attribute__((__section__(".sdram_bss")))
 #define PLACE_SDRAM_DATA __attribute__((__section__(".sdram_data")))
 #define PLACE_SDRAM_RODATA __attribute__((__section__(".sdram_rodata")))

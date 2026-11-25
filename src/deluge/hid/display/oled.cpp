@@ -1326,7 +1326,7 @@ void OLED::freezeWithError(char const* text) {
 
 	int32_t transferSize = (OLED_MAIN_HEIGHT_PIXELS >> 3) * OLED_MAIN_WIDTH_PIXELS;
 	DMACn(OLED_SPI_DMA_CHANNEL).N0TB_n = transferSize; // TODO: only do this once?
-	uint32_t dataAddress = (uint32_t)(&OLED::main.hackGetImageStore()[0][0]);
+	uintptr_t dataAddress = (uintptr_t)(&OLED::main.hackGetImageStore()[0][0]);
 	DMACn(OLED_SPI_DMA_CHANNEL).N0SA_n = dataAddress;
 	// oledFrameQueueReadPos = (oledFrameQueueReadPos + 1) & (OLED_FRAME_QUEUE_SIZE - 1);
 	// todo - should only need a flush

@@ -44,11 +44,13 @@ touched (--scripts), and the orchestrator runs --full on the milestone branch af
      line), or the --scripts given. --full picks every perform_*.txt and compose_*.txt but includes and those with a
      "# needs:" line (a song, a Deluge, another runner). A script whose needs line is "# needs: card DIR" runs on its own card: the factory
      card with the overlay folder DIR (relative to scripts/generative/) put on it (test_port_emu.py reads the line).
+     Beside them the icount checks (ICOUNT_CHECKS: preset_emu.py, seam S6's preset load and notes with their audio),
+     each picked as a probe script is, by its "# covers:" line or its own file; --full runs them, --scripts doesn't.
 The build release and step section of step 6, and step 7, run only for a change to a firmware input (covers.FIRMWARE:
 src/, lib/, the root CMakeLists.txt, the linker script, the toolchain and its CMake file (`scripts/cmake/`), the dbt
 build tasks), to what the emulator checks run on (gen_emu.py, test_port_emu.py, deluge_probe.py and their imports, the
-delugemu pin) or decide what they run (check_all.py, covers.py), to a probe script or an include, or to a file a covers
-line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check, the
+delugemu pin) or decide what they run (check_all.py, covers.py), to a probe script, an include or an icount check, or to
+a file a covers line names; --scripts runs them whatever changed. A src/ file no covers line names runs smoke, the leak check, the
 firmware check and test_port_smoke.txt only (and every script with no covers line), and needs --full before its merge.
 The table has a SKIP row for each step left out, with why, and a "not picked" row naming the probe scripts the change
 didn't pick.
@@ -129,6 +131,12 @@ LISTED_COSTS = {
     "delugemu perform_sound_editor.txt": 56,
     "delugemu perform_sound_controls.txt": 53,
 }
+# Emulator checks of their own that run under icount (gen_emu.py's driving, with the audio) instead of as probe scripts
+# through test_port_emu.py, with an "--elf ELF --out DIR" command line and a "N checks, M failed" last line. Each is
+# picked as a probe script is, by its "# covers:" line or a change to its own file (covers.picked_by()).
+ICOUNT_CHECKS = (
+    "preset_emu.py",
+)  # seam S6: a preset loaded and played over the test port
 SIZE_LINE = r"^\s*(\d+\s+\d+\s+\d+)\s+\d+\s+\w+\s+\S*deluge.elf$"  # arm-none-eabi-size after a build
 
 
@@ -147,6 +155,12 @@ class Plan(NamedTuple):
     scripts: list  # the probe scripts to run in delugemu, test_port_smoke.txt first
     not_picked: list  # the probe scripts whose covers paths didn't change
     not_run: list  # the names of the scripts delugemu can't run ("# needs:" lines)
+    icount: tuple = ()  # the ICOUNT_CHECKS to run (paths)
+
+
+def icount_checks():
+    """The ICOUNT_CHECKS, as paths."""
+    return [os.path.join(HERE, name) for name in ICOUNT_CHECKS]
 
 
 def plan(changed, base_ref, full=False, given=None):
@@ -156,16 +170,24 @@ def plan(changed, base_ref, full=False, given=None):
     everything, skipped = covers.probe_scripts(HERE)
     smoke = os.path.join(HERE, os.path.basename(covers.SMOKE))
     if full or changed is None:
-        return Plan(None, None, given or everything, [], skipped)
+        return Plan(
+            None,
+            None,
+            given or everything,
+            [],
+            skipped,
+            () if given else tuple(icount_checks()),
+        )
     unit = None
     if not any(f.startswith(UNIT_TEST_PATHS) for f in changed):
         unit = f"nothing under {', '.join(UNIT_TEST_PATHS)} changed since {base_ref}"
     if given:
         return Plan(unit, None, given, [], skipped)
     picked = covers.pick(everything, changed, REPO)
+    icount = tuple(c for c in icount_checks() if covers.picked_by(c, changed, REPO))
     # explicit: a firmware change runs the leg even if every script, test_port_smoke.txt too, had covers lines. Not
     # `if not picked` alone: pick() returns [] then too. firmware_changed() runs only when nothing was picked.
-    if not picked and not covers.firmware_changed(changed, REPO):
+    if not picked and not icount and not covers.firmware_changed(changed, REPO):
         why = f"no firmware input, probe script or what one covers changed since {base_ref}"
         return Plan(unit, why, [], [], skipped)
     others = [s for s in picked if s != smoke]
@@ -175,6 +197,7 @@ def plan(changed, base_ref, full=False, given=None):
         [smoke, *others],
         [s for s in everything if s not in picked],
         skipped,
+        icount,
     )
 
 
@@ -405,7 +428,7 @@ def slot_wait_note(note, text):
 
 def full_reason(changed, base_ref):
     """covers.full_rule() for this run: why the change needs --full before its merge, or None."""
-    scripts = covers.probe_scripts(HERE)[0]
+    scripts = covers.probe_scripts(HERE)[0] + icount_checks()
     return covers.full_rule(changed, scripts, base_ref == "origin/generative", REPO)
 
 
@@ -770,6 +793,13 @@ def run_delugemu(checks, todo, built, workers, given):
                 # the error replies are checked once, with the smoke script
                 cmd.append("--no-protocol-checks")
             jobs.append((f"delugemu {name}", cmd, SCRIPT_RESULT))
+        for check in todo.icount:
+            name = os.path.basename(check)
+            out = os.path.join(LOGS, "emu-" + os.path.splitext(name)[0])
+            cmd = [py, check, "--elf", elf, "--out", out]
+            jobs.append(
+                (f"delugemu {name}", cmd, last_match(r"\d+ checks, \d+ failed"))
+            )
     else:
         checks.skip(
             "leak check, firmware check and probe scripts", "the test-port build failed"

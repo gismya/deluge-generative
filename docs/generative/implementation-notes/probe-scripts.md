@@ -198,3 +198,15 @@ otherwise.
   entry: `include perform_regen_transition.txt`, the `encoder 3 N` turn, `include perform_regen_go.txt`, then SELECT.
   Its multi-selects and FROM's list remember their row across scripts on one boot: choose a variant from the top
   (`encoder 3 -5`). Menu events carry l10n's text (`title=Regenerate`, `Random`), not the capitals the OLED draws.
+- Seam S7's `next recipe` lines (spec §21.3) are queued like presses, so they land in order with the script's other
+  lines. `NextRecipe` lives in `.sdram_bss`, zero-filled, not constructed: the first field a line sets calls `clear()`
+  to put its defaults in (`macroPoints` -1, `swing` kept). A pick's path is the rest of its line and waits in
+  `songPath`, the one slot `load song` uses, so `kLineLength` covers `kMaxSoundPath`. A roll that uses them draws its
+  fresh entropy first, in the order it always did, then replaces the draws: `hold entropy` sequences stay the same.
+- Seam S6's `load synth|kit` lines share `songPath`'s one slot with `load song` (a second waits as a full queue
+  would), and run, like it, outside the card routine and one per buttons pass. `midi` lines run inside it, as DIN
+  bytes do (`routineForSD()` reads both), and several with no `wait` between them land in one pass: a chord. Under
+  icount a pack synth with no samples loads in about 1 ms, so its `preset_loaded` comes back before the inject's reply
+  has been read: look for the event from before the inject (`preset_emu.load()`), not after. `midi` in a
+  `deluge_probe.py` script is the host's own line, sent when the queue is idle, so a probe script can't send the test
+  port's: `preset_emu.py` and the Engine send their lines themselves.

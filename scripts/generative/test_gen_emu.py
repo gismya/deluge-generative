@@ -8,6 +8,7 @@ The emulator runs themselves are checked by running gen_emu.py smoke against a r
 import argparse
 import math
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -190,8 +191,20 @@ def unpack_recipe(blob):
     return dict(zip(RECIPE_FIELDS, struct.unpack(RECIPE_LAYOUT, blob)))
 
 
-class CaptureBuild(unittest.TestCase):
-    def test_the_header_sets_genre_seed_and_each_override_given(self):
+def test_port_line_length():
+    """kLineLength in test_port.cpp, the longest inject line with its terminator, as the firmware computes it."""
+    src = os.path.join(gen_emu.REPO, "src", "deluge")
+    with open(os.path.join(src, "io", "midi", "test_port.cpp")) as fh:
+        extra = re.search(
+            r"kLineLength = (\d+) \+ deluge::generative::kMaxSoundPath;", fh.read()
+        )
+    with open(os.path.join(src, "generative", "core", "recipe.h")) as fh:
+        path = re.search(r"kMaxSoundPath = (\d+);", fh.read())
+    return int(extra[1]) + int(path[1])
+
+
+class CaptureRecipeLines(unittest.TestCase):
+    def test_the_lines_set_genre_seed_and_each_override_given(self):
         args = gen_emu.parser().parse_args(
             [
                 "capture",
@@ -201,6 +214,12 @@ class CaptureBuild(unittest.TestCase):
                 "7",
                 "--energy",
                 "40",
+                "--density",
+                "0",
+                "--complexity",
+                "17",
+                "--motion",
+                "50",
                 "--key",
                 "C#",
                 "--scale",
@@ -212,16 +231,112 @@ class CaptureBuild(unittest.TestCase):
             ]
         )
         self.assertEqual(
-            gen_emu.capture_recipe(args),
-            recipe_bytes(b"techno-acid", 0, 7, 13150, (40, -1, -1, -1), 1, 3, -10),
+            gen_emu.recipe_lines(args),
+            [
+                "next recipe genre techno-acid",
+                "next recipe entropy 0",
+                "next recipe seed 7",
+                "next recipe macro 0 40",
+                "next recipe macro 1 0",
+                "next recipe macro 2 17",
+                "next recipe macro 3 50",
+                "next recipe tempo 13150",
+                "next recipe key 1",
+                "next recipe scale 3",
+                "next recipe swing -10",
+            ],
         )
 
     def test_overrides_not_given_keep_what_the_genre_rolled(self):
         args = gen_emu.parser().parse_args(["capture", "--genre", "techno-dub"])
         self.assertEqual(
-            gen_emu.capture_recipe(args),
-            recipe_bytes(b"techno-dub", 0, 1, 0, (-1, -1, -1, -1), -1, -1, -128),
+            gen_emu.recipe_lines(args),
+            [
+                "next recipe genre techno-dub",
+                "next recipe entropy 0",
+                "next recipe seed 1",
+            ],
         )
+
+    def test_each_line_fits_the_test_port(self):
+        # the longest genre name decides
+        limit = test_port_line_length()
+        args = gen_emu.parser().parse_args(["capture", "--swing", "-49"])
+        for genre in gen_emu.genre_names():
+            args.genre = genre
+            for line in gen_emu.recipe_lines(args):
+                self.assertLess(len(line), limit)
+
+    def test_it_takes_the_ranges_the_render_takes(self):
+        for argv in (
+            ["--seed", "-1"],
+            ["--seed", str(2**32)],
+            ["--entropy", str(2**32)],
+            ["--tempo", "19.9"],
+            ["--tempo", "1000"],
+            ["--tempo", "nan"],
+        ):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                gen_emu.parser().parse_args(["capture", *argv])
+        args = gen_emu.parser().parse_args(
+            ["capture", "--seed", str(2**32 - 1), "--tempo", "130.125"]
+        )
+        lines = gen_emu.recipe_lines(args)
+        self.assertIn("next recipe seed 4294967295", lines)
+        # int(bpm * 100 + 0.5), as the render rounds: 13012.5 goes up, where Python's round() goes to even
+        self.assertIn("next recipe tempo 13013", lines)
+
+    def test_it_reads_numbers_in_base_10_as_the_render_does(self):
+        args = gen_emu.parser().parse_args(["capture", "--seed", "010"])
+        self.assertIn("next recipe seed 10", gen_emu.recipe_lines(args))
+        with self.assertRaises(SystemExit):
+            gen_emu.parser().parse_args(["capture", "--entropy", "0x10"])
+
+    def test_a_capture_is_named_after_every_argument_and_never_overwrites(self):
+        args = gen_emu.parser().parse_args(
+            ["capture", "--seed", "7", "--entropy", "2", "--energy", "40", "--motion", "0", "--key", "C#",
+             "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--seconds", "30"]
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            first = gen_emu.capture_path(args, tmp)
+            self.assertEqual(
+                os.path.basename(first),
+                "techno-acid-seed7-entropy2-energy40-motion0-keyC#-phrygian-tempo131.5-swing-10-30s.wav",
+            )
+            open(first, "w").close()
+            second = gen_emu.capture_path(args, tmp)
+            self.assertEqual(
+                os.path.basename(second), os.path.basename(first)[:-4] + "-2.wav"
+            )
+            plain = gen_emu.capture_path(gen_emu.parser().parse_args(["capture"]), tmp)
+            self.assertEqual(os.path.basename(plain), "techno-acid-seed1-60s.wav")
+
+    def test_it_knows_the_genres_and_scales_the_firmware_has(self):
+        self.assertIn("techno-acid", gen_emu.genre_names())
+        scales = gen_emu.scale_names()
+        self.assertEqual(scales[:4], ["major", "minor", "dorian", "phrygian"])
+        self.assertIn("harmonic-minor", scales)
+        self.assertEqual(len(scales), 12)
+
+    def test_it_lists_subgenres_and_leaves_parents_out(self):
+        # A parent table is never played, so no capture can name it; a subgenre is written as overrides of it.
+        names = gen_emu.genre_names()
+        self.assertEqual(len(names), len(set(names)))
+        self.assertIn("techno-acid", names)
+        self.assertIn("techno-melodic", names)
+        self.assertIn("techno-dub", names)
+        self.assertIn("techno-detroit", names)
+        self.assertNotIn("techno", names)
+        self.assertNotIn("techno-standin", names)
+
+    def test_unknown_genre_scale_or_key_is_refused(self):
+        for argv in (["--genre", "polka"], ["--scale", "blues"], ["--key", "H"]):
+            with self.assertRaises(SystemExit):
+                gen_emu.recipe_lines(gen_emu.parser().parse_args(["capture", *argv]))
+
+
+class CaptureVariants(unittest.TestCase):
+    """--variant captures keep the GENERATIVE_CAPTURE route: S7 has no variant lines (#548)."""
 
     def test_variants_go_into_the_header_and_the_render_check_and_the_name(self):
         args = gen_emu.parser().parse_args(
@@ -270,72 +385,27 @@ class CaptureBuild(unittest.TestCase):
         with self.assertRaises(SystemExit):
             gen_emu.capture_recipe(long)
 
-    def test_it_takes_the_ranges_the_render_takes(self):
-        for argv in (
-            ["--seed", "-1"],
-            ["--seed", str(2**32)],
-            ["--entropy", str(2**32)],
-            ["--tempo", "19.9"],
-            ["--tempo", "1000"],
-            ["--tempo", "nan"],
-        ):
-            with self.subTest(argv=argv), self.assertRaises(SystemExit):
-                gen_emu.parser().parse_args(["capture", *argv])
+    def test_the_header_holds_each_override_given(self):
         args = gen_emu.parser().parse_args(
-            ["capture", "--seed", str(2**32 - 1), "--tempo", "130.125"]
-        )
-        fields = unpack_recipe(gen_emu.capture_recipe(args))
-        self.assertEqual(fields["seed"], 4294967295)
-        # int(bpm * 100 + 0.5), as the render rounds: 13012.5 goes up, where Python's round() goes to even
-        self.assertEqual(fields["tempo"], 13013)
-
-    def test_it_reads_numbers_in_base_10_as_the_render_does(self):
-        args = gen_emu.parser().parse_args(["capture", "--seed", "010"])
-        self.assertEqual(unpack_recipe(gen_emu.capture_recipe(args))["seed"], 10)
-        with self.assertRaises(SystemExit):
-            gen_emu.parser().parse_args(["capture", "--entropy", "0x10"])
-
-    def test_a_capture_is_named_after_every_argument_and_never_overwrites(self):
-        args = gen_emu.parser().parse_args(
-            ["capture", "--seed", "7", "--entropy", "2", "--energy", "40", "--motion", "0", "--key", "C#",
-             "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--seconds", "30"]
+            ["capture", "--genre", "techno-acid", "--seed", "7", "--energy", "40", "--key", "C#",
+             "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--variant", "a=b"]
         )  # fmt: skip
-        with tempfile.TemporaryDirectory() as tmp:
-            first = gen_emu.capture_path(args, tmp)
-            self.assertEqual(
-                os.path.basename(first),
-                "techno-acid-seed7-entropy2-energy40-motion0-keyC#-phrygian-tempo131.5-swing-10-30s.wav",
-            )
-            open(first, "w").close()
-            second = gen_emu.capture_path(args, tmp)
-            self.assertEqual(
-                os.path.basename(second), os.path.basename(first)[:-4] + "-2.wav"
-            )
-            plain = gen_emu.capture_path(gen_emu.parser().parse_args(["capture"]), tmp)
-            self.assertEqual(os.path.basename(plain), "techno-acid-seed1-60s.wav")
-
-    def test_it_knows_the_genres_and_scales_the_firmware_has(self):
-        self.assertIn("techno-acid", gen_emu.genre_names())
-        scales = gen_emu.scale_names()
-        self.assertEqual(scales[:4], ["major", "minor", "dorian", "phrygian"])
-        self.assertIn("harmonic-minor", scales)
-        self.assertEqual(len(scales), 12)
-
-    def test_it_lists_subgenres_and_leaves_parents_out(self):
-        # A parent table is never played, so no capture can name it; a subgenre is written as overrides of it.
-        names = gen_emu.genre_names()
-        self.assertEqual(len(names), len(set(names)))
-        self.assertIn("techno-acid", names)
-        self.assertIn("techno-melodic", names)
-        self.assertIn("techno-dub", names)
-        self.assertIn("techno-detroit", names)
-        self.assertNotIn("techno", names)
-        self.assertNotIn("techno-standin", names)
+        fields = unpack_recipe(gen_emu.capture_recipe(args))
+        self.assertEqual(
+            (fields["genre"].rstrip(b"\0"), fields["seed"], fields["tempo"], fields["m0"], fields["key"]),
+            (b"techno-acid", 7, 13150, 40, 1),
+        )  # fmt: skip
+        self.assertEqual(
+            (fields["scale"], fields["swing"], fields["variants"].rstrip(b"\0")),
+            (3, -10, b"a=b"),
+        )
 
     def test_unknown_genre_scale_or_key_is_refused(self):
         for argv in (["--genre", "polka"], ["--scale", "blues"], ["--key", "H"]):
             with self.assertRaises(SystemExit):
-                gen_emu.capture_recipe(gen_emu.parser().parse_args(["capture", *argv]))
+                gen_emu.capture_recipe(
+                    gen_emu.parser().parse_args(["capture", "--variant", "a=b", *argv])
+                )
 
 
 def fake_elf(symbol=b"generative_capture_recipe", data=None, addr=0x20020000, before=8):
@@ -373,32 +443,54 @@ def fake_elf(symbol=b"generative_capture_recipe", data=None, addr=0x20020000, be
 
 
 class BuildCapture(unittest.TestCase):
-    def build(self, cache=None):
-        tmp = self.enterContext(tempfile.TemporaryDirectory())
+    def build(self, cache=None, variant=False):
+        tmp = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "b")
+        build = tmp + "-variants" if variant else tmp
+        os.makedirs(build)
         if cache is not None:
-            touch(os.path.join(tmp, "CMakeCache.txt"), cache.encode())
-        args = gen_emu.parser().parse_args(["capture", "--build-dir", tmp])
+            touch(os.path.join(build, "CMakeCache.txt"), cache.encode())
+        argv = ["capture", "--build-dir", tmp] + (
+            ["--variant", "a=b"] if variant else []
+        )
+        args = gen_emu.parser().parse_args(argv)
         with mock.patch.object(gen_emu, "dbt") as dbt:
             elf = gen_emu.build_capture(args)
-        self.assertEqual(elf, os.path.join(tmp, "Release", "deluge.elf"))
+        self.assertEqual(elf, os.path.join(build, "Release", "deluge.elf"))
         return [c.args[0].split()[:2] for c in dbt.call_args_list], dbt.call_args_list[
             0
         ].args[0]
 
-    def test_a_new_build_dir_is_configured_as_a_capture_build(self):
+    def test_a_new_build_dir_is_configured_as_a_test_port_build(self):
         calls, first = self.build()
         self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
-        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=ON", first)
+        self.assertIn("-DENABLE_SYSEX_TEST:BOOL=ON", first)
+        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=OFF", first)
 
-    def test_a_capture_build_dir_only_builds(self):
-        calls, _ = self.build("FOO:BOOL=OFF\nGENERATIVE_CAPTURE:BOOL=ON\n")
+    def test_a_test_port_build_dir_only_builds(self):
+        calls, _ = self.build("FOO:BOOL=OFF\nENABLE_SYSEX_TEST:BOOL=ON\n")
         self.assertEqual(calls, [["cmake", "--build"]])
 
-    def test_a_build_dir_from_before_the_patched_recipe_is_configured_again(self):
-        # it compiled the Recipe in from generative_capture.h: GENERATIVE_CAPTURE_DIR, and no GENERATIVE_CAPTURE
-        calls, first = self.build("GENERATIVE_CAPTURE_DIR:PATH=/x/generated\n")
+    def test_a_build_dir_from_before_the_test_port_is_configured_again(self):
+        for cache in (
+            "GENERATIVE_CAPTURE_DIR:PATH=/x/generated\n",  # the Recipe compiled in (before #401)
+            "GENERATIVE_CAPTURE:BOOL=ON\n",  # the Recipe patched into the ELF (before #523)
+            "ENABLE_SYSEX_TEST:BOOL=ON\nGENERATIVE_CAPTURE:BOOL=ON\n",  # both: it would play the patched one
+        ):
+            with self.subTest(cache=cache):
+                calls, first = self.build(cache)
+                self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+                self.assertIn("-UGENERATIVE_CAPTURE_DIR", first)
+
+    def test_a_variant_capture_builds_generative_capture_beside_the_build_dir(self):
+        calls, first = self.build(variant=True)
         self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
-        self.assertIn("-UGENERATIVE_CAPTURE_DIR", first)
+        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=ON", first)
+        self.assertIn("-DENABLE_SYSEX_TEST:BOOL=OFF", first)
+        self.assertIn("-variants", first)
+        calls, _ = self.build("GENERATIVE_CAPTURE:BOOL=ON\n", variant=True)
+        self.assertEqual(calls, [["cmake", "--build"]])
+        calls, _ = self.build("ENABLE_SYSEX_TEST:BOOL=ON\n", variant=True)
+        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
 
 
 class PatchedElf(unittest.TestCase):
@@ -407,7 +499,9 @@ class PatchedElf(unittest.TestCase):
         self.src = os.path.join(self.tmp, "deluge.elf")
         self.dst = os.path.join(self.tmp, "capture.elf")
         self.recipe = gen_emu.capture_recipe(
-            gen_emu.parser().parse_args(["capture", "--seed", "9"])
+            gen_emu.parser().parse_args(
+                ["capture", "--seed", "9", "--variant", "skank=plain"]
+            )
         )
 
     def patch(self, elf):
@@ -581,7 +675,7 @@ class Boot(unittest.TestCase):
         closed = []
 
         class Broken:
-            def __init__(self, *args):
+            def __init__(self, *args, **kwargs):
                 pass
 
             def booted(self):
@@ -1355,32 +1449,120 @@ class AudioTail(unittest.TestCase):
         self.assertEqual(gen_emu.run_for_audio(emu, 0, 10), gen_emu.TAIL_LIMIT_S * 1000)
 
 
+class RecipeOverTestPort(unittest.TestCase):
+    def port(self, replies):
+        """A TestPort whose link records what it sends and answers each look from `replies` (seq filled in)."""
+        port = gen_emu.deluge_probe.TestPort(mock.Mock(), on_hardware=False)
+        self.sent = []
+        port.link.send = self.sent.append
+        answers = iter(replies)
+
+        def receive_until(match, timeout):
+            status = next(answers)
+            if status is None:
+                return None
+            msg = gen_emu.deluge_probe.HDR + [
+                0x02,
+                gen_emu.deluge_probe.STATUS_REPLY,
+                port.seq,
+                status,
+                0xF7,
+            ]
+            return msg if match(msg) else None
+
+        port.receive_until = receive_until
+        return port
+
+    def test_each_line_runs_the_vm_in_fixed_steps_until_its_reply(self):
+        emu = FakeEmu()
+        emu.port = self.port([None, None, 0, 0])
+        gen_emu.send_recipe(emu, ["next recipe seed 1", "next recipe entropy 0"])
+        self.assertEqual(
+            emu.t, 4 * gen_emu.LINK_STEP_MS * gen_emu.MS
+        )  # 3 for the first, 1 for the second
+        lines = [bytes(m[8:-1]).decode() for m in self.sent[1:]]  # after the subscribe
+        self.assertEqual(lines, ["next recipe seed 1", "next recipe entropy 0"])
+
+    def test_a_reply_that_took_longer_than_usual_warns(self):
+        emu = FakeEmu()
+        emu.port = self.port([None, 0])
+        with mock.patch.object(gen_emu, "log") as log:
+            gen_emu.send_recipe(emu, ["next recipe seed 1"])
+        self.assertIn("LINK_DELIVER_S", log.call_args.args[0])
+
+    def test_no_reply_to_the_first_line_asks_whether_it_is_a_test_port_build(self):
+        emu = FakeEmu()
+        emu.port = self.port([None] * (gen_emu.REPLY_LIMIT_MS // gen_emu.LINK_STEP_MS))
+        with self.assertRaisesRegex(RuntimeError, "test-port build"):
+            gen_emu.send_recipe(emu, ["next recipe genre techno-acid"])
+
+    def test_a_refused_or_unanswered_line_fails_the_capture(self):
+        emu = FakeEmu()
+        emu.port = self.port([gen_emu.deluge_probe.PARSE_ERROR])
+        with self.assertRaises(RuntimeError):
+            gen_emu.send_recipe(emu, ["next recipe tempo 5"])
+        emu.port = self.port([None] * (gen_emu.REPLY_LIMIT_MS // gen_emu.LINK_STEP_MS))
+        with self.assertRaises(RuntimeError):
+            gen_emu.send_recipe(emu, ["next recipe seed 1"])
+
+    def test_an_entry_that_never_took_the_recipe_fails_the_capture(self):
+        port = mock.Mock(
+            events=["8.69: gen_perform_entered techno-acid"]
+        )  # pump() reads none
+        with self.assertRaises(RuntimeError):
+            gen_emu.check_recipe_taken(mock.Mock(port=port))
+        port.subscribe.assert_called_with(False)  # no test events while it plays
+        port.events.insert(0, "8.09: gen_next_recipe taken")
+        gen_emu.check_recipe_taken(mock.Mock(port=port))
+
+    def test_an_exchange_ends_at_a_fixed_virtual_time_or_fails(self):
+        emu = FakeEmu()
+        emu.run_to = lambda ns: setattr(emu, "t", max(emu.t, ns))
+        emu.t = 1 * gen_emu.SEC
+        gen_emu.settle(emu, 3 * gen_emu.SEC, "x")
+        self.assertEqual(emu.t, 3 * gen_emu.SEC)
+        emu.t = 4 * gen_emu.SEC
+        with self.assertRaises(RuntimeError):
+            gen_emu.settle(emu, 3 * gen_emu.SEC, "x")
+
+    def test_the_link_gives_qemu_time_to_hand_over_the_bytes(self):
+        link = gen_emu.IcountLink()
+        self.addCleanup(link.close)
+        with (
+            mock.patch.object(gen_emu.deluge_probe.UdpLink, "send") as send,
+            mock.patch.object(gen_emu.time, "sleep") as sleep,
+        ):
+            link.send([0xF0, 0xF7])
+        send.assert_called_once_with([0xF0, 0xF7])
+        sleep.assert_called_once_with(gen_emu.LINK_DELIVER_S)
+
+
 class CaptureOne(unittest.TestCase):
     """capture_one around a faked emulator: what it leaves on disk and what it logs."""
 
     def run_one(self, pcm, harness, argv=()):
-        self.patched = []
+        self.sent = []
         tmp = self.enterContext(tempfile.TemporaryDirectory())
         args = gen_emu.parser().parse_args(
             ["capture", "--out", tmp, "--seconds", "2", *argv]
         )
 
-        def boot(args, elf, out, tag):
-            self.booted = (elf, tag, os.path.exists(elf))
+        def boot(args, elf, out, tag, test_port=False):
+            self.booted = (elf, tag, test_port)
             for n in (1, 2):
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".s32"))
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".log"))
-            return mock.Mock()
+            return mock.Mock(t=0)
 
         with (
             mock.patch.object(gen_emu, "boot", side_effect=boot),
             mock.patch.object(
                 gen_emu,
-                "write_capture_elf",
-                side_effect=lambda src, dst, recipe: (
-                    self.patched.append((src, recipe)) or touch(dst)
-                ),
+                "send_recipe",
+                side_effect=lambda emu, lines: self.sent.append(lines),
             ),
+            mock.patch.object(gen_emu, "check_recipe_taken"),
+            mock.patch.object(gen_emu, "settle"),
             mock.patch.object(gen_emu, "enter_perform", return_value=True),
             mock.patch.object(gen_emu, "check_perform_plays", return_value=pcm),
             mock.patch.object(gen_emu, "log") as log,
@@ -1394,21 +1576,14 @@ class CaptureOne(unittest.TestCase):
         self.assertEqual(fails, [])
         self.assertEqual(os.listdir(tmp), [os.path.basename(wav)])
 
-    def test_it_boots_a_copy_of_the_elf_patched_with_its_recipe_and_named_after_it(
-        self,
-    ):
-        # one copy per capture (its tag holds the pid), so two captures from one build dir never patch the same file
+    def test_it_boots_the_build_with_the_test_port_and_sends_its_recipe(self):
         parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
-        tmp, wav, _, _ = self.run_one(
+        _, wav, _, _ = self.run_one(
             bars_pcm([0.3] * 4), (parts, STEP_S), ["--seed", "5"]
         )
-        elf, tag, existed = self.booted
-        self.assertEqual(elf, os.path.join(tmp, tag + ".elf"))
-        self.assertEqual(tag, gen_emu.capture_tag(wav))
-        self.assertTrue(existed)
+        self.assertEqual(self.booted, ("fw.elf", gen_emu.capture_tag(wav), True))
         args = gen_emu.parser().parse_args(["capture", "--seed", "5"])
-        self.assertEqual(self.patched, [("fw.elf", gen_emu.capture_recipe(args))])
-        self.assertFalse(os.path.exists(elf))
+        self.assertEqual(self.sent, [gen_emu.recipe_lines(args)])
 
     def test_a_bad_capture_keeps_its_logs(self):
         parts = [Part(Note(0, 6))]
@@ -1435,14 +1610,12 @@ class CaptureOne(unittest.TestCase):
         tmp = self.enterContext(tempfile.TemporaryDirectory())
         out = os.path.join(tmp, "out")
         args = gen_emu.parser().parse_args(["capture", "--out", out])
-        elf = os.path.join(tmp, "fw.elf")
-        touch(elf, fake_elf())
         with (
             mock.patch.object(gen_emu, "boot", side_effect=RuntimeError("no boot")),
             self.assertRaises(RuntimeError),
         ):
-            gen_emu.capture_one(args, elf, [], None)
-        self.assertEqual(os.listdir(out), [])  # nor the patched copy of the firmware
+            gen_emu.capture_one(args, "fw.elf", [], None)
+        self.assertEqual(os.listdir(out), [])
 
 
 class CheckCommand(unittest.TestCase):

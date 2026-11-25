@@ -53,7 +53,7 @@ Error FileItem::getFilenameWithoutExtension(String* filenameWithoutExtension) {
 		char const* chars = filenameWithoutExtension->get();
 		char const* dotAddress = strrchr(chars, '.');
 		if (dotAddress) {
-			int32_t newLength = (uint32_t)dotAddress - (uint32_t)chars;
+			int32_t newLength = (uintptr_t)dotAddress - (uintptr_t)chars;
 			Error error = filenameWithoutExtension->shorten(newLength);
 			if (error != Error::NONE) {
 				return error;
