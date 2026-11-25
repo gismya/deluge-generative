@@ -1133,7 +1133,7 @@ Error LoadInstrumentPresetUI::performLoadSynthToKit() {
 	// Nothing references the old drum now, so it can go
 	if (oldDrum != nullptr) {
 		oldDrum->wontBeRenderedForAWhile();
-		kitToLoadFor->drumsWithRenderingActive.deleteAtKey((int32_t)(Drum*)oldDrum);
+		kitToLoadFor->drumsWithRenderingActive.deleteAtKey((int32_t)(uintptr_t)(Drum*)oldDrum);
 		kitToLoadFor->removeDrum(oldDrum);
 		currentSong->deleteBackedUpParamManagersForModControllable(oldDrum);
 		void* toDealloc = dynamic_cast<void*>(oldDrum);

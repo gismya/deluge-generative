@@ -537,7 +537,7 @@ void smSysex::readBlock(MIDICable& cable, JsonDeserializer& reader) {
 		errCode = FRESULT::FR_NOT_ENABLED;
 	}
 	UINT actuallyRead = 0;
-	uint8_t* srcAddr = (uint8_t*)addr;
+	uint8_t* srcAddr = (uint8_t*)(uintptr_t)addr;
 	if (errCode == FRESULT::FR_OK) {
 		if (!readBlockBuffer && fp) {
 			readBlockBuffer = (uint8_t*)GeneralMemoryAllocator::get().allocLowSpeed(blockBufferMax);

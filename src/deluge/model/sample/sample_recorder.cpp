@@ -616,7 +616,7 @@ Error SampleRecorder::finalizeRecordedFile() {
 
 	// In the very rare case where we've already got between 1 and 5 bytes overhanging the end of our current cluster,
 	// we need to allocate a new one right now
-	int32_t bytesTilClusterEnd = (uint32_t)clusterEndPos - (uint32_t)writePos;
+	int32_t bytesTilClusterEnd = (uintptr_t)clusterEndPos - (uintptr_t)writePos;
 	if (bytesTilClusterEnd < 0) {
 		Error error = createNextCluster();
 
@@ -639,7 +639,7 @@ Error SampleRecorder::finalizeRecordedFile() {
 	// created, cos or RAM or file size limit.)
 	if (currentRecordCluster) {
 
-		int32_t bytesToWrite = (uint32_t)writePos - (uint32_t)currentRecordCluster->data;
+		int32_t bytesToWrite = (uintptr_t)writePos - (uintptr_t)currentRecordCluster->data;
 		if (bytesToWrite > 0) { // Will always be true
 			Error error = writeCluster(currentRecordClusterIndex, bytesToWrite);
 			if (error != Error::NONE) {
@@ -855,7 +855,7 @@ Error SampleRecorder::createNextCluster() {
 	if (currentRecordClusterIndex >= (1 << (MAX_FILE_SIZE_MAGNITUDE - Cluster::size_magnitude))) {
 
 		// See if we actually already had any bytes to write into that new cluster we can't have...
-		int32_t bytesTilClusterEnd = (uint32_t)clusterEndPos - (uint32_t)writePos;
+		int32_t bytesTilClusterEnd = (uintptr_t)clusterEndPos - (uintptr_t)writePos;
 		if (bytesTilClusterEnd < 0) {
 			numSamplesCaptured--;
 			writePos -= (int32_t)recordingNumChannels * 3;
@@ -892,7 +892,7 @@ Error SampleRecorder::createNextCluster() {
 	memcpy(currentRecordCluster->data, &oldRecordCluster->data[Cluster::size],
 	       5); // 5 is the max number of bytes we could have overshot
 
-	int32_t bytesOvershot = (uint32_t)writePos - (uint32_t)clusterEndPos;
+	int32_t bytesOvershot = (uintptr_t)writePos - (uintptr_t)clusterEndPos;
 
 	currentRecordCluster->loaded =
 	    true; // I think this is ok - mark it as loaded even though we're yet to record into it
@@ -951,7 +951,7 @@ doFinishCapturing:
 			int32_t bytesPerSample = recordingNumChannels * 3;
 			int32_t bytesWeWantToWrite = numSamplesThisCycle * bytesPerSample;
 
-			int32_t bytesTilClusterEnd = (uint32_t)clusterEndPos - (uint32_t)writePos;
+			int32_t bytesTilClusterEnd = (uintptr_t)clusterEndPos - (uintptr_t)writePos;
 
 			// If we need a new cluster right now...
 			if (bytesTilClusterEnd <= 0) {
@@ -965,7 +965,7 @@ doFinishCapturing:
 					return;
 				}
 
-				bytesTilClusterEnd = (uint32_t)clusterEndPos - (uint32_t)writePos; // Recalculate it
+				bytesTilClusterEnd = (uintptr_t)clusterEndPos - (uintptr_t)writePos; // Recalculate it
 			}
 
 			if (bytesTilClusterEnd <= bytesWeWantToWrite - bytesPerSample) {
@@ -1326,7 +1326,7 @@ Error SampleRecorder::alterFile(MonitoringAction action, int32_t lshiftAmount, u
 
 		// If need to advance write-head past the end of a cluster, then we'll write that current cluster to disk
 		// and carry on
-		int32_t writeOvershot = (uint32_t)writePos - (uint32_t)&currentWriteCluster->data[Cluster::size];
+		int32_t writeOvershot = (uintptr_t)writePos - (uintptr_t)&currentWriteCluster->data[Cluster::size];
 		if (writeOvershot >= 0) {
 
 			// If reached very end of file, break
@@ -1436,7 +1436,7 @@ writeFailed:
 
 			D_PRINTLN("read advance");
 
-			int32_t overshot = (uint32_t)readPos - (uint32_t)&currentReadCluster->data[Cluster::size];
+			int32_t overshot = (uintptr_t)readPos - (uintptr_t)&currentReadCluster->data[Cluster::size];
 
 			// Some bug-hunting
 			if (!currentReadCluster->numReasonsHeldBySampleRecorder) {
@@ -1500,7 +1500,7 @@ writeFailed:
 
 	currentWriteCluster->loaded = true;
 
-	uint32_t bytesToWriteFinalCluster = (uint32_t)writePos - (uint32_t)currentWriteCluster->data;
+	uint32_t bytesToWriteFinalCluster = (uintptr_t)writePos - (uintptr_t)currentWriteCluster->data;
 
 	if (bytesToWriteFinalCluster) { // If there is in fact anything to flush out to the file / card...
 
