@@ -16,9 +16,10 @@
  */
 
 // The Recipe a genre tuning tool plays (spec §21.5): genre + Recipe overrides + seed. The harness rough render takes
-// them as arguments, and a delugemu capture build compiles them in (GENERATIVE_CAPTURE), so the same arguments give
-// the same Recipe in both. Facts are rolled from a fixed entropy instead of a timer, so a capture is a function of its
-// arguments. Header-only: the default firmware build never uses it.
+// them as arguments, and a delugemu capture sets them at run time with a test build's "next recipe" lines (NextRecipe,
+// seam S7), so the same arguments give the same Recipe in both. Facts are rolled from a fixed entropy instead of a
+// timer, so a capture is a function of its arguments. (M5's --variant captures still patch them into a
+// GENERATIVE_CAPTURE build's ELF, on m5-variants.) Header-only: the default firmware build never uses it.
 
 #pragma once
 
@@ -71,11 +72,8 @@ struct RolledRecipe {
 	uint32_t seed = 0;
 };
 
-/// The genre's new Recipe rolled from `overrides.entropy`, with each override applied.
-inline RolledRecipe rollWithOverrides(const Genre& fallback, const RecipeOverrides& overrides) {
-	const Genre* genre = overrides.genre != nullptr ? findGenre(overrides.genre) : nullptr;
-	RolledRecipe rolled{newRecipe(genre != nullptr ? *genre : fallback, overrides.entropy), overrides.seed};
-	Recipe& recipe = rolled.recipe;
+/// Each override's macro, fact and variant over `recipe`; the genre, entropy and seed are the roll's.
+inline void applyOverrides(Recipe& recipe, const RecipeOverrides& overrides) {
 	for (int32_t m = 0; m < kNumMacros; m++) {
 		if (overrides.macroPoints[m] >= 0) {
 			recipe.macros.set(static_cast<Macro>(m), macroPoints(overrides.macroPoints[m]));
@@ -94,7 +92,50 @@ inline RolledRecipe rollWithOverrides(const Genre& fallback, const RecipeOverrid
 		recipe.swing = overrides.swing;
 	}
 	applyVariantOverrides(recipe, overrides.variant);
+}
+
+/// The genre's new Recipe rolled from `overrides.entropy`, with each override applied.
+inline RolledRecipe rollWithOverrides(const Genre& fallback, const RecipeOverrides& overrides) {
+	const Genre* genre = overrides.genre != nullptr ? findGenre(overrides.genre) : nullptr;
+	RolledRecipe rolled{newRecipe(genre != nullptr ? *genre : fallback, overrides.entropy), overrides.seed};
+	applyOverrides(rolled.recipe, overrides);
 	return rolled;
 }
+
+/// The Recipe and seed a test build's "next recipe" lines set for the next roll only (seam S7, spec §21.3): overrides
+/// plus sound picks. Left out, the genre is the one the roll is for, entropy and seed are fresh, and a pick is rolled
+/// from the palette.
+struct NextRecipe {
+	RecipeOverrides overrides;
+	bool entropySet = false;
+	bool seedSet = false;
+	/// An empty pick is rolled from the palette as usual.
+	SoundPicks sounds;
+
+	/// As constructed, without a SoundPicks temporary (several KB) on the stack.
+	void clear() {
+		overrides = RecipeOverrides{};
+		entropySet = seedSet = false;
+		for (SoundPath& path : sounds.part) {
+			path.clear();
+		}
+		for (SoundPath& path : sounds.lane) {
+			path.clear();
+		}
+	}
+	/// Each pick set here over the rolled ones.
+	void applySounds(SoundPicks& picks) const {
+		for (int32_t p = 0; p < kMaxParts; p++) {
+			if (!sounds.part[p].empty()) {
+				picks.part[p] = sounds.part[p];
+			}
+		}
+		for (int32_t l = 0; l < kNumLanes; l++) {
+			if (!sounds.lane[l].empty()) {
+				picks.lane[l] = sounds.lane[l];
+			}
+		}
+	}
+};
 
 } // namespace deluge::generative

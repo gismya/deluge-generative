@@ -38,8 +38,10 @@ bool lastWasNewline = false;
 	//  - bit 2 [1] Cycle counter reset
 	//  - bit 1 [1] Event counter reset
 	//  - bit 0 [1] Enable all counters.
+#if defined(__arm__) // the PMU is ARMv7's; other targets have no clock to reset
 	uint32_t const pmcr = 0b10111;
 	asm volatile("MCR p15, 0, %0, c9, c12, 0\n" : : "r"(pmcr));
+#endif
 }
 
 // https://johnnylee-sde.github.io/Fast-unsigned-integer-to-hex-string/
@@ -83,6 +85,7 @@ void init() {
 	// Enable the PMU cycle counter
 	//
 	// See ARM DDI 0406C.d, page B4-1671 (PMCR, Performance Monitors Control Register, VMSA)
+#if defined(__arm__) // the PMU is ARMv7's
 	uint32_t const pmcr = 0;
 	uint32_t const pmcntenset = 0b10000000000000000000000000000000u;
 
@@ -93,6 +96,7 @@ void init() {
 	             "MCR p15, 0, %1, c9, c12, 1\n"
 	             :
 	             : "r"(pmcr), "r"(pmcntenset));
+#endif
 
 	initFlag = true;
 }

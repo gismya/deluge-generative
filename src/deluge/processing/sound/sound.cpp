@@ -63,7 +63,6 @@
 #include "util/misc.h"
 #include <algorithm>
 #include <array>
-#include <bits/ranges_algo.h>
 #include <limits>
 #include <ranges>
 
@@ -2861,7 +2860,7 @@ bool Sound::learnKnob(MIDICable* cable, ParamDescriptor paramDescriptor, uint8_t
 void Sound::ensureInaccessibleParamPresetValuesWithoutKnobsAreZero(Song* song) {
 
 	// We gotta do this for any backedUpParamManagers too!
-	int32_t i = song->backedUpParamManagers.search((uint32_t)(ModControllableAudio*)this,
+	int32_t i = song->backedUpParamManagers.search((uint32_t)(uintptr_t)(ModControllableAudio*)this,
 	                                               GREATER_OR_EQUAL); // Search by first word only.
 
 	while (true) {

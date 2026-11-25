@@ -33,8 +33,8 @@ public:
 		longest_runs_[q] = 0xFFFFFFFF; // TODO: actually investigate neighbouring memory "run".
 	}
 
-	uint32_t ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeeded, void* thingNotToStealFrom,
-	                       int32_t* __restrict__ foundSpaceSize);
+	uintptr_t ReclaimMemory(MemoryRegion& region, int32_t totalSizeNeeded, void* thingNotToStealFrom,
+	                        int32_t* __restrict__ foundSpaceSize);
 
 private:
 	std::array<BidirectionalLinkedList, kNumStealableQueue> reclamation_queue_;

@@ -2132,7 +2132,9 @@ ActionResult InstrumentClipView::potentiallyRandomizeDrumSample(Kit* kit, Drum* 
 	if (path == &nothing) {
 		return ActionResult::NOT_DEALT_WITH;
 	}
-	char* slashAddress = strrchr(path, '/');
+	// The cast: libc++'s C++ overload of strrchr returns `char const*` for a `char const*` argument; newlib's returns
+	// `char*`.
+	char* slashAddress = const_cast<char*>(strrchr(path, '/'));
 	if (slashAddress == nullptr) {
 		return ActionResult::NOT_DEALT_WITH;
 	}
@@ -4419,7 +4421,7 @@ ModelStackWithNoteRow* InstrumentClipView::createNoteRowForYDisplay(ModelStackWi
 	InstrumentClip* clip = (InstrumentClip*)modelStack->getTimelineCounter();
 
 	NoteRow* noteRow = nullptr;
-	int32_t noteRowId;
+	int32_t noteRowId = 0;
 
 	// If *not* a kit
 	if (clip->output->type != OutputType::KIT) {

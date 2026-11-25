@@ -388,15 +388,23 @@ double ConvertFromIeeeExtended(unsigned char* bytes /* LCN */);
 int32_t divide_round_negative(int32_t dividend, int32_t divisor);
 
 [[gnu::always_inline]] inline uint32_t swapEndianness32(uint32_t input) {
+#if defined(__arm__)
 	int32_t out;
 	asm("rev %0, %1" : "=r"(out) : "r"(input));
 	return out;
+#else
+	return __builtin_bswap32(input);
+#endif
 }
 
 [[gnu::always_inline]] inline uint32_t swapEndianness2x16(uint32_t input) {
+#if defined(__arm__)
 	int32_t out;
 	asm("rev16 %0, %1" : "=r"(out) : "r"(input));
 	return out;
+#else
+	return ((input & 0xFF00FF00u) >> 8) | ((input & 0x00FF00FFu) << 8);
+#endif
 }
 
 [[gnu::always_inline]] inline int32_t getMagnitudeOld(uint32_t input) {
