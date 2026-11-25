@@ -21,6 +21,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/steering_log.h"
 #include <algorithm>
+#include <cassert>
 
 namespace deluge::generative {
 
@@ -578,7 +579,17 @@ GEN_STEP_CODE void Generator::dropVariants(SteeringLog* log) {
 	}
 	switchedSets_ = 0;
 	if (moved) {
+		const DropOutEntry* dropOuts = genre_->dropOuts.data();
 		genre_ = &resolveGenre(genre, recipe_.variants, resolved_);
+		// The last drop-out's entry indexes the table it was drawn from, and a set may swap the table (Dub's MIX). A
+		// Section line ends any drop-out and drops one waiting, so here it is over: forget it, as it never started.
+		if (genre_->dropOuts.data() != dropOuts) {
+#ifdef GENERATOR_TEST_SEAMS
+			// A Drop follows a Build, so even a drop-out the Build's line ended has finished its Throw's fall.
+			assert(dropOut_.entry < 0 || n >= dropOut_.to() + kThrowDecaySteps);
+#endif
+			dropOut_.entry = -1;
+		}
 	}
 }
 

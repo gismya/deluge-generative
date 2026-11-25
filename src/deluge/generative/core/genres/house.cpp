@@ -465,10 +465,10 @@ constexpr void bassLeadsIn(ArcSpec& arc) {
 	arc.buildCutLeads = true;
 }
 
-/// S4a and feel-1 F4, the Build's shape: the roll Build with everything, with no Lead (it returns on the Drop), with
-/// the kick and Bass cut for its last 2 bars, or with no kick and the Bass only in its last bar; or the filter Build,
-/// with no roll, Gap or Riser, the kick out and the Bass entering on its last bar, as heavy as the four roll Builds
-/// together (the owner: "both work"). Not live: the Arc reads the Build ahead.
+/// S4a and feel-1 F4, the Build's shape: the roll Build with everything, with no Lead (it returns on the Drop), or with
+/// no kick and the Bass only in its last bar; or the filter Build, with no roll, Gap or Riser, the kick out and the
+/// Bass entering on its last bar, 5 to the roll Builds' 4 (the owner: "both work"; feel-2 G2 dropped the Build that cut
+/// the kick and Bass for its last 2 bars). Not live: the Arc reads the Build ahead.
 constexpr Variant kBuildVariants[] = {
     {.name = "full", .oledName = "FULL", .weight = 2},
     {.name = "nolead",
@@ -477,14 +477,6 @@ constexpr Variant kBuildVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.genre.arc.buildKeeps = kEverything.without({.parts = partBit(kLeadPart)});
-         }},
-    {.name = "cut2",
-     .oledName = "CUT 2",
-     .weight = 1,
-     .apply =
-         [](ResolvedGenre& resolved) {
-	         resolved.genre.arc.buildCut = {.parts = partBit(kBassPart), .lanes = laneBit(Lane::Kick)};
-	         resolved.genre.arc.buildCutBars = 2;
          }},
     {.name = "nokick",
      .oledName = "NO KICK",
@@ -544,14 +536,14 @@ constexpr Variant kBassVariants[] = {
          }},
 };
 
-/// feel-1 F5, the chords: the graph's loops (the genre as written), or the i–iv vamp for more intensity, 3 to 1 (the
-/// owner: "A is the better default, but B could be good when the intensity/complexity increases"). It keeps the loop
-/// chance the loops set (S1) drew, so it comes after it. Not live: a live set may not move the chord lines (ADR 0008).
+/// feel-1 F5, the chords: the graph's loops (the genre as written), or the i–iv vamp, 1 to 2 (feel-2 G4 picked the
+/// vamp: "barely hear a difference, but A might be better"). It keeps the loop chance the loops set (S1) drew, so it
+/// comes after it. Not live: a live set may not move the chord lines (ADR 0008).
 constexpr Variant kChordVariants[] = {
-    {.name = "loop", .oledName = "LOOP", .weight = 3},
+    {.name = "loop", .oledName = "LOOP", .weight = 1},
     {.name = "vamp",
      .oledName = "VAMP",
-     .weight = 1,
+     .weight = 2,
      .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = vampOf(resolved.genre.harmony.graph); }},
 };
 
@@ -565,7 +557,7 @@ constexpr VariantSet kVariantSets[] = {
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 7, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 8, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 14},
     .phraseBars = 8,
     .parts = kParts,

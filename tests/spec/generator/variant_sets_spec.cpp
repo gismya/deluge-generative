@@ -492,7 +492,7 @@ describe variant_sets("Variant sets", $ {
 	context("Dub's skank (Q359, #359)", _ {
 		it("lists the skank set: the 7ths it played before, first, and plain triads, evenly", _ {
 			const Genre& dub = genres::dub;
-			expect(dub.variantSets.size()).to_equal(size_t{3}); // and the drum styles (#495, drop_changes_spec), the Break (dub_spec)
+			expect(dub.variantSets.size()).to_equal(size_t{5}); // and the drum styles (#495, drop_changes_spec), the Break, MIX and BASS (dub_spec)
 			const VariantSet& skank = dub.variantSets[0];
 			expect(std::string(skank.name)).to_equal(std::string("skank"));
 			expect(std::string(skank.variants[0].name)).to_equal(std::string("sevenths"));
