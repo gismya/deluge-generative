@@ -3,7 +3,8 @@
 # entry picks ACID: Perform enters on the line's Recipe, which the Compose screen then shows, with the key entropy 7
 # rolls for Dub techno (F; entropy 0 rolls G: generator_render --genre techno-dub --entropy 7). The next roll, the Compose
 # screen's REGENERATE, draws fresh entropy again, and "next recipe clear" forgets fields that were set. Last, a
-# Regenerate in Perform takes the lines' facts but keeps its genre.
+# Regenerate in Perform cancelled before its roster loads leaves the lines, and the next one takes their facts but
+# keeps its genre.
 # gen_next_recipe taken: a roll took the lines. gen_compose_recipe and gen_compose_seed: see compose_screen.txt.
 # covers: src/deluge/io/midi/test_port.* src/deluge/generative/core/recipe_overrides.h
 # covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/transitions.cpp
@@ -85,6 +86,27 @@ expect event gen_perform_entered techno-acid since=mark
 next recipe genre techno-dub
 next recipe tempo 12600
 next recipe key 5
+# A Regenerate cancelled before its roster loads (BACK while "hold preload" parks the preload) leaves the lines
+mark now
+hold preload
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=context_menu
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_transition_preload_held within=10
+button BACK down
+wait 30
+button BACK up
+expect event gen_transition cancel preload
+expect event gen_transition phase=idle
+expect event gen_transition_preload cancelled within=5
+expect no_event gen_next_recipe taken since=mark within=3
+# ... and the next Regenerate takes them
 mark now
 include perform_transition_menu.txt
 encoder 3 1

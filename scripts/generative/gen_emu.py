@@ -33,13 +33,14 @@ golden   the firmware check and the Compose and Recipe-file smoke checks (spec �
          are the golden's (tests/spec/generator/goldens/<genre>.txt, the genre the script picks): both as the
          golden's note lines, the notes that start more than kMaxLean before the golden's last tick, cut there. A
          difference prints as a diff; both dumps are left in --out (golden-notes.txt, song-notes.txt).
-capture  the tuning loop's main step: builds a capture firmware in build-capture/ (--build-dir; --elf: that one, built
-         before, and nothing builds), writes a copy of its ELF beside the WAV whose Current Recipe and seed come from
-         the arguments (genre, Recipe overrides, seed; the same flags as the harness's generator_render), boots it,
-         plays Perform for --seconds and writes the rendered audio to a WAV, then plays it (afplay) unless
-         --no-play. Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new
-         Recipe rebuilds nothing; a source change rebuilds and relinks. --out is a folder (the WAV is named after
-         the arguments, never overwriting one) or a .wav path.
+capture  the tuning loop's main step: builds the test-port firmware in build-capture/ (--build-dir; --elf: that one,
+         built before, and nothing builds), boots it, sends the Recipe and seed over the test port as "next recipe"
+         lines (seam S7, spec §21.3; from the arguments: genre, Recipe overrides, seed, the same flags as the
+         harness's generator_render), so the entry's roll plays them, plays Perform for --seconds and writes the
+         rendered audio to a WAV, then plays it (afplay) unless --no-play. Deterministic: the same arguments give
+         the same WAV. The Recipe isn't in the build, so a new Recipe rebuilds nothing; a source change rebuilds
+         and relinks. --out is a folder (the WAV is named after the arguments, never overwriting one) or a .wav
+         path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
          --end-after-drop [N] (default 1; put WAV paths before it, or give N, or it reads the WAV as N) or
@@ -52,12 +53,12 @@ capture  the tuning loop's main step: builds a capture firmware in build-capture
          --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
          level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
          on the first step.
-         Each capture keeps its patched ELF as <WAV stem>-pid<N>.elf and its raw dump and run log as
-         <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so captures sharing a --out folder or a --build-dir
-         never patch the same firmware or read each other's audio. The emulator's audio runs a little behind its
+         Each capture keeps its raw dump and run log as <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so
+         captures sharing a --out folder never read each other's audio. The emulator's audio runs a little behind its
          virtual clock (13-60 ms over a few minutes), so a capture runs on past --seconds until the dump holds the
-         whole --seconds (at most TAIL_LIMIT_S more): the WAV is exactly --seconds long. The ELF and dumps are deleted after, the logs when
-         the audio is whole; a capture also deletes the ELFs, dumps (and the empty WAV) of captures that were killed. It
+         whole --seconds (at most TAIL_LIMIT_S more): the WAV is exactly --seconds long. The dumps are deleted after, the logs
+         when the audio is whole; a capture also deletes the dumps (and the empty WAV) of captures that were killed,
+         and the patched ELFs captures from before #523 left. It
          then runs the check below on its WAV and exits 1 if the audio isn't whole: after the firmware it builds
          generator_render (only that target, in build/tests/) and renders the same Recipe, so the check reads what
          the firmware plays (--render: that one instead). --no-check skips it: the length and a corrupt run still
@@ -97,6 +98,7 @@ import math
 import os
 import re
 import shlex
+import signal
 import struct
 import subprocess
 import sys
@@ -556,30 +558,28 @@ def scale_names():
     return [re.sub(r"(?<!^)(?=[A-Z])", "-", n).lower() for n in names]
 
 
-# The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp): the Recipe it plays, which
-# write_capture_elf patches into a copy of its ELF. The two layouts must agree; the firmware static_asserts its own.
-CAPTURE_SYMBOL = b"generative_capture_recipe"
-CAPTURE_MAGIC = b"GENCAP1\0"
-CAPTURE_LAYOUT = struct.Struct(
-    "<8s32sIIi4bbbbx"
-)  # magic, genre, entropy, seed, tempo, macros, key, scale, swing
-CAPTURE_GENRE_BYTES = 32
-KEEP_SWING = -128  # RecipeOverrides::kKeepSwing
-
-
-def capture_recipe(args):
-    """The CaptureRecipe bytes for these arguments: a RecipeOverrides (generative/core/recipe_overrides.h) with the
-    genre's name inline. Exits on an unknown genre, key or scale."""
+def recipe_lines(args):
+    """The test port's "next recipe" lines (seam S7, spec §21.3) that set the capture's Recipe and seed for the
+    entry's roll: a RecipeOverrides (generative/core/recipe_overrides.h), as the harness's generator_render takes it.
+    Exits on an unknown genre, key or scale."""
     if args.genre not in genre_names():
         sys.exit(
             "unknown genre: {} (have {})".format(args.genre, ", ".join(genre_names()))
         )
-    key = -1
+    lines = [
+        f"next recipe genre {args.genre}",
+        f"next recipe entropy {args.entropy}",
+        f"next recipe seed {args.seed}",
+    ]
+    for m, name in enumerate(MACROS):
+        if getattr(args, name) is not None:
+            lines.append(f"next recipe macro {m} {getattr(args, name)}")
+    if args.tempo is not None:
+        lines.append(f"next recipe tempo {hundredths(args.tempo)}")
     if args.key is not None:
         if args.key not in KEYS:
             sys.exit(f"unknown key: {args.key}")
-        key = KEYS[args.key]
-    scale = -1
+        lines.append(f"next recipe key {KEYS[args.key]}")
     if args.scale is not None:
         if args.scale not in scale_names():
             sys.exit(
@@ -587,68 +587,10 @@ def capture_recipe(args):
                     args.scale, ", ".join(scale_names())
                 )
             )
-        scale = scale_names().index(args.scale)
-    genre = args.genre.encode()
-    if len(genre) >= CAPTURE_GENRE_BYTES:  # the firmware needs its terminating NUL
-        sys.exit(f"genre name too long for a capture: {args.genre}")
-    return CAPTURE_LAYOUT.pack(
-        CAPTURE_MAGIC,
-        genre,
-        args.entropy,
-        args.seed,
-        0 if args.tempo is None else hundredths(args.tempo),
-        *(-1 if getattr(args, m) is None else getattr(args, m) for m in MACROS),
-        key,
-        scale,
-        KEEP_SWING if args.swing is None else args.swing,
-    )
-
-
-def capture_recipe_offset(elf, path):
-    """The file offset of the CaptureRecipe in `elf` (an ELF32 file's bytes). Exits if it has none."""
-    if elf[:6] != b"\x7fELF\x01\x01":
-        sys.exit(f"{path}: not a little-endian 32-bit ELF")
-    shoff, shentsize, shnum = (
-        struct.unpack_from("<I", elf, 32)[0],
-        *struct.unpack_from("<HH", elf, 46),
-    )
-    sections = [
-        struct.unpack_from("<10I", elf, shoff + i * shentsize) for i in range(shnum)
-    ]  # name, type, flags, addr, offset, size, link, info, addralign, entsize
-    for _, kind, _, _, offset, size, link, _, _, entsize in sections:
-        if kind != 2:  # SHT_SYMTAB
-            continue
-        strtab = sections[link][4]
-        for at in range(offset, offset + size, entsize):
-            name, value, sym_size, _, _, shndx = struct.unpack_from("<IIIBBH", elf, at)
-            end = elf.index(b"\0", strtab + name)
-            if elf[strtab + name : end] != CAPTURE_SYMBOL:
-                continue
-            if shndx >= len(
-                sections
-            ):  # SHN_ABS, SHN_COMMON or out of range: not a capture build's
-                break
-            home = sections[shndx]
-            if home[1] != 1 or sym_size != CAPTURE_LAYOUT.size:  # SHT_PROGBITS
-                break
-            start = home[4] + value - home[3]
-            if elf[start : start + len(CAPTURE_MAGIC)] != CAPTURE_MAGIC:
-                break
-            return start
-    sys.exit(
-        f"{path} has no {CAPTURE_LAYOUT.size}-byte {CAPTURE_SYMBOL.decode()} of this gen_emu's layout: not a capture "
-        "build (gen_emu.py capture builds one in --build-dir), or one from another gen_emu"
-    )
-
-
-def write_capture_elf(src, dst, recipe):
-    """Writes a copy of the capture firmware `src` to `dst` that plays `recipe` (capture_recipe's bytes)."""
-    with open(src, "rb") as fh:
-        elf = bytearray(fh.read())
-    start = capture_recipe_offset(elf, src)
-    elf[start : start + len(recipe)] = recipe
-    with open(dst, "wb") as fh:
-        fh.write(elf)
+        lines.append(f"next recipe scale {scale_names().index(args.scale)}")
+    if args.swing is not None:
+        lines.append(f"next recipe swing {args.swing}")
+    return lines
 
 
 def uint32(text):
@@ -726,7 +668,8 @@ BOOT_FILE = re.compile(
 )
 
 
-# A capture's copy of the firmware, patched with its Recipe: <capture_tag>.elf.
+# A capture's copy of the firmware, patched with its Recipe, from before #523 (a GENERATIVE_CAPTURE build):
+# <capture_tag>.elf. clear_dead_captures() still removes those a killed capture left.
 CAPTURE_ELF = re.compile(r"^(?P<stem>.+)-pid(?P<pid>\d+)\.elf$")
 
 
@@ -1003,20 +946,24 @@ def dbt(command):
 
 
 def build_capture(args):
-    """Builds the capture firmware in --build-dir and returns its ELF. The Recipe isn't in the build (capture_one
-    patches it into a copy), so a new Recipe builds nothing: only a source change does."""
+    """Builds the capture firmware, the test-port build (Release, -DENABLE_SYSEX_TEST=ON), in --build-dir and returns
+    its ELF. The Recipe isn't in the build (capture_one sends it over the test port), so a new Recipe builds nothing:
+    only a source change does."""
     build = os.path.abspath(args.build_dir)
     cache = os.path.join(build, "CMakeCache.txt")
     configured = False
     if os.path.exists(cache):
         with open(cache) as fh:
-            configured = "GENERATIVE_CAPTURE:BOOL=ON" in fh.read().splitlines()
-    if (
-        not configured
-    ):  # a new build dir, or one from before #401 (GENERATIVE_CAPTURE_DIR)
+            lines = fh.read().splitlines()
+        configured = (
+            "ENABLE_SYSEX_TEST:BOOL=ON" in lines
+            and "GENERATIVE_CAPTURE:BOOL=ON" not in lines
+        )
+    if not configured:  # a new build dir, or one from before #523 (GENERATIVE_CAPTURE)
         dbt(
             f"cmake -B {shlex.quote(build)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' -DCMAKE_CROSS_CONFIGS:STRING=all "
-            "'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DGENERATIVE_CAPTURE:BOOL=ON -UGENERATIVE_CAPTURE_DIR"
+            "'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DENABLE_SYSEX_TEST:BOOL=ON -DGENERATIVE_CAPTURE:BOOL=OFF "
+            "-UGENERATIVE_CAPTURE_DIR"
         )
     dbt(f"cmake --build {shlex.quote(build)} --config Release --target deluge")
     return os.path.join(build, "Release", "deluge.elf")
@@ -1025,10 +972,35 @@ def build_capture(args):
 # -- driving the emulator ----------------------------------------------------
 
 
-class Emu:
-    """One delugemu run under icount. The VM moves only in run_to(); every input lands at a fixed virtual time."""
+class IcountLink(deluge_probe.UdpLink):
+    """The test port's link to delugemu's DIN MIDI (a UDP bridge) under icount. It never runs the VM: a capture runs
+    it only in fixed virtual steps (send_recipe()), so the exchange is the same in every run."""
 
-    def __init__(self, args, elf, out, name, *, card=None, snapshot=True):
+    def __init__(self):
+        super().__init__("0:0")  # the OS picks our port; QEMU's end is .addr
+
+    def send(self, msg):
+        # While the VM is stopped QEMU's main loop still runs: it hands the bytes to the UART's receive DMA, which
+        # takes each at once, so they all reach the firmware at the virtual time the VM next runs from.
+        super().send(msg)
+        time.sleep(LINK_DELIVER_S)
+
+
+LINK_STEP_MS = 10  # virtual time between looks for a reply
+LINK_DELIVER_S = (
+    0.1  # wall-clock time a request's bytes get to reach the UART before the VM runs on
+)
+REPLY_LIMIT_MS = 2000  # virtual time a reply may take
+REPLY_STEPS = 1  # steps a reply takes when its bytes were in before the VM ran on (#523: every line, every run)
+
+
+class Emu:
+    """One delugemu run under icount. The VM moves only in run_to(); every input lands at a fixed virtual time. With
+    `test_port`, the DIN MIDI port is bridged to UDP and .port is a deluge_probe.TestPort on it (an IcountLink)."""
+
+    def __init__(
+        self, args, elf, out, name, *, card=None, snapshot=True, test_port=False
+    ):
         if not snapshot and card is None:
             raise ValueError(
                 "snapshot=False needs a card clone: it would write to the master card image"
@@ -1042,21 +1014,36 @@ class Emu:
         if os.path.exists(self.dump):
             os.unlink(self.dump)
         self.t = 0
+        self.port = None
         extra = ("-icount", "shift=2,sleep=off", "-S") + (
             ("-snapshot",) if snapshot else ()
         )
-        self.s = DelugeSession.launch(
-            firmware=os.path.abspath(elf),
-            sd=os.path.abspath(card or args.card),
-            repo_root=args.delugemu,
-            env={"DELUGEMU_QEMU_BIN": args.qemu, "DELUGEMU_SSIF_DUMP": self.dump},
-            sock=qmp_socket(name),
-            run_log=os.path.join(out, name + ".log"),
-            extra_qemu=extra,
-        )
+        launch = {
+            "firmware": os.path.abspath(elf),
+            "sd": os.path.abspath(card or args.card),
+            "repo_root": args.delugemu,
+            "env": {"DELUGEMU_QEMU_BIN": args.qemu, "DELUGEMU_SSIF_DUMP": self.dump},
+            "sock": qmp_socket(name),
+            "run_log": os.path.join(out, name + ".log"),
+            "extra_qemu": extra,
+        }
+        if not test_port:
+            self.s = DelugeSession.launch(**launch)
+            return
+        link = IcountLink()
+        link.addr = ("127.0.0.1", test_port_emu.free_udp_port())
+        midi = f"udp:127.0.0.1:{link.sock.getsockname()[1]}@127.0.0.1:{link.addr[1]}"
+        try:
+            self.s = launch_with_midi(DelugeSession, midi, **launch)
+        except BaseException:
+            link.close()
+            raise
+        self.port = deluge_probe.TestPort(link, on_hardware=False)
 
     def close(self):
         self.s.close()
+        if self.port is not None:
+            self.port.link.close()
 
     def run_to(self, ns, each_step=None):
         while self.t < ns:
@@ -1123,6 +1110,76 @@ class Emu:
             return fh.read(int(seconds * RATE) * FRAME)
 
 
+def stop_group(proc, grace_s=10):
+    """Stops run.sh and the QEMU it started (its process group): SIGTERM, then SIGKILL if it outlasts `grace_s`."""
+    for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, None)):
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, sig)
+        try:
+            proc.wait(timeout=wait_s)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def launch_with_midi(
+    session_class, midi, *, firmware, sd, repo_root, env, sock, run_log, extra_qemu
+):
+    """DelugeSession.launch() with run.sh's --midi MIDI (a QEMU chardev for the DIN port), which launch() has no
+    argument for: run.sh, then a session on its QMP socket."""
+    from delugemu.qmp import QmpClient
+
+    with contextlib.suppress(FileNotFoundError):
+        os.unlink(sock)
+    cmd = [
+        os.path.join(repo_root, "scripts", "run.sh"),
+        firmware,
+        "--sd",
+        sd,
+        "--display",
+        "none",
+    ]
+    cmd += [
+        "--audio",
+        "none",
+        "--midi",
+        midi,
+        "--",
+        "-qmp",
+        f"unix:{sock},server,nowait",
+        *extra_qemu,
+    ]
+    log_fh = open(run_log, "w")  # noqa: SIM115 - the emulator writes to it for its whole run
+    proc = subprocess.Popen(
+        cmd,
+        cwd=repo_root,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+        env={**os.environ, **env},
+    )
+    try:
+        deadline = time.monotonic() + 90
+        while not os.path.exists(sock):
+            if proc.poll() is not None or time.monotonic() > deadline:
+                raise RuntimeError(
+                    f"run.sh never opened its QMP socket (see {run_log})"
+                )
+            time.sleep(0.1)
+        return session_class(
+            QmpClient(sock, connect_timeout=15.0),
+            proc=proc,
+            repo_root=repo_root,
+            run_log=run_log,
+        )
+    except BaseException:
+        stop_group(proc)
+        raise
+    finally:
+        log_fh.close()
+
+
 def clone_card(master, dst):
     """Clones `master` to `dst` (APFS copy-on-write on macOS). Refuses to write over `master`."""
     if os.path.realpath(master) == os.path.realpath(dst):
@@ -1132,17 +1189,23 @@ def clone_card(master, dst):
     subprocess.run(["cp", "-c", master, dst], check=True)
 
 
-def boot(args, elf, out, tag, *, card=None, snapshot=True):
-    """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times."""
+def boot(args, elf, out, tag, *, card=None, snapshot=True, test_port=False):
+    """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times. `test_port`: see Emu."""
     for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
         if card is not None and not snapshot:
             clone_card(args.card, card)
         if card is not None or not snapshot:
             emu = Emu(
-                args, elf, out, boot_name(tag, attempt), card=card, snapshot=snapshot
+                args,
+                elf,
+                out,
+                boot_name(tag, attempt),
+                card=card,
+                snapshot=snapshot,
+                test_port=test_port,
             )
         else:
-            emu = Emu(args, elf, out, boot_name(tag, attempt))
+            emu = Emu(args, elf, out, boot_name(tag, attempt), test_port=test_port)
         try:
             booted = emu.booted()
         except BaseException:
@@ -1156,10 +1219,62 @@ def boot(args, elf, out, tag, *, card=None, snapshot=True):
     raise RuntimeError(f"no boot in {test_port_emu.BOOT_TRIES} tries")
 
 
+def send_recipe(emu, lines):
+    """Sends a capture's "next recipe" lines over the test port, subscribed to its events: each line, then the VM in
+    LINK_STEP_MS steps until its status reply (TestPort.inject_stepped()). Only virtual time decides where each step
+    ends, so the exchange plays out the same in every run (TestPort's own waits pump for wall-clock time). Raises on a
+    refused or unanswered line; warns when a reply took more steps than REPLY_STEPS, a sign that LINK_DELIVER_S, the
+    one wall-clock wait left, was too short for the host and the bytes reached the firmware late."""
+    port = emu.port
+    port.subscribe()
+    for n, line in enumerate(lines):
+        try:
+            steps = port.inject_stepped(
+                line, lambda: emu.wait(LINK_STEP_MS), REPLY_LIMIT_MS // LINK_STEP_MS
+            )
+        except TimeoutError as error:
+            first = (
+                " Is --elf a test-port build (-DENABLE_SYSEX_TEST=ON)?"
+                if n == 0
+                else ""
+            )
+            raise RuntimeError(f"test port: {error}.{first}") from None
+        except deluge_probe.InjectRejected as error:
+            raise RuntimeError(f"test port: {error}") from None
+        if steps > REPLY_STEPS:
+            log(
+                f"WARNING the reply to {line!r} took {steps} steps of {LINK_STEP_MS} ms, not {REPLY_STEPS} or "
+                f"fewer: the host may have delivered it late (LINK_DELIVER_S), so this capture may not repeat"
+            )
+
+
+RECIPE_SETTLE_S = 3  # virtual seconds a test port exchange of a capture may take
+
+
+def settle(emu, ns, what):
+    """Runs the VM to `ns`: where a test port exchange that took a host-dependent time ends. Raises if it ran past."""
+    if emu.t > ns:
+        raise RuntimeError(
+            f"{what} took past {RECIPE_SETTLE_S} s of virtual time ({(emu.t - ns) / SEC:.2f} s over)"
+        )
+    emu.run_to(ns)
+
+
+def check_recipe_taken(emu):
+    """Raises unless the entry's roll took the "next recipe" lines (its gen_next_recipe taken event), then stops the
+    test events, so none goes out while the capture plays."""
+    emu.port.pump(0.05)  # the events the entry sent, without running the VM
+    emu.port.subscribe(False)
+    if "gen_next_recipe taken" not in " ".join(emu.port.events):
+        raise RuntimeError(
+            "the entry's roll never took the capture's Recipe (no gen_next_recipe taken)"
+        )
+
+
 def enter_perform(emu):
     """SHIFT+SONG to Song view, SHIFT+SONG again for GENERATIVE, then PERFORM FROM -> GENRE -> TECHNO -> the default
     genre -> DISCARD SONG? -> OK (spec §14.1, §14.3): GENRE opens on the default genre's row and submenu. A capture
-    build plays its own genre whatever row is picked."""
+    plays the genre its "next recipe" lines set whatever row is picked."""
     emu.shift_tap("SESSION_VIEW")
     emu.wait(1500)  # the zoom out to Song view; SHIFT+SONG needs no UI mode active
     emu.shift_tap("SESSION_VIEW")
@@ -1575,16 +1690,21 @@ def capture_one(args, elf, mutes, harness=None, end=None):
     clear_dead_captures(out)
     wav = capture_path(args, args.out, mutes)
     tag = capture_tag(wav)
-    # Its own copy (the tag holds the pid), so captures from one build dir at once never patch the same file.
-    patched = os.path.join(out, tag + ".elf")
     warnings = []
     writing = False
     try:
-        write_capture_elf(elf, patched, capture_recipe(args))
-        emu = boot(args, patched, out, tag)
+        emu = boot(args, elf, out, tag, test_port=True)
         try:
+            # The test port's exchanges run the VM for as long as the host takes to answer, so each ends at a fixed
+            # virtual time: entry and PLAY land where they always do, and the same arguments give the same WAV.
+            booted = emu.t
+            send_recipe(emu, recipe_lines(args))
+            settle(emu, booted + RECIPE_SETTLE_S * SEC, "sending the Recipe")
             if not enter_perform(emu):
                 raise RuntimeError("Perform's song never finished loading")
+            entered = emu.t
+            check_recipe_taken(emu)
+            settle(emu, entered + RECIPE_SETTLE_S * SEC, "the entry's events")
             pcm = check_perform_plays(
                 emu,
                 args.seconds,
@@ -1605,8 +1725,6 @@ def capture_one(args, elf, mutes, harness=None, end=None):
     finally:
         # every boot attempt's raw dump: up to 100 MB each, and nothing reads it again
         remove_boot_files(out, tag, "s32")
-        with contextlib.suppress(FileNotFoundError):
-            os.remove(patched)
     if harness:
         parts, step_seconds = harness
         verdict = wav_failures(
@@ -1648,7 +1766,7 @@ def capture_one(args, elf, mutes, harness=None, end=None):
 
 def capture(args):
     check_capture_args(args)
-    capture_recipe(args)  # an unknown genre, key or scale stops before the build
+    recipe_lines(args)  # an unknown genre, key or scale stops before the build
     warn_pin(args)
     check = not args.no_check
     if check and args.render:
@@ -1885,7 +2003,8 @@ def parser():
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
     c.add_argument(
         "--elf",
-        help="capture with this capture firmware (a --build-dir's Release/deluge.elf) and build nothing; "
+        help="capture with this firmware and build nothing: a test-port build (-DENABLE_SYSEX_TEST=ON), as a "
+        "--build-dir's Release/deluge.elf is; "
         "--build-dir is then ignored, and the check renders with the current checkout's harness, which may differ "
         "from the one the ELF was built from (--no-check skips it)",
     )

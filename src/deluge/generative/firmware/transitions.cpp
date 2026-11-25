@@ -181,7 +181,9 @@ public:
 				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
 #if ENABLE_SYSEX_TEST
 				if (appliedNext_) {
-					TestPort::nextRecipeTaken(); // its roster loaded: the pending Recipe will play
+					// Its roster loaded. A CANCEL CHANGE while queued, or a full queue in loaded(), can still drop
+					// the change; the lines are taken anyway, as spec §21.3 says.
+					TestPort::nextRecipeTaken();
 				}
 #endif
 			}

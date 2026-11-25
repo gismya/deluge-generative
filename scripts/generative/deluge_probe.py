@@ -339,6 +339,28 @@ class TestPort:
             raise TimeoutError(f"no reply to test port command {command:#x}")
         return msg
 
+    def inject_stepped(self, line, step, limit):
+        """Queues one event line for a firmware that runs only when the caller lets it (delugemu under icount): calls
+        step() before each look for the reply, and never waits on the wall clock past a short read. Returns the steps
+        the reply took. Raises InjectRejected on any status but Queued, TimeoutError after `limit` steps."""
+        seq = self._next_seq()
+        self.link.send(
+            HDR + [0x02, INJECT, seq] + self.key + list(line.encode("ascii")) + [0xF7]
+        )
+        for steps in range(1, limit + 1):
+            step()
+            msg = self.receive_until(
+                lambda m: (
+                    m[:6] == HDR + [0x02] and m[6] == STATUS_REPLY and m[7] == seq
+                ),
+                0.005,  # the reply went out before step() returned
+            )
+            if msg is not None:
+                if msg[8] != QUEUED:
+                    raise InjectRejected(line, msg[8])
+                return steps
+        raise TimeoutError(f"no reply to {line!r} in {limit} steps")
+
     def inject(self, line, timeout=10.0):
         """Queues one event line. Waits while the queue is full; raises on any other error."""
         msg = self.poll(

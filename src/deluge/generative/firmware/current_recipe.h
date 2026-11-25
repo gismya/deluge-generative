@@ -134,8 +134,8 @@ uint32_t nextEntropy(uint32_t fresh);
 uint32_t nextSeed(uint32_t fresh);
 const Genre& nextGenre(const Genre& genre);
 /// The lines' macros, facts and sound picks over a roll. False, and nothing changed, when no lines are set. The roll
-/// calls TestPort::nextRecipeTaken() once its Recipe is the one that plays: one that fails or is cancelled leaves the
-/// lines for the next roll.
+/// calls TestPort::nextRecipeTaken() once its Recipe is the one that plays (in Perform: when the roster has loaded):
+/// one that fails, or is cancelled before then, leaves the lines for the next roll.
 bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds);
 #else
 inline uint32_t nextEntropy(uint32_t fresh) {
