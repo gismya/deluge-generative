@@ -483,7 +483,7 @@ gotError5:
 			// Stop before we get to the final sample that overlaps the end of the cluster, if that happens.
 			sourceStopAt = sourceStopAt - byteDepth + 1;
 
-			int32_t numSourceBytesLookingAtThisCluster = (uint32_t)sourceStopAt - (uint32_t)source;
+			int32_t numSourceBytesLookingAtThisCluster = (uintptr_t)sourceStopAt - (uintptr_t)source;
 			if (numSourceBytesLookingAtThisCluster > sourceBytesLeftToCopyThisCycle) {
 				sourceStopAt = source + sourceBytesLeftToCopyThisCycle;
 			}
@@ -503,7 +503,7 @@ gotError5:
 				source += byteDepth;
 			}
 
-			int32_t bytesJustWritten = (uint32_t)initialBandWritePos - (uint32_t)bandDestinationStartedAt;
+			int32_t bytesJustWritten = (uintptr_t)initialBandWritePos - (uintptr_t)bandDestinationStartedAt;
 			int32_t samplesJustCopied = bytesJustWritten >> 1;
 			int32_t sourceBytesJustRead = samplesJustCopied * byteDepth;
 			sourceBytesLeftToCopyThisCycle -= sourceBytesJustRead;
@@ -805,7 +805,7 @@ transformBandToTimeDomain:
 				uint32_t amountShortened = GeneralMemoryAllocator::get().shortenLeft(
 				    band->data, idealAmountToShorten,
 				    sizeof(WaveTableBandData)); // Tell it to move the WaveTableBandData "header" forward
-				band->data = (WaveTableBandData*)((uint32_t)band->data + amountShortened);
+				band->data = (WaveTableBandData*)((uintptr_t)band->data + amountShortened);
 			}
 		}
 	}
@@ -857,7 +857,7 @@ WaveTable::doRenderingLoopSingleCycle(int32_t* __restrict__ thisSample, int32_t 
 		        - bandCycleSizeMagnitude); // The -5 is for 32 bytes (16 samples) per line in the windowed sinc table.
 		windowedSincTableLineOffsetBytes &= 0b111100000;
 		int16_t const* __restrict__ sincKernelReadPos =
-		    (int16_t const*)((uint32_t)&kernel[0] + windowedSincTableLineOffsetBytes);
+		    (int16_t const*)((uintptr_t)&kernel[0] + windowedSincTableLineOffsetBytes);
 
 		int16x8_t kernelVector[kInterpolationMaxNumSamples >> 3];
 
@@ -961,7 +961,7 @@ WaveTable::doRenderingLoop(int32_t* __restrict__ thisSample, int32_t const* buff
 		        - bandCycleSizeMagnitude); // The -5 is for 32 bytes (16 samples) per line in the windowed sinc table.
 		windowedSincTableLineOffsetBytes &= 0b111100000;
 		int16_t const* __restrict__ sincKernelReadPos =
-		    (int16_t const*)((uint32_t)&kernel[0] + windowedSincTableLineOffsetBytes);
+		    (int16_t const*)((uintptr_t)&kernel[0] + windowedSincTableLineOffsetBytes);
 
 		int16x8_t kernelVector[kInterpolationMaxNumSamples >> 3];
 

@@ -408,7 +408,7 @@ bool Output::readTagFromFile(Deserializer& reader, char const* tagName) {
 			}
 			ClipInstance* newInstance = clipInstances.getElement(i);
 			newInstance->length = length;
-			newInstance->clip = (Clip*)clipCode; // Sneaky - disguising int32_t as Clip*
+			newInstance->clip = (Clip*)(uintptr_t)clipCode; // Sneaky - disguising int32_t as Clip*
 
 			numElementsToAllocateFor--;
 		}

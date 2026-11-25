@@ -128,3 +128,34 @@ target_link_libraries(UnitTests CppUTestExt etl::etl)
 target_compile_options(UnitTests PUBLIC
         $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
 )
+
+# Containers keyed on pointers, at the host's own pointer width (the 32-bit tests can't see what a 64-bit host does).
+add_executable(PointerKeyTests
+        RunAllTests.cpp
+        pointer_keys/multi_word_key_tests.cpp
+        pointer_keys/mock_allocator.cpp
+        mocks/mock_print.cpp
+        ../../src/deluge/util/container/array/resizeable_array.cpp
+        ../../src/deluge/util/container/array/ordered_resizeable_array.cpp
+        ../../src/deluge/util/container/array/ordered_resizeable_array_with_multi_word_key.cpp
+        ../../src/deluge/util/container/list/bidirectional_linked_list.cpp
+)
+add_test(NAME PointerKeyTests
+        COMMAND PointerKeyTests)
+target_include_directories(PointerKeyTests PRIVATE
+        mocks
+        ../../src
+        ../../src/deluge
+)
+set_target_properties(PointerKeyTests
+        PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS ON
+)
+target_link_libraries(PointerKeyTests CppUTestExt etl::etl)
+target_compile_options(PointerKeyTests PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>
+)

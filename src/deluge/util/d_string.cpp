@@ -40,11 +40,11 @@ String::~String() {
 }
 
 int32_t String::getNumReasons() const {
-	return *std::bit_cast<intptr_t*>(stringMemory - 4);
+	return *std::bit_cast<int32_t*>(stringMemory - 4);
 }
 
 void String::setNumReasons(int32_t newNum) const {
-	*std::bit_cast<intptr_t*>(stringMemory - 4) = newNum;
+	*std::bit_cast<int32_t*>(stringMemory - 4) = newNum;
 }
 
 void String::clear(bool destructing) {

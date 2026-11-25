@@ -178,8 +178,8 @@ bool inputMonitoringWarmedUp = false;
 // then ~50ms to fade it in so monitoring doesn't switch on with a click.
 constexpr uint32_t kInputMonitoringWarmupSamples = kSampleRate / 2;
 constexpr uint32_t kInputMonitoringFadeInSamples = kSampleRate / 20;
-uint32_t i2sTXBufferPos;
-uint32_t i2sRXBufferPos;
+uintptr_t i2sTXBufferPos;
+uintptr_t i2sRXBufferPos;
 volatile int voices_started_this_render = 0;
 bool headphonesPluggedIn;
 bool micPluggedIn;
@@ -205,7 +205,7 @@ int32_t masterVolumeAdjustmentR;
 bool doMonitoring;
 MonitoringAction monitoringAction;
 
-uint32_t saddr;
+uintptr_t saddr;
 
 deluge::fast_vector<Sound*> sounds;
 TaskID routine_task_id = -1;
@@ -230,9 +230,9 @@ void init() {
 
 	sampleForPreview->sideChainSendLevel = 2147483647;
 
-	i2sTXBufferPos = (uint32_t)getTxBufferStart();
+	i2sTXBufferPos = (uintptr_t)getTxBufferStart();
 
-	i2sRXBufferPos = (uint32_t)getRxBufferStart()
+	i2sRXBufferPos = (uintptr_t)getRxBufferStart()
 	                 + ((SSI_RX_BUFFER_NUM_SAMPLES - SSI_TX_BUFFER_NUM_SAMPLES - 16)
 	                    << (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE)); // Subtracting 5 or more seems fine
 
@@ -758,7 +758,7 @@ bool calledFromScheduler = false;
 
 	GeneralMemoryAllocator::get().checkStack("AudioDriver::routine");
 
-	saddr = (uint32_t)(getTxBufferCurrentPlace());
+	saddr = (uintptr_t)(getTxBufferCurrentPlace());
 	size_t numSamples = ((uint32_t)(saddr - i2sTXBufferPos) >> (2 + NUM_MONO_OUTPUT_CHANNELS_MAGNITUDE))
 	                    & (SSI_TX_BUFFER_NUM_SAMPLES - 1);
 
@@ -1229,8 +1229,8 @@ void routine_task() {
 #if ENABLE_SYSEX_TEST
 // Generative mode (spec §20): the audio output's margin, in frames of the TX ring
 constexpr uint32_t kTxFrameBytes = 4 * NUM_MONO_OUTPUT_CHANNELS;
-uint32_t txFrame(uint32_t address) {
-	return (address - (uint32_t)getTxBufferStart()) / kTxFrameBytes;
+uint32_t txFrame(uintptr_t address) {
+	return (address - (uintptr_t)getTxBufferStart()) / kTxFrameBytes;
 }
 #endif
 
@@ -1249,7 +1249,7 @@ void routine() {
 	numRoutines = 0;
 	if (!stemExport.processStarted || (stemExport.processStarted && !stemExport.renderOffline)) {
 #if ENABLE_SYSEX_TEST
-		TestPort::audioRoutineEntered(txFrame((uint32_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
+		TestPort::audioRoutineEntered(txFrame((uintptr_t)getTxBufferCurrentPlace())); // Generative mode (spec §20)
 #endif
 		while (doSomeOutputting() && numRoutines < 2) {
 
@@ -1322,7 +1322,7 @@ void routine() {
 #if ENABLE_SYSEX_TEST
 	{
 		// After an offline stem export's render too, as it writes the ring: the next entry's margin counts from here.
-		const auto dma = (uint32_t)getTxBufferCurrentPlace();
+		const auto dma = (uintptr_t)getTxBufferCurrentPlace();
 		TestPort::audioRoutineLeft(
 		    deluge::io::midi::txSamplesQueued(dma, i2sTXBufferPos, kTxFrameBytes, SSI_TX_BUFFER_NUM_SAMPLES),
 		    txFrame(dma));
@@ -1333,7 +1333,7 @@ void routine() {
 }
 
 int32_t getNumSamplesLeftToOutputFromPreviousRender() {
-	return ((uint32_t)renderingBufferOutputEnd - (uint32_t)renderingBufferOutputPos) >> 3;
+	return ((uintptr_t)renderingBufferOutputEnd - (uintptr_t)renderingBufferOutputPos) >> 3;
 }
 
 // Returns whether we got to the end
@@ -1350,14 +1350,14 @@ bool doSomeOutputting() {
 	while (renderingBufferOutputPosNow != renderingBufferOutputEnd) {
 
 		// If we've reached the end of the known space in the output buffer...
-		if (!(((uint32_t)((uint32_t)i2sTXBufferPosNow - saddr) >> (2 + NUM_MONO_OUTPUT_CHANNELS_MAGNITUDE))
+		if (!(((uint32_t)((uintptr_t)i2sTXBufferPosNow - saddr) >> (2 + NUM_MONO_OUTPUT_CHANNELS_MAGNITUDE))
 		      & (SSI_TX_BUFFER_NUM_SAMPLES - 1))) {
 
 			// See if there's now some more space.
-			saddr = (uint32_t)getTxBufferCurrentPlace();
+			saddr = (uintptr_t)getTxBufferCurrentPlace();
 
 			// If there wasn't, stop for now
-			if (!(((uint32_t)((uint32_t)i2sTXBufferPosNow - saddr) >> (2 + NUM_MONO_OUTPUT_CHANNELS_MAGNITUDE))
+			if (!(((uint32_t)((uintptr_t)i2sTXBufferPosNow - saddr) >> (2 + NUM_MONO_OUTPUT_CHANNELS_MAGNITUDE))
 			      & (SSI_TX_BUFFER_NUM_SAMPLES - 1))) {
 				break;
 			}
@@ -1422,12 +1422,12 @@ bool doSomeOutputting() {
 	}
 
 	renderingBufferOutputPos = renderingBufferOutputPosNow; // Write back from __restrict__ pointer to permanent pointer
-	i2sTXBufferPos = (uint32_t)i2sTXBufferPosNow;
+	i2sTXBufferPos = (uintptr_t)i2sTXBufferPosNow;
 
 	if (numSamplesOutputted) {
 
 		i2sRXBufferPos += (numSamplesOutputted << (NUM_MONO_INPUT_CHANNELS_MAGNITUDE + 2));
-		if (i2sRXBufferPos >= (uint32_t)getRxBufferEnd()) {
+		if (i2sRXBufferPos >= (uintptr_t)getRxBufferEnd()) {
 			i2sRXBufferPos -= (SSI_RX_BUFFER_NUM_SAMPLES << (NUM_MONO_INPUT_CHANNELS_MAGNITUDE + 2));
 		}
 
@@ -1449,15 +1449,15 @@ bool doSomeOutputting() {
 				// We'll feed a bunch of samples to the SampleRecorder - normally all of what we just advanced, but
 				// if the buffer wrapped around, we'll just go to the end of the buffer, and not worry about the
 				// extra bit at the start - that'll get done next time.
-				uint32_t stopPos =
-				    (i2sRXBufferPos < (uint32_t)recorder->sourcePos) ? (uint32_t)getRxBufferEnd() : i2sRXBufferPos;
+				uintptr_t stopPos =
+				    (i2sRXBufferPos < (uintptr_t)recorder->sourcePos) ? (uintptr_t)getRxBufferEnd() : i2sRXBufferPos;
 
 				size_t numSamplesFeedingNow =
-				    (stopPos - (uint32_t)recorder->sourcePos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE);
+				    (stopPos - (uintptr_t)recorder->sourcePos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE);
 
 				// We also enforce a firm limit on how much to feed, to keep things sane. Any remaining will get
 				// done next time.
-				numSamplesFeedingNow = std::min(numSamplesFeedingNow, 256u);
+				numSamplesFeedingNow = std::min<size_t>(numSamplesFeedingNow, 256u);
 
 				// this is extremely janky, but essentially because feedAudio only works on an interleaved stream of
 				// stereo samples, we can offset it one sample to get it to operate on the right channel
@@ -1773,19 +1773,19 @@ void slowRoutine() {
 	// correct it. The correct latency for the RX buffer is between (SSI_TX_BUFFER_NUM_SAMPLES) and (2 *
 	// SSI_TX_BUFFER_NUM_SAMPLES).
 
-	uint32_t rxBufferWriteAddr = (uint32_t)getRxBufferCurrentPlace();
+	uintptr_t rxBufferWriteAddr = (uintptr_t)getRxBufferCurrentPlace();
 	uint32_t latencyWithinAppropriateWindow =
-	    (((rxBufferWriteAddr - (uint32_t)i2sRXBufferPos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE))
+	    (((rxBufferWriteAddr - (uintptr_t)i2sRXBufferPos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE))
 	     - SSI_TX_BUFFER_NUM_SAMPLES)
 	    & (SSI_RX_BUFFER_NUM_SAMPLES - 1);
 
 	while (latencyWithinAppropriateWindow >= SSI_TX_BUFFER_NUM_SAMPLES) {
 		i2sRXBufferPos += (SSI_TX_BUFFER_NUM_SAMPLES << (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE));
-		if (i2sRXBufferPos >= (uint32_t)getRxBufferEnd()) {
+		if (i2sRXBufferPos >= (uintptr_t)getRxBufferEnd()) {
 			i2sRXBufferPos -= (SSI_RX_BUFFER_NUM_SAMPLES << (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE));
 		}
 		latencyWithinAppropriateWindow =
-		    (((rxBufferWriteAddr - (uint32_t)i2sRXBufferPos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE))
+		    (((rxBufferWriteAddr - (uintptr_t)i2sRXBufferPos) >> (2 + NUM_MONO_INPUT_CHANNELS_MAGNITUDE))
 		     - SSI_TX_BUFFER_NUM_SAMPLES)
 		    & (SSI_RX_BUFFER_NUM_SAMPLES - 1);
 	}
