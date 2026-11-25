@@ -129,7 +129,7 @@ TEST(MultiWordKeyPointerTests, pointerKeysSortAndSearch) {
 	// Each owner's entries form one run: a first-word search finds its start, the NULL clip comes first in it, and
 	// searchPastPointerWord() finds its end.
 	for (auto& owner : owners) {
-		int32_t first = array.searchFirstWord(lowWord(owner.modControllable), GREATER_OR_EQUAL);
+		int32_t first = array.search(lowWord(owner.modControllable), GREATER_OR_EQUAL);
 		int32_t past = array.searchPastPointerWord(lowWord(owner.modControllable), first);
 		CHECK_EQUAL((int32_t)owner.clips.size(), past - first);
 		for (int32_t i = first; i < past; i++) {
@@ -139,6 +139,6 @@ TEST(MultiWordKeyPointerTests, pointerKeysSortAndSearch) {
 			CHECK(((Entry*)array.getElementAddress(first))->clip == nullptr);
 		}
 		// Searching only the run before it, from 0 up to its start, finds nothing of its own.
-		CHECK_EQUAL(first, array.searchFirstWord(lowWord(owner.modControllable), GREATER_OR_EQUAL, 0, first));
+		CHECK_EQUAL(first, array.search(lowWord(owner.modControllable), GREATER_OR_EQUAL, 0, first));
 	}
 }

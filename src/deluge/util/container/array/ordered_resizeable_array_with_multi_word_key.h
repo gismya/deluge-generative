@@ -18,6 +18,7 @@
 #pragma once
 
 #include "util/container/array/ordered_resizeable_array.h"
+#include <cstdint>
 
 // This class extends OrderedResizeableArrayWith32bitKey so that if we wish, we can still use that class's single-word
 // search functions, where we only care about the first word.
@@ -35,19 +36,17 @@ public:
 	bool deleteAtKeyMultiWord(uint32_t* __restrict__ keyWords);
 	void testSequentiality(char const* errorCode);
 
-	/// Like search() on the first key word alone, comparing it as searchMultiWord() does.
-	[[gnu::always_inline]] int32_t searchFirstWord(uint32_t firstWord, int32_t comparison, int32_t rangeBegin = 0,
-	                                               int32_t rangeEnd = -1) {
-		if (rangeEnd == -1) {
-			rangeEnd = numElements;
-		}
-		if constexpr (kUnsignedKeyWords) {
-			return searchFirstWordUnsigned(firstWord, false, rangeBegin, rangeEnd) + comparison;
-		}
-		else {
-			return search((int32_t)firstWord, comparison, rangeBegin, rangeEnd);
-		}
+#if UINTPTR_MAX > UINT32_MAX
+	/// Where a pointer is wider than a key word, these hide OrderedResizeableArray::search(): they search the first key
+	/// word alone, compared unsigned as searchMultiWord() compares it here. On the Deluge, search() is the base
+	/// class's.
+	int32_t search(int32_t firstWord, int32_t comparison, int32_t rangeBegin, int32_t rangeEnd) {
+		return searchFirstWordUnsigned((uint32_t)firstWord, false, rangeBegin, rangeEnd) + comparison;
 	}
+	int32_t search(int32_t firstWord, int32_t comparison, int32_t rangeBegin = 0) {
+		return search(firstWord, comparison, rangeBegin, numElements);
+	}
+#endif
 
 	/// The first index from `rangeBegin` whose first key word is past `pointerWord`, a pointer's low 32 bits: the end
 	/// of that pointer's run of elements.

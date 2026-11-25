@@ -3875,8 +3875,8 @@ ParamManager* Song::getBackedUpParamManagerForExactClip(ModControllableAudio* mo
 ParamManager* Song::getBackedUpParamManagerPreferablyWithClip(ModControllableAudio* modControllable, Clip* clip,
                                                               ParamManager* stealInto) {
 
-	int32_t iAnyClip = backedUpParamManagers.searchFirstWord((uint32_t)(uintptr_t)modControllable,
-	                                                         GREATER_OR_EQUAL); // Search just by first word
+	int32_t iAnyClip = backedUpParamManagers.search((uint32_t)(uintptr_t)modControllable,
+	                                                GREATER_OR_EQUAL); // Search just by first word
 	if (iAnyClip >= backedUpParamManagers.getNumElements()) {
 		return nullptr;
 	}
@@ -4004,9 +4004,8 @@ void Song::deleteBackedUpParamManagersForClip(Clip* clip) {
 				backedUpParamManagers.deleteAtIndex(i);
 
 				// ...and then go find the first one that had this ModControllable
-				int32_t j =
-				    backedUpParamManagers.searchFirstWord((uint32_t)(uintptr_t)modControllable, GREATER_OR_EQUAL, 0,
-				                                          i); // Search by first word only
+				int32_t j = backedUpParamManagers.search((uint32_t)(uintptr_t)modControllable, GREATER_OR_EQUAL, 0,
+				                                         i); // Search by first word only
 				BackedUpParamManager* firstElementWithModControllable =
 				    (BackedUpParamManager*)backedUpParamManagers.getElementAddress(j);
 
@@ -4083,8 +4082,8 @@ void Song::deleteBackedUpParamManagersForClip(Clip* clip) {
 
 void Song::deleteBackedUpParamManagersForModControllable(ModControllableAudio* modControllable) {
 
-	int32_t iAnyClip = backedUpParamManagers.searchFirstWord((uint32_t)(uintptr_t)modControllable,
-	                                                         GREATER_OR_EQUAL); // Search by first word only
+	int32_t iAnyClip = backedUpParamManagers.search((uint32_t)(uintptr_t)modControllable,
+	                                                GREATER_OR_EQUAL); // Search by first word only
 
 	while (true) {
 		if (iAnyClip >= backedUpParamManagers.getNumElements()) {
