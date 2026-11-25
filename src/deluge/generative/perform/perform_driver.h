@@ -47,6 +47,9 @@ public:
 	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length. 0 for a sound that lasts as long
 	/// as its note, such as a synth. The driver asks only for a Riser, to end its sample on the Drop (spec §9.5).
 	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+	/// How long the fallback Riser `noteOn`'s part loaded beside its drawn one plays, in microseconds, 0 for none: the
+	/// driver plays it in a Build the drawn sample is longer than (spec §9.5).
+	virtual int32_t fallbackMicros(const Event& /*noteOn*/) { return 0; }
 	/// Whether a master clock owns the tempo: setTempo() then writes nothing and no glide is heard (spec §9.7,
 	/// §12.7), so the driver plans with the tempo it last set, the master's as the adapter samples it.
 	virtual bool tempoFollowsMaster() { return false; }
@@ -244,7 +247,7 @@ private:
 
 	/// Holds a Riser's note-on back if its sound is a sample that ends before the Drop when started now.
 	/// @return whether it was held.
-	bool holdRiser(const Event& noteOn, NoteSink& sink);
+	bool holdRiser(Event& noteOn, NoteSink& sink);
 	/// Works out where the held Riser starts, from the tempo planned now. Each change to the plan calls it again.
 	void timeRiser();
 	/// The held Riser never sounds.

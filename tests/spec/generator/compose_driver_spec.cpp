@@ -35,10 +35,12 @@ struct Composed {
 };
 
 std::unique_ptr<Composed> composeSong(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0,
-                                      const Takes& takes = Takes{}, bool skipIntro = false) {
+                                      const Takes& takes = Takes{}, bool skipIntro = false,
+                                      int32_t riserFallbackMicros = 0) {
 	auto out = std::make_unique<Composed>();
 	out->target = target;
 	out->writer.riserMicros = riserMicros;
+	out->writer.riserFallbackMicros = riserFallbackMicros;
 	auto generator = std::make_unique<harness::Instance>();
 	ComposeDriver driver;
 	driver.begin(*generator, recipe, seed, takes, target, out->writer, skipIntro);
@@ -86,9 +88,9 @@ struct Agreement {
 
 /// A sample Riser `riserMicros` long plays in both runs, and both play `takes`.
 Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target, int32_t riserMicros = 0,
-                    const Takes& takes = Takes{}) {
+                    const Takes& takes = Takes{}, int32_t riserFallbackMicros = 0) {
 	Agreement out;
-	auto composed = composeSong(recipe, seed, target, riserMicros, takes);
+	auto composed = composeSong(recipe, seed, target, riserMicros, takes, false, riserFallbackMicros);
 	const int32_t cut = composed->endQueuedAt;
 	out.cut = cut;
 	if (cut <= 0) {
@@ -99,6 +101,7 @@ Agreement agreement(const Recipe& recipe, uint32_t seed, int32_t target, int32_t
 	run.seed = seed;
 	run.takes = takes;
 	run.riserMicros = riserMicros;
+	run.riserFallbackMicros = riserFallbackMicros;
 	Result performed = play(run, cut / kStepsPerBar + 2);
 
 	const std::vector<Note> expected = notesBefore(pairNotes(performed.events), stepTick(cut));
@@ -671,6 +674,40 @@ describe compose_driver("The Compose driver", $ {
 				risers += agreed.risers;
 			}
 			expect(risers).to_be_greater_than(0U);
+		});
+
+		it("with a sample Riser longer than every Build: the fallback where it fits, else no Riser, in both (spec §9.5)", _ {
+			size_t risers = 0;
+			int32_t fallbacks = 0;
+			for (const Genre* genre : allGenres()) {
+				const Recipe recipe = recipeOf(*genre);
+				const int32_t bar = kStepsPerBar * perform::stepMicros(recipe.tempo);
+				const int32_t tenMinutes = 600 * 1000 * 1000; // longer than any Build
+				// A fallback a bar long fits every Build: each Riser note is the fallback's.
+				const Agreement fallback = agreement(recipe, 1, targetSteps(240, recipe.tempo), tenMinutes, {}, bar);
+				expect(fallback.cut).to_be_greater_than(0);
+				expect(fallback.sameNotes).to_be_true();
+				risers += fallback.risers;
+				auto composed = composeSong(recipe, 1, targetSteps(240, recipe.tempo), tenMinutes, {}, false, bar);
+				// A Riser whose Build has a Drop ahead is the fallback's, on its row, and as long as it is. One in a Build
+				// End cuts short has no Drop ahead: it plays as placed (spec §9.5).
+				size_t placed = 0;
+				for (const Note& note : composed->writer.notes) {
+					if (note.lane == Lane::Riser && note.pitch == perform::kRiserFallbackPitch) {
+						fallbacks++;
+						expect(note.length).to_be_less_than(kBarTicks + 1);
+					}
+					placed += note.lane == Lane::Riser && note.pitch != perform::kRiserFallbackPitch ? 1 : 0;
+				}
+				// No fallback, or one that fits no Build either: no Riser in a Build with a Drop ahead.
+				for (const int32_t none : {0, tenMinutes / 2}) {
+					const Agreement silent = agreement(recipe, 1, targetSteps(240, recipe.tempo), tenMinutes, {}, none);
+					expect(silent.sameNotes).to_be_true();
+					expect(silent.risers).to_equal(placed);
+				}
+			}
+			expect(risers).to_be_greater_than(0U);
+			expect(fallbacks).to_be_greater_than(0);
 		});
 
 		it("with re-rolled takes", _ {

@@ -90,7 +90,10 @@ struct LoggedParam {
 	int32_t collection = 0; ///< Its collection's index among the manager's summaries
 	int32_t slot = 0;       ///< Its bit in the collection's summary: the param id, or the cable's index
 };
-std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song);
+/// With `fallback`, the same param on the FX Kit's fallback Riser row, for an edit on the Riser lane (spec §9.5): the
+/// row plays the lane's notes in some Builds, so an edit applies to both.
+std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song,
+                                       bool fallback = false);
 
 /// `part`'s new picks (`picks`, its preset or each of its lanes' samples), landed on `step` with `token`.
 void logSoundPaths(SteeringLog& log, int32_t step, uint8_t part, uint8_t token, const SoundPicks& picks,

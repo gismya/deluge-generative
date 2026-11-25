@@ -9,6 +9,7 @@
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
 #include "generative/core/variants.h"
+#include "generative/perform/riser_timing.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -16,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -61,8 +63,11 @@ const char* const kUsage =
     "file order can differ from the render's, so a capture can pick another file from the same entropy.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
     "line, for scripts/generative/osc_octaves.py.\n"
-    "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
-    "shortest Build in ms at the top of its tempo range, and the lane's folders and tags, each |-separated, for\n"
+    "--list-risers prints the pack's fallback Risers, one \"fallback<TAB>path<TAB>ms\" a line, longest first, then\n"
+    "each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its shortest Build in ms at\n"
+    "the top of its tempo range, its variants' Builds counted, and the lane's folders and tags, each |-separated, for\n"
+    "scripts/generative/riser_fit.py.\n"
+    "--riser-fallback MICROS prints the fallback Riser the firmware loads beside a sample MICROS long, or -, for\n"
     "scripts/generative/riser_fit.py.\n";
 
 namespace {
@@ -158,6 +163,10 @@ std::string pitchedPalettePresets() {
 
 std::string riserLanes() {
 	std::string out;
+	// The fallbacks a Riser lane loads beside a longer drawn sample (spec §9.5), for the check to measure.
+	for (const perform::PackRiser& riser : perform::kPackRisers) {
+		out += std::string("fallback\t") + riser.path + "\t" + std::to_string(riser.ms) + "\n";
+	}
 	for (const Genre* genre : allGenres()) {
 		const bool hasRiser = std::ranges::any_of(genre->parts, [](const PartSpec& part) {
 			return std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.lane == Lane::Riser; });
@@ -167,10 +176,29 @@ std::string riserLanes() {
 		}
 		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
 		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
-		// bars over an 8-bar phrase.
-		const std::span<const WeightedBars> builds = genre->arc.buildBars;
-		const int32_t buildBars =
-		    builds.empty() ? genre->phraseBars : std::ranges::min(builds, {}, &WeightedBars::bars).bars;
+		// bars over an 8-bar phrase. Over the genre as written and each of its variants, since a set may patch the
+		// Build (Techno's hard Build, 4 bars, #531). A variant whose Builds play no Riser (House's filter) doesn't
+		// count.
+		auto shortestIn = [](const Genre& g) {
+			const std::span<const WeightedBars> builds = g.arc.buildBars;
+			if (!g.arc.buildRiser) {
+				return INT32_MAX;
+			}
+			return builds.empty() ? static_cast<int32_t>(g.phraseBars)
+			                      : static_cast<int32_t>(std::ranges::min(builds, {}, &WeightedBars::bars).bars);
+		};
+		int32_t buildBars = shortestIn(*genre);
+		auto copy = std::make_unique<ResolvedGenre>();
+		for (size_t s = 0; s < genre->variantSets.size(); s++) {
+			for (size_t v = 0; v < genre->variantSets[s].variants.size(); v++) {
+				VariantPicks picks;
+				picks.pick[s] = static_cast<uint8_t>(v);
+				buildBars = std::min(buildBars, shortestIn(resolveGenre(*genre, picks, copy.get())));
+			}
+		}
+		if (buildBars == INT32_MAX) {
+			continue; // no Build of it plays a Riser
+		}
 		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
 		const LaneSounds none{.lane = Lane::Riser};
@@ -237,6 +265,15 @@ Parsed parseArgs(int argc, const char* const* argv) {
 				return fail("--list-risers takes no other arguments");
 			}
 			parsed.listRisers = true;
+			return parsed;
+		}
+		if (flag == "--riser-fallback") {
+			char* end = nullptr;
+			const long long micros = argc == 3 ? std::strtoll(argv[2], &end, 10) : -1;
+			if (argc != 3 || end == argv[2] || *end != 0 || micros < 0 || micros > INT32_MAX) {
+				return fail("--riser-fallback takes one length in microseconds");
+			}
+			parsed.riserFallbackFor = micros;
 			return parsed;
 		}
 		int32_t macro = -1;

@@ -1,0 +1,5 @@
+# perform_riser_fallback.txt's card (test_port_emu.py --card-overlay, steps in apply_overlay()): the factory card,
+# which has no pack Risers, plus the pack's 8 s GEN Riser 1, the only file in SAMPLES/FX/Riser, so Acid techno's Riser
+# lane draws it, and the 2 s GEN Riser Short, the only shorter pack Riser on the card, so the FX Kit's fallback is it.
+copy pack/SAMPLES/FX/Riser/GEN Riser 1.wav -> SAMPLES/FX/Riser/GEN Riser 1.wav
+copy pack/SAMPLES/FX/Riser/Short/GEN Riser Short.wav -> SAMPLES/FX/Riser/Short/GEN Riser Short.wav

@@ -17,6 +17,7 @@
 #include "generative/core/variants.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
+#include "generative/perform/riser_timing.h"
 #include "instance.h"
 #include "log_store.h"
 
@@ -49,13 +50,22 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 /// Keeps every event the driver plays, in play order.
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
-	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
+	int32_t riserMicros = 0;         ///< The Riser lane's sample length; 0 for a synth Riser.
+	int32_t riserFallbackMicros = 0; ///< The fallback Riser's length beside it; 0 for none (spec §9.5).
 	/// Where each restart's new piece begins in `events` (spec §13.2): its first event's index.
 	std::vector<size_t> restartedAt;
 	/// Starts a restart's piece, as the adapter does: a StepwisePiece sets it to its Current Recipe's.
 	std::function<void(Generator&)> restarts;
 	void play(const Event& event) override { events.push_back(event); }
-	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
+	int32_t sampleMicros(const Event& noteOn) override {
+		if (noteOn.lane != Lane::Riser) {
+			return 0;
+		}
+		return noteOn.pitch == perform::kRiserFallbackPitch ? riserFallbackMicros : riserMicros;
+	}
+	int32_t fallbackMicros(const Event& noteOn) override {
+		return noteOn.lane == Lane::Riser ? riserFallbackMicros : 0;
+	}
 	void restartPiece(Generator& generator) override {
 		restartedAt.push_back(events.size());
 		if (restarts) {
@@ -323,6 +333,8 @@ struct Run {
 	bool skipIntro = false;
 	/// The Riser lane's sample length, in microseconds; 0 for a synth Riser (spec §9.5).
 	int32_t riserMicros = 0;
+	/// The fallback Riser's length beside it; 0 for none (spec §9.5).
+	int32_t riserFallbackMicros = 0;
 };
 
 struct Result {
@@ -344,6 +356,7 @@ inline Result play(const Run& run, int32_t bars) {
 	SteeringQueue queue;
 	RecordingSink sink;
 	sink.riserMicros = run.riserMicros;
+	sink.riserFallbackMicros = run.riserFallbackMicros;
 	perform::PerformDriver driver;
 
 	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);

@@ -411,7 +411,7 @@ describe render_command("Rough render command", $ {
 		expect(listing.find("\tFX\t")).to_equal(std::string::npos);
 	});
 
-	it("lists each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
+	it("lists the fallback Risers and each built-in genre's Riser lane with its shortest Build with --list-risers, for riser_fit.py", _ {
 		harness::render::Parsed parsed = parse({"--list-risers"});
 		expect(parsed.error).to_equal(std::string{});
 		expect(parsed.listRisers).to_be_true();
@@ -420,9 +420,20 @@ describe render_command("Rough render command", $ {
 		const std::string listing = harness::render::riserLanes();
 		// Dub's 1-bar Build at 80 BPM is 3,000 ms; its lane reads the short riser's own folder.
 		expect(listing.find("dub\t3000\tSAMPLES/FX/Riser/Short\t\n")).not_().to_equal(std::string::npos);
-		// Acid techno's 8-bar Build at its top tempo, every file in the default folder.
-		expect(listing.find("techno-acid\t")).not_().to_equal(std::string::npos);
+		// Acid techno's shortest Build is the BUILD set's hard one, 4 bars at 135 BPM (#531), every file in the default
+		// folder; the fallbacks come first, longest first.
+		expect(listing.find("techno-acid\t7111\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+		expect(listing.rfind("fallback\tSAMPLES/FX/Riser/GEN Riser 2.wav\t6000\n", 0)).to_equal(size_t{0});
 		expect(listing.find("psytrance-classic\t13150\tSAMPLES/FX/Riser\t\n")).not_().to_equal(std::string::npos);
+		// House's filter Build plays no Riser, so it doesn't count: its shortest Riser Build is 8 bars at 126 BPM.
+		expect(listing.find("house\t15238\tSAMPLES/FX/Riser\tGEN Riser 2|GEN Riser 3\n")).not_().to_equal(std::string::npos);
+	});
+
+	it("tells the fallback Riser the firmware loads beside a sample with --riser-fallback, for riser_fit.py", _ {
+		expect(parse({"--riser-fallback", "8000000"}).riserFallbackFor).to_equal(int64_t{8000000});
+		expect(parse({"--riser-fallback"}).error.empty()).to_be_false();
+		expect(parse({"--riser-fallback", "x"}).error.empty()).to_be_false();
+		expect(parse({"--riser-fallback", "8000000", "--seed", "1"}).error.empty()).to_be_false(); // a mode of its own
 	});
 
 	it("lists a Recipe's sound picks with --list-sounds: a line per part and per lane of a Drums or FX part", _ {

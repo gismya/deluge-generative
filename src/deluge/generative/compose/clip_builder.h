@@ -41,8 +41,8 @@ struct Note {
 	int32_t length = 0;     ///< Ticks, at least 1.
 	uint8_t part = 0;       ///< The part's index in the genre's roster: its clip.
 	Lane lane = Lane::None; ///< A Drums or FX part's lane: its row. Lane::None on a pitched part.
-	uint8_t pitch = 0;      ///< A pitched part's absolute MIDI note.
-	uint8_t velocity = 0;   ///< 1–127.
+	uint8_t pitch = 0; ///< A pitched part's absolute MIDI note; a Riser's perform::kRiserFallbackPitch on its fallback.
+	uint8_t velocity = 0; ///< 1–127.
 	constexpr bool operator==(const Note&) const = default;
 };
 
@@ -102,6 +102,9 @@ public:
 	/// How long `noteOn`'s sound plays by itself, in microseconds: a sample's length, 0 for a synth. Asked only for a
 	/// Riser in a Build, which then starts so its file ends on the Drop (spec §9.5, §10.5), as Perform's does.
 	virtual int32_t sampleMicros(const Event& /*noteOn*/) { return 0; }
+	/// The fallback Riser's length beside `noteOn`'s drawn one, 0 for none (spec §9.5): a Riser note-on carrying
+	/// perform::kRiserFallbackPitch goes on its row.
+	virtual int32_t fallbackMicros(const Event& /*noteOn*/) { return 0; }
 
 	// ---- Capture's replay (spec §17.5, §17.6). A Compose song gets none of these. ----
 	// Ticks are from the piece's step 0. Each comes when the replay reaches it, among the notes and nodes; a note or

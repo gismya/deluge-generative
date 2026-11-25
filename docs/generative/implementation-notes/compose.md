@@ -44,7 +44,9 @@ otherwise.
 - A sample Riser's note-on moves later in `ComposeDriver::timeRiser()` (`perform::riserStart()` at the Recipe's tempo,
   from `Generator::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
   as Perform asks its `NoteSink`. The harness's `play()` sets Perform's tempo to the Recipe's, or a sample Riser there is
-  timed at the driver's default tempo and the equivalence fails.
+  timed at the driver's default tempo and the equivalence fails. Where the drawn sample is longer than the Build,
+  `perform::pickRiserSample()` (with `SongWriter::fallbackMicros()`) puts the note on the FX Kit's fallback row
+  (`kRiserFallbackPitch`) or, where neither fits, `timeRiser()` returns false and Compose writes no note (spec §9.5).
 - `ClipBuilder` holds a sounding-note table (`SoundingNotes::kTotal`) and `kMaxTracks` lanes, each with a bar of
   buffered points (2 B each): it lives in the Compose job, not the Generator block, so it isn't under H18.
 - Harness traps: CppSpec's `it` is a macro, so a local named `it` doesn't compile in a spec; `expect()` works only

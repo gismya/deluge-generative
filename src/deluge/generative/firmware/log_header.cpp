@@ -19,6 +19,7 @@
 #include "generative/core/genre.h"
 #include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/perform/riser_timing.h"
 #include "io/midi/test_port.h"
 #include "model/clip/instrument_clip.h"
 #include "model/global_effectable/global_effectable.h"
@@ -98,8 +99,13 @@ struct BlockParams {
 };
 
 /// The ParamManager a block names, as logPieceHeader() walked them: the song's, a part's Output's (its clip's), or a
-/// Kit row's. Empty for a part, row or collection that isn't there now.
-BlockParams paramsOf(const SnapshotBlock& block, const Roster& roster, const Genre& genre, Song& song) {
+/// Kit row's; with `fallback`, the FX Kit's fallback Riser row's for a Riser block (spec §9.5). Empty for a part, row
+/// or collection that isn't there now.
+BlockParams paramsOf(const SnapshotBlock& block, const Roster& roster, const Genre& genre, Song& song,
+                     bool fallback = false) {
+	if (fallback && block.lane != Lane::Riser) {
+		return {};
+	}
 	if (block.output == kSongParams) {
 		return {&song.paramManager, nullptr};
 	}
@@ -114,7 +120,7 @@ BlockParams paramsOf(const SnapshotBlock& block, const Roster& roster, const Gen
 		Sound* sound = part.output->type == OutputType::SYNTH ? static_cast<SoundInstrument*>(part.output) : nullptr;
 		return {&part.clip->paramManager, sound};
 	}
-	Drum* drum = part.drums[laneRow(block.lane)];
+	Drum* drum = part.drums[fallback ? perform::kRiserFallbackRow : laneRow(block.lane)];
 	NoteRow* row = drum != nullptr ? part.clip->getNoteRowForDrum(drum) : nullptr;
 	if (row == nullptr || !row->paramManager.containsAnyMainParamCollections()) {
 		return {};
@@ -179,12 +185,13 @@ int32_t restoreBlock(const SnapshotBlock& block, const uint8_t* values, int32_t 
 
 } // namespace
 
-std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song) {
+std::optional<LoggedParam> loggedParam(const Command& edit, const Roster& roster, const Genre& genre, Song& song,
+                                       bool fallback) {
 	const int32_t collection = edit.length >> 13;
 	const auto source = static_cast<uint8_t>((edit.length >> 8) & 0x1F);
 	const int32_t id = edit.length & 0xFF;
 	SnapshotBlock block{edit.target, edit.lane, static_cast<uint8_t>(collection), 0};
-	const BlockParams params = paramsOf(block, roster, genre, song);
+	const BlockParams params = paramsOf(block, roster, genre, song, fallback);
 	ParamManager* manager = params.manager;
 	if (manager == nullptr || collection >= manager->getExpressionParamSetOffset()) {
 		return std::nullopt;
@@ -223,16 +230,19 @@ int32_t restoreSnapshot(const SteeringLog::Piece& piece, const Roster& roster, c
 		if (!includeSong && block.output == kSongParams) {
 			return;
 		}
-		const BlockParams params = paramsOf(block, roster, genre, song);
-		if (params.manager == nullptr) {
-			return;
+		// The block's row, and for the Riser lane the fallback Riser's row, which plays its notes in some Builds.
+		for (const bool fallback : {false, true}) {
+			const BlockParams params = paramsOf(block, roster, genre, song, fallback);
+			if (params.manager == nullptr) {
+				continue;
+			}
+			const int32_t n = restoreBlock(block, static_cast<const uint8_t*>(data) + sizeof block,
+			                               length - static_cast<int32_t>(sizeof block), *params.manager);
+			if (n > 0 && params.sound != nullptr) {
+				params.sound->patcher.performInitialPatching(*params.sound, *params.manager);
+			}
+			written += fallback ? 0 : n;
 		}
-		const int32_t n = restoreBlock(block, static_cast<const uint8_t*>(data) + sizeof block,
-		                               length - static_cast<int32_t>(sizeof block), *params.manager);
-		if (n > 0 && params.sound != nullptr) {
-			params.sound->patcher.performInitialPatching(*params.sound, *params.manager);
-		}
-		written += n;
 	});
 	return written;
 }
