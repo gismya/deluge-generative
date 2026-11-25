@@ -4,6 +4,10 @@ Part of the [implementation notes](../implementation-notes.md). Paths are under 
 otherwise.
 
 - `set_source_files_properties` in `src/deluge/CMakeLists.txt` needs `TARGET_DIRECTORY deluge` to reach the target.
+- `DELUGE_HOST` is the host-build macro: set (to 1) only by deluge-engine, which compiles this source for macOS with
+  its own stand-ins for the hardware and the allocator. Firmware code that a host build must leave out or replace goes
+  under `#if !DELUGE_HOST` (first use: `GeneralMemoryAllocator::isNonAudioExternal`, deluge-engine#4). Later host
+  seams reuse this name rather than adding another.
 - `./dbt sizediff` noise: under LTO a different git SHA in `version.h` alone moves `handle_cpu_fault`,
   `fault_handler_print_freeze_pointers` and an `OrderedResizeableArrayWith32bitKey` constructor (about +20 B text).
   Don't chase it. The base also builds under `.cache/sizediff/base/`, so its `__FILE__` strings are longer: #283's
