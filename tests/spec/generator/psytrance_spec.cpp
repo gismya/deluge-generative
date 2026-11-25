@@ -1251,18 +1251,18 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {
-		it("gives the Bass GEN Psy Bass with 000 Rich Saw Bass as its fallback, the Drone 5 presets, the Lead 3 and the Arp 2, "
+		it("gives the Bass GEN Psy Roll Bass (#497) with 000 Rich Saw Bass as its fallback, the Drone 5 presets, the Lead 3 (and 057 as the pack copy's fallback) and the Arp 2, "
 		   "each on the factory card or in the pack (the rest dropped by ear in #133)",
 		   _ {
 			   FakeCard card = harness::factoryCardWithPack();
 			   auto presets = [](int32_t part) { return psyGenre.palette->partEntries(psyGenre.parts[part]).size(); };
 			   expect(presets(kBassPart)).to_equal(size_t{2});
 			   expect(presets(kDronePart)).to_equal(size_t{5});
-			   expect(presets(kLeadPart)).to_equal(size_t{3});
+			   expect(presets(kLeadPart)).to_equal(size_t{4});
 			   expect(presets(kArpPart)).to_equal(size_t{2});
 			   expect(harness::partPresetsMissing(psyGenre, card).empty()).to_be_true();
 			   expect(harness::mainPick(psyGenre, kBassPart))
-			       .to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Bass.XML x3"));
+			       .to_equal(std::string("SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML x3"));
 			   // Round 2 (H3): three darker pads join 149 and 126, all at the same weight.
 			   std::map<std::string, int32_t> drones;
 			   for (const PaletteEntry& entry : psyGenre.palette->partEntries(psyGenre.parts[kDronePart])) {
@@ -1278,9 +1278,9 @@ describe psytrance("Psytrance", $ {
 
 		it("falls back to 000 Rich Saw Bass on a card without the pack, never rolling it where the pack is (round 2, H5)", _ {
 			FakeLoader loader;
-			loader.missing = {"SYNTHS/GENERATIVE/GEN Psy Bass.XML"};
+			loader.missing = {"SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML"};
 			const SoundLoad bass = loadPartSound(*psyGenre.palette, psyGenre.parts[kBassPart],
-			                                     "SYNTHS/GENERATIVE/GEN Psy Bass.XML", loader);
+			                                     "SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML", loader);
 			expect(bass.source == SoundSource::Fallback).to_be_true();
 			expect(loader.tried.back()).to_equal(std::string("SYNTHS/000 Rich Saw Bass.XML"));
 			for (const PaletteEntry& entry : psyGenre.palette->partEntries(psyGenre.parts[kBassPart])) {
@@ -1288,6 +1288,42 @@ describe psytrance("Psytrance", $ {
 					expect(static_cast<int32_t>(entry.weight)).to_equal(0);
 				}
 			}
+		});
+
+		it("plays the pack's GEN FM Lead Soft in 057's place, 057 at weight 0 as its fallback, and moves the FM leads' and "
+		   "045's Brightness half as far (#497)",
+		   _ {
+			expect(harness::mainPick(psyGenre, kLeadPart))
+			    .to_equal(std::string("SYNTHS/GENERATIVE/GEN FM Lead Soft.XML x3"));
+			std::map<std::string, int32_t> brightness;
+			for (const PaletteEntry& entry : psyGenre.palette->partEntries(psyGenre.parts[kLeadPart])) {
+				brightness[entry.path] = entry.ranges.percent(SoundControl::Brightness);
+			}
+			expect(brightness == std::map<std::string, int32_t>{{"SYNTHS/GENERATIVE/GEN FM Lead Soft.XML", 50},
+			                                                    {"SYNTHS/057 FM Lead.XML", 50},
+			                                                    {"SYNTHS/098 Saturated Sync.XML", 100},
+			                                                    {"SYNTHS/045 Square Sync.XML", 50}})
+			    .to_be_true();
+		});
+
+		it("falls back to the factory 057 when GEN FM Lead Soft is missing, a card without the pack (#497)", _ {
+			FakeLoader loader;
+			loader.missing = {"SYNTHS/GENERATIVE/GEN FM Lead Soft.XML"};
+			const SoundLoad lead = loadPartSound(*psyGenre.palette, psyGenre.parts[kLeadPart],
+			                                     "SYNTHS/GENERATIVE/GEN FM Lead Soft.XML", loader);
+			expect(lead.source == SoundSource::Fallback).to_be_true();
+			expect(loader.tried.back()).to_equal(std::string("SYNTHS/057 FM Lead.XML"));
+		});
+
+		it("rolls the Kick lane's own list from the short copies and Deep Sky alone, never a factory Psy kick (#497)", _ {
+			FakeCard card = harness::factoryCardWithPack();
+			const auto picks = harness::lanePicks(psyGenre, card, 400, {}, false);
+			bool shortKick = false;
+			for (const std::string& path : picks.at(Lane::Kick)) {
+				expect(path.rfind("SAMPLES/Artists/Dean Daughters/Psy/", 0) == 0).to_be_false();
+				shortKick = shortKick || path.rfind("SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-", 0) == 0;
+			}
+			expect(shortKick).to_be_true();
 		});
 
 		it("loads the Drone at 55 % of its preset's volume, louder than round 1's 40 (round 2, H3)", _ {
@@ -1317,7 +1353,14 @@ describe psytrance("Psytrance", $ {
 			}
 			// The Impact: the owner's boom alone (#472).
 			expect(picks[Lane::Impact] == std::set<std::string>{"SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML"}).to_be_true();
-			for (Lane lane : {Lane::Kick, Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
+			// The Psy kit's kick is the pack's short copy (#497), never the factory file with its long tail.
+			bool shortKick = false;
+			for (const std::string& path : withKits[Lane::Kick]) {
+				expect(path.rfind(kPsyFolder, 0) == 0).to_be_false();
+				shortKick = shortKick || path.rfind("SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-", 0) == 0;
+			}
+			expect(shortKick).to_be_true();
+			for (Lane lane : {Lane::Snare, Lane::Clap, Lane::ClosedHat, Lane::OpenHat}) {
 				bool psy = false;
 				for (const std::string& path : withKits[lane]) {
 					psy = psy || path.rfind(kPsyFolder, 0) == 0;
