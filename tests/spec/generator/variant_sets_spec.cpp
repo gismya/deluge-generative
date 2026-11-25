@@ -24,6 +24,7 @@
 #include "generative/core/variants.h"
 #include "harness.h"
 #include "log_store.h"
+#include "no_sets_genre.h"
 
 #include "cppspec.hpp"
 
@@ -147,13 +148,16 @@ bool sameLookAhead(const Genre& a, const Genre& b) {
 	return same;
 }
 
-/// Two pools a pick reads the same way: as many entries, each as long.
+/// Two pools a pick reads the same way: as many entries, each as long. An empty pool agrees with any: a part or lane
+/// with none never reads its pick's entry, and its first pick from a pool is fresh (Generator::updatePick()), or the
+/// entry it last held in the one other pool its set's variants give it (patchesKeepLookAhead() compares them pairwise).
 bool samePickRange(std::span<const Pattern> a, std::span<const Pattern> b) {
-	return std::ranges::equal(a, b, [](const Pattern& x, const Pattern& y) { return x.length == y.length; });
+	return a.empty() || b.empty()
+	       || std::ranges::equal(a, b, [](const Pattern& x, const Pattern& y) { return x.length == y.length; });
 }
 
 /// What a pick held across a Drop reads (a frozen part keeps its pool entry, spec §6.7): each part's lanes, in their
-/// order, and every pool, as many entries, each as long. True when `a` and `b` agree on them.
+/// order, and every pool, as many entries, each as long (samePickRange()). True when `a` and `b` agree on them.
 bool samePicks(const Genre& a, const Genre& b) {
 	bool same = partCount(a) == partCount(b);
 	for (int32_t p = 0; same && p < partCount(a); p++) {
@@ -168,25 +172,46 @@ bool samePicks(const Genre& a, const Genre& b) {
 	return same;
 }
 
-/// Every set of `genre` that may change mid-piece (live, or at a Drop) keeps the look-ahead, and what a pick held
-/// across the Drop reads, in each of its variants.
+/// Every set of `genre` that may change mid-piece (live, or at a Drop) keeps the look-ahead in each of its variants,
+/// and what a pick held across the Drop reads between any two of them (a switch may go from any to any).
 bool patchesKeepLookAhead(const Genre& genre) {
 	for (size_t s = 0; s < genre.variantSets.size(); s++) {
 		const VariantSet& set = genre.variantSets[s];
 		if (!set.live && set.changeAt == ChangeAt::Never) {
 			continue;
 		}
-		for (size_t v = 0; v < set.variants.size(); v++) {
+		const size_t count = set.variants.size();
+		std::vector<std::unique_ptr<ResolvedGenre>> copies;
+		std::vector<const Genre*> resolved;
+		for (size_t v = 0; v < count; v++) {
 			VariantPicks picks;
 			picks.pick[s] = static_cast<uint8_t>(v);
-			auto copy = std::make_unique<ResolvedGenre>();
-			const Genre& resolved = resolveGenre(genre, picks, copy.get());
-			if (!sameLookAhead(genre, resolved) || !samePicks(genre, resolved)) {
+			copies.push_back(std::make_unique<ResolvedGenre>());
+			resolved.push_back(&resolveGenre(genre, picks, copies.back().get()));
+			if (!sameLookAhead(genre, *resolved.back())) {
 				return false;
+			}
+		}
+		for (size_t v = 0; v < count; v++) {
+			for (size_t w = v + 1; w < count; w++) {
+				if (!samePicks(*resolved[v], *resolved[w])) {
+					return false;
+				}
 			}
 		}
 	}
 	return true;
+}
+
+/// The Bass's pool emptied, and a Drums lane given another of a different size.
+void noBassPool(ResolvedGenre& resolved) {
+	resolved.parts[1].pool = {};
+}
+constexpr Pattern kThreeEntries[] = {{"X...............", "................", 0},
+                                     {"X...............", "................", 0},
+                                     {"X...............", "................", 0}};
+void threeEntryBass(ResolvedGenre& resolved) {
+	resolved.parts[1].pool = kThreeEntries;
 }
 
 /// Plays `recipe` from SHIFT+PLAY for `bars` bars and gives the most pitch classes part `part` starts at one tick.
@@ -312,7 +337,7 @@ describe variant_sets("Variant sets", $ {
 			}
 		});
 		it("leaves the picks at 0 for a genre with no sets", _ {
-			expect(newRecipe(genres::technoAcid, 12345).variants == VariantPicks{}).to_be_true();
+			expect(newRecipe(genreWithNoSets(), 12345).variants == VariantPicks{}).to_be_true();
 		});
 	});
 
@@ -324,7 +349,7 @@ describe variant_sets("Variant sets", $ {
 			expect(&resolveGenre(genre, picks, storage.get()) == &genre).to_be_true();
 			picks.pick[1] = 2; // z: no patch either
 			expect(&resolveGenre(genre, picks, storage.get()) == &genre).to_be_true();
-			expect(&resolveGenre(genres::technoAcid, picks, storage.get()) == &genres::technoAcid).to_be_true();
+			expect(&resolveGenre(genreWithNoSets(), picks, storage.get()) == &genreWithNoSets()).to_be_true();
 		});
 		it("is a copy with each picked variant's patch applied, its parts its own", _ {
 			const Genre genre = madeUp();
@@ -399,7 +424,7 @@ describe variant_sets("Variant sets", $ {
 				expect(patchesKeepLookAhead(*genre)).to_be_true();
 			}
 		});
-		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register, a pool's size, the Chord graph beyond its loop chances, and lets one that moves the repicks or the loop chances by", _ {
+		it("catches a live or Drop-changing set that moves the Arc's lengths, offsets or roll, a Register, a pool's size, the Chord graph beyond its loop chances, and lets one that moves the repicks or the loop chances, or empties a pool, by", _ {
 			static constexpr Variant kArc[] = {{.name = "a", .oledName = "A"},
 			                                   {.name = "b", .oledName = "B", .apply = longerGrooves}};
 			static constexpr Variant kRegister[] = {{.name = "a", .oledName = "A"},
@@ -420,6 +445,12 @@ describe variant_sets("Variant sets", $ {
 			                                     {.name = "b", .oledName = "B", .apply = otherMoves}};
 			static constexpr Variant kLoopChance[] = {{.name = "a", .oledName = "A"},
 			                                          {.name = "b", .oledName = "B", .apply = otherLoopChances}};
+			// An emptied pool reads no pick, so it passes; one empty and two of different sizes in a set don't.
+			static constexpr Variant kEmptied[] = {{.name = "a", .oledName = "A"},
+			                                       {.name = "b", .oledName = "B", .apply = noBassPool}};
+			static constexpr Variant kEmptiedAndOther[] = {{.name = "a", .oledName = "A", .apply = noBassPool},
+			                                               {.name = "b", .oledName = "B", .apply = threeEntryBass},
+			                                               {.name = "c", .oledName = "C"}};
 			static constexpr VariantSet kLive[][1] = {
 			    {{.name = "s", .oledName = "S", .variants = kArc, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kRegister, .live = true}},
@@ -432,6 +463,8 @@ describe variant_sets("Variant sets", $ {
 			    {{.name = "s", .oledName = "S", .variants = kLoopLength, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kMoves, .live = true}},
 			    {{.name = "s", .oledName = "S", .variants = kLoopChance, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kEmptied, .live = true}},
+			    {{.name = "s", .oledName = "S", .variants = kEmptiedAndOther, .live = true}},
 			};
 			std::vector<bool> kept;
 			for (const auto& sets : kLive) {
@@ -439,7 +472,8 @@ describe variant_sets("Variant sets", $ {
 				genre.variantSets = sets;
 				kept.push_back(patchesKeepLookAhead(genre));
 			}
-			expect(kept).to_equal(std::vector<bool>{false, false, true, true, false, false, false, false, false, false, true});
+			expect(kept).to_equal(
+			    std::vector<bool>{false, false, true, true, false, false, false, false, false, false, true, true, false});
 		});
 	});
 

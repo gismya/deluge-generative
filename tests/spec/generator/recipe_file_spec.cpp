@@ -23,6 +23,7 @@
 #include "generative/core/recipe_file.h"
 #include "generative/core/variants.h"
 #include "generative/perform/recipe_name.h"
+#include "no_sets_genre.h"
 
 #include "cppspec.hpp"
 
@@ -389,7 +390,7 @@ describe recipe_file("Recipe files", $ {
 		});
 		it("writes no variant child for a genre with no sets", _ {
 			FakeCard card = factoryCardWithPack();
-			expect(written(*rolledFile(genres::technoAcid, 5, card)).find("<variant")).to_equal(std::string::npos);
+			expect(written(*rolledFile(genreWithNoSets(), 5, card)).find("<variant")).to_equal(std::string::npos);
 		});
 	});
 

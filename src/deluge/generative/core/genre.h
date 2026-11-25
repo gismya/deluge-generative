@@ -398,6 +398,7 @@ enum class ArpOrder : uint8_t {
 	Down,   ///< highest to lowest
 	UpDown, ///< up, then down, the top and bottom notes played once each turn
 	Random, ///< a keyed draw from the walk's notes on each onset
+	Pulse,  ///< the chord's root and its octave in turn, whatever the chord's other notes; needs a 2-octave walk
 };
 
 /// The most octaves an Arp walk climbs (spec §8.1).
@@ -1478,8 +1479,9 @@ constexpr bool loopNotesValid(const Genre& genre) {
 }
 
 /// Whether every Arp part has something to walk and keeps the note bound (spec §5.2, §7.3, §8.1): a pool, a walk of 1
-/// to kMaxArpOctaves octaves for each entry, a gate of at least a tick, a Register that holds its widest walk
-/// (arpRange()), and the bound over each pattern's own onset gaps (detail::onsetNotesKeepBound()).
+/// to kMaxArpOctaves octaves for each entry (2 for a Pulse, which plays the root's octave), a gate of at least a tick,
+/// a Register that holds its widest walk (arpRange()), and the bound over each pattern's own onset gaps
+/// (detail::onsetNotesKeepBound()).
 constexpr bool arpNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Arp) {
@@ -1490,7 +1492,8 @@ constexpr bool arpNotesValid(const Genre& genre) {
 		}
 		int32_t octaves = 0;
 		for (const ArpWalk& walk : part.arp.walks) {
-			if (walk.octaves < 1 || walk.octaves > kMaxArpOctaves) {
+			if (walk.octaves < 1 || walk.octaves > kMaxArpOctaves
+			    || (walk.order == ArpOrder::Pulse && walk.octaves != 2)) {
 				return false;
 			}
 			octaves = std::max<int32_t>(octaves, walk.octaves);

@@ -75,7 +75,8 @@ using Lines = std::vector<std::pair<int32_t, std::string>>;
 /// tinyRendering()'s THEORY lines: the Recipe and Acid techno's parts, lanes and rules, all at tick 0.
 const Lines kTinyTheory = {
     {0, "recipe genre=techno-acid seed=1 entropy=0 tempo=128.00 swing=0 energy=25.0 density=25.0 "
-        "complexity=25.0 motion=25.0 phrase=8 hysteresis=2.0"},
+        "complexity=25.0 motion=25.0 phrase=8 hysteresis=2.0 variant.drums=offbeat variant.acid=classic "
+        "variant.build=roll"},
     {0, "part DRUMS role=Drums flavour=None gate=0.0"},
     {0, "lane DRUMS.Kick gate=0.0 note=36"},
     {0, "lane DRUMS.Snare gate=0.0 note=38"},
@@ -138,8 +139,8 @@ describe render_midi("Rough render MIDI file", $ {
 		    'M', 'T', 'r', 'k', 0, 0, 0, 11,
 		    0x00, 0xFF, 0x03, 0x02, 'F', 'X',
 		    0x83, 0x00, 0xFF, 0x2F, 0x00,
-		    // THEORY, last: 887 bytes of its name and kTinyTheory's lines as Text events at tick 0, then End of Track.
-		    'M', 'T', 'r', 'k', 0, 0, 0x03, 0x77,
+		    // THEORY, last: 949 bytes of its name and kTinyTheory's lines as Text events at tick 0, then End of Track.
+		    'M', 'T', 'r', 'k', 0, 0, 0x03, 0xB5,
 		    0x00, 0xFF, 0x03, 0x06, 'T', 'H', 'E', 'O', 'R', 'Y',
 		};
 		for (const auto& [tick, line] : kTinyTheory) {

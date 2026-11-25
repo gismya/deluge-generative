@@ -304,5 +304,13 @@ otherwise.
   table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
   `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the
   Lead) until pinned (#497).
+- Trap: every built-in genre has variant sets since Techno's (#531), Acid techno, the default, among them. The
+  harness's `acidRecipe()` (and so `Start`, `playSteered()`) pins each set to its first variant (`writtenVariants()`);
+  a spec that edits a genre's Build or pools on a copy clears its `variantSets`, or a set's patch undoes the edit
+  (`compose_driver_spec`'s `shortBuildsOnly()`). A spec of a genre with no sets uses `genreWithNoSets()`
+  (`no_sets_genre.h`). The patch-diff rule compares a live set's variants pairwise and lets an empty pool match any
+  (Techno's `tribal` gives the Tom lane a groove pool): a lane with no pool never reads its pick's entry.
+- Trap: events due on one tick may leave the event buffer in another order when a lane's notes around them change
+  (Techno's running hats under a roll punch-in): a spec comparing "everything else" across two runs sorts each tick.
 - Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
   the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).

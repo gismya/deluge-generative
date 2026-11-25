@@ -206,6 +206,13 @@ describe arp("The Arp flavour", $ {
 			expect(barPitches(upDown, 0) == cycled({57, 60, 64, 69, 72, 76, 72, 69, 64, 60})).to_be_true();
 		});
 
+		it("pulses: the chord's root and its octave in turn, whatever its other notes (#531)", _ {
+			Result result = play(runOf(OneArp<ArpOrder::Pulse, 2>::genre), 1);
+			expect(barPitches(result, 0) == cycled({57, 69})).to_be_true();
+			Result seventh = play(runOf(OneArp<ArpOrder::Pulse, 2, 1, 1>::genre), 1); // the 7th in the chord
+			expect(barPitches(seventh, 0) == cycled({57, 69})).to_be_true();
+		});
+
 		it("climbs as many octaves as its pool entry spans", _ {
 			Result result = play(runOf(OneArp<ArpOrder::Up, 2>::genre), 1);
 			expect(barPitches(result, 0) == cycled({57, 60, 64, 69, 72, 76})).to_be_true();
@@ -371,6 +378,11 @@ describe arp("The Arp flavour", $ {
 			// Two octaves at most (spec §8.1).
 			static constexpr ArpWalk kThree[] = {{.order = ArpOrder::Up, .octaves = 3}};
 			expect(arpValid(kEvery16th, kThree, 18, {.anchor = 57, .spanLow = -6, .spanHigh = 48})).to_be_false();
+			// A Pulse plays the root's octave: it walks 2 octaves.
+			static constexpr ArpWalk kPulseOne[] = {{.order = ArpOrder::Pulse, .octaves = 1}};
+			static constexpr ArpWalk kPulseTwo[] = {{.order = ArpOrder::Pulse, .octaves = 2}};
+			expect(arpValid(kEvery16th, kPulseOne, 18, kArpRegister)).to_be_false();
+			expect(arpValid(kEvery16th, kPulseTwo, 18, kArpRegister)).to_be_true();
 		});
 	});
 });
