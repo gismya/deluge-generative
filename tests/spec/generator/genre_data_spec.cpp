@@ -404,6 +404,15 @@ describe genre_data("Every built-in genre", $ {
 		static constexpr PartSpec kBadRootOnAnchors[] = {
 		    {.role = Role::Lead, .flavour = Flavour::Motif, .loop = {.rootOnAnchors = true}}};
 		expect(loopNotesValid(Genre{.name = "bad-root-anchor", .parts = kBadRootOnAnchors})).to_be_false();
+		// A tie chance is a per-mille, and a tie strikes nothing, so a Loop that ties carries no Ornament (spec §5.2).
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 1000}, {})).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 1001}, {})).to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 500}, {.ornaments = kRatchet}))
+		    .to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 500},
+		                 {.ornaments = {.rateFloor = 500, .rateCeiling = 500, .flam = 1}}))
+		    .to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep}, {.ornaments = kRatchet})).to_be_true();
 	});
 
 	it("gives each Arp part a walk per pool entry, a Register that holds its widest, and the note bound (spec §5.2, §7.3)", _ {

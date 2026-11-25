@@ -346,7 +346,8 @@ struct LoopSpec {
 	/// 0: any step (every genre before #497).
 	uint16_t jumpSteps = 0;
 	/// Per-mille chance a plain note on the pitch the part still sounds ties into it: no new strike, and the sounding
-	/// note lasts to the new one's end (spec §5.2, §8.6). A rest, a Section line, a slide or a mute change ends a tie.
+	/// note lasts to the new one's end (spec §5.2, §8.6). A rest, a Section line, a slide, an accent or a mute change
+	/// ends a tie.
 	uint16_t tieChance = 0;
 };
 

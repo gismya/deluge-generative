@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -129,28 +130,85 @@ SharedTones padSharedTones(int32_t chance) {
 	return out;
 }
 
-/// Ambient with its Bass's tie chance at `chance` per-mille (LoopSpec::tieChance).
+/// Ambient with its Bass's tie chance at `chance` per-mille (LoopSpec::tieChance), and `edit` made to its Bass.
 struct TiedAmbient {
 	std::vector<PartSpec> parts;
 	Genre genre;
-	explicit TiedAmbient(int32_t chance)
+	explicit TiedAmbient(int32_t chance, const std::function<void(PartSpec&)>& edit = {})
 	    : parts(ambientGenre.parts.begin(), ambientGenre.parts.end()), genre(ambientGenre) {
 		parts[kBassPart].loop.tieChance = static_cast<uint16_t>(chance);
+		if (edit) {
+			edit(parts[kBassPart]);
+		}
 		genre.parts = parts;
 	}
 };
 
-/// A piece of `genre`'s Bass: its notes, and the steps it was decided on.
+/// A Bass on every 16th, each note lasting its step, so each plain note reaches the next onset and may tie.
+constexpr Pattern kEvery16th[] = {{"XXXXXXXXXXXXXXXX", "................", 0}};
+/// The same, every step accented by the pattern.
+constexpr Pattern kEvery16thAccented[] = {{"XXXXXXXXXXXXXXXX", "aaaaaaaaaaaaaaaa", 0}};
+
+/// The Bass of `genre` playing kEvery16th or kEvery16thAccented, sliding on every step or never.
+void sixteenths(PartSpec& bass, std::span<const Pattern> pool, int32_t slide) {
+	bass.pool = pool;
+	bass.loop.gateTicks = kTicksPerStep;
+	bass.loop.slide = static_cast<int16_t>(slide);
+}
+
+/// A piece of `genre`'s Bass: its notes, its note events, and the steps it was decided on.
 struct BassRun {
 	std::vector<Held> notes;
+	std::vector<Event> events; ///< The Bass's note-ons and note-offs, muted ones flagged.
 	std::vector<Walked::Step> steps;
+
+	[[nodiscard]] const Event* noteOnAt(int32_t tick) const {
+		for (const Event& e : events) {
+			if (e.kind == EventKind::NoteOn && e.tick == tick) {
+				return &e;
+			}
+		}
+		return nullptr;
+	}
 };
 
-BassRun bassRun(const Genre& genre, uint32_t seed, const WalkSteer& steer = {}) {
+/// `bars` of `genre` at `seed` in D Dorian (entropy `seed`), at Density `density` and Motion `motion`, `steer` pushing
+/// commands.
+BassRun bassRun(const Genre& genre, uint32_t seed, const WalkSteer& steer = {}, int32_t density = 25,
+                int32_t motion = 25, int32_t bars = 128) {
 	Recipe recipe = ambientRecipe(Scale::Dorian, 7, seed);
 	recipe.genre = &genre;
-	Walked walked = walk(recipe, seed, 128 * kStepsPerBar, steer);
-	return {heldNotes(walked.notes, kBassPart), std::move(walked.steps)};
+	recipe.macros.set(Macro::Density, macroPoints(density));
+	recipe.macros.set(Macro::Motion, macroPoints(motion));
+	Walked walked = walk(recipe, seed, bars * kStepsPerBar, steer);
+	BassRun out{heldNotes(walked.notes, kBassPart), {}, std::move(walked.steps)};
+	for (const Event& e : walked.notes) {
+		if (e.part == kBassPart) {
+			out.events.push_back(e);
+		}
+	}
+	return out;
+}
+
+/// `bassRun()`'s steer: `command` pushed before step `step` is decided.
+WalkSteer pushAt(std::vector<std::pair<int32_t, Command>> commands) {
+	return [commands](int32_t n, const Generator&, SteeringQueue& queue) {
+		for (const auto& [step, command] : commands) {
+			if (n == step) {
+				queue.push(command);
+			}
+		}
+	};
+}
+
+/// The first note of `run` tied over `onsets` strikes or more (each 2 bars on): its onset, or -1.
+int32_t firstTiedOver(const BassRun& run, int32_t onsets) {
+	for (const Held& note : run.notes) {
+		if (note.off != INT32_MAX && note.off - note.on > onsets * 2 * kBarTicks) {
+			return note.on;
+		}
+	}
+	return -1;
 }
 
 /// A Control event's set and control.
@@ -487,81 +545,158 @@ describe ambient("Ambient", $ {
 
 		it("ties about half its notes on the root it still holds, sounding as it would struck (sign-off 1's BASS)", _ {
 			expect(ambientGenre.parts[kBassPart].loop.tieChance).to_equal(500);
-			const TiedAmbient struck(0);
+			const TiedAmbient noTies(0);
 			int32_t candidates = 0;
 			int32_t ties = 0;
-			for (uint32_t seed = 1; seed <= 8; seed++) {
-				const BassRun plain = bassRun(struck.genre, seed);
-				const BassRun tied = bassRun(ambientGenre, seed);
-				// Each tied note is a run of the struck notes, each ending where the next starts on its pitch: it
-				// sounds the same pitch over the same ticks, with fewer strikes. None runs across a Section line.
-				size_t i = 0;
-				for (const Held& note : tied.notes) {
-					expect(i < plain.notes.size()).to_be_true();
-					if (i >= plain.notes.size()) {
-						break;
-					}
-					expect(plain.notes[i].on).to_equal(note.on);
-					expect(plain.notes[i].pitch).to_equal(note.pitch);
-					while (plain.notes[i].off < note.off && i + 1 < plain.notes.size()) {
-						const int32_t line = plain.notes[i].off;
-						expect(plain.notes[i + 1].on).to_equal(line);
-						expect(plain.notes[i + 1].pitch).to_equal(note.pitch);
-						expect(tied.steps[line / kTicksPerStep].sectionStart).to_be_false();
-						ties++;
+			const std::pair<int32_t, int32_t> macros[] = {{25, 25}, {45, 0}, {35, 50}};
+			for (const auto& [density, motion] : macros) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const BassRun plain = bassRun(noTies.genre, seed, {}, density, motion);
+					const BassRun tied = bassRun(ambientGenre, seed, {}, density, motion);
+					// Each tied note is a run of the struck notes, each ending where the next starts on its pitch:
+					// it sounds the same pitch over the same ticks, with fewer strikes. None runs across a Section
+					// line.
+					size_t i = 0;
+					for (const Held& note : tied.notes) {
+						expect(i < plain.notes.size()).to_be_true();
+						if (i >= plain.notes.size()) {
+							break;
+						}
+						expect(plain.notes[i].on).to_equal(note.on);
+						expect(plain.notes[i].pitch).to_equal(note.pitch);
+						while (plain.notes[i].off < note.off && i + 1 < plain.notes.size()) {
+							const int32_t line = plain.notes[i].off;
+							expect(plain.notes[i + 1].on).to_equal(line);
+							expect(plain.notes[i + 1].pitch).to_equal(note.pitch);
+							expect(tied.steps[line / kTicksPerStep].sectionStart).to_be_false();
+							ties++;
+							i++;
+						}
+						expect(plain.notes[i].off).to_equal(note.off);
 						i++;
 					}
-					expect(plain.notes[i].off).to_equal(note.off);
-					i++;
-				}
-				expect(i).to_equal(plain.notes.size());
-				// The strikes that could tie: the next note on the same pitch from the tick the last ends, inside a
-				// Section.
-				for (size_t n = 0; n + 1 < plain.notes.size(); n++) {
-					const int32_t line = plain.notes[n].off;
-					candidates += plain.notes[n + 1].on == line && plain.notes[n + 1].pitch == plain.notes[n].pitch
-					                      && !plain.steps[line / kTicksPerStep].sectionStart
-					                  ? 1
-					                  : 0;
+					expect(i).to_equal(plain.notes.size());
+					// The strikes that could tie: the next note on the same pitch from the tick the last ends, inside
+					// a Section.
+					for (size_t n = 0; n + 1 < plain.notes.size(); n++) {
+						const int32_t line = plain.notes[n].off;
+						candidates += plain.notes[n + 1].on == line && plain.notes[n + 1].pitch == plain.notes[n].pitch
+						                      && !plain.steps[line / kTicksPerStep].sectionStart
+						                  ? 1
+						                  : 0;
+					}
 				}
 			}
-			expect(candidates).to_be_greater_than(60);
+			expect(candidates).to_be_greater_than(80);
 			expect(ties * 100 / candidates).to_be_between(35, 65);
 		});
 
-		it("strikes the next root after a mute lands, muted, instead of tying the unmuted note on through it", _ {
-			// A plain mute lands on the next bar line, inside a 2-bar note the Bass would tie on.
-			const TiedAmbient always(1000);
-			const BassRun tied = bassRun(always.genre, 1);
-			int32_t tie = -1;
-			for (const Held& note : tied.notes) {
-				if (note.off != INT32_MAX && note.off - note.on > 2 * kBarTicks) {
-					tie = note.on + 2 * kBarTicks;
-					break;
+		it("strikes the next root after a mute lands, muted, and the one after an unmute lands, unmuted", _ {
+			// Plain presses land on the next bar line, each inside a 2-bar note the Bass would tie on.
+			const TiedAmbient allTies(1000);
+			const int32_t on = firstTiedOver(bassRun(allTies.genre, 1), 2);
+			expect(on).to_be_greater_than(-1);
+			const int32_t tieTick = on + 2 * kBarTicks;
+			const int32_t nextTick = tieTick + 2 * kBarTicks;
+			const int32_t onStep = on / kTicksPerStep;
+			const BassRun steered =
+			    bassRun(allTies.genre, 1,
+			            pushAt({{onStep + kStepsPerBeat, mute(kBassPart)},
+			                    {onStep + 2 * kStepsPerBar + kStepsPerBeat, mute(kBassPart)}}));
+			const Event* muted = steered.noteOnAt(tieTick);
+			const Event* unmuted = steered.noteOnAt(nextTick);
+			expect(muted != nullptr && muted->muted).to_be_true();
+			expect(unmuted != nullptr && !unmuted->muted).to_be_true();
+			// The note struck before the mute ends at its gate, not later.
+			for (const Event& e : steered.events) {
+				if (e.kind == EventKind::NoteOff && e.tick > on && e.tick < tieTick + kTicksPerStep) {
+					expect(e.tick).to_equal(tieTick);
 				}
 			}
-			expect(tie).to_be_greater_than(0);
-			const int32_t press = tie / kTicksPerStep - 2 * kStepsPerBar + kStepsPerBeat;
-			Recipe recipe = ambientRecipe(Scale::Dorian, 7, 1);
-			recipe.genre = &always.genre;
-			const Walked walked = walk(recipe, 1, 128 * kStepsPerBar, [press](int32_t n, const Generator&, SteeringQueue& queue) {
-				if (n == press) {
-					queue.push(mute(kBassPart));
-				}
-			});
-			bool struck = false;
-			for (const Event& e : walked.notes) {
-				if (e.part == kBassPart && e.kind == EventKind::NoteOn && e.tick == tie) {
-					struck = true;
-					expect(e.muted).to_be_true();
-				}
-				// The note struck before the mute ends at its gate, not later.
-				if (e.part == kBassPart && e.kind == EventKind::NoteOff && e.tick > tie - 2 * kBarTicks
-				    && e.tick < tie + kTicksPerStep) {
-					expect(e.tick).to_equal(tie);
+		});
+
+		it("still ties over a mute and an unmute both landing between two strikes", _ {
+			const TiedAmbient allTies(1000);
+			const int32_t on = firstTiedOver(bassRun(allTies.genre, 1), 1);
+			expect(on).to_be_greater_than(-1);
+			const int32_t onStep = on / kTicksPerStep;
+			const BassRun steered = bassRun(allTies.genre, 1,
+			                                pushAt({{onStep + kStepsPerBeat, mute(kBassPart, true)},
+			                                        {onStep + kStepsPerBar, mute(kBassPart, true)}}));
+			expect(steered.noteOnAt(on) != nullptr).to_be_true();
+			expect(steered.noteOnAt(on + 2 * kBarTicks) == nullptr).to_be_true();
+		});
+
+		it("never ties a note that slides or is accented, nor one after a slide", _ {
+			// On every 16th each plain note reaches the next onset: with no slides and no accents, most tie.
+			const auto run = [](int32_t chance, std::span<const Pattern> pool, int32_t slide) {
+				const TiedAmbient genre(chance, [&](PartSpec& bass) { sixteenths(bass, pool, slide); });
+				return bassRun(genre.genre, 1, {}, 25, 25, 32);
+			};
+			const auto onsets = [](const BassRun& r) {
+				return std::ranges::count_if(r.events, [](const Event& e) { return e.kind == EventKind::NoteOn; });
+			};
+			expect(onsets(run(1000, kEvery16th, 0)) * 4).to_be_less_than(onsets(run(0, kEvery16th, 0)));
+			// Every note slides: each is the one after a slide too. The stream is the untied one.
+			expect(run(1000, kEvery16th, 1000).events == run(0, kEvery16th, 1000).events).to_be_true();
+			// Every note is accented by its pattern.
+			expect(run(1000, kEvery16thAccented, 0).events == run(0, kEvery16thAccented, 0).events).to_be_true();
+			// Half the notes slide: one that slides after a plain note, which ends on its onset, is struck too.
+			const BassRun plain = run(0, kEvery16th, 500);
+			const BassRun tied = run(1000, kEvery16th, 500);
+			int32_t slidAfterPlain = 0;
+			for (size_t n = 1; n < plain.notes.size(); n++) {
+				const Held& before = plain.notes[n - 1];
+				const Held& note = plain.notes[n];
+				if (before.off == note.on && before.off - before.on == kTicksPerStep
+				    && note.off - note.on != kTicksPerStep) {
+					slidAfterPlain++;
+					expect(tied.noteOnAt(note.on) != nullptr).to_be_true();
 				}
 			}
-			expect(struck).to_be_true();
+			expect(slidAfterPlain).to_be_greater_than(10);
+		});
+
+		it("replays its ties while frozen, phrase by phrase", _ {
+			// Frozen mid-phrase, each later phrase replays the frozen one's draws: the onsets on bars 3, 5 and 7 of a
+			// phrase (no chord changes there) tie where the frozen phrase's did, when both could.
+			const TiedAmbient noTies(0);
+			constexpr int32_t kPhraseSteps = 8 * kStepsPerBar;
+			const int32_t frozenPhrase = 3;
+			const int32_t press = frozenPhrase * kPhraseSteps + 5;
+			const Command freeze{CommandKind::SetFreeze, kBassPart, 1};
+			const auto compare = [&](const WalkSteer& steer, int32_t& same, int32_t& differ) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const BassRun plain = bassRun(noTies.genre, seed, steer);
+					const BassRun tied = bassRun(ambientGenre, seed, steer);
+					const auto candidate = [&](int32_t tick) {
+						return plain.noteOnAt(tick) != nullptr
+						       && std::ranges::any_of(plain.notes, [tick](const Held& n) { return n.off == tick; });
+					};
+					for (int32_t phrase = frozenPhrase + 1; phrase < 16; phrase++) {
+						for (int32_t bar : {2, 4, 6}) {
+							const int32_t at = (phrase * kPhraseSteps + bar * kStepsPerBar) * kTicksPerStep;
+							const int32_t then = (frozenPhrase * kPhraseSteps + bar * kStepsPerBar) * kTicksPerStep;
+							if (!candidate(at) || !candidate(then)) {
+								continue;
+							}
+							const bool tiedNow = tied.noteOnAt(at) == nullptr;
+							const bool tiedThen = tied.noteOnAt(then) == nullptr;
+							(tiedNow == tiedThen ? same : differ)++;
+						}
+					}
+				}
+			};
+			int32_t same = 0;
+			int32_t differ = 0;
+			compare(pushAt({{press, freeze}}), same, differ);
+			expect(same).to_be_greater_than(10);
+			expect(differ).to_equal(0);
+			// Unfrozen, the same onsets draw afresh.
+			int32_t freeSame = 0;
+			int32_t freeDiffer = 0;
+			compare({}, freeSame, freeDiffer);
+			expect(freeDiffer).to_be_greater_than(0);
 		});
 
 		it("folds V, vi and ♭VII under the key's root and plays the other roots at or over it, never under C#2 (about "

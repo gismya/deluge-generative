@@ -923,8 +923,8 @@ private:
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
 	/// Whether a Loop part's plain note on `step` may tie into the note it still sounds (LoopSpec::tieChance, spec
-	/// §8.6): its draw, and the rules a tie keeps. `muted` is the part's mute now.
-	[[nodiscard]] bool loopTies(int32_t partIndex, const LoopSpec& loop, const LinePitch& pitch, bool muted,
+	/// §8.6): its draw, and the rules a tie keeps. `slide` and `level` are the new note's, `muted` the part's mute now.
+	[[nodiscard]] bool loopTies(int32_t partIndex, const LoopSpec& loop, bool slide, VelocityLevel level, bool muted,
 	                            const Step& step) const;
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
 	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
