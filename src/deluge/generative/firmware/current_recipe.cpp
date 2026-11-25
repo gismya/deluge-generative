@@ -42,9 +42,9 @@
 #ifdef GENERATIVE_CAPTURE
 namespace deluge::generative::firmware {
 
-/// The Recipe a capture build plays: a RecipeOverrides with the genre's name inline. scripts/generative/gen_emu.py
-/// capture writes it into a copy of the ELF before each boot (CAPTURE_LAYOUT there), so a new Recipe needs no build.
-/// The two layouts must agree.
+/// The Recipe a GENERATIVE_CAPTURE build plays: a RecipeOverrides with the genre's name inline. On m5-variants,
+/// gen_emu.py's --variant captures write it into a copy of the ELF before each boot (CAPTURE_LAYOUT there; the two
+/// layouts must agree). On generative, gen_emu.py capture uses seam S7's "next recipe" lines instead (#523).
 struct CaptureRecipe {
 	char magic[8];
 	char genre[32]; ///< NUL-terminated. Empty, or a name no genre has: the fallback genre.

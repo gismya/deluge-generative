@@ -8,6 +8,7 @@ The emulator runs themselves are checked by running gen_emu.py smoke against a r
 import argparse
 import math
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -152,8 +153,20 @@ class Pin(unittest.TestCase):
 
 # The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp), written out here so a change to
 # gen_emu's packing has to agree with it.
-class CaptureBuild(unittest.TestCase):
-    def test_the_header_sets_genre_seed_and_each_override_given(self):
+def test_port_line_length():
+    """kLineLength in test_port.cpp, the longest inject line with its terminator, as the firmware computes it."""
+    src = os.path.join(gen_emu.REPO, "src", "deluge")
+    with open(os.path.join(src, "io", "midi", "test_port.cpp")) as fh:
+        extra = re.search(
+            r"kLineLength = (\d+) \+ deluge::generative::kMaxSoundPath;", fh.read()
+        )
+    with open(os.path.join(src, "generative", "core", "recipe.h")) as fh:
+        path = re.search(r"kMaxSoundPath = (\d+);", fh.read())
+    return int(extra[1]) + int(path[1])
+
+
+class CaptureRecipeLines(unittest.TestCase):
+    def test_the_lines_set_genre_seed_and_each_override_given(self):
         args = gen_emu.parser().parse_args(
             [
                 "capture",
@@ -163,6 +176,12 @@ class CaptureBuild(unittest.TestCase):
                 "7",
                 "--energy",
                 "40",
+                "--density",
+                "0",
+                "--complexity",
+                "17",
+                "--motion",
+                "50",
                 "--key",
                 "C#",
                 "--scale",
@@ -180,6 +199,9 @@ class CaptureBuild(unittest.TestCase):
                 "next recipe entropy 0",
                 "next recipe seed 7",
                 "next recipe macro 0 40",
+                "next recipe macro 1 0",
+                "next recipe macro 2 17",
+                "next recipe macro 3 50",
                 "next recipe tempo 13150",
                 "next recipe key 1",
                 "next recipe scale 3",
@@ -199,12 +221,13 @@ class CaptureBuild(unittest.TestCase):
         )
 
     def test_each_line_fits_the_test_port(self):
-        # kLineLength in test_port.cpp: 160 with the terminator; the longest genre name decides
+        # the longest genre name decides
+        limit = test_port_line_length()
         args = gen_emu.parser().parse_args(["capture", "--swing", "-49"])
         for genre in gen_emu.genre_names():
             args.genre = genre
             for line in gen_emu.recipe_lines(args):
-                self.assertLess(len(line), 160)
+                self.assertLess(len(line), limit)
 
     def test_it_takes_the_ranges_the_render_takes(self):
         for argv in (
@@ -449,7 +472,7 @@ class Boot(unittest.TestCase):
         closed = []
 
         class Broken:
-            def __init__(self, *args):
+            def __init__(self, *args, **kwargs):
                 pass
 
             def booted(self):
@@ -1244,9 +1267,24 @@ class RecipeOverTestPort(unittest.TestCase):
         emu = FakeEmu()
         emu.port = self.port([None, None, 0, 0])
         gen_emu.send_recipe(emu, ["next recipe seed 1", "next recipe entropy 0"])
-        self.assertEqual(emu.t, 4 * gen_emu.LINK_STEP_MS * gen_emu.MS)
+        self.assertEqual(
+            emu.t, 4 * gen_emu.LINK_STEP_MS * gen_emu.MS
+        )  # 3 for the first, 1 for the second
         lines = [bytes(m[8:-1]).decode() for m in self.sent[1:]]  # after the subscribe
         self.assertEqual(lines, ["next recipe seed 1", "next recipe entropy 0"])
+
+    def test_a_reply_that_took_longer_than_usual_warns(self):
+        emu = FakeEmu()
+        emu.port = self.port([None, 0])
+        with mock.patch.object(gen_emu, "log") as log:
+            gen_emu.send_recipe(emu, ["next recipe seed 1"])
+        self.assertIn("LINK_DELIVER_S", log.call_args.args[0])
+
+    def test_no_reply_to_the_first_line_asks_whether_it_is_a_test_port_build(self):
+        emu = FakeEmu()
+        emu.port = self.port([None] * (gen_emu.REPLY_LIMIT_MS // gen_emu.LINK_STEP_MS))
+        with self.assertRaisesRegex(RuntimeError, "test-port build"):
+            gen_emu.send_recipe(emu, ["next recipe genre techno-acid"])
 
     def test_a_refused_or_unanswered_line_fails_the_capture(self):
         emu = FakeEmu()

@@ -16,10 +16,10 @@
  */
 
 // The Recipe a genre tuning tool plays (spec §21.5): genre + Recipe overrides + seed. The harness rough render takes
-// them as arguments, and a delugemu capture build compiles them in (GENERATIVE_CAPTURE), so the same arguments give
-// the same Recipe in both. Facts are rolled from a fixed entropy instead of a timer, so a capture is a function of its
-// arguments. A test build's "next recipe" lines (NextRecipe) set them at run time. Header-only: the default firmware
-// build never uses it.
+// them as arguments, and a delugemu capture sets them at run time with a test build's "next recipe" lines (NextRecipe,
+// seam S7), so the same arguments give the same Recipe in both. Facts are rolled from a fixed entropy instead of a
+// timer, so a capture is a function of its arguments. (M5's --variant captures still patch them into a
+// GENERATIVE_CAPTURE build's ELF, on m5-variants.) Header-only: the default firmware build never uses it.
 
 #pragma once
 

@@ -98,6 +98,7 @@ import math
 import os
 import re
 import shlex
+import signal
 import struct
 import subprocess
 import sys
@@ -990,6 +991,7 @@ LINK_DELIVER_S = (
     0.1  # wall-clock time a request's bytes get to reach the UART before the VM runs on
 )
 REPLY_LIMIT_MS = 2000  # virtual time a reply may take
+REPLY_STEPS = 1  # steps a reply takes when its bytes were in before the VM ran on (#523: every line, every run)
 
 
 class Emu:
@@ -1108,6 +1110,18 @@ class Emu:
             return fh.read(int(seconds * RATE) * FRAME)
 
 
+def stop_group(proc, grace_s=10):
+    """Stops run.sh and the QEMU it started (its process group): SIGTERM, then SIGKILL if it outlasts `grace_s`."""
+    for sig, wait_s in ((signal.SIGTERM, grace_s), (signal.SIGKILL, None)):
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, sig)
+        try:
+            proc.wait(timeout=wait_s)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def launch_with_midi(
     session_class, midi, *, firmware, sd, repo_root, env, sock, run_log, extra_qemu
 ):
@@ -1160,9 +1174,7 @@ def launch_with_midi(
             run_log=run_log,
         )
     except BaseException:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, 15)
-        proc.wait()
+        stop_group(proc)
         raise
     finally:
         log_fh.close()
@@ -1179,7 +1191,6 @@ def clone_card(master, dst):
 
 def boot(args, elf, out, tag, *, card=None, snapshot=True, test_port=False):
     """Launches and boots, relaunching a blank boot up to test_port_emu.BOOT_TRIES times. `test_port`: see Emu."""
-    port = {"test_port": True} if test_port else {}
     for attempt in range(1, test_port_emu.BOOT_TRIES + 1):
         if card is not None and not snapshot:
             clone_card(args.card, card)
@@ -1191,10 +1202,10 @@ def boot(args, elf, out, tag, *, card=None, snapshot=True, test_port=False):
                 boot_name(tag, attempt),
                 card=card,
                 snapshot=snapshot,
-                **port,
+                test_port=test_port,
             )
         else:
-            emu = Emu(args, elf, out, boot_name(tag, attempt), **port)
+            emu = Emu(args, elf, out, boot_name(tag, attempt), test_port=test_port)
         try:
             booted = emu.booted()
         except BaseException:
@@ -1210,36 +1221,30 @@ def boot(args, elf, out, tag, *, card=None, snapshot=True, test_port=False):
 
 def send_recipe(emu, lines):
     """Sends a capture's "next recipe" lines over the test port, subscribed to its events: each line, then the VM in
-    LINK_STEP_MS steps until its status reply. Only virtual time decides where each step ends, so the exchange plays
-    out the same in every run (TestPort's own waits pump for wall-clock time). Raises on a refused line."""
+    LINK_STEP_MS steps until its status reply (TestPort.inject_stepped()). Only virtual time decides where each step
+    ends, so the exchange plays out the same in every run (TestPort's own waits pump for wall-clock time). Raises on a
+    refused or unanswered line; warns when a reply took more steps than REPLY_STEPS, a sign that LINK_DELIVER_S, the
+    one wall-clock wait left, was too short for the host and the bytes reached the firmware late."""
     port = emu.port
     port.subscribe()
-    for line in lines:
-        seq = port._next_seq()
-        port.link.send(
-            deluge_probe.HDR
-            + [0x02, deluge_probe.INJECT, seq]
-            + port.key
-            + list(line.encode("ascii"))
-            + [0xF7]
-        )
-        for _ in range(REPLY_LIMIT_MS // LINK_STEP_MS):
-            emu.wait(LINK_STEP_MS)
-            reply = port.receive_until(
-                lambda m, seq=seq: (
-                    m[:6] == deluge_probe.HDR + [0x02]
-                    and m[6] == deluge_probe.STATUS_REPLY
-                    and m[7] == seq
-                ),
-                0.005,  # QEMU sent it before run_until returned
+    for n, line in enumerate(lines):
+        try:
+            steps = port.inject_stepped(
+                line, lambda: emu.wait(LINK_STEP_MS), REPLY_LIMIT_MS // LINK_STEP_MS
             )
-            if reply is not None:
-                break
-        else:
-            raise RuntimeError(f"no test port reply to {line!r}")
-        if reply[8] != deluge_probe.QUEUED:
-            raise RuntimeError(
-                f"test port: {line!r}: {deluge_probe.STATUS.get(reply[8], reply[8])}"
+        except TimeoutError as error:
+            first = (
+                " Is --elf a test-port build (-DENABLE_SYSEX_TEST=ON)?"
+                if n == 0
+                else ""
+            )
+            raise RuntimeError(f"test port: {error}.{first}") from None
+        except deluge_probe.InjectRejected as error:
+            raise RuntimeError(f"test port: {error}") from None
+        if steps > REPLY_STEPS:
+            log(
+                f"WARNING the reply to {line!r} took {steps} steps of {LINK_STEP_MS} ms, not {REPLY_STEPS} or "
+                f"fewer: the host may have delivered it late (LINK_DELIVER_S), so this capture may not repeat"
             )
 
 
@@ -1998,7 +2003,8 @@ def parser():
     c.add_argument("--build-dir", default=os.path.join(REPO, "build-capture"))
     c.add_argument(
         "--elf",
-        help="capture with this capture firmware (a --build-dir's Release/deluge.elf) and build nothing; "
+        help="capture with this firmware and build nothing: a test-port build (-DENABLE_SYSEX_TEST=ON), as a "
+        "--build-dir's Release/deluge.elf is; "
         "--build-dir is then ignored, and the check renders with the current checkout's harness, which may differ "
         "from the one the ELF was built from (--no-check skips it)",
     )
