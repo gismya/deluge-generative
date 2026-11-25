@@ -41,8 +41,14 @@ otherwise.
   and seed as the test port's `next recipe` lines (seam S7, spec §21.3) before it enters Perform, so a new Recipe
   builds nothing (#523). delugemu's DIN MIDI goes to a UDP socket (run.sh's `--midi`, which
   `DelugeSession.launch()` has no argument for, so `launch_with_midi()` starts run.sh itself). Under icount the VM
-  moves only in `run_to()`, so `IcountLink.receive()` runs it 10 ms of virtual time a look while it waits for a
-  reply. The capture checks the entry's `gen_next_recipe taken` event, then stops the test events before PLAY. The
+  moves only in `run_to()`, and any wait whose length the host decides makes captures differ run to run (#523 saw
+  three WAVs from one build): `TestPort.wait_idle()` and `pump()` run for wall-clock time, so a VM stepped inside them
+  moves a host-dependent distance. So `send_recipe()` sends each line while the VM is stopped (`IcountLink.send()`
+  gives QEMU 0.1 s to hand the bytes to the UART's receive DMA, which takes them at once even with the VM stopped),
+  then runs it in 10 ms virtual steps until that line's reply, and `settle()` ends each exchange at a fixed virtual
+  time. The capture checks the entry's `gen_next_recipe taken` event, then stops the test events before PLAY. To
+  check that two routes or builds play the same Recipe, `pmemsave` `currentRecipe` over QMP after entry (quote the path: HMP reads
+  a bare `/` as division) and compare all but the genre pointer, as #523 did. The
   older route, a `-DGENERATIVE_CAPTURE=ON` build whose `CaptureRecipe` gen_emu patched into a copy of the ELF (#401),
   stays in the firmware for M5's variant captures until S7 carries variant sets (ADR 0008): its `RECIPE_LAYOUT`
   and its notes are in git history.
