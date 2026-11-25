@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <tuple>
 #include <vector>
 
 using namespace harness;
@@ -67,6 +68,15 @@ std::vector<Event> without(const std::vector<Event>& events, int32_t part, Lane 
 		}
 	}
 	return out;
+}
+
+/// `events` sorted within each tick by part and lane, keeping each lane's own order: events due on one tick may leave
+/// the buffer in another order when a lane's notes around them change (Techno's running hats under a roll, #531).
+std::vector<Event> tickSorted(std::vector<Event> events) {
+	std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
+		return std::tuple(a.tick, a.part, a.lane) < std::tuple(b.tick, b.part, b.lane);
+	});
+	return events;
 }
 
 /// The notes from tick `from` on, with no note-offs: a roll's or a flam's last hits end a little differently.
@@ -197,7 +207,8 @@ describe punch_in("Punch-ins", $ {
 					}
 					// The other lanes and parts play as they would have, and so does the lane after the
 					// release.
-					expect(without(rolled.events, drums, roll.lane) == without(plain.events, drums, roll.lane))
+					expect(tickSorted(without(rolled.events, drums, roll.lane))
+					       == tickSorted(without(plain.events, drums, roll.lane)))
 					    .to_be_true();
 					expect(onsFrom(rolled.events, stepTick(kOff + 1))
 					       == onsFrom(plain.events, stepTick(kOff + 1)))

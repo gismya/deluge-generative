@@ -46,7 +46,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect ui=sound_editor
-expect event gen_regen_page open title=Regenerate style=0 variants=0
+expect event gen_regen_page open title=Regenerate style=0 variants=1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

@@ -514,6 +514,10 @@ GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
 		index = index < notes ? index : turn - index;
 		break;
 	}
+	case ArpOrder::Pulse:
+		// The root, then the root an octave up (its walk's first note on the second octave).
+		index = (position & 1) != 0 ? current.size : 0;
+		break;
 	case ArpOrder::Random: {
 		// One draw per onset, keyed on the pick and the step like Density's jitter, so a pass loops while the pick
 		// holds, a take re-rolls it and freeze holds it.

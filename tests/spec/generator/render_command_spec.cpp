@@ -228,7 +228,9 @@ describe render_command("Rough render command", $ {
 		    .to_equal(std::string("unknown variant for dub: skank=jazz (have skank=sevenths, skank=plain, drums=onedrop, drums=rockers, "
 		                        "drums=steppers, break=seven, break=fifteen, mix=version, mix=tubby, mix=light, bass=bursts, bass=rolling, bass=heavy)"));
 		expect(parse({"--variant", "skank=plain", "--out", "x"}).error)
-		    .to_equal(std::string("unknown variant for techno-acid: skank=plain (have none)"));
+		    .to_equal(std::string("unknown variant for techno-acid: skank=plain (have drums=offbeat, drums=running, drums=pump, "
+		                          "drums=tribal, acid=classic, acid=talking, acid=hypnotic, build=roll, build=long, "
+		                          "build=noroll, build=hard)"));
 	});
 
 	it("reads numbers in base 10, as gen_emu.py does", _ {

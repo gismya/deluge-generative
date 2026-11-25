@@ -26,6 +26,7 @@
 #include "generative/perform/menu_rows.h"
 #include "generative/perform/regenerate_page.h"
 #include "gui/fonts/fonts.h"
+#include "no_sets_genre.h"
 
 #include "cppspec.hpp"
 
@@ -111,7 +112,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			char text[kPicksTextChars];
 			picksText(genres::dub, picks, text);
 			expect(std::string(text)).to_equal(std::string("skank=plain:2 drums=onedrop:7 break=seven:3 mix=version:7 bass=bursts:7"));
-			picksText(genres::technoAcid, VariantPicks{}, text);
+			picksText(harness::genreWithNoSets(), VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
 		});
 
@@ -139,7 +140,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			char text[kPicksTextChars];
 			masksText(genres::dub, picks, text);
 			expect(std::string(text)).to_equal(std::string("skank:3 drums:7 break:3 mix:7 bass:7"));
-			masksText(genres::technoAcid, VariantPicks{}, text);
+			masksText(harness::genreWithNoSets(), VariantPicks{}, text);
 			expect(std::string(text)).to_equal(std::string("-"));
 		});
 	});
@@ -184,7 +185,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 
 		it("shows no VARIANTS row for a genre with no sets, nor for a LOAD", _ {
 			RegeneratePage page;
-			page.open(genres::technoAcid, false);
+			page.open(harness::genreWithNoSets(), false);
 			expect(page.showsVariants()).to_be_false();
 			page.open(genres::dub, true);
 			expect(page.showsVariants()).to_be_false();

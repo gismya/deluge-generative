@@ -310,5 +310,13 @@ otherwise.
   Lead) until pinned (#497). The same holds for a spec that fixes one set and measures it: pin the sets that change
   what it measures too. House's S1 loop-move shares fixed only `loops` and fell under their bounds once a reweight
   made `vamp` the chords set's likelier draw, since a two-chord vamp often redraws the loop it left (#536).
+- Trap: every built-in genre has variant sets since Techno's (#531), Acid techno, the default, among them. The
+  harness's `acidRecipe()` (and so `Start`, `playSteered()`) pins each set to its first variant (`writtenVariants()`);
+  a spec that edits a genre's Build or pools on a copy clears its `variantSets`, or a set's patch undoes the edit
+  (`compose_driver_spec`'s `shortBuildsOnly()`). A spec of a genre with no sets uses `genreWithNoSets()`
+  (`no_sets_genre.h`). The patch-diff rule compares a live set's variants pairwise and lets an empty pool match any
+  (Techno's `tribal` gives the Tom lane a groove pool): a lane with no pool never reads its pick's entry.
+- Trap: events due on one tick may leave the event buffer in another order when a lane's notes around them change
+  (Techno's running hats under a roll punch-in): a spec comparing "everything else" across two runs sorts each tick.
 - Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
   the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).

@@ -16,7 +16,7 @@
 # params=: params written back on the line. gen_restart as_it_began [stopped] tempo= energy=: it started the piece
 # again (energy: the Energy macro's units). gen_log_piece pieces=: a piece opened in the log. Acid techno: ACID is part
 # 1, its SONG row pad 9 6; perform_choose_002.txt chooses SYNTHS/002 for it. The Perform menu's rows with no transition to cancel:
-# GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART; RESTART ▸'s: AS IT IS, AS IT
+# GENRE, REGENERATE, VARIANTS (Techno has sets, #531), KEY / SCALE, GLIDE, SEED + TAKES, OCTAVES, RESET PART BIAS, RESTART; RESTART ▸'s: AS IT IS, AS IT
 # BEGAN. Menus remember their row, so each choice counts from the top, and the script leaves both on their first row.
 # covers: src/deluge/generative/firmware/restart_began.* src/deluge/generative/firmware/log_header.*
 # covers: src/deluge/generative/firmware/perform_adapter.* src/deluge/generative/firmware/sound_swaps.*
@@ -51,7 +51,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -75,7 +75,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -127,7 +127,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -168,7 +168,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -194,7 +194,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -223,7 +223,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -238,7 +238,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -258,7 +258,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -284,7 +284,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 7
+encoder 3 8
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

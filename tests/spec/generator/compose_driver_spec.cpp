@@ -202,6 +202,7 @@ std::shared_ptr<EditedGenre> shortBuildsOnly(const Genre& genre, uint8_t grooveP
 	edited->genre.arc.groovePhrases = {groovePhrases, groovePhrases};
 	edited->genre.arc.grooveToBuild = 1000;
 	edited->genre.arc.buildBars = kOneBarBuild;
+	edited->genre.variantSets = {}; // a set's Build would undo the edit
 	return edited;
 }
 

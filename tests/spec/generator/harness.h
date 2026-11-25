@@ -14,6 +14,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/core/steering_log.h"
+#include "generative/core/variants.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
 #include "instance.h"
@@ -379,9 +380,18 @@ inline Result play(const Run& run, int32_t bars) {
 	return result;
 }
 
-/// The Acid techno default Recipe with its first palette entries and fixed facts, so a spec's expectations hold.
+/// `recipe` with each of its genre's variant sets fixed to its first variant, the genre as written (spec §3.6).
+inline Recipe writtenVariants(Recipe recipe) {
+	for (size_t s = 0; s < recipe.genre->variantSets.size(); s++) {
+		fixVariant(recipe.variants, {.set = static_cast<int32_t>(s), .variant = 0});
+	}
+	return recipe;
+}
+
+/// The Acid techno default Recipe with its first palette entries, fixed facts and the genre as written (each variant
+/// set on its first variant), so a spec's expectations hold.
 inline Recipe acidRecipe() {
-	Recipe recipe = newRecipe(genres::technoAcid, 0);
+	Recipe recipe = writtenVariants(newRecipe(genres::technoAcid, 0));
 	recipe.keyRoot = 9; // A
 	recipe.scale = Scale::Minor;
 	return recipe;

@@ -57,9 +57,14 @@ GEN_STEP_CODE int32_t drawInRange(const DrawKey& key, Range range) {
 	return range.low + drawBelow(key, inclusiveSpan(range.low, range.high));
 }
 
-/// The lowest Density gate of any part or lane that plays patterns, or of any Sustain part, which has no pool but
-/// plays by its gate (spec §9.4): a lane opens only with its part, so its gate is the higher of the two. Lanes and
-/// other parts without a pool play only by section rules and never in an Intro, so they don't count.
+/// A Density value a genre may leave unset, or the Energy one it then uses (spec §9.4): for Energy itself, or when
+/// `density` is kSameAsEnergy.
+constexpr int32_t forMacro(bool energy, int32_t energyValue, int32_t density) {
+	return energy || density == kSameAsEnergy ? energyValue : density;
+}
+
+} // namespace
+
 int32_t lowestGate(const Genre& genre) {
 	int32_t lowest = INT32_MAX;
 	for (const PartSpec& part : genre.parts) {
@@ -76,14 +81,6 @@ int32_t lowestGate(const Genre& genre) {
 	}
 	return lowest == INT32_MAX ? 0 : lowest;
 }
-
-/// A Density value a genre may leave unset, or the Energy one it then uses (spec §9.4): for Energy itself, or when
-/// `density` is kSameAsEnergy.
-constexpr int32_t forMacro(bool energy, int32_t energyValue, int32_t density) {
-	return energy || density == kSameAsEnergy ? energyValue : density;
-}
-
-} // namespace
 
 void Arc::start(const Genre& genre, SectionKind first, bool onDrop) {
 	*this = Arc{};

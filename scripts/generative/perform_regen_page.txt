@@ -1,5 +1,5 @@
 # The Regenerate and genre-change page (#494, spec §13.6, ADR 0008 "The menus") over the sysex test port: REGENERATE
-# on Acid techno opens it titled REGENERATE on GO, with TRANSITION and GO only (Acid has no variant sets); a style
+# on Acid techno opens it titled REGENERATE on GO, with TRANSITION, VARIANTS (Acid's sets, #531) and GO; a style
 # turned there is forgotten after BACK. GENRE ▸ ROOTS DUB opens it titled ROOTS DUB? with VARIANTS ▸: SKANK shows
 # RANDOM, unticking 7THS leaves PLAIN (the last tick stays), and GO draws the incoming Recipe within it. Dub's
 # REGENERATE then opens with SKANK on RANDOM again. Runs on a Deluge (deluge_probe.py session) or in delugemu
@@ -29,16 +29,16 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- REGENERATE: titled REGENERATE, on DROP, no VARIANTS row. A turn of TRANSITION, then BACK: nothing changes ----
+# ---- REGENERATE: titled REGENERATE, on DROP, with Acid's VARIANTS row. A turn of TRANSITION, then BACK: nothing changes ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect ui=sound_editor
-expect event gen_regen_page open title=Regenerate style=0 variants=0
-# Up from GO is TRANSITION: no VARIANTS row between them for Acid
-encoder 3 -1
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+# Two up from GO is TRANSITION, past Acid's VARIANTS row
+encoder 3 -2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -62,7 +62,7 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_regen_page open title=Regenerate style=0 variants=0
+expect event gen_regen_page open title=Regenerate style=0 variants=1
 button BACK down
 wait 50
 button BACK up
