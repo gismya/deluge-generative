@@ -20,7 +20,6 @@
 #include "generative/core/lane_names.h"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
-#include "generative/core/variants.h"
 #include "generative/firmware/card_sounds.h"
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
@@ -190,26 +189,7 @@ struct Build {
 	Chunks& chunks;
 	/// Parts on the default synth and played lanes left silent: one warning covers them all (spec §10.1).
 	int32_t missing = 0;
-	const Genre* genre = nullptr;
-	/// The piece's variant picks, where known: an FX Kit loads a fallback Riser only where its Builds need one.
-	const VariantPicks* variants = nullptr;
 };
-
-/// The shortest Build a Riser plays in, in microseconds at the top of `genre`'s tempo range, with `variants` applied
-/// (spec §9.5): INT64_MAX when its Builds play no Riser. A ResolvedGenre on the stack, once per FX Kit build.
-int64_t shortestRiserBuild(const Genre& genre, const VariantPicks& variants) {
-	ResolvedGenre resolved;
-	const Genre& played = resolveGenre(genre, variants, &resolved);
-	if (!played.arc.buildRiser) {
-		return INT64_MAX;
-	}
-	const std::span<const WeightedBars> builds = played.arc.buildBars;
-	int32_t bars = builds.empty() ? played.phraseBars : builds[0].bars;
-	for (const WeightedBars& build : builds) {
-		bars = std::min<int32_t>(bars, build.bars);
-	}
-	return int64_t{bars} * kStepsPerBar * perform::stepMicros(int32_t{played.facts.tempoHighBpm} * 100);
-}
 
 /// Frees a drum that never joined a Kit, with any ParamManager backed up for it.
 void deleteLooseDrum(Song* song, SoundDrum* drum) {
@@ -445,10 +425,6 @@ Error buildFallbackRiser(Build& build, Kit* kit, const PartSpec& part, PartOutpu
 	const perform::PackRiser* fallback = perform::fallbackFor(drawn);
 	if (fallback == nullptr || !plays(part, Lane::Riser) || previewBuild()) {
 		return Error::NONE;
-	}
-	if (build.variants != nullptr && build.genre != nullptr
-	    && drawn <= shortestRiserBuild(*build.genre, *build.variants)) {
-		return Error::NONE; // every Build of the piece fits the drawn Riser
 	}
 	Song* song = build.song;
 	ParamManagerForTimeline paramManager;
@@ -693,7 +669,7 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 	const Genre& genre = *recipe.genre;
 	for (int32_t p = 0; p < static_cast<int32_t>(genre.parts.size()) && p < kMaxParts; p++) {
 		int32_t missing = 0;
-		error = buildPartOutput(song, genre, p, sounds, palette, &roster->parts[p], chunks, &missing, &recipe.variants);
+		error = buildPartOutput(song, genre, p, sounds, palette, &roster->parts[p], chunks, &missing);
 		if (soundsMissing != nullptr) {
 			*soundsMissing += missing;
 		}
@@ -712,16 +688,10 @@ Error buildPerformSong(const Recipe& recipe, const SoundPicks& sounds, const Pal
 }
 
 Error buildPartOutput(Song* song, const Genre& genre, int32_t part, const SoundPicks& sounds, const Palette& palette,
-                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing, const VariantPicks* variants) {
+                      PartOutput* out, Chunks& chunks, int32_t* soundsMissing) {
 	*out = PartOutput{};
 	CardFolders folders(&chunks);
-	Build build{.song = song,
-	            .sounds = sounds,
-	            .palette = palette,
-	            .folders = folders,
-	            .chunks = chunks,
-	            .genre = &genre,
-	            .variants = variants};
+	Build build{.song = song, .sounds = sounds, .palette = palette, .folders = folders, .chunks = chunks};
 	const PartSpec& spec = genre.parts[part];
 	const Error error = spec.synth() ? loadSynth(build, part, spec, out) : buildKit(build, spec, out);
 	if (soundsMissing != nullptr) {

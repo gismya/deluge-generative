@@ -208,8 +208,11 @@ otherwise.
   carries `kRiserFallbackPitch`; route a laned note by `kitRowOf(lane, pitch)`, never `laneRow(lane)` alone. The core's
   note-off doesn't know which row played, so `OutputSink::playNote()` ends both; Compose's ClipBuilder pairs by lane
   and writes the note-on's pitch, so its note lands on the fallback's row by itself. The fallback row follows the lane:
-  `SoundControls` binds a mirror Set for it (same part and lane, so `applyIn()`, `writeNode()`, `writeBase()` and
-  `moveHome()` reach both; `applyIn()` must not stop at the first match), `mirrorEdit()` copies a player's control
-  edit, `PerformAdapter`'s param-edit hook copies other param edits, and the log replay (`paramsOf()`,
-  `loggedParam(..., fallback)`) and the settings tracker (`resolveTarget(..., fallback)`) apply to both rows, a
-  sample path aside. `perform_riser_fallback.txt` checks it in delugemu (the 8 s Riser on its card).
+  `SoundControls::mirror_` (a `Mirror`, the row's NoteRow, Sound and ParamManager, plus `outgoingMirror_` for a
+  transition's Throws) shares the Riser lane set's params and homes, and `mirrored()` makes the set's copy on that row
+  for `applyIn()`, `writeNode()`, `writeBase()`, `restoreIn()`, `moveToClip()` and a player's control edit
+  (`mirrorEdit()`). `PerformAdapter::playerEdited()` copies other param edits (`mirrorRiserEdit()`), and the log replay
+  (`paramsOf()`, `loggedParam(..., fallback)`) and the settings tracker (`resolveTarget(..., fallback)`) apply to both
+  rows, a sample path aside. Every FX Kit with a sample Riser longer than a pack short Riser loads the fallback,
+  whatever the piece's Builds: a load that depended on the piece would differ between Perform and Capture's song.
+  `perform_riser_fallback.txt` checks it in delugemu (the 8 s Riser on its card).

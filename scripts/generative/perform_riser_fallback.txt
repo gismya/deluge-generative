@@ -3,10 +3,12 @@
 # BUILD to HARD (4 or 8 bars), so the FX Kit loads the fallback beside the 8 s Riser; at 240 BPM or more even an 8-bar
 # Build (8 s or less) is no longer than 8 s, so the forced Build plays the 2 s fallback, which starts late. At its note-on the
 # fallback row's filters stand where the drawn row's do: the Riser lane's controls (its Rise's Brightness and Thin)
-# move both rows. Delugemu or a Deluge; the card overlay is fixtures/perform_riser_fallback.
+# move both rows. Perform's entry, the Regenerate's transition and Capture's song each load the same fallback, whatever
+# the piece's Builds. Delugemu or a Deluge: on a Deluge the card needs the overlay's files (fixtures/
+# perform_riser_fallback) and FineTempoKnob On, so a pushed tempo encoder turns in coarse steps.
 #
 # gen_riser_fallback loaded part= path=|none part=: the fallback an FX Kit loaded. gen_riser_on sample_ms=N at the
-# Riser's note-on; gen_riser_rows lpf=<drawn>/<fallback> hpf=<drawn>/<fallback>: both rows' LPF and HPF frequency
+# Riser's note-on; gen_capture_begin, gen_capture_end: as in perform_capture_leave.txt; gen_riser_rows lpf=<drawn>/<fallback> hpf=<drawn>/<fallback>: both rows' LPF and HPF frequency
 # params as the fallback starts.
 # needs: card fixtures/perform_riser_fallback
 # covers: src/deluge/generative/firmware/perform_song.* src/deluge/generative/firmware/output_sink.cpp
@@ -16,11 +18,14 @@
 # covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/gui/l10n/english.json
 # covers: src/deluge/gui/l10n/g_english.cpp src/deluge/generative/firmware/transitions.*
 # covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/firmware/capture_job.* src/deluge/generative/perform/capture.*
 # covers: src/deluge/playback/playback_handler.* src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/gui/context_menu/generative.cpp src/deluge/generative/core/types.h
 start_state
+mark
 include perform_open.txt
 include perform_confirm.txt
+expect event gen_riser_fallback loaded part=FX path=SAMPLES/FX/Riser/Short/GEN Riser Short.wav since=mark
 
 # ---- Stopped, REGENERATE with BUILD on HARD alone: the rebuilt FX Kit loads the 2 s fallback ----
 mark
@@ -122,14 +127,23 @@ wait 50
 encoder 2 1
 wait 50
 button TEMPO_ENC up
-expect event /^gen_tempo_popup Tempo: (2[4-9]\d|3\d\d)/ within=5
+expect event /^gen_tempo_popup Tempo: (2[5-9]\d|3\d\d)/ within=5
 pad 17 5 down
 wait 50
 pad 17 5 up
 expect event gen_section BUILD within=60
 expect event /^gen_riser_on sample_ms=(19\d\d|20\d\d)$/ within=40
-expect event /^gen_riser_rows lpf=(-?\d+)/\1 hpf=(-?\d+)/\2$/ within=1
-button PLAY down
+# The HPF off its floor (Thin rose) and not -1 (a row missing), and the same on both rows
+expect event /^gen_riser_rows lpf=(-?\d+)/\1 hpf=(?!-2147483648/|-1/)(-?\d+)/\2$/ within=1
+
+# ---- LEAVE, KEEP: LAST: Capture's song builds the same FX Kit, fallback and all ----
+mark now
+button BACK down
+expect event /^gen_leave_menu open / within=10
+button BACK up
+button 4 3 down
 wait 50
-button PLAY up
-expect playing=false
+button 4 3 up
+expect event gen_capture_begin keep=3 within=20 since=mark
+expect event gen_riser_fallback loaded part=FX path=SAMPLES/FX/Riser/Short/GEN Riser Short.wav within=60 since=mark
+expect event /^gen_capture_end done songs=1 saved=1 / within=90 since=mark

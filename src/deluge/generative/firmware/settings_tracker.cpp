@@ -848,9 +848,11 @@ int32_t restoreSettings(const SteeringLog::Piece& piece, const Roster& roster, c
 			else {
 				// Tick context: PatchCableSet::setupPatching() allocates, so only run allocation-free initial patching
 				// here (all structural/filter-mode settings trigger a task-context rebuild in BeganJob).
-				const TargetRefs refs = resolveTarget(hdr.output, hdr.lane, roster, genre, &song);
-				if (refs.sound != nullptr && refs.manager != nullptr) {
-					refs.sound->patcher.performInitialPatching(*refs.sound, *refs.manager);
+				for (const bool fallback : {false, true}) { // a Riser's fallback row too (spec §9.5)
+					const TargetRefs refs = resolveTarget(hdr.output, hdr.lane, roster, genre, &song, fallback);
+					if (refs.sound != nullptr && refs.manager != nullptr) {
+						refs.sound->patcher.performInitialPatching(*refs.sound, *refs.manager);
+					}
 				}
 			}
 		}

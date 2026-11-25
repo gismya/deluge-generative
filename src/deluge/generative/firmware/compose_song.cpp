@@ -493,6 +493,7 @@ void ComposeSong::paramEdit(const Command& edit, int32_t tick) {
 	// The edit's row, then for the Riser lane the fallback Riser's row, which plays its notes in some Builds (spec
 	// §9.5).
 	const std::optional<LoggedParam> fallback = loggedParam(edit, *roster_, *genre_, *song_, true);
+	const LoggedParam* const rows[] = {&*found, fallback ? &*fallback : nullptr};
 	if (edit.kind == CommandKind::SetHome) {
 		// A sound control's home (spec §11.6): the control's nodes from here are at the new home (the driver ended and
 		// resumed the part's lanes around this call). A param no lane automates holds each home in turn.
@@ -500,8 +501,8 @@ void ComposeSong::paramEdit(const Command& edit, int32_t tick) {
 		if (!old) {
 			return;
 		}
-		for (const std::optional<LoggedParam>& at : {found, fallback}) {
-			if (at && written && !at->param->isAutomated()) {
+		for (const LoggedParam* at : rows) {
+			if (at != nullptr && written && !at->param->isAutomated()) {
 				written = writeEdit(*at->param, *at->manager, at->collection, at->slot, start, tick, *old, edit.value);
 			}
 		}
@@ -509,8 +510,8 @@ void ComposeSong::paramEdit(const Command& edit, int32_t tick) {
 	else {
 		// A param no control moves: automation on the song or the part's clip (spec §17.6). Its value now goes with it
 		// into a clip cut after.
-		for (const std::optional<LoggedParam>& at : {found, fallback}) {
-			if (at && written) {
+		for (const LoggedParam* at : rows) {
+			if (at != nullptr && written) {
 				AutoParam& param = *at->param;
 				written = writeEdit(param, *at->manager, at->collection, at->slot, start, tick, param.getCurrentValue(),
 				                    edit.value);
