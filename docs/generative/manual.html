@@ -1,0 +1,2409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deluge Generative Mode — User Manual</title>
+<style>
+  :root {
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --surface-alt: #f0eee9;
+    --border: #dcd8cf;
+    --border-strong: #bfb9ac;
+    --text: #1c1b18;
+    --text-muted: #5a564e;
+    --accent: #c94a1a;
+    --accent-soft: #fdece5;
+    --accent-border: #f0b9a3;
+    --info-bg: #eef4fa;
+    --info-border: #b8d1ea;
+    --info-text: #1d4973;
+    --warn-bg: #fdf6e3;
+    --warn-border: #e5cb84;
+    --warn-text: #6a4c08;
+    --kbd-bg: #eceae4;
+    --kbd-border: #c5c0b4;
+    --kbd-shadow: #b0aa9c;
+    --code-bg: #efede8;
+    --oled-bg: #0c0e11;
+    --oled-fg: #e7f6ff;
+    --oled-dim: #6f8799;
+    --grid-bg: #15171b;
+    --grid-pad-off: #272b33;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --radius: 8px;
+    --toc-w: 260px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121316;
+      --surface: #1a1c21;
+      --surface-alt: #22252c;
+      --border: #2e323c;
+      --border-strong: #434957;
+      --text: #e9e8e4;
+      --text-muted: #9fa3ad;
+      --accent: #f07446;
+      --accent-soft: #2e1d17;
+      --accent-border: #6e3521;
+      --info-bg: #172330;
+      --info-border: #2a4666;
+      --info-text: #9ec8f2;
+      --warn-bg: #292212;
+      --warn-border: #5c491b;
+      --warn-text: #f0cf7a;
+      --kbd-bg: #262a33;
+      --kbd-border: #414755;
+      --kbd-shadow: #0a0b0e;
+      --code-bg: #23262e;
+      --oled-bg: #07090c;
+      --oled-fg: #dff4ff;
+      --oled-dim: #6d8596;
+      --grid-bg: #0d0f12;
+      --grid-pad-off: #22262e;
+      --shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #121316;
+    --surface: #1a1c21;
+    --surface-alt: #22252c;
+    --border: #2e323c;
+    --border-strong: #434957;
+    --text: #e9e8e4;
+    --text-muted: #9fa3ad;
+    --accent: #f07446;
+    --accent-soft: #2e1d17;
+    --accent-border: #6e3521;
+    --info-bg: #172330;
+    --info-border: #2a4666;
+    --info-text: #9ec8f2;
+    --warn-bg: #292212;
+    --warn-border: #5c491b;
+    --warn-text: #f0cf7a;
+    --kbd-bg: #262a33;
+    --kbd-border: #414755;
+    --kbd-shadow: #0a0b0e;
+    --code-bg: #23262e;
+    --oled-bg: #07090c;
+    --oled-fg: #dff4ff;
+    --oled-dim: #6d8596;
+    --grid-bg: #0d0f12;
+    --grid-pad-off: #22262e;
+    --shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 1.5rem;
+    font-size: 16px;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: var(--toc-w) minmax(0, 1fr);
+    max-width: 1180px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  /* Sticky Sidebar TOC */
+  .toc {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 1.5rem 1.25rem 2rem;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .toc-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .toc-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .theme-btn {
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    line-height: 1.3;
+  }
+  .theme-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .toc nav ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .toc nav > ol > li {
+    margin-bottom: 0.2rem;
+  }
+
+  .toc nav a {
+    display: block;
+    padding: 0.28rem 0.55rem;
+    border-radius: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    border-left: 2px solid transparent;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .toc nav a:hover {
+    color: var(--text);
+    background: var(--surface-alt);
+  }
+
+  .toc nav a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .toc nav .sub-toc {
+    padding-left: 0.85rem;
+    margin: 0.1rem 0 0.35rem;
+  }
+
+  .toc nav .sub-toc a {
+    font-size: 0.8rem;
+    padding: 0.18rem 0.5rem;
+  }
+
+  .mobile-bar {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0.65rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .mobile-bar strong {
+    font-size: 0.92rem;
+    color: var(--accent);
+  }
+
+  .menu-toggle {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+  }
+
+  /* Main content */
+  main {
+    padding: 2.25rem 3rem 5rem;
+    max-width: 860px;
+    width: 100%;
+  }
+
+  header.doc-header {
+    margin-bottom: 2.25rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .eyebrow {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 0.4rem;
+  }
+
+  h1 {
+    font-size: 2.15rem;
+    line-height: 1.18;
+    margin: 0 0 0.65rem;
+    letter-spacing: -0.02em;
+  }
+
+  .lead {
+    font-size: 1.08rem;
+    color: var(--text-muted);
+    margin: 0 0 1rem;
+    max-width: 62ch;
+  }
+
+  .meta-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  section {
+    margin-top: 2.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    line-height: 1.25;
+    margin: 0 0 0.9rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.01em;
+  }
+
+  h3 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    margin: 1.65rem 0 0.6rem;
+  }
+
+  h4 {
+    font-size: 0.98rem;
+    margin: 1.2rem 0 0.4rem;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 0.9rem;
+    max-width: 72ch;
+  }
+
+  ul, ol {
+    margin: 0 0 1rem;
+    padding-left: 1.35rem;
+    max-width: 72ch;
+  }
+
+  li { margin-bottom: 0.35rem; }
+  li > p { margin-bottom: 0.4rem; }
+
+  a { color: var(--accent); }
+  a:hover { text-decoration: none; }
+
+  a.gloss-link {
+    color: inherit;
+    text-decoration: underline dotted var(--border-strong);
+    text-underline-offset: 2px;
+  }
+  a.gloss-link:hover {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
+
+  .note {
+    font-size: 0.87rem;
+    color: var(--text-muted);
+    margin: -0.4rem 0 1rem;
+  }
+  .table-wrap + .note {
+    margin-top: -0.8rem;
+  }
+
+  tr.table-group th {
+    background: var(--surface-alt);
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.45rem 0.75rem;
+    border-top: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Inline UI badges & code */
+  kbd {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.25;
+    padding: 0.12rem 0.42rem;
+    border-radius: 5px;
+    background: var(--kbd-bg);
+    border: 1px solid var(--kbd-border);
+    box-shadow: 0 1px 0 var(--kbd-shadow);
+    color: var(--text);
+    white-space: nowrap;
+    vertical-align: 0.05em;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+
+  pre {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.9rem 1.1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    margin: 0.75rem 0 1.1rem;
+  }
+
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .tag-live {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.08rem 0.42rem;
+    border-radius: 4px;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    color: var(--info-text);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  /* Callouts */
+  .callout {
+    border-radius: var(--radius);
+    padding: 0.85rem 1.05rem;
+    margin: 1rem 0 1.2rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    max-width: 72ch;
+    font-size: 0.94rem;
+  }
+  .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+  .callout-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.35rem;
+    display: block;
+  }
+  .callout.info {
+    background: var(--info-bg);
+    border-color: var(--info-border);
+    color: var(--text);
+  }
+  .callout.info .callout-title { color: var(--info-text); }
+  .callout.warn {
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
+    color: var(--text);
+  }
+  .callout.warn .callout-title { color: var(--warn-text); }
+
+  /* Cards grid */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin: 1rem 0 1.3rem;
+  }
+
+  @media (max-width: 560px) {
+    .card-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.95rem 1.05rem;
+    box-shadow: var(--shadow);
+  }
+
+  .card h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.98rem;
+  }
+
+  .card p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 0.85rem 0 1.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  thead th {
+    background: var(--surface-alt);
+    font-weight: 700;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-alt); }
+
+  /* Genre cards */
+  .genre-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.15rem;
+    margin-bottom: 0.9rem;
+    box-shadow: var(--shadow);
+  }
+
+  .genre-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .genre-head h4 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .genre-meta {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .genre-card p { font-size: 0.93rem; margin-bottom: 0.55rem; }
+  .genre-card p:last-child, .genre-card ul:last-child { margin-bottom: 0; }
+
+  .variant-list {
+    margin: 0.4rem 0 0;
+    padding-left: 1.15rem;
+    font-size: 0.88rem;
+  }
+  .variant-list li { margin-bottom: 0.25rem; }
+
+  /* Diagrams */
+  figure.diagram {
+    margin: 1.15rem 0 1.45rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  figure.diagram svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  figure.diagram figcaption {
+    margin-top: 0.65rem;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .oled-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+    margin: 1rem 0 1.35rem;
+  }
+
+  .oled-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+  }
+
+  .oled-card svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+  }
+
+  .oled-card .oled-cap {
+    margin-top: 0.45rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  /* Glossary */
+  dl.glossary {
+    margin: 0.75rem 0 0;
+    max-width: 72ch;
+  }
+  dl.glossary dt {
+    font-weight: 700;
+    margin-top: 0.85rem;
+    color: var(--text);
+  }
+  dl.glossary dd {
+    margin: 0.2rem 0 0 0;
+    color: var(--text-muted);
+    font-size: 0.94rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 920px) {
+    .layout {
+      display: block;
+    }
+    .mobile-bar {
+      display: flex;
+    }
+    .toc {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: min(82vw, 300px);
+      z-index: 40;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .toc.open {
+      transform: translateX(0);
+    }
+    .toc-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 35;
+    }
+    .toc-backdrop.open { display: block; }
+    main {
+      padding: 1.5rem 1.25rem 3.5rem;
+      margin: 0 auto;
+    }
+  }
+
+  /* Print */
+  @media print {
+    :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+      --bg: #ffffff;
+      --surface: #ffffff;
+      --surface-alt: #f3f3f3;
+      --border: #cccccc;
+      --border-strong: #999999;
+      --text: #111111;
+      --text-muted: #444444;
+      --accent: #a5340d;
+      --accent-soft: #f7ece8;
+      --info-bg: #f0f5fa;
+      --info-border: #b8cde0;
+      --info-text: #1b4469;
+      --warn-bg: #faf5e6;
+      --warn-border: #d8c284;
+      --warn-text: #5d4307;
+      --kbd-bg: #eeeeee;
+      --kbd-border: #bbbbbb;
+      --kbd-shadow: #999999;
+      --code-bg: #f0f0f0;
+      --shadow: none;
+    }
+    html { font-size: 10.5pt; }
+    body {
+      line-height: 1.48;
+      background: #ffffff !important;
+      color: #111111 !important;
+    }
+    .toc, .mobile-bar, .toc-backdrop, .theme-btn { display: none !important; }
+    .layout { display: block; max-width: none; }
+    main { max-width: none; padding: 0; }
+    section { break-inside: auto; margin-top: 1.75rem; }
+    h2, h3, h4 { break-after: avoid; }
+    .callout, .genre-card, .card, figure.diagram, .oled-card, pre {
+      break-inside: avoid;
+      box-shadow: none;
+    }
+    .table-wrap { overflow: visible; box-shadow: none; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    tr.table-group { break-after: avoid; }
+    dl.glossary dt { break-after: avoid; }
+    a { color: #111111 !important; text-decoration: underline; }
+    a.gloss-link { text-decoration: none; }
+    @page { margin: 1.4cm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mobile-bar">
+  <button class="menu-toggle" id="menuToggle" type="button" aria-expanded="false" aria-controls="tocSidebar">☰ Contents</button>
+  <strong>Deluge Generative Mode</strong>
+  <button class="theme-btn" id="themeToggleMobile" type="button" title="Switch light/dark theme">Theme</button>
+</div>
+<div class="toc-backdrop" id="tocBackdrop"></div>
+
+<div class="layout">
+  <aside class="toc" id="tocSidebar" aria-label="Table of contents">
+    <div class="toc-brand">
+      <p class="toc-title">Manual</p>
+      <button class="theme-btn" id="themeToggle" type="button" title="Switch light/dark theme">Theme</button>
+    </div>
+    <nav>
+      <ol>
+        <li><a href="#overview">1. What Is Generative Mode?</a></li>
+        <li><a href="#getting-started">2. Getting In and Out</a></li>
+        <li><a href="#genres">3. Genres &amp; Subgenres</a></li>
+        <li><a href="#recipe-seed">4. Recipe, Seed, Entropy &amp; Takes</a></li>
+        <li><a href="#macros">5. The Four Macros &amp; Part Bias</a></li>
+        <li><a href="#arc">6. The Arc &amp; Its Sections</a></li>
+        <li>
+          <a href="#perform">7. Perform: Playing Live</a>
+          <ol class="sub-toc">
+            <li><a href="#perform-grids">Pad Grids &amp; Sidebar</a></li>
+            <li><a href="#perform-oled">OLED Screens &amp; Peeks</a></li>
+            <li><a href="#perform-controls">Buttons, Knobs &amp; Focus</a></li>
+            <li><a href="#perform-menu">The Perform Menu</a></li>
+            <li><a href="#perform-transitions">Regenerate &amp; Transitions</a></li>
+            <li><a href="#perform-variants">Variant Sets &amp; Drop Changes</a></li>
+            <li><a href="#perform-live-tools">Freeze, Fills &amp; Punch-ins</a></li>
+            <li><a href="#perform-sounds">Sound Controls &amp; Homes</a></li>
+            <li><a href="#perform-midi">MIDI &amp; External Clock</a></li>
+          </ol>
+        </li>
+        <li><a href="#compose">8. The Compose Screen</a></li>
+        <li><a href="#capture">9. Capture: Keeping Live Pieces</a></li>
+        <li><a href="#recipes">10. Recipe Files</a></li>
+        <li><a href="#pack">11. The Generative Pack</a></li>
+        <li><a href="#tips">12. Practical Tips</a></li>
+        <li><a href="#troubleshooting">13. Troubleshooting &amp; Messages</a></li>
+        <li><a href="#glossary">14. Glossary</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="doc-header">
+      <span class="eyebrow">Synthstrom Deluge · Community Firmware Fork</span>
+      <h1>Generative Mode User Manual</h1>
+      <p class="lead">Play evolving, genre-aware music live on your Deluge, steer its energy and structure in real time, and turn any jam or Recipe into an editable Deluge song.</p>
+      <div class="meta-pills">
+        <span class="pill">OLED Deluge only</span>
+        <span class="pill">8 built-in genres</span>
+        <span class="pill">Perform · Compose · Capture</span>
+        <span class="pill">4/4 time</span>
+      </div>
+    </header>
+
+    <!-- 1. OVERVIEW -->
+    <section id="overview">
+      <h2>1. What Is Generative Mode?</h2>
+      <p><strong>Generative mode</strong> adds a built-in music generator to the Deluge. You give it a <a class="gloss-link" href="#gloss-recipe"><strong>Recipe</strong></a>—a genre, tempo, key, scale, four <a class="gloss-link" href="#gloss-macro">macro</a> settings, and a set of sounds—and it writes drums, bass, chords, pads, leads, and FX on the fly.</p>
+      <p>One engine drives two core modes—<a class="gloss-link" href="#gloss-perform"><strong>Perform</strong></a> and <a class="gloss-link" href="#gloss-compose"><strong>Compose</strong></a>—supported by <a class="gloss-link" href="#gloss-capture"><strong>Capture</strong></a> and <strong>Recipe files</strong>:</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h4>Perform</h4>
+          <p>Plays live and non-destructively in a song of its own. Steer macros, force breakdowns and drops, mute parts, swap sounds, and switch genres mid-set.</p>
+        </div>
+        <div class="card">
+          <h4>Compose</h4>
+          <p>Renders a fixed Recipe into a normal, editable Deluge song—complete with clips, arranger layout, and thinned automation ready to tweak in stock views.</p>
+        </div>
+        <div class="card">
+          <h4>Capture</h4>
+          <p>Watches everything you do in Perform. When you leave, it replays your favourite pieces into regular Deluge songs saved on your SD card.</p>
+        </div>
+        <div class="card">
+          <h4>Recipe Files</h4>
+          <p>Save and load Recipes in <code>RECIPES/</code> on your SD card so you can come back to a groove or share it with another player.</p>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-title">Hardware &amp; Scope Notes</span>
+        <ul>
+          <li><strong>OLED only:</strong> Generative mode requires an OLED Deluge. 7-segment displays are not supported.</li>
+          <li><strong>4/4 time:</strong> All built-in genres play in 4/4 on a 16th-note grid.</li>
+          <li><strong>Internal sounds only in v1:</strong> Generative mode plays internal synths and SD card samples. MIDI/CV note output to external gear and playing along from an external MIDI keyboard are not in v1 (external notes are ignored in Perform).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 2. GETTING IN AND OUT -->
+    <section id="getting-started">
+      <h2>2. Getting In and Out</h2>
+      <p>Before your first session, unzip the <a href="#pack">Generative pack</a> onto your SD card so all built-in genres have their custom presets, risers, impacts, and percussion.</p>
+
+      <h3>Entering Generative Mode</h3>
+      <ol>
+        <li>Go to <strong>Session view</strong>. (If you are in Arranger view, press <kbd>SONG</kbd> first—Arranger keeps its stock <kbd>SHIFT</kbd>+<kbd>SONG</kbd> shortcut.)</li>
+        <li>Press <kbd>SHIFT</kbd>+<kbd>SONG</kbd>. The <code>GENERATIVE</code> menu opens while your current song keeps playing.</li>
+        <li>Pick <strong>PERFORM</strong> or <strong>COMPOSE</strong> with <kbd>SELECT</kbd>.</li>
+        <li>Choose where to start from in <code>PERFORM FROM</code> or <code>COMPOSE FROM</code>:
+          <ul>
+            <li><strong>CURRENT RECIPE</strong> — appears once you have used Generative mode since power-on. Picks up right where you left off.</li>
+            <li><strong>GENRE ▸</strong> — picks a built-in genre and rolls a fresh Recipe (tempo, key, scale, sounds, and a new seed). Opens on your Current Recipe's genre, or Acid Techno before one exists.</li>
+            <li><strong>FILE...</strong> — opens the Recipe browser on <code>RECIPES/</code>.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h3>Replacing the Current Song</h3>
+      <p>Before replacing whatever song you have open, Generative mode asks <code>DISCARD SONG? → OK</code>. Press <kbd>BACK</kbd> to cancel with nothing changed.</p>
+      <ul>
+        <li><strong>Perform</strong> asks right after you pick a source. While Perform loads its sounds, your old song keeps playing. Once loaded, Perform swaps in <strong>stopped</strong> on the <kbd>SONG</kbd> page.</li>
+        <li><strong>Compose</strong> opens the Compose screen without discarding your song—picking <code>GENRE ▸</code> or <code>FILE...</code> reads the SD card first under the working animation (<kbd>BACK</kbd> cancels with the Recipe unchanged). Compose only asks <code>DISCARD SONG?</code> when you press <strong>BUILD</strong>.</li>
+      </ul>
+
+      <h3>Starting &amp; Stopping Playback in Perform</h3>
+      <ul>
+        <li>Press <kbd>PLAY</kbd> to start from bar 1 with the genre's <strong>Intro</strong>.</li>
+        <li>Press <kbd>SHIFT</kbd>+<kbd>PLAY</kbd> to skip the Intro and jump straight into a <strong>Groove</strong>.</li>
+        <li>Press <kbd>PLAY</kbd> again to stop immediately (tails ring out). Stopping drops every queued action—including any queued key change—and every start begins a fresh <a class="gloss-link" href="#gloss-piece"><strong>piece</strong></a>.</li>
+      </ul>
+
+      <h3>Leaving Perform</h3>
+      <p>Hold <kbd>BACK</kbd> while in Perform. Music keeps playing while the Leave menu opens: choose which pieces to keep as normal songs via <a href="#capture">Capture</a>, pick <strong>NOTHING</strong> (or <strong>LEAVE</strong> if nothing played) to exit to a blank session song, or pick <strong>CANCEL</strong> (or tap <kbd>BACK</kbd>) to keep playing.</p>
+
+      <p>Your <a class="gloss-link" href="#gloss-current-recipe"><strong>Current Recipe</strong></a> stays in memory after you leave Perform or Compose until you switch the Deluge off. Save it with <kbd>SAVE</kbd> if you want to keep it across power cycles.</p>
+    </section>
+
+    <!-- 3. GENRES -->
+    <section id="genres">
+      <h2>3. Genres &amp; Subgenres</h2>
+      <p>A <strong>genre</strong> is a built-in style definition. It sets the parts (4 to 6 instruments), tempo range, scales, swing, rhythm patterns, chord habits, Arc rules, and sound palette. You cannot edit a genre itself, though you can steer any Recipe it produces.</p>
+      <p>Some genres are grouped into <strong>subgenres</strong> under a parent menu row (such as <code>TECHNO ▸</code>). Moving between two subgenres—say from Acid Techno to Detroit Techno—is a full genre change with a transition.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Genre (OLED Name)</th>
+              <th>BPM</th>
+              <th>Scales</th>
+              <th>Swing</th>
+              <th>Phrase</th>
+              <th>Parts</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Acid Techno</strong><br><code>ACID TECHNO</code> <em>(default)</em></td>
+              <td>125–135</td>
+              <td>Minor, Phrygian</td>
+              <td>Straight</td>
+              <td>8 bars</td>
+              <td>Drums, Acid, Drone, FX</td>
+            </tr>
+            <tr>
+              <td><strong>Melodic Techno</strong><br><code>MELODIC TECHNO</code></td>
+              <td>122–128</td>
+              <td>Minor, Phrygian, Harm. Minor</td>
+              <td>Straight</td>
+              <td>8 bars</td>
+              <td>Drums, Bass, Pad, Arp, FX</td>
+            </tr>
+            <tr>
+              <td><strong>Detroit Techno</strong><br><code>DETROIT TECHNO</code></td>
+              <td>125–135</td>
+              <td>Minor, Dorian</td>
+              <td>Straight</td>
+              <td>8 bars</td>
+              <td>Drums, Bass, Strings, Stab, Motif, FX</td>
+            </tr>
+            <tr>
+              <td><strong>Dub Techno</strong><br><code>DUB TECHNO</code></td>
+              <td>115–125</td>
+              <td>Minor, Dorian</td>
+              <td>Straight</td>
+              <td>8 bars</td>
+              <td>Drums, Sub, Stab, Pad, FX</td>
+            </tr>
+            <tr>
+              <td><strong>House</strong><br><code>HOUSE</code></td>
+              <td>120–126</td>
+              <td>Minor, Dorian, Mixolydian</td>
+              <td>+10 to +14</td>
+              <td>8 bars</td>
+              <td>Drums, Bass, Stab, Strings, Lead, FX</td>
+            </tr>
+            <tr>
+              <td><strong>Roots Dub</strong><br><code>ROOTS DUB</code></td>
+              <td>70–80</td>
+              <td>Minor, Dorian</td>
+              <td>+5 to +15</td>
+              <td>8 bars</td>
+              <td>Drums, Bass, Skank, Melodica, FX (w/ Siren)</td>
+            </tr>
+            <tr>
+              <td><strong>Classic Psytrance</strong><br><code>CLASSIC PSY</code></td>
+              <td>138–146</td>
+              <td>Minor, Phrygian, Harm. Minor</td>
+              <td>Straight</td>
+              <td>16 bars</td>
+              <td>Drums, Bass, Drone, Lead, Arp, FX</td>
+            </tr>
+            <tr>
+              <td><strong>Ambient</strong><br><code>AMBIENT</code></td>
+              <td>60–90</td>
+              <td>Major, Lydian, Dorian, Minor, Mixolydian</td>
+              <td>Straight</td>
+              <td>8 bars</td>
+              <td>Drums (gated high), Bass, Pad, Drone, Bells, FX</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note"><em>Note:</em> On the Deluge OLED swing popup and Compose editor, straight swing displays as <code>50</code>, so House's rolled range (<code>+10 to +14</code>) displays as <code>60–64</code> and Roots Dub's (<code>+5 to +15</code>) displays as <code>55–65</code>. Perform's <code>RECIPE</code> peek prints the signed offset instead (e.g. <code>SW 10</code>, <code>SW 0</code>).</p>
+
+      <h3>How Each Genre Feels</h3>
+
+      <div class="genre-card">
+        <div class="genre-head">
+          <h4>Techno — Acid, Melodic, Detroit &amp; Dub</h4>
+          <span class="genre-meta">TECHNO ▸ · Straight time · 8-bar phrases</span>
+        </div>
+        <p>All four Techno subgenres share four-on-the-floor kicks, offbeat hats, no claps on 2 and 4, Builds whose length and shape the BUILD set picks (see below), and kick-and-bass rest fills.</p>
+        <ul>
+          <li><strong>Acid Techno:</strong> Hypnotic and raw. Stays on one chord throughout while a mutating acid bassline sweeps its filter over 8 bars beneath a quiet root-and-fifth drone. Breaks drop down to the drone, kick, rim, and closed hat.</li>
+          <li><strong>Melodic Techno:</strong> Driving and spacious. A rolling 16th-note bass leaves room for the kick while chords move every 2 bars in a minor key, topped by a sweeping 16th-note arpeggio. Breaks strip back to the pad, arp, and closed hat.</li>
+          <li><strong>Detroit Techno:</strong> Warm and chord-led. Every chord carries an Extension (usually a 7th), adding a second (often a 9th) as Complexity rises. Syncopated stabs and warm strings drive the groove, and a motif lead enters automatically on Drops or when you raise Density.</li>
+          <li><strong>Dub Techno:</strong> Deep and cavernous (115–125 BPM). One minor 7th/9th chord echoes through a dotted-8th ping-pong delay with 2-bar stab drop-outs, a long-note sub bass, shaker, and a low pedal pad. <em>(Not to be confused with Roots Dub.)</em></li>
+        </ul>
+        <p><strong>Variant sets:</strong></p>
+        <ul class="variant-list">
+          <li><code>BUILD</code> (all four subgenres) — <code>ROLL</code> (8/16-bar roll), <code>LONG</code> (16/32-bar, 2-bar kick cut), <code>NO ROLL</code> (8-bar, no roll), or <code>HARD</code> (4/8-bar, no Gap).</li>
+          <li><code>DRUMS</code> <span class="tag-live">Live</span> (Acid &amp; Detroit) — <code>OFFBEAT</code>, <code>RUNNING</code> (16th closed hats), <code>PUMP</code> (open hat on every &amp;), or <code>TRIBAL</code> (busier rim &amp; toms).</li>
+          <li><code>ACID</code> <span class="tag-live">Live</span> (Acid) — <code>CLASSIC</code>, <code>TALKING</code> (busier line with ♭2, wider leaps &amp; slides), or <code>HYPNOTIC</code> (root/octave, slow mutation).</li>
+          <li><code>ARP</code> <span class="tag-live">Live</span> (Melodic) — <code>RISING</code>, <code>PULSE</code> (alternating root/octave 16ths), <code>DOWN</code>, or <code>SPARSE</code> (dotted-8th onsets).</li>
+        </ul>
+      </div>
+
+      <div class="genre-card">
+        <div class="genre-head">
+          <h4>House</h4>
+          <span class="genre-meta">HOUSE · 120–126 BPM · Swung 16ths</span>
+        </div>
+        <p>Punchy four-on-the-floor kick with claps anchored on beats 2 and 4, late-leaning hats, 7th/9th chord stabs, warm strings, and a motif lead that answers the bass on Builds and Drops. Groove drop-outs periodically pull out the stabs, strings, kick, or hats for 4–8 bars.</p>
+        <p><strong>Variant sets:</strong></p>
+        <ul class="variant-list">
+          <li><code>LOOPS</code> <span class="tag-live">Live</span> — how often Drops switch to a new chord loop: <code>1 IN 3</code>, <code>1 IN 2</code>, <code>EVERY</code>, or <code>NEVER</code>.</li>
+          <li><code>BUILD</code> — build style: <code>FULL</code> (snare roll), <code>NO LEAD</code>, <code>NO KICK</code> (bass enters on last bar), or <code>FILTER</code> (no roll, riser, or gap; kick out and filtered bass leads in).</li>
+          <li><code>BASS</code> — <code>RIFF</code> (3-3-2 groove), <code>OFFBEAT</code>, <code>OFF ROOT</code> (root-only at low Complexity), or <code>PICKUPS</code> (offbeat with 16th pickups).</li>
+          <li><code>CHORDS</code> — <code>LOOP</code> (moving chord progression) or <code>VAMP</code> (two-chord i–iv vamp).</li>
+        </ul>
+      </div>
+
+      <div class="genre-card">
+        <div class="genre-head">
+          <h4>Roots Dub</h4>
+          <span class="genre-meta">ROOTS DUB · 70–80 BPM · Dotted-8th echoes &amp; Siren</span>
+        </div>
+        <p>Slow, heavy, and spacious. A pentatonic bassline carries the melody while an offbeat skank and a breathing melodica bounce through dotted-8th analog echo. Frequent drop-outs pull instruments out while throwing their last hit into reverb and delay, and a dub Siren sweeps on Drops (and on Breaks at higher Density).</p>
+        <p><strong>Variant sets:</strong></p>
+        <ul class="variant-list">
+          <li><code>SKANK</code> <span class="tag-live">Live</span> — <code>7THS</code> or <code>PLAIN</code> (triads).</li>
+          <li><code>DRUMS</code> <span class="tag-live">Live · Drop-changing</span> — <code>ONE DROP</code>, <code>ROCKERS</code>, or <code>STEPPERS</code>. Can automatically switch at Drops (40% chance per Drop) unless you lock it to one variant.</li>
+          <li><code>BREAK</code> — <code>7 BARS</code> (1-phrase Break minus the 1-bar Build) or <code>15 BARS</code> (2-phrase Break minus the 1-bar Build).</li>
+          <li><code>MIX</code> <span class="tag-live">Live</span> — drop-out style: <code>VERSION</code> (balanced), <code>TUBBY</code> (heavy, frequent cuts), or <code>LIGHT</code> (mostly 1-bar spot echoes).</li>
+          <li><code>BASS</code> <span class="tag-live">Live</span> — <code>BURSTS</code> (spaced phrases), <code>ROLLING</code> (8th-note lines), or <code>HEAVY</code> (sparse, long root/5th notes).</li>
+        </ul>
+      </div>
+
+      <div class="genre-card">
+        <div class="genre-head">
+          <h4>Psytrance — Classic Psytrance</h4>
+          <span class="genre-meta">PSYTRANCE ▸ CLASSIC · 138–146 BPM · 16-bar phrases</span>
+        </div>
+        <p>Fast and relentless. A tight rolling 16th bass carves around every kick hit over a root-and-fifth pedal drone with no chord changes. A filter-swept arp climbs through 8-, 16-, or 32-bar builds (cutting kick and bass on the last 4 bars) into hard drops whose lift decays over 4 phrases, bringing the sweeping lead in for the first two phrases.</p>
+        <p><strong>Variant sets:</strong></p>
+        <ul class="variant-list">
+          <li><code>FIGURE</code> <span class="tag-live">Live</span> — Arp style: <code>SEQUENCE</code> (16th loop), <code>WALK</code> (Up / Up-down arp), <code>SHUFFLE</code> (the same walks in random order), or <code>TRIAD</code> (walk without 7ths).</li>
+          <li><code>BREAK</code> — <code>ARP</code> (drone, arp, closed hat), <code>LEAD</code> (drone, lead, hat), or <code>NO HAT</code> (drone and lead alone).</li>
+          <li><code>ARP+LEAD</code> <span class="tag-live">Live</span> — how the Arp behaves when the Lead plays: <code>DROP BOTH</code> (both full on Drops, Arp 8ths elsewhere), <code>TURNS</code> (Arp rests), or <code>8THS</code> (Arp plays 8ths everywhere).</li>
+          <li><code>LEAD</code> — when the Lead enters: <code>DROPS</code> (Drops only), <code>GROOVES</code> (every Groove), or <code>INTRO</code> (late Intro and Breaks too).</li>
+          <li><code>ACCENTS</code> <span class="tag-live">Live</span> — where Arp octave jumps land: <code>ANYWHERE</code>, <code>3-3-2</code>, or <code>OFFBEAT</code>.</li>
+        </ul>
+      </div>
+
+      <div class="genre-card" id="genre-ambient">
+        <div class="genre-head">
+          <h4>Ambient</h4>
+          <span class="genre-meta">AMBIENT · 60–90 BPM · Fades through · No heard drop</span>
+        </div>
+        <p>Slow, wide, and gentle. Open-voiced pads hold common tones across 8-bar+ chord changes so harmonies blur smoothly instead of re-striking. A deep drone anchors the bottom, and sparse bells chime above. At default Density (25), soft percussion is silent in Grooves and Breaks, with only mallets and pings entering softly late in Builds and fading in Drops; raising Density from 29 to 47 brings all six soft percussion lanes (mallets, wood, hats, rim, brushes, kick) into the Groove one by one. Builds swell softly with no roll, no gap, and no drop shock. Transitions into Ambient default to <strong>FADE</strong>.</p>
+        <p><strong>Variant sets:</strong></p>
+        <ul class="variant-list">
+          <li><code>COLOUR</code> <span class="tag-live">Live</span> — chord colour: <code>ADD9</code> (9ths &amp; sus4), <code>PURE</code> (plain triads), or <code>LUSH 7/9</code> (rich 7th + 9th chords).</li>
+          <li><code>MOTION</code> — harmonic pace: <code>DRIFT</code> (balanced 8-bar chords), <code>STILL</code> (very slow 16-bar chords near home), or <code>WANDER</code> (wider chord moves).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4. RECIPE, SEED, ENTROPY & TAKES -->
+    <section id="recipe-seed">
+      <h2>4. Recipe, Seed, Entropy &amp; Takes</h2>
+      <p>Five simple ideas explain why Generative mode stays repeatable while still feeling alive:</p>
+
+      <ul>
+        <li><strong>Recipe:</strong> The musical blueprint. It stores the genre, tempo, key, scale (one of 12 supported seven-note scales: Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Melodic Minor, Harmonic Minor, Hungarian Minor, Marva, and Arabian), swing, the four macro values, any per-part octave shifts and Part biases, the chosen sound files, and the variant picks. It holds <em>no notes</em>.</li>
+        <li><strong>Current Recipe:</strong> The one active Recipe held in RAM while your Deluge is on. Perform steers it and Compose edits it, so switching between Perform and Compose always keeps your latest settings.</li>
+        <li><strong>Seed:</strong> A single number sitting beside the Recipe, shown read-only as a 7-character code like <code>1A2B3C4</code> (using characters that never look alike on the OLED). The seed fixes every musical choice: patterns, melodies, chord walks, fills, drop-outs, section lengths, and drift. Play the same Recipe and seed with the same moves, and you hear the exact same notes.</li>
+        <li><strong>Fresh entropy:</strong> True randomness used only when you explicitly roll something new—picking a genre, running <strong>Regenerate</strong>, or rolling a new sound. It picks tempo, key, scale, swing, sounds, variant picks, and a new seed. Because those results are saved into the Recipe, drawing a <code>NEW SEED</code> (in Compose) creates brand-new patterns and melodies while keeping your tempo, key, sounds, and variants intact.</li>
+        <li><strong>Takes (1–16 per part):</strong> Each part has its own take counter. Re-rolling a part's pattern advances its take, giving that part new rhythms and lines without disturbing any other part. You can step backwards to any earlier take at any time—the old pattern comes right back. Drawing a new seed, Regenerating, or changing genre resets every part to take 1.</li>
+      </ul>
+
+      <div class="callout info">
+        <span class="callout-title">How to See Your Seed Code</span>
+        <p>In Perform, push the <kbd>Y</kbd> (<kbd>▲▼</kbd>) encoder at any time to pop up the current key, scale, and seed code (for example, <code>A MINOR 1A2B3C4</code>). You can also see it as the title of <code>SEED + TAKES ▸</code> in the Perform menu and on the Compose screen.</p>
+      </div>
+    </section>
+
+    <!-- 5. MACROS -->
+    <section id="macros">
+      <h2>5. The Four Macros &amp; Part Bias</h2>
+      <p>Four global macros, each running from <strong>0 to 50</strong> (starting at <strong>25</strong> in built-in genres), shape the whole performance in real time. Each macro pushes the music in the same direction across every genre:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Macro</th>
+              <th>What It Controls</th>
+              <th>Low (0–15)</th>
+              <th>High (35–50)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Energy</strong> (<code>E</code>)</td>
+              <td>Intensity: note velocity and sound shading (brighter, shorter decay, more drive, drier). <em>Does not change how many notes play.</em></td>
+              <td>Soft, dark, long, and wet</td>
+              <td>Hard, bright, tight, driven, and punchy</td>
+            </tr>
+            <tr>
+              <td><strong>Density</strong> (<code>D</code>)</td>
+              <td>How many notes and layers play: thins or fills pattern steps by importance and opens/closes part and drum-lane Density gates.</td>
+              <td>Stripped back to core anchors; gated parts rest</td>
+              <td>Full patterns; extra percussion and gated leads enter</td>
+            </tr>
+            <tr>
+              <td><strong>Complexity</strong> (<code>C</code>)</td>
+              <td>How intricate each beat is: busier pattern tiers, bigger melodic leaps, intricate Loop answers, ratchets and flams, interplay strength, chord extensions (7th/9th/sus4/6th), and chord wandering. <em>Never moves sound controls.</em></td>
+              <td>Plain patterns, tight intervals, simpler chords, rare ornaments</td>
+              <td>Syncopated tiers, wider leaps, rich chords, frequent ratchets/flams</td>
+            </tr>
+            <tr>
+              <td><strong>Motion</strong> (<code>M</code>)</td>
+              <td>How much and how fast things evolve: line mutation, pattern re-picks, sound drift speed/depth, fills, answers, drop-outs, and how quickly Grooves move to Breaks and Builds.</td>
+              <td>At <strong>0</strong>: Arc stays put, no mutation, no fills, no drop-outs, drift pauses</td>
+              <td>Fast-moving Arc, frequent fills/drop-outs, lively mutation and drift</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Your macro values are the centre, not a hard ceiling.</strong> The Arc automatically pushes effective <strong>Energy</strong> and <strong>Density</strong> up during Builds and Drops and dips them during Breaks—then returns to your centre. Complexity and Motion are never moved by the Arc.</p>
+
+      <h3>Part Bias (Per-Part Macro Offsets)</h3>
+      <p>Want busy drums over a sparse bass, or a bright lead over a dark pad? Each part has a signed <strong>Part bias</strong> (<strong>−50 to +50</strong>) on every macro. It shifts that part above or below the global macro value while easing smoothly near 0 and 50, so the biased part still rides Breaks, Builds, and Drops with the rest of the track.</p>
+      <ul>
+        <li><strong>Set Part bias:</strong> Focus a part (hold its row on <kbd>SONG</kbd>, double-tap to lock, or lock with <kbd>AFFECT ENTIRE</kbd> on <kbd>CLIP</kbd>), then turn the <kbd>F8</kbd> gold knobs or tap/hold the macro faders on the <kbd>KEYBOARD</kbd> page.</li>
+        <li><strong>Reset Part bias:</strong> Choose <code>RESET PART BIAS</code> in the Perform menu (resets the focused part, or all parts if nothing is focused).</li>
+        <li><strong>Kept on Regenerate:</strong> Regenerate keeps your Part biases. A genre change resets all biases to 0.</li>
+      </ul>
+    </section>
+
+    <!-- 6. THE ARC -->
+    <section id="arc">
+      <h2>6. The Arc &amp; Its Sections</h2>
+      <p>The <strong>Arc</strong> gives your music song structure automatically. It cycles through five <strong>Sections</strong> around your Recipe's Energy and Density values:</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 225" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Arc timeline showing Intro, Groove, Break, Build, Gap, Drop, Groove, and Outro with Energy and Density curve">
+          <!-- Background grid -->
+          <rect x="0" y="0" width="760" height="225" rx="6" fill="var(--surface-alt)"/>
+          <!-- Section bands -->
+          <rect x="20"  y="24" width="78"  height="145" rx="4" fill="#8c8c8c" fill-opacity="0.16" stroke="#8c8c8c" stroke-opacity="0.45"/>
+          <rect x="102" y="24" width="166" height="145" rx="4" fill="#00dc46" fill-opacity="0.13" stroke="#00b83a" stroke-opacity="0.45"/>
+          <rect x="272" y="24" width="96"  height="145" rx="4" fill="#285aff" fill-opacity="0.14" stroke="#285aff" stroke-opacity="0.45"/>
+          <rect x="372" y="24" width="92"  height="145" rx="4" fill="#ff9600" fill-opacity="0.15" stroke="#e68600" stroke-opacity="0.5"/>
+          <rect x="466" y="24" width="16"  height="145" rx="2" fill="#e53935" fill-opacity="0.22" stroke="#e53935" stroke-dasharray="3 2"/>
+          <rect x="486" y="24" width="168" height="145" rx="4" fill="#00dc46" fill-opacity="0.13" stroke="#00b83a" stroke-opacity="0.45"/>
+          <rect x="658" y="24" width="82"  height="145" rx="4" fill="#aa3cd2" fill-opacity="0.15" stroke="#aa3cd2" stroke-opacity="0.45"/>
+
+          <!-- Centre dashed line -->
+          <line x1="20" y1="98" x2="740" y2="98" stroke="var(--text-muted)" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.65"/>
+          <text x="26" y="92" fill="var(--text-muted)" font-size="10" font-family="sans-serif">Recipe Centre (E / D)</text>
+
+          <!-- Curve path -->
+          <path d="M 22 154 C 52 146, 72 118, 98 98 L 268 98 L 274 138 L 368 138 C 405 134, 435 92, 464 56"
+                fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+          <!-- Gap silence -->
+          <line x1="466" y1="160" x2="482" y2="160" stroke="#e53935" stroke-width="2.5"/>
+          <!-- Drop & decay & Groove & Outro -->
+          <path d="M 486 44 C 514 54, 540 84, 566 98 L 654 98 C 685 110, 712 136, 738 156"
+                fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+
+          <!-- Drop marker -->
+          <circle cx="486" cy="44" r="5" fill="var(--accent)"/>
+          <line x1="486" y1="24" x2="486" y2="169" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <rect x="492" y="30" width="54" height="18" rx="4" fill="var(--accent)"/>
+          <text x="519" y="42" text-anchor="middle" fill="#fff" font-size="10.5" font-weight="700" font-family="sans-serif">DROP</text>
+
+          <!-- Section labels -->
+          <g font-family="sans-serif" font-size="11.5" font-weight="700" fill="var(--text)" text-anchor="middle">
+            <text x="59"  y="186">INTRO</text>
+            <text x="185" y="186">GROOVE</text>
+            <text x="320" y="186">BREAK</text>
+            <text x="418" y="186">BUILD</text>
+            <text x="570" y="186">GROOVE</text>
+            <text x="699" y="186">OUTRO</text>
+          </g>
+          <g font-family="sans-serif" font-size="9.5" fill="var(--text-muted)" text-anchor="middle">
+            <text x="59"  y="200">Rises in</text>
+            <text x="185" y="200">Home centre</text>
+            <text x="320" y="200">Dips &amp; strips</text>
+            <text x="418" y="200">Ramps + roll</text>
+            <text x="474" y="17" fill="#e53935" font-weight="700">GAP</text>
+            <text x="570" y="200">Drop lift → decays</text>
+            <text x="699" y="200">Fades &amp; stops</text>
+          </g>
+          <!-- Start / Stop tags -->
+          <text x="20" y="16" fill="var(--text-muted)" font-size="9.5" font-family="sans-serif">PLAY</text>
+          <text x="740" y="16" text-anchor="end" fill="var(--text-muted)" font-size="9.5" font-family="sans-serif">END → Stop</text>
+        </svg>
+        <figcaption>The automatic Arc cycle: <strong>Intro → Groove → Break → Build → (Gap) → Drop → Groove → … → Outro</strong>. Some genres (such as Psytrance and Ambient) can also move directly from Groove into a Build. Ambient uses a gentle swell with no roll, gap, or drop shock.</figcaption>
+      </figure>
+
+      <ul>
+        <li><strong>Intro:</strong> Plays when you press <kbd>PLAY</kbd> from stop (1–2 phrases). Density rises from the lowest part gate up to your centre, bringing parts in gradually. Press <kbd>SHIFT</kbd>+<kbd>PLAY</kbd> to skip it.</li>
+        <li><strong>Groove:</strong> Home. Macros sit at your Recipe values. Automatic fills and drop-outs happen here. Higher <strong>Motion</strong> shortens how many phrases a Groove lasts before moving on; at Motion 0, the Groove plays indefinitely.</li>
+        <li><strong>Break:</strong> Strips back to each genre's kept parts (for example, pads and hats) and dips Energy and Density while filters close and reverb washes in.</li>
+        <li><strong>Build:</strong> Ramps Energy and Density up above your centre, opens filters/high-pass (Rise), triggers the Riser FX, and plays a climbing snare roll. A Build shorter than one phrase tucks into the end of the phrase before it so the Drop always lands on a phrase line.</li>
+        <li><strong>Gap:</strong> Not a Section of its own—an optional brief silence (none, 1 beat, or 1 bar depending on genre) right before the Drop.</li>
+        <li><strong>Drop:</strong> The moment a Build lands back in Groove. Every allowed part enters, an Impact and Crash hit, gesture filters snap open (Reset), and Energy/Density get a temporary lift that decays back to centre.</li>
+        <li><strong>Outro:</strong> Queued by holding the <strong>End</strong> sidebar pad for 0.6 s. Energy and Density fall as parts exit, and transport stops cleanly at the end of the Outro.</li>
+      </ul>
+
+      <p><strong>Headroom:</strong> If you turn Energy or Density near 50 (or near 0), the Arc automatically scales its lifts (or dips) to fit the remaining headroom so curves stay smooth instead of slamming flat.</p>
+    </section>
+
+    <!-- 7. PERFORM -->
+    <section id="perform">
+      <h2>7. Perform: Playing Live</h2>
+      <p>Perform runs in its own live song—you cannot jump into stock Clip or Arranger views while Perform is active. Everything you need sits on three grid pages, the permanent sidebar, the OLED, and the panel controls.</p>
+      <p class="note"><em>Panel shorthand used below:</em> <kbd>X</kbd> = horizontal scroll encoder (<kbd>◄►</kbd>), <kbd>Y</kbd> = vertical scroll encoder (<kbd>▲▼</kbd>), <kbd>F1</kbd>–<kbd>F8</kbd> = the 8 mod buttons beside the two gold knobs (top to bottom).</p>
+
+      <!-- 7.1 PAD GRIDS -->
+      <h3 id="perform-grids">Pad Grids &amp; Permanent Sidebar</h3>
+      <p>Switch grid pages with <kbd>SONG</kbd>, <kbd>CLIP</kbd>, and <kbd>KEYBOARD</kbd> (their LEDs show which page is open). The two rightmost columns—<strong>MUTE/LAUNCH</strong> and <strong>AUDITION/SECTION</strong>—stay the same on every page.</p>
+
+      <h4>SONG Page (Arc Map) &amp; Sidebar</h4>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 275" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perform SONG page pad grid showing 16 phrase columns and 2 sidebar columns">
+          <rect x="0" y="0" width="760" height="275" rx="8" fill="var(--grid-bg)"/>
+
+          <!-- Column header labels -->
+          <g font-family="sans-serif" font-size="9.5" fill="#9ea8b8" text-anchor="middle">
+            <text x="105" y="16">← HISTORY</text>
+            <text x="175" y="16" fill="#ffffff" font-weight="700">NOW</text>
+            <text x="402" y="16">ARC PLAN (UPCOMING PHRASES) →</text>
+            <text x="646" y="16" fill="#d7dde6" font-weight="700">MUTE</text>
+            <text x="688" y="16" fill="#d7dde6" font-weight="700">ARC</text>
+          </g>
+
+          <!-- Row labels left -->
+          <g font-family="monospace" font-size="9.5" fill="#9ea8b8" text-anchor="end">
+            <text x="48" y="39">1 DRUMS</text>
+            <text x="48" y="65">2 BASS</text>
+            <text x="48" y="91">3 CHORD</text>
+            <text x="48" y="117">4 PAD</text>
+            <text x="48" y="143">5 LEAD</text>
+            <text x="48" y="169">6 FX</text>
+            <text x="48" y="195">7 ENGY</text>
+            <text x="48" y="221">8 SECT</text>
+          </g>
+
+          <!-- Main 16x8 grid: x starts at 56, pitch 35px, pad 30x20 -->
+          <!-- Highlight column 4 (index 3, x=161-21 -> 56 + 3*35 = 161? Wait: col 1=56, 2=91, 3=126, 4=161 -> center 176. Adjust NOW text) -->
+          <rect x="157" y="22" width="36" height="208" rx="4" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="1.5"/>
+
+          <!-- Generate rows via clean SVG groups -->
+          <!-- Row 1: Drums (red #ff2828) -->
+          <g transform="translate(56,26)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#ff2828"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#ff2828"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#ff2828"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#ff5555" stroke="#fff" stroke-width="1"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#7a1b1b"/>
+          </g>
+          <!-- Row 2: Bass (orange #ff8c00) -->
+          <g transform="translate(56,52)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#ff8c00"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#ff8c00"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#ff8c00"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#ffffff"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#7a4508"/>
+          </g>
+          <!-- Row 3: Chords (cyan #00c8ff in history; muted now -> dark in NOW, faint red in planned cols) -->
+          <g transform="translate(56,78)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#00c8ff"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#00c8ff"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#4a1414"/>
+          </g>
+          <!-- Row 4: Pad (purple #9650ff) -->
+          <g transform="translate(56,104)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#9650ff"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#9650ff"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#9650ff"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#9650ff"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#48297a"/>
+          </g>
+          <!-- Row 5: Lead (green #28ff5a, gated in groove, enters on Drop) -->
+          <g transform="translate(56,130)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#186e2d"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#186e2d"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#186e2d"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#186e2d"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+          </g>
+          <!-- Row 6: FX (magenta #ff3cdc, plays on Break/Build/Drop) -->
+          <g transform="translate(56,156)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#782268"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#272b33"/>
+          </g>
+          <!-- Row 7: Energy vs centre (blue below, green at, orange above) -->
+          <g transform="translate(56,182)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#3a7bff"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#3a7bff"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#ff9800"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#ff9800"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#3a7bff"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#ff9800"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#ff9800"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#00c853"/>
+          </g>
+          <!-- Row 8: Section (Intro grey, Groove green, Break blue, Build orange) -->
+          <g transform="translate(56,208)">
+            <rect x="0"   y="0" width="28" height="18" rx="3" fill="#8c8c8c"/>
+            <rect x="35"  y="0" width="28" height="18" rx="3" fill="#008c30"/>
+            <rect x="70"  y="0" width="28" height="18" rx="3" fill="#008c30"/>
+            <rect x="105" y="0" width="28" height="18" rx="3" fill="#00dc46"/>
+            <rect x="140" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+            <rect x="175" y="0" width="28" height="18" rx="3" fill="#1c3fa8"/>
+            <rect x="210" y="0" width="28" height="18" rx="3" fill="#b36800"/>
+            <rect x="245" y="0" width="28" height="18" rx="3" fill="#00b53a"/>
+            <rect x="280" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+            <rect x="315" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+            <rect x="350" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+            <rect x="385" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+            <rect x="420" y="0" width="28" height="18" rx="3" fill="#1c3fa8"/>
+            <rect x="455" y="0" width="28" height="18" rx="3" fill="#b36800"/>
+            <rect x="490" y="0" width="28" height="18" rx="3" fill="#00b53a"/>
+            <rect x="525" y="0" width="28" height="18" rx="3" fill="#006b24"/>
+          </g>
+
+          <!-- Divider between main grid and sidebar -->
+          <line x1="620" y1="22" x2="620" y2="230" stroke="#3c4352" stroke-width="1.5"/>
+
+          <!-- Sidebar Column 1: MUTE/LAUNCH (x=632) -->
+          <g transform="translate(632,26)">
+            <rect x="0" y="0"   width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="0" y="26"  width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="0" y="52"  width="28" height="18" rx="3" fill="#e53935"/>
+            <rect x="0" y="78"  width="28" height="18" rx="3" fill="#00c853"/>
+            <rect x="0" y="104" width="28" height="18" rx="3" fill="#1a5c32"/>
+            <rect x="0" y="130" width="28" height="18" rx="3" fill="#1a5c32"/>
+            <rect x="0" y="156" width="28" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="0" y="182" width="28" height="18" rx="3" fill="#1c1f26"/>
+          </g>
+
+          <!-- Sidebar Column 2: AUDITION/SECTION (x=674) -->
+          <g transform="translate(674,26)" font-family="sans-serif" font-size="8.5" font-weight="700" text-anchor="middle">
+            <rect x="0" y="0"   width="28" height="18" rx="3" fill="#00dc46"/>
+            <text x="14" y="12" fill="#081b0e">GRV</text>
+            <rect x="0" y="26"  width="28" height="18" rx="3" fill="#285aff"/>
+            <text x="14" y="38" fill="#ffffff">BRK</text>
+            <rect x="0" y="52"  width="28" height="18" rx="3" fill="#ff9600"/>
+            <text x="14" y="64" fill="#1a1000">BLD</text>
+            <rect x="0" y="78"  width="28" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="0" y="104" width="28" height="18" rx="3" fill="#e0e0e0"/>
+            <text x="14" y="116" fill="#111111">HLD</text>
+            <rect x="0" y="130" width="28" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="0" y="156" width="28" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="0" y="182" width="28" height="18" rx="3" fill="#aa3cd2"/>
+            <text x="14" y="194" fill="#ffffff">END</text>
+          </g>
+
+          <!-- Sidebar right-hand annotations -->
+          <g font-family="sans-serif" font-size="9" fill="#9ea8b8">
+            <text x="708" y="38">Force Grv</text>
+            <text x="708" y="64">Force Brk</text>
+            <text x="708" y="90">Force Bld</text>
+            <text x="708" y="142">Hold Arc</text>
+            <text x="708" y="220">Hold 0.6s</text>
+          </g>
+
+          <!-- Legend bottom -->
+          <g transform="translate(56,246)" font-family="sans-serif" font-size="9.5" fill="#b4becd">
+            <rect x="0"   y="0" width="10" height="10" rx="2" fill="#ffffff"/>
+            <text x="15"  y="9">Focused (Col 4)</text>
+            <rect x="108" y="0" width="10" height="10" rx="2" fill="#00c853"/>
+            <text x="123" y="9">Active</text>
+            <rect x="168" y="0" width="10" height="10" rx="2" fill="#e53935"/>
+            <text x="183" y="9">Muted</text>
+            <rect x="230" y="0" width="10" height="10" rx="2" fill="#4a1414" stroke="#7a2424" stroke-width="0.7"/>
+            <text x="245" y="9">Muted (plan)</text>
+            <rect x="322" y="0" width="10" height="10" rx="2" fill="#1a5c32"/>
+            <text x="337" y="9">Dim = Arc-silenced</text>
+            <rect x="446" y="0" width="10" height="10" rx="2" fill="#00b53a"/>
+            <text x="461" y="9">Drop phrase</text>
+          </g>
+        </svg>
+        <figcaption><strong>SONG page (Arc map):</strong> Each column is one phrase. <strong>Column 4</strong> is now (white pad = focused part; active parts flash live). Columns 1–3 show played history; columns 5–16 show the Arc plan ahead. Turn <kbd>X</kbd> to scroll history/plan, tap <kbd>X</kbd> to jump back to now. Hold any part row (rows 1–6) to focus it, or double-tap to lock focus. Queued actions blink in the column where they land.</figcaption>
+      </figure>
+
+      <p><strong>Sidebar rules (same on every grid page):</strong></p>
+      <ul>
+        <li><strong>MUTE/LAUNCH (rows 1–6):</strong> Tap to mute/unmute a part at the next bar line (hold <kbd>SHIFT</kbd> for immediate mute at the next step). Hold <kbd>X</kbd> + tap a MUTE pad to <strong>solo</strong>. Green = active, red = muted, blue = solo, dim = silenced by the Arc (gate closed, Break, drop-out, or soloed out).</li>
+        <li><strong>AUDITION/SECTION (rows 1–3):</strong> Force <strong>Groove</strong> (row 1, green), <strong>Break</strong> (row 2, blue), or <strong>Build</strong> (row 3, orange). Starts at the next phrase line (a short Build starts early enough to end on a phrase line). Tap again to cancel while queued.</li>
+        <li><strong>AUDITION/SECTION row 5:</strong> <strong>Hold</strong> the current Section (white while held). A Build always finishes to its Drop and then holds the Groove.</li>
+        <li><strong>AUDITION/SECTION row 8:</strong> <strong>End</strong> (purple). Hold for <strong>0.6 s</strong> to queue the Outro; tap to cancel while queued. Disabled while a menu, browser, or sound editor is open on top.</li>
+        <li><em>While stopped, sidebar pads do nothing</em>—mutes, solos, forces, and holds are live performance state cleared on stop.</li>
+      </ul>
+
+      <h4>CLIP Page (One Part in Depth)</h4>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perform CLIP page pad grid showing takes, action pads, and six horizontal sound control faders">
+          <rect x="0" y="0" width="760" height="250" rx="8" fill="var(--grid-bg)"/>
+
+          <g font-family="monospace" font-size="9.5" fill="#9ea8b8" text-anchor="end">
+            <text x="64" y="34">1 TAKES</text>
+            <text x="64" y="60">2 ACT</text>
+            <text x="64" y="86">3 BRI</text>
+            <text x="64" y="112">4 THI</text>
+            <text x="64" y="138">5 DEC</text>
+            <text x="64" y="164">6 SPA</text>
+            <text x="64" y="190">7 DRI</text>
+            <text x="64" y="216">8 WOB</text>
+          </g>
+
+          <!-- Row 1: Takes 1-16 (x=72, pitch 40, pad 34x18) -->
+          <g transform="translate(72,21)" font-family="sans-serif" font-size="8.5" font-weight="700" text-anchor="middle">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#5e3a0a"/><text x="17" y="12" fill="#e0b57a">1</text>
+            <rect x="40"  y="0" width="34" height="18" rx="3" fill="#ff8c00"/><text x="57" y="12" fill="#1a1000">2</text>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#5e3a0a"/><text x="97" y="12" fill="#e0b57a">3</text>
+            <rect x="120" y="0" width="34" height="18" rx="3" fill="#505662"/><text x="137" y="12" fill="#d0d4dc">+4</text>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="200" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="280" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="360" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="440" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="520" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+            <rect x="600" y="0" width="34" height="18" rx="3" fill="#272b33"/>
+          </g>
+
+          <!-- Row 2: FREEZE, NEW SOUND, SOUND EDITOR -->
+          <g transform="translate(72,47)" font-family="sans-serif" font-size="8" font-weight="700" text-anchor="middle">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#00c8ff"/><text x="17" y="12" fill="#071e26">FRZ</text>
+            <rect x="40"  y="0" width="34" height="18" rx="3" fill="#a85500"/><text x="57" y="12" fill="#ffffff">SND</text>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#7035b5"/><text x="97" y="12" fill="#ffffff">EDT</text>
+            <text x="132" y="12" fill="#9ea8b8" font-weight="400" font-size="9.5" text-anchor="start">Pad 1: Freeze · Pad 2: New Sound (SHIFT = prev) · Pad 3: Sound Editor</text>
+          </g>
+
+          <!-- Rows 3-8: Six horizontal 16-pad faders (all use the focused part's role colour, here Bass orange) -->
+          <!-- Row 3 Brightness: home 9, live 11 -->
+          <g transform="translate(72,73)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#ffffff"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#422508"/>
+          </g>
+          <!-- Row 4 Thin: home 1, live 1 -->
+          <g transform="translate(72,99)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#ffffff"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#422508"/>
+          </g>
+          <!-- Row 5 Decay: home 7, live 6 -->
+          <g transform="translate(72,125)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#ffffff"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#422508"/>
+          </g>
+          <!-- Row 6 Space: home 5, live 5 -->
+          <g transform="translate(72,151)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#ffffff"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#422508"/>
+          </g>
+          <!-- Row 7 Drive: home 4, live 6 -->
+          <g transform="translate(72,177)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#d97706"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#d97706"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#ffffff"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#422508"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#422508"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#422508"/>
+          </g>
+          <!-- Row 8 Wobble: dark (not used by preset) -->
+          <g transform="translate(72,203)">
+            <rect x="0"   y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="40"  y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="80"  y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="120" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="160" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="200" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="240" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="280" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="320" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="360" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="400" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="440" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="480" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="520" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <rect x="560" y="0" width="34" height="18" rx="3" fill="#1c1f26"/><rect x="600" y="0" width="34" height="18" rx="3" fill="#1c1f26"/>
+            <text x="10" y="13" fill="#7c8596" font-family="sans-serif" font-size="9">Dark row = preset does not use this control</text>
+          </g>
+
+          <text x="72" y="238" fill="#b4becd" font-family="sans-serif" font-size="9.5">Lit pads = home position · White pad = live value (with Arc, gestures &amp; drift) · Tap any pad to set home</text>
+        </svg>
+        <figcaption><strong>CLIP page:</strong> Shows the last part you focused (dark until you focus a part on <kbd>SONG</kbd>). Opening CLIP does not lock the gold knobs—press <kbd>AFFECT ENTIRE</kbd> to lock or unlock the shown part. Row 1 picks takes (bright = playing, dim = earlier, grey = next new take, blinking = queued). Row 2 has <code>FREEZE</code>, <code>NEW SOUND</code> (<kbd>SHIFT</kbd> = previous sound), and <code>SOUND EDITOR</code>. Rows 3–8 are horizontal faders for the six sound controls (dark on FX parts, which have per-lane controls only).</figcaption>
+      </figure>
+
+      <h4>KEYBOARD Page (Performance Pads &amp; Stock Performance View)</h4>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 258" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Perform KEYBOARD page pad grid showing macro faders, drum lane mutes, phrase quarters, punch-ins, and FILL block">
+          <rect x="0" y="0" width="760" height="258" rx="8" fill="var(--grid-bg)"/>
+
+          <!-- Column group headers -->
+          <g font-family="sans-serif" font-size="9.5" font-weight="700" text-anchor="middle">
+            <text x="64"  y="17" fill="#ff7043">ENERGY</text>
+            <text x="148" y="17" fill="#ffca28">DENSITY</text>
+            <text x="232" y="17" fill="#29b6f6">COMPLEX</text>
+            <text x="316" y="17" fill="#ab47bc">MOTION</text>
+            <text x="400" y="17" fill="#66bb6a">DRUM MUTES</text>
+            <text x="505" y="17" fill="#6f7785">FREE</text>
+            <text x="580" y="17" fill="#cfd8dc">PHR</text>
+            <text x="665" y="17" fill="#ff9800">PUNCH-INS</text>
+          </g>
+
+          <!-- 16 columns: x=26, pitch 42, pad 36x19, row pitch 24 starting y=25 -->
+          <!-- Energy & Density show Arc lift (Build/Drop); Complexity & Motion white pad sits on top lit row -->
+          <g transform="translate(26,25)">
+            <!-- Col 1-2 Energy (RGB 255,70,30; centre row 4, Arc lifted to row 3) -->
+            <rect x="0" y="0"   width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="0" y="24"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="0" y="48"  width="78" height="19" rx="3" fill="#ffffff"/>
+            <rect x="0" y="72"  width="78" height="19" rx="3" fill="#d93b19"/>
+            <rect x="0" y="96"  width="78" height="19" rx="3" fill="#d93b19"/>
+            <rect x="0" y="120" width="78" height="19" rx="3" fill="#d93b19"/>
+            <rect x="0" y="144" width="78" height="19" rx="3" fill="#d93b19"/>
+            <rect x="0" y="168" width="78" height="19" rx="3" fill="#d93b19"/>
+
+            <!-- Col 3-4 Density (x=84; RGB 255,200,0; centre row 5, Arc lifted to row 4) -->
+            <rect x="84" y="0"   width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="84" y="24"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="84" y="48"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="84" y="72"  width="78" height="19" rx="3" fill="#ffffff"/>
+            <rect x="84" y="96"  width="78" height="19" rx="3" fill="#d4a600"/>
+            <rect x="84" y="120" width="78" height="19" rx="3" fill="#d4a600"/>
+            <rect x="84" y="144" width="78" height="19" rx="3" fill="#d4a600"/>
+            <rect x="84" y="168" width="78" height="19" rx="3" fill="#d4a600"/>
+
+            <!-- Col 5-6 Complexity (x=168; RGB 0,180,255; Arc never moves C, white on top lit row 5) -->
+            <rect x="168" y="0"   width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="168" y="24"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="168" y="48"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="168" y="72"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="168" y="96"  width="78" height="19" rx="3" fill="#ffffff"/>
+            <rect x="168" y="120" width="78" height="19" rx="3" fill="#0095d4"/>
+            <rect x="168" y="144" width="78" height="19" rx="3" fill="#0095d4"/>
+            <rect x="168" y="168" width="78" height="19" rx="3" fill="#0095d4"/>
+
+            <!-- Col 7-8 Motion (x=252; RGB 180,90,255; Arc never moves M, white on top lit row 4) -->
+            <rect x="252" y="0"   width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="252" y="24"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="252" y="48"  width="78" height="19" rx="3" fill="#272b33"/>
+            <rect x="252" y="72"  width="78" height="19" rx="3" fill="#ffffff"/>
+            <rect x="252" y="96"  width="78" height="19" rx="3" fill="#9248d4"/>
+            <rect x="252" y="120" width="78" height="19" rx="3" fill="#9248d4"/>
+            <rect x="252" y="144" width="78" height="19" rx="3" fill="#9248d4"/>
+            <rect x="252" y="168" width="78" height="19" rx="3" fill="#9248d4"/>
+
+            <!-- Cols 9-10: Drum lane mutes (x=336, x=378) -->
+            <g font-family="sans-serif" font-size="8" font-weight="700" text-anchor="middle">
+              <rect x="336" y="0"   width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="12" fill="#e8f5e9">KICK</text>
+              <rect x="336" y="24"  width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="36" fill="#e8f5e9">SNR</text>
+              <rect x="336" y="48"  width="36" height="19" rx="3" fill="#c62828"/><text x="354" y="60" fill="#ffebee">CLP</text>
+              <rect x="336" y="72"  width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="84" fill="#e8f5e9">RIM</text>
+              <rect x="336" y="96"  width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="108" fill="#e8f5e9">CH</text>
+              <rect x="336" y="120" width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="132" fill="#e8f5e9">OH</text>
+              <rect x="336" y="144" width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="156" fill="#e8f5e9">RID</text>
+              <rect x="336" y="168" width="36" height="19" rx="3" fill="#2e7d32"/><text x="354" y="180" fill="#e8f5e9">CRS</text>
+
+              <rect x="378" y="0"   width="36" height="19" rx="3" fill="#2e7d32"/><text x="396" y="12" fill="#e8f5e9">TOM</text>
+              <rect x="378" y="24"  width="36" height="19" rx="3" fill="#2e7d32"/><text x="396" y="36" fill="#e8f5e9">P1</text>
+              <rect x="378" y="48"  width="36" height="19" rx="3" fill="#2e7d32"/><text x="396" y="60" fill="#e8f5e9">P2</text>
+              <rect x="378" y="72"  width="36" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="378" y="96"  width="36" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="378" y="120" width="36" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="378" y="144" width="36" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="378" y="168" width="36" height="19" rx="3" fill="#1c1f26"/>
+            </g>
+
+            <!-- Cols 11-13: Free (x=420..538) -->
+            <rect x="422" y="0" width="110" height="187" rx="4" fill="#1c1f26" stroke="#2f3542" stroke-dasharray="4 3"/>
+            <text x="477" y="97" text-anchor="middle" fill="#6f7785" font-family="sans-serif" font-size="9.5">Cols 11–13 free</text>
+
+            <!-- Col 14: Phrase quarters rows 1-4 (x=538) -->
+            <rect x="538" y="0"   width="36" height="19" rx="3" fill="#1d6e35"/>
+            <rect x="538" y="24"  width="36" height="19" rx="3" fill="#00dc46"/>
+            <rect x="538" y="48"  width="36" height="19" rx="3" fill="#14331d"/>
+            <rect x="538" y="72"  width="36" height="19" rx="3" fill="#14331d"/>
+
+            <!-- Cols 15-16: Punch-ins rows 1-3 (firmware kPunchColours) -->
+            <g font-family="sans-serif" font-size="7.8" font-weight="700" text-anchor="middle">
+              <rect x="580" y="0"  width="56" height="19" rx="3" fill="#008eb3"/><text x="608" y="12" fill="#e0f7fa">HAT ROLL</text>
+              <rect x="642" y="0"  width="56" height="19" rx="3" fill="#c76e00"/><text x="670" y="12" fill="#fff3e0">SNR ROLL</text>
+              <rect x="580" y="24" width="56" height="19" rx="3" fill="#b82c74"/><text x="608" y="36" fill="#fce4ec">FLAM</text>
+              <rect x="642" y="24" width="56" height="19" rx="3" fill="#b81700"/><text x="670" y="36" fill="#ffebee">2× KICK</text>
+              <rect x="580" y="48" width="56" height="19" rx="3" fill="#469e20"/><text x="608" y="60" fill="#e8f5e9">PUMP</text>
+              <rect x="642" y="48" width="56" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="580" y="72" width="56" height="19" rx="3" fill="#1c1f26"/>
+              <rect x="642" y="72" width="56" height="19" rx="3" fill="#1c1f26"/>
+            </g>
+
+            <!-- Cols 14-16 rows 5-8: FILL block (x=538..698, y=96..187) -->
+            <rect x="538" y="96" width="160" height="91" rx="5" fill="#424854" stroke="#8a93a6" stroke-width="1.2"/>
+            <text x="618" y="138" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="13" font-weight="700">FILL</text>
+            <text x="618" y="154" text-anchor="middle" fill="#cfd6e3" font-family="sans-serif" font-size="9">Hold any pad (SHIFT = fresh)</text>
+          </g>
+
+          <text x="26" y="238" fill="#b4becd" font-family="sans-serif" font-size="9.5">Faders: tap &lt; 0.3s sets centre · hold ≥ 0.3s springs back · Focus a part to steer its Part bias · Press KEYBOARD again for stock song FX</text>
+        </svg>
+        <figcaption><strong>KEYBOARD page:</strong> Columns 1–8 are vertical faders for Energy, Density, Complexity, and Motion (0 at bottom, 50 at top; white pad = Arc position, or Recipe centre when steering Part bias). Columns 9–10 mute individual drum lanes (green = active, red = muted; only the playing genre's lanes are lit). Column 14 (top 4) shows phrase quarters. Columns 15–16 (top 3) are punch-in effects. Columns 14–16 (bottom 4) are a large held <code>FILL</code> pad.</figcaption>
+      </figure>
+
+      <p><strong>Stock Performance View (Song FX):</strong> Press <kbd>KEYBOARD</kbd> a second time while already on the KEYBOARD page (the <kbd>KEYBOARD</kbd> LED blinks) to flip to the stock Deluge Performance View song FX pads (LPF, HPF, reverb, delay, mod FX, decimation, bitcrush, stutter). Perform's sidebar, gold knobs, OLED, and menus stay live around it. Press <kbd>KEYBOARD</kbd> again to return.</p>
+
+      <!-- 7.2 OLED -->
+      <h3 id="perform-oled">OLED Screens &amp; Peeks</h3>
+      <p>The top status line is always visible, with a thin phrase-progress bar underneath:</p>
+      <ul>
+        <li><strong>Left:</strong> Current Section and phrase count (<code>GROOVE 2</code>, <code>BREAK 1/2</code>), <code>STOPPED</code>, or—on the <kbd>SONG</kbd> page when a part is focused—that part's name. Adds <code>HELD</code> (or <code>H</code>) when the Arc is held.</li>
+        <li><strong>Right:</strong> Inverted tag for the next queued action with its countdown (e.g. <code>&gt;BR3</code> = Break in 3 bars, <code>+</code> if more are queued), or <code>bar.beat</code> when nothing is queued. Shows <code>EXT</code> under an external clock, and a <strong>Capture dot</strong> at the far right (once a piece has played; filled = marked, hollow = unmarked, blinking = log full).</li>
+      </ul>
+      <p>The main area follows your current grid page:</p>
+
+      <div class="oled-row">
+        <div class="oled-card">
+          <svg viewBox="0 0 256 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OLED ARC page mockup">
+            <rect width="256" height="96" rx="4" fill="var(--oled-bg)"/>
+            <!-- Status line -->
+            <text x="6" y="16" fill="var(--oled-fg)" font-family="monospace" font-size="11" font-weight="700">GROOVE 2</text>
+            <rect x="172" y="5" width="46" height="14" rx="2" fill="var(--oled-fg)"/>
+            <text x="195" y="16" text-anchor="middle" fill="var(--oled-bg)" font-family="monospace" font-size="10.5" font-weight="700">&gt;BR3+</text>
+            <circle cx="242" cy="12" r="4" fill="var(--oled-fg)"/>
+            <line x1="6" y1="22" x2="250" y2="22" stroke="var(--oled-dim)" stroke-width="1"/>
+            <line x1="6" y1="22" x2="140" y2="22" stroke="var(--oled-fg)" stroke-width="2.5"/>
+            <!-- 8 phrase boxes: now inverted, queued BR blinking inverted, Drop GR with vertical bar inside right edge -->
+            <g transform="translate(6,32)" font-family="monospace" font-size="10" text-anchor="middle">
+              <rect x="0"   y="0" width="27" height="24" rx="1" fill="var(--oled-fg)"/><text x="13.5" y="16" fill="var(--oled-bg)" font-weight="700">GR</text>
+              <rect x="31"  y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-fg)"/><text x="44.5" y="16" fill="var(--oled-fg)">GR</text>
+              <rect x="62"  y="0" width="27" height="24" rx="1" fill="var(--oled-fg)"/><text x="75.5" y="16" fill="var(--oled-bg)" font-weight="700">BR</text>
+              <rect x="93"  y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-fg)"/><text x="106.5" y="16" fill="var(--oled-fg)">BU</text>
+              <rect x="124" y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-fg)"/><text x="135.5" y="16" fill="var(--oled-fg)">GR</text><line x1="148" y1="2" x2="148" y2="22" stroke="var(--oled-fg)" stroke-width="2"/>
+              <rect x="155" y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-dim)"/><text x="168.5" y="16" fill="var(--oled-dim)">GR</text>
+              <rect x="186" y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-dim)"/><text x="199.5" y="16" fill="var(--oled-dim)">GR</text>
+              <rect x="217" y="0" width="27" height="24" rx="1" fill="none" stroke="var(--oled-dim)"/><text x="230.5" y="16" fill="var(--oled-dim)">GR</text>
+            </g>
+            <text x="6" y="80" fill="var(--oled-fg)" font-family="monospace" font-size="11">NEXT BREAK 3 BARS</text>
+          </svg>
+          <div class="oled-cap"><strong>ARC page</strong> (on <kbd>SONG</kbd>): Now (inverted) + next 7 phrases. Queued boxes (<code>BR</code>) blink inverted; a Drop box has a vertical bar inside its right edge.</div>
+        </div>
+
+        <div class="oled-card">
+          <svg viewBox="0 0 256 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OLED PART page mockup">
+            <rect width="256" height="96" rx="4" fill="var(--oled-bg)"/>
+            <text x="6" y="16" fill="var(--oled-fg)" font-family="monospace" font-size="11" font-weight="700">GROOVE 2</text>
+            <text x="220" y="16" text-anchor="end" fill="var(--oled-fg)" font-family="monospace" font-size="11">4.2</text>
+            <circle cx="242" cy="12" r="4" fill="none" stroke="var(--oled-fg)" stroke-width="1.5"/>
+            <line x1="6" y1="22" x2="250" y2="22" stroke="var(--oled-dim)" stroke-width="1"/>
+            <line x1="6" y1="22" x2="120" y2="22" stroke="var(--oled-fg)" stroke-width="2.5"/>
+            <text x="6" y="38" fill="var(--oled-fg)" font-family="monospace" font-size="10.5" font-weight="700">ACID 005 Sweet Mono</text>
+            <text x="250" y="38" text-anchor="end" fill="var(--oled-fg)" font-family="monospace" font-size="10.5">T2/3*</text>
+            <!-- 6 mini bars in firmware row-major order: BRI|THI, DEC|SPA, DRI|WOB (unused WOB shows label only) -->
+            <g font-family="monospace" font-size="9.5" fill="var(--oled-fg)">
+              <text x="6"   y="56">BRI</text><rect x="34" y="48" width="84" height="8" fill="none" stroke="var(--oled-dim)"/><rect x="34" y="48" width="46" height="8" fill="var(--oled-fg)"/><line x1="94" y1="46" x2="94" y2="58" stroke="var(--oled-fg)" stroke-width="2"/>
+              <text x="134" y="56">THI</text><rect x="162" y="48" width="84" height="8" fill="none" stroke="var(--oled-dim)"/><rect x="162" y="48" width="8" height="8" fill="var(--oled-fg)"/>
+              <text x="6"   y="71">DEC</text><rect x="34" y="63" width="84" height="8" fill="none" stroke="var(--oled-dim)"/><rect x="34" y="63" width="40" height="8" fill="var(--oled-fg)"/>
+              <text x="134" y="71">SPA</text><rect x="162" y="63" width="84" height="8" fill="none" stroke="var(--oled-dim)"/><rect x="162" y="63" width="26" height="8" fill="var(--oled-fg)"/>
+              <text x="6"   y="86">DRI</text><rect x="34" y="78" width="84" height="8" fill="none" stroke="var(--oled-dim)"/><rect x="34" y="78" width="30" height="8" fill="var(--oled-fg)"/><line x1="80" y1="76" x2="80" y2="88" stroke="var(--oled-fg)" stroke-width="2"/>
+              <text x="134" y="86">WOB</text>
+            </g>
+          </svg>
+          <div class="oled-cap"><strong>PART page</strong> (on <kbd>CLIP</kbd>): Part + preset name, take &amp; freeze star (<code>T2/3*</code>), and the 6 controls row-by-row (<code>BRI|THI</code>, <code>DEC|SPA</code>, <code>DRI|WOB</code>; bar = home, tick = live; unused controls show label only).</div>
+        </div>
+
+        <div class="oled-card">
+          <svg viewBox="0 0 256 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OLED MACROS page mockup">
+            <rect width="256" height="96" rx="4" fill="var(--oled-bg)"/>
+            <text x="6" y="16" fill="var(--oled-fg)" font-family="monospace" font-size="11" font-weight="700">BUILD 1/1</text>
+            <text x="220" y="16" text-anchor="end" fill="var(--oled-fg)" font-family="monospace" font-size="11">7.3</text>
+            <circle cx="242" cy="12" r="4" fill="var(--oled-fg)"/>
+            <line x1="6" y1="22" x2="250" y2="22" stroke="var(--oled-dim)" stroke-width="1"/>
+            <line x1="6" y1="22" x2="210" y2="22" stroke="var(--oled-fg)" stroke-width="2.5"/>
+            <g font-family="monospace" font-size="10.5" fill="var(--oled-fg)">
+              <text x="6" y="40">E25</text><rect x="38" y="31" width="208" height="9" fill="none" stroke="var(--oled-dim)"/><rect x="38" y="31" width="104" height="9" fill="var(--oled-fg)"/><line x1="178" y1="29" x2="178" y2="42" stroke="var(--oled-fg)" stroke-width="2.5"/>
+              <text x="6" y="56">D25</text><rect x="38" y="47" width="208" height="9" fill="none" stroke="var(--oled-dim)"/><rect x="38" y="47" width="104" height="9" fill="var(--oled-fg)"/><line x1="168" y1="45" x2="168" y2="58" stroke="var(--oled-fg)" stroke-width="2.5"/>
+              <text x="6" y="72">C32</text><rect x="38" y="63" width="208" height="9" fill="none" stroke="var(--oled-dim)"/><rect x="38" y="63" width="133" height="9" fill="var(--oled-fg)"/>
+              <text x="6" y="88">M25</text><rect x="38" y="79" width="208" height="9" fill="none" stroke="var(--oled-dim)"/><rect x="38" y="79" width="104" height="9" fill="var(--oled-fg)"/>
+            </g>
+          </svg>
+          <div class="oled-cap"><strong>MACROS page</strong> (on <kbd>KEYBOARD</kbd>): Four macro bars (fill = Recipe centre, tick = where the Arc has it right now).</div>
+        </div>
+      </div>
+
+      <p><strong>Peeks (turn <kbd>SELECT</kbd>):</strong> Turning <kbd>SELECT</kbd> temporarily shows one of three info views for 4 seconds—first turn right shows <strong>QUEUE</strong> (all queued actions with countdowns), first turn left shows <strong>RECIPE</strong> (genre, tempo &amp; swing, key/scale); keep turning to cycle <strong>RECIPE ↔ QUEUE ↔ CAPTURE</strong> (piece mark status, marked count, and log status: <code>ON CARD</code>, <code>FULL</code>, or <code>CARD ERROR</code>). Macro values show on the <kbd>SONG</kbd> page while stopped and on the <strong>MACROS</strong> page.</p>
+
+      <!-- 7.3 CONTROLS & FOCUS -->
+      <h3 id="perform-controls">Buttons, Gold Knobs &amp; Focus</h3>
+
+      <h4>How Focus Works</h4>
+      <p><strong>Focus</strong> chooses whether the gold knobs and part buttons act on the whole Recipe or on one specific part:</p>
+      <ul>
+        <li><strong>Nothing focused (Recipe level):</strong> The <kbd>AFFECT ENTIRE</kbd> LED is lit. <kbd>F8</kbd> turns global macros; <kbd>F1</kbd>–<kbd>F7</kbd> stay stock song FX.</li>
+        <li><strong>Temporary focus:</strong> Hold a part's row on the <kbd>SONG</kbd> page. Releases when you lift your finger.</li>
+        <li><strong>Locked focus:</strong> Double-tap a part's row on <kbd>SONG</kbd> (within 0.35 s), or press <kbd>AFFECT ENTIRE</kbd> on <kbd>CLIP</kbd> to lock/unlock the shown part. Double-tap again or press <kbd>AFFECT ENTIRE</kbd> on <kbd>SONG</kbd>/<kbd>KEYBOARD</kbd> to unlock.</li>
+        <li>Focus is dropped automatically when you stop playback, leave Perform, or switch to a new roster (genre change, Regenerate, or Load). A Restart (<code>AS IT IS</code> or <code>AS IT BEGAN</code>) keeps Focus.</li>
+      </ul>
+
+      <h4>Gold Knobs</h4>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mod Button</th>
+              <th>Recipe Level (Nothing Focused)</th>
+              <th>Part Focused</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><kbd>F8</kbd> (1st press)</td>
+              <td><strong>Energy</strong> (upper) / <strong>Density</strong> (lower)</td>
+              <td>Part bias: <strong>Energy</strong> / <strong>Density</strong> (popup shows biased value &amp; bias, e.g. <code>ENERGY 36 +11</code>)</td>
+            </tr>
+            <tr>
+              <td><kbd>F8</kbd> (2nd press, blinking)</td>
+              <td><strong>Complexity</strong> (upper) / <strong>Motion</strong> (lower)</td>
+              <td>Part bias: <strong>Complexity</strong> / <strong>Motion</strong></td>
+            </tr>
+            <tr>
+              <td><kbd>F1</kbd>–<kbd>F6</kbd></td>
+              <td>Stock song FX</td>
+              <td>Stock part Sound params (turning Cutoff, Release, Reverb, Delay, Mod Depth moves that control's home)</td>
+            </tr>
+            <tr>
+              <td><kbd>F7</kbd> (1st press)</td>
+              <td>Stock song Stutter / Custom 1</td>
+              <td>Stock part Stutter / Custom 1 (upper knob push stays stutter)</td>
+            </tr>
+            <tr>
+              <td><kbd>F7</kbd> (2nd press, blinking)</td>
+              <td>—</td>
+              <td><strong>Thin</strong> (upper) / <strong>Drive</strong> (lower) on the focused part (3rd press returns to stock)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Panel Buttons &amp; Encoders</h4>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Control</th>
+              <th>What It Does in Perform</th>
+              <th>When It Lands</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="table-group"><th colspan="3">Transport &amp; Global</th></tr>
+            <tr>
+              <td><kbd>PLAY</kbd> / <kbd>SHIFT</kbd>+<kbd>PLAY</kbd></td>
+              <td>Start with Intro, or stop (drops all queued actions) / Start straight in Groove (skip Intro)</td>
+              <td>Immediate</td>
+            </tr>
+            <tr>
+              <td><kbd>X</kbd>+<kbd>PLAY</kbd></td>
+              <td><strong>Restart AS IT IS:</strong> restarts the Current Recipe from bar 1 with Intro without stopping the clock (while stopped, acts as <kbd>PLAY</kbd>). Press again to cancel while queued.</td>
+              <td>Next bar line</td>
+            </tr>
+            <tr>
+              <td><kbd>RECORD</kbd> / <kbd>SHIFT</kbd>+<kbd>RECORD</kbd></td>
+              <td>Toggle Capture mark on the current piece (LED lit = marked) / Stock Resample</td>
+              <td>Immediate</td>
+            </tr>
+            <tr>
+              <td><kbd>SYNC-SCALING</kbd></td>
+              <td>Hold for the genre's <strong>Fill</strong> (works regardless of your community Fill setting). <kbd>SHIFT</kbd>+<kbd>SYNC-SCALING</kbd> = fresh random fill pick.</td>
+              <td>While held</td>
+            </tr>
+            <tr>
+              <td><kbd>TEMPO</kbd> / <kbd>SHIFT</kbd>+<kbd>TEMPO</kbd> / <kbd>TAP</kbd>+<kbd>TEMPO</kbd></td>
+              <td>Steer tempo / swing amount (glides over the Perform <code>GLIDE</code> setting) / swing interval (first turn shows swing popup). <kbd>TAP</kbd> taps tempo; <kbd>SHIFT</kbd>+<kbd>TAP</kbd> = metronome.</td>
+              <td>Glides from now (interval: immediate)</td>
+            </tr>
+            <tr>
+              <td><kbd>X</kbd> (<kbd>◄►</kbd>) turn / tap / hold</td>
+              <td><strong>Turn:</strong> scroll history &amp; Arc plan on <kbd>SONG</kbd>. <strong>Tap:</strong> jump back to now. <strong>Hold + MUTE pad:</strong> solo part (<kbd>SHIFT</kbd> = immediate). <strong>Hold + <kbd>TEMPO</kbd> turn:</strong> nudge clock sync.</td>
+              <td>Immediate / Next bar (solo)</td>
+            </tr>
+            <tr>
+              <td><kbd>BACK</kbd> tap / hold</td>
+              <td><strong>Tap:</strong> cancel the newest queued action (or a preload in progress). <strong>Hold:</strong> open Leave menu.</td>
+              <td>Immediate</td>
+            </tr>
+            <tr class="table-group"><th colspan="3">Part Controls (Focused Part)</th></tr>
+            <tr>
+              <td><kbd>SYNTH</kbd> / <kbd>KIT</kbd></td>
+              <td><kbd>SYNTH</kbd> opens the preset browser on a synth part (or re-rolls Drums/FX). <kbd>KIT</kbd> opens the lane list on Drums/FX (or re-rolls a synth part). <kbd>SHIFT</kbd>+<kbd>SYNTH</kbd>/<kbd>KIT</kbd> = back to previous sound. Press again to cancel a pending load.</td>
+              <td>Preloads, swaps at next phrase line</td>
+            </tr>
+            <tr>
+              <td><kbd>CROSS-SCREEN</kbd></td>
+              <td><strong>Freeze</strong> / unfreeze focused part (LED lit = frozen).</td>
+              <td>Next step</td>
+            </tr>
+            <tr>
+              <td><kbd>Y</kbd> turn / push</td>
+              <td><strong>Turn:</strong> step focused part's <a class="gloss-link" href="#gloss-take">take</a> back or forward (past newest creates a new take). <strong>Push:</strong> popup with key, scale, and <a class="gloss-link" href="#gloss-seed">seed</a> code (works with or without focus).</td>
+              <td>Next phrase line / Immediate</td>
+            </tr>
+            <tr>
+              <td><kbd>SHIFT</kbd>+<kbd>Y</kbd> turn</td>
+              <td>Step focused pitched part's <strong>Octave shift</strong> (−2 to +2 octaves within MIDI range).</td>
+              <td>Next bar line</td>
+            </tr>
+            <tr>
+              <td><kbd>SHIFT</kbd> + main pad</td>
+              <td>Open the stock <strong>Sound editor</strong> at the printed parameter for the focused part (or song FX with nothing focused / on stock Performance view). Does not override FILL, NEW SOUND, or SOUND EDITOR shortcuts.</td>
+              <td>Immediate</td>
+            </tr>
+            <tr class="table-group"><th colspan="3">Recipe, Menu &amp; Files</th></tr>
+            <tr>
+              <td><kbd>SCALE</kbd></td>
+              <td>Open the <strong>Key / Scale</strong> editor (12 seven-note scales). LED blinks while a change is queued.</td>
+              <td>Next phrase line (or Drop)</td>
+            </tr>
+            <tr>
+              <td><kbd>SELECT</kbd> push / turn</td>
+              <td><strong>Push:</strong> open Perform menu (<kbd>SHIFT</kbd>+<kbd>SELECT</kbd> stays stock settings). <strong>Turn:</strong> peek at QUEUE, RECIPE, CAPTURE.</td>
+              <td>Immediate</td>
+            </tr>
+            <tr>
+              <td><kbd>SAVE</kbd> / <kbd>SHIFT</kbd>+<kbd>SAVE</kbd></td>
+              <td>Playing: instant quick save. Stopped or <kbd>SHIFT</kbd>+<kbd>SAVE</kbd>: full save UI (see <a href="#recipes">Recipe Files</a>).</td>
+              <td>Immediate</td>
+            </tr>
+            <tr>
+              <td><kbd>LOAD</kbd></td>
+              <td>Open Recipe load browser on <code>RECIPES/</code> (queues a transition if playing; preloads directly while stopped).</td>
+              <td>Transition (playing) / Preload (stopped)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 7.4 PERFORM MENU -->
+      <h3 id="perform-menu">The Perform Menu (<kbd>SELECT</kbd> Push)</h3>
+      <p>The music, pads, and gold knobs stay live under the menu. Tapping any pad closes it.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Menu Row</th>
+              <th>What It Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>CANCEL CHANGE</code></td><td>Appears only while a genre change, Regenerate, or mid-set Load can still be cancelled.</td></tr>
+            <tr><td><code>GENRE ▸</code></td><td>Switch genre (current genre is tagged <code>= REGEN</code> and acts as Regenerate). Opens the Regenerate page.</td></tr>
+            <tr><td><code>REGENERATE</code></td><td>Roll a fresh piece in the same genre (new tempo, key, scale, sounds, seed; keeps macros &amp; Part biases). Opens the Regenerate page.</td></tr>
+            <tr><td><code>VARIANTS ▸</code></td><td>Appears when the playing genre has variant sets. Switch live sets at the next Drop (see <a href="#perform-variants">Variant Sets</a>).</td></tr>
+            <tr><td><code>KEY / SCALE ▸</code></td><td>Same Key / Scale editor as the <kbd>SCALE</kbd> button.</td></tr>
+            <tr><td><code>GLIDE</code></td><td>Tempo/swing glide length: <code>Instant</code>, <code>1 beat</code>, <code>1 bar</code> (default), <code>2 bars</code>, <code>4 bars</code>, or <code>1 phrase</code>. Kept until power-off.</td></tr>
+            <tr><td><code>SEED + TAKES ▸</code></td><td>Title shows seed code. Step any part's take (1–16) without needing to focus it.</td></tr>
+            <tr><td><code>OCTAVES ▸</code></td><td>Step any pitched part's octave shift (−2 to +2).</td></tr>
+            <tr><td><code>RESET PART BIAS</code></td><td>Zeroes all macro biases on the focused part—or on every part if nothing is focused.</td></tr>
+            <tr><td><code>RESTART ▸</code></td><td><strong>AS IT IS</strong> (same as <kbd>X</kbd>+<kbd>PLAY</kbd>) or <strong>AS IT BEGAN</strong> (restores the exact Recipe, sounds, and knob homes from when the current piece started, preloads any swapped sounds, then restarts from bar 1).</td></tr>
+            <tr><td><code>CAPTURE ▸</code></td><td>Lists marked pieces plus the current (or last) piece (newest first, up to 16 shown). Push to toggle a piece's mark.</td></tr>
+            <tr><td><code>BROWSER PREVIEW</code></td><td>Whether preset &amp; lane browsers audition files as you scroll: <code>Off</code>, <code>When stopped</code> (default), or <code>Always</code>. <em>Note: Synth presets preview only while stopped, even on Always; drum samples preview live too.</em></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 7.5 TRANSITIONS -->
+      <h3 id="perform-transitions">Regenerate, Genre Changes &amp; Transitions</h3>
+      <p>When you pick <strong>REGENERATE</strong>, another genre in <strong>GENRE ▸</strong>, or load a Recipe file mid-set, Perform opens the <strong>Regenerate page</strong> (titled <code>REGENERATE</code>, <code>&lt;GENRE&gt;?</code>, or <code>&lt;FILENAME&gt;?</code>):</p>
+      <ul>
+        <li><strong>TRANSITION:</strong> Pick how the handover plays—<code>DROP</code>, <code>FADE</code>, or <code>CUT</code>. Defaults to the incoming genre's preferred entry (<code>FADE</code> for Ambient, <code>DROP</code> for all others).</li>
+        <li><strong>VARIANTS ▸:</strong> Narrow any variant set of the incoming genre before rolling (always opens on <code>RANDOM</code>; omitted on a Recipe Load because the file brings its own variants).</li>
+        <li><strong>GO:</strong> The cursor starts on <strong>GO</strong>, so <kbd>SELECT</kbd>, <kbd>SELECT</kbd> confirms immediately.</li>
+      </ul>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Transition Style</th>
+              <th>How It Sounds</th>
+              <th>Tempo &amp; Swing</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>DROP</strong><br>(Build into a Drop)</td>
+              <td>Incoming sounds preload silently, then the playing genre plays a Build and the new piece lands on a <strong>Drop</strong>.</td>
+              <td>Tempo glides across the Build. Swing switches cleanly on the Drop.</td>
+            </tr>
+            <tr>
+              <td><strong>FADE</strong><br>(Fade through)</td>
+              <td>Outgoing genre plays its <strong>Outro</strong> (with Close &amp; Wash), reaches the seam, and the new piece enters with its own <strong>Intro</strong>.</td>
+              <td>Tempo glides across the Outro. Swing switches at the seam.</td>
+            </tr>
+            <tr>
+              <td><strong>CUT</strong><br>(Hard cut at phrase)</td>
+              <td>No Build and no Outro. The new piece starts in <strong>Groove</strong> on the next phrase line after preloading finishes.</td>
+              <td>Tempo glides over your <code>GLIDE</code> setting (or jumps if Instant). Swing switches on the cut.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Smart Key Lean:</strong> On a genre change or Regenerate, the key roll leans strongly (65%) toward keys sharing 6 or 7 notes with the key already playing, so transitions stay musical. Macros always carry over; outgoing parts get an echo/reverb Throw on their final hit before releasing.</p>
+      <p><strong>Cancelling:</strong> Tap <kbd>BACK</kbd> (or pick <code>CANCEL CHANGE</code> in the menu) any time while the incoming sounds are still loading or waiting for the Build/Outro/cut line. Once the Build or Outro begins, the transition is committed.</p>
+
+      <!-- 7.6 VARIANTS -->
+      <h3 id="perform-variants">Variant Sets &amp; Drop Changes</h3>
+      <p>All eight built-in genres include <a class="gloss-link" href="#gloss-variant"><strong>variant sets</strong></a>: musical rule variations drawn per piece alongside tempo and key.</p>
+      <ul>
+        <li><strong>Narrowing before a roll:</strong> On the Regenerate / genre-change page (and in Compose), open <code>VARIANTS ▸</code> and tick the variants you want to allow. Every tick on shows <code>RANDOM</code>; one tick locks that variant (e.g. <code>STEPPERS</code>); several ticks show <code>2 OF 3</code>. You cannot untick the last remaining choice.</li>
+        <li><strong>Live switching in Perform:</strong> Open <code>VARIANTS ▸</code> in the Perform menu during a piece.
+          <ul>
+            <li><strong>Live sets</strong> open the same multi-select checklist. Changing ticks queues a <code>VARIANT DROP</code> (shown as <code>VAR</code> in the status line) that lands at the next <strong>Drop</strong>. If the currently playing variant is still ticked, it stays; otherwise a new one is drawn from your ticks. While stopped, changes apply immediately.</li>
+            <li><strong>Non-live sets</strong> (sets that change song structure or a part's pattern pool, such as House's <code>BASS</code> or Psytrance's <code>LEAD</code>) display <code>AT REGEN</code> when pushed—change them on the Regenerate page instead.</li>
+          </ul>
+        </li>
+        <li><strong>Automatic Drop changes:</strong> Roots Dub's <code>DRUMS</code> set can switch on its own between <code>ONE DROP</code>, <code>ROCKERS</code>, and <code>STEPPERS</code> on Drops (40% chance per Drop) within whatever variants you allow. Tick just one drum style if you want to lock it for the rest of the piece.</li>
+      </ul>
+
+      <!-- 7.7 FREEZE, FILLS, DROP-OUTS, PUNCH-INS -->
+      <h3 id="perform-live-tools">Freeze, Fills, Drop-outs &amp; Punch-ins</h3>
+      <ul>
+        <li><strong>Freeze (<kbd>CROSS-SCREEN</kbd> or CLIP Pad 1):</strong> Locks the focused part so it repeats its current phrase and stops mutating. Macros, mutes, Break rules, and sound Drift still act on top. Unfreezing jumps seamlessly back to the live timeline.</li>
+        <li><strong>Fills:</strong> The Generator automatically plays fills at phrase ends (more often at higher Motion). Hold <kbd>SYNC-SCALING</kbd> or any of the 12 <code>FILL</code> pads on <kbd>KEYBOARD</kbd> to play the genre's signature held fill immediately (hold <kbd>SHIFT</kbd> too for a fresh random fill pick). Across a phrase line, a held fill pauses for the first step (one 16th) so phrase downbeats stay clear, then carries on from the next step. Ambient has no fills.</li>
+        <li><a class="gloss-link" href="#gloss-dropout"><strong>Drop-outs</strong></a><strong>:</strong> Built into Roots Dub, Dub Techno, House, Classic Psytrance, and Ambient. During a Groove, specific parts or drum lanes drop silent for 1–16 bars—often throwing their last hit into reverb and delay—while notes already sounding ring out cleanly. Higher Motion makes drop-outs happen more often.</li>
+        <li><a class="gloss-link" href="#gloss-punchin"><strong>Punch-ins</strong></a> <strong>(<kbd>KEYBOARD</kbd> page):</strong> Immediate performance effects on columns 9–10 (Drums lane mutes) and columns 15–16 (<code>HAT ROLL</code> 32nds, <code>SNARE ROLL</code> 16ths, <code>FLAM</code> on backbeats, <code>DOUBLE KICK</code>, and <code>PUMP</code> sidechain ducking under the kick). All follow the <strong>0.3 s rule</strong>: tap (&lt; 0.3 s) to latch on, hold (≥ 0.3 s) for momentary effect that springs back on release. Pressing and releasing a latched pad turns it off regardless of how long you hold it, and latched punch-ins stay on across a stop (unlike mutes, solos, and freezes). Note that <code>FLAM</code> is often silent in Techno at default macros because Techno has no clap and only sparse rim/snare hits.</li>
+      </ul>
+
+      <!-- 7.8 SOUND CONTROLS & HOMES -->
+      <h3 id="perform-sounds">Sound Controls, Homes &amp; Choosing Sounds</h3>
+      <p>The Generator never automates volume or pan—your mix stays yours. Instead, it shapes sounds through six <strong>sound controls</strong>: <strong>Brightness</strong>, <strong>Thin</strong> (high-pass), <strong>Decay</strong>, <strong>Space</strong> (reverb &amp; throw delay), <strong>Drive</strong>, and <strong>Wobble</strong> (mod FX / LFOs). Each control only moves parameters that the loaded preset actually uses (for example, Brightness moves the low-pass cutoff on subtractive synths, or modulator levels on FM synths).</p>
+      <p>Every control adds three automatic layers around a sound's <strong>home</strong> (its saved preset value, or wherever you turn it):</p>
+      <ol>
+        <li><strong>Macro layer:</strong> Effective Energy makes sounds brighter, shorter, more driven, and drier as it rises.</li>
+        <li><strong>Gestures:</strong> Arc-locked moves—<strong>Close</strong> (darkens into Breaks/Outros), <strong>Wash</strong> (adds Space in Breaks/Outros), <strong>Rise</strong> (sweeps Thin and Brightness up across Builds/Intros), <strong>Throw</strong> (spikes reverb and synced delay on a part's last hit before a Break, Gap, drop-out, or transition), and <strong>Reset</strong> (snaps all gestures back to 0 on Drops).</li>
+        <li><strong>Drift &amp; Sweeps:</strong> Slow, smooth wandering on Brightness, Decay, Space, and Wobble—or a phrase-locked filter <strong>Sweep</strong> on acid lines, pads, and psy leads.</li>
+      </ol>
+
+      <div class="callout info">
+        <span class="callout-title">Turning Knobs Never Fights the Generator</span>
+        <p>Whenever you turn a gold knob, tap a CLIP fader, edit in the Sound Editor, or send MIDI CC on a sound-controlled parameter, you move its <strong>home</strong>. The Generator keeps breathing smoothly around your new position instead of snapping back.</p>
+      </div>
+
+      <h4>Swapping Sounds Live</h4>
+      <ul>
+        <li><strong>Re-roll from palette:</strong> Tap <code>NEW SOUND</code> on <kbd>CLIP</kbd> (or press <kbd>SYNTH</kbd> on Drums/FX, <kbd>KIT</kbd> on a synth). The new sound preloads silently and swaps in on the next phrase line. <kbd>SHIFT</kbd> + that button returns to the previous sound.</li>
+        <li><strong>Pick any preset (<kbd>SYNTH</kbd> on a focused synth part):</strong> Opens the preset browser across your whole SD card (not just the palette). Scroll freely while music plays; press <kbd>SELECT</kbd> to preload and swap at the next phrase line.</li>
+        <li><strong>Pick any drum or FX sample (<kbd>KIT</kbd> on a focused Drums/FX part):</strong> Opens the lane list—<code>RE-ROLL ALL</code> at the top, followed by every lane (<code>KICK</code>, <code>SNARE</code>, etc.). Pick a lane to browse audio files on the card (or <code>SYNTH PRESET</code> on FX lanes that accept synths).</li>
+      </ul>
+
+      <!-- 7.9 MIDI & EXTERNAL CLOCK -->
+      <h3 id="perform-midi">MIDI Control &amp; External Clock</h3>
+      <ul>
+        <li><strong>Macro CCs:</strong> Send <strong>CC 114</strong> (Energy), <strong>CC 115</strong> (Density), <strong>CC 116</strong> (Complexity), and <strong>CC 117</strong> (Motion) on your stock MIDI-follow channels (A, B, or C). Values 0–127 map to 0–50, move the Recipe centre, and send MIDI feedback.</li>
+        <li><strong>MIDI-follow &amp; Learn:</strong> MIDI-follow CCs on channels A–C target whatever the gold knobs point at (the focused part or Song FX). Per-track channels (Tracks 1–16) are disabled in Perform. Learned CCs work on the current Output until it is replaced.</li>
+        <li><strong>Global MIDI commands:</strong> <code>PLAY</code>, <code>FILL</code>, <code>SHIFT</code>, <code>RECORD</code> (Capture mark), <code>TAP</code>, and <code>TRANSPOSE</code> (queues a key change at the next phrase line) all work. External MIDI notes, pitch bend, mod wheel, and MPE are dropped.</li>
+        <li><strong>External clock:</strong> When synced to MIDI/DIN/CV clock, the status line shows <code>EXT</code>. The master clock owns tempo (no tempo glides, <kbd>TAP</kbd> ignored, <kbd>TEMPO</kbd> turn shows <code>EXT</code>), while <kbd>SHIFT</kbd>+<kbd>TEMPO</kbd> still glides swing and <kbd>X</kbd>+<kbd>TEMPO</kbd> nudges sync. Entering Perform stops playback and waits for the master's Start or Continue.</li>
+      </ul>
+    </section>
+
+    <!-- 8. COMPOSE -->
+    <section id="compose">
+      <h2>8. The Compose Screen</h2>
+      <p><strong>Compose</strong> lets you set up a Recipe and render it directly into a standard, editable Deluge song. Because Compose builds a fixed song, there is no live audition on this screen—to hear and jam with a Recipe first, use Perform (both modes share the same Current Recipe).</p>
+      <p>The OLED title shows the current genre, tempo, key, and scale (scrolling if wide). Press <kbd>SAVE</kbd> at any time to save the Recipe, or <kbd>LOAD</kbd> to load another.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>What It Edits</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>FROM ▸</code></td><td>Pick a new <code>GENRE ▸</code> or load a <code>FILE...</code> from <code>RECIPES/</code> (reads the SD card first under the working animation; <kbd>BACK</kbd> cancels with the Recipe unchanged).</td></tr>
+            <tr><td><code>REGENERATE</code></td><td>Asks <code>REGENERATE? → OK</code>. Rolls new facts (leaning toward your current key), sounds, seed, and resets takes, keeping macros and allowed variants.</td></tr>
+            <tr><td><code>SEED + TAKES ▸</code></td><td>Title shows the seed code. Choose <strong>NEW SEED</strong> (rolls new music and resets every part's take to 1 while keeping tempo, key, sounds, and variants) or step any part's take (1–16).</td></tr>
+            <tr><td><code>TEMPO</code></td><td>Song tempo in whole BPM.</td></tr>
+            <tr><td><code>SWING</code></td><td>Swing amount (<code>50</code> = straight, as in stock Deluge).</td></tr>
+            <tr><td><code>KEY</code> / <code>SCALE</code></td><td>Edits in place (value blinks; turn <kbd>SELECT</kbd>, push or <kbd>BACK</kbd> to finish). 12 seven-note scales.</td></tr>
+            <tr><td><code>VARIANTS ▸</code></td><td>Shown when the genre has variant sets. Edits allowed variants for each set; unticking the current pick immediately draws a new one from the remaining ticks.</td></tr>
+            <tr><td><code>ENERGY</code>, <code>DENSITY</code>, <code>COMPLEXITY</code>, <code>MOTION</code></td><td>Set each macro centre (0–50) with the stock continuous bar editor.</td></tr>
+            <tr><td><code>SOUNDS ▸</code></td><td>Lists each part and its picked sound. Push <kbd>SELECT</kbd> to re-roll from the palette; <kbd>SHIFT</kbd>+push swaps back to the previous pick. Drums and FX open a per-lane list.</td></tr>
+            <tr><td><code>LENGTH</code></td><td>Target song length from <strong>1:00 to 20:00</strong> in 30-second steps (default <strong>4:00</strong>). Kept until power-off, never saved in Recipe files.</td></tr>
+            <tr><td><code>BUILD</code></td><td>Asks <code>DISCARD SONG? → OK</code> and renders the song.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Building &amp; What You Get</h3>
+      <p>While rendering, the OLED shows <code>COMPOSING</code> with a progress bar and <code>BACK = CANCEL</code>. Your old song keeps playing while it builds unless RAM is tight, in which case playback stops first. When done, the new song swaps in <strong>stopped</strong> in <strong>Arranger view</strong>, unsaved, and pre-named <code>GEN &lt;GENRE&gt; &lt;seed&gt;</code> (for example <code>GEN ACID TECHNO 1A2B3C4</code>).</p>
+      <ul>
+        <li><strong>Length:</strong> Compose never chops a Break or Build in half—once it passes your target length, it finishes the Groove cleanly and adds the genre's Outro.</li>
+        <li><strong>Session &amp; Arranger views:</strong> Every sounding part gets one full-song clip placed in Arranger view and grouped into one session section in Session view. Parts that stayed silent throughout get no clip.</li>
+        <li><strong>Editable notes &amp; automation:</strong> Notes are written at 100% probability with exact tick nudges for swing/Lean/ornaments. Sound controls become thinned, editable automation curves on real synth parameters (never volume or pan).</li>
+        <li><strong>Plain Deluge song:</strong> Once built, it is a completely normal Deluge song—save it with <kbd>SAVE</kbd>, add clips, chop parts, or tweak synths as usual.</li>
+      </ul>
+    </section>
+
+    <!-- 9. CAPTURE -->
+    <section id="capture">
+      <h2>9. Capture: Keeping Live Pieces</h2>
+      <p><strong>Capture</strong> turns your live Perform jams into editable Deluge songs. Instead of recording raw audio, Perform quietly logs every move you make—macro turns, Part biases, mutes, solos, fills, punch-ins, key/tempo changes, sound swaps, and knob edits—to <code>GENERATIVE/CAPTURE/</code> on your SD card.</p>
+
+      <h3>Marking Pieces While You Play</h3>
+      <ul>
+        <li>A <strong>piece</strong> runs from <kbd>PLAY</kbd>, a Restart, a Regenerate, a genre change, or a mid-set Load until you stop or start the next piece.</li>
+        <li>Tap <kbd>RECORD</kbd> (playing or stopped) to mark or unmark the current piece. The <kbd>RECORD</kbd> LED lights up and the status-line Capture dot fills in. Marking includes everything played <em>before and after</em> you pressed <kbd>RECORD</kbd> for that whole piece.</li>
+        <li>Open <code>CAPTURE ▸</code> in the Perform menu to see your marked pieces plus the current (or last) piece (up to 16 newest listed; up to 32 kept). Push to toggle a piece's mark. Unmarked pieces leave the table as soon as the next piece begins, so mark a piece before starting the next one if you want to keep it.</li>
+        <li><strong>Forgot to press RECORD?</strong> No problem—the Leave menu always offers to keep your <strong>last piece</strong> even if you never marked it.</li>
+      </ul>
+
+      <h3>Building Songs When You Leave</h3>
+      <p>Hold <kbd>BACK</kbd> to open the Leave menu and choose what to keep: <code>MARKED + LAST</code>, <code>MARKED ONLY</code>, <code>MARKED</code> (when the last piece is already marked), <code>LAST</code> (when nothing was marked), <code>NOTHING</code> / <code>LEAVE</code> (blank session song), or <code>CANCEL</code>. Capture builds and saves each kept piece one at a time directly into <code>SONGS/</code> as <code>GEN &lt;GENRE&gt; &lt;seed&gt; LIVE</code> (adding <code>B</code>, <code>C</code>, … if that name already exists—it never overwrites). You land in Arranger view on the last saved song.</p>
+      <p>During the handover, the OLED shows <code>BUILDING n OF m</code> and <code>SAVING n OF m</code> with a progress bar and <code>BACK = STOP</code>. Press <kbd>BACK</kbd> to stop early (songs already saved remain safely on the card; any save already writing finishes first). If a card write fails mid-Capture, Capture stops and shows the stock card error plus <code>n OF m SAVED</code>, leaving the unsaved song open so you can still try <kbd>SAVE</kbd>. If power is lost during a set, any pieces you had already marked are recovered automatically the next time you enter Perform (up to the last ~10-second flush).</p>
+
+      <h3>What Capture Keeps—and Its Limits</h3>
+      <ul>
+        <li><strong>Tempo changes:</strong> Saved as song-level tempo automation—play the song in <strong>Arranger view</strong> to hear tempo glides.</li>
+        <li><strong>Swing changes:</strong> Baked directly into note tick positions.</li>
+        <li><strong>Key &amp; scale changes:</strong> Automatically split pitched clips at the change so earlier clips stay in scale mode.</li>
+        <li><strong>Sound swaps &amp; mid-piece synth setting changes:</strong> Start a fresh track from the swap step so both the old and new sounds play cleanly.</li>
+        <li><strong>Very long pieces:</strong> To keep saved songs reliably loadable, any piece that exceeds ~25–30 minutes automatically splits at a clean Section boundary into sequential songs: <code>… LIVE</code>, <code>… LIVE 2</code>, <code>… LIVE 3</code>.</li>
+        <li><strong>Not captured in v1:</strong> Stock <strong>Stutter</strong> and the <strong>PUMP</strong> punch-in cannot be represented as normal song automation in v1, so captured songs play without those two effects.</li>
+      </ul>
+    </section>
+
+    <!-- 10. RECIPE FILES -->
+    <section id="recipes">
+      <h2>10. Recipe Files: Saving &amp; Loading</h2>
+      <p>Recipe files are tiny XML files stored in <code>RECIPES/</code> at the root of your SD card (created automatically on first save). They keep your Recipes separate from your normal songs.</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h4>Saved in a Recipe File</h4>
+          <p>Genre &amp; version, tempo, swing, key, scale, the 4 macros, octave shifts, Part biases, all sound file paths, variant picks &amp; allowed masks, seed, and every part's take.</p>
+        </div>
+        <div class="card">
+          <h4>Not Saved</h4>
+          <p>Mutes, solos, freezes, knob/sound-control homes, Arc position, Compose length, Glide setting, and live steering history (use Capture for replaying a live performance).</p>
+        </div>
+      </div>
+
+      <h3>Saving (<kbd>SAVE</kbd>)</h3>
+      <ul>
+        <li><strong>Naming:</strong> A Recipe that has never been saved or loaded starts with the default name <code>&lt;GENRE&gt; &lt;seed&gt;</code> (for example <code>ACID TECHNO 1A2B3C4</code>). After any save or load, the next save suggests the next free letter suffix appended directly to the remembered name with no space (<code>NIGHT DRIVE</code> → <code>NIGHT DRIVEA</code>, or <code>ACID TECHNO 1A2B3C4A</code>).</li>
+        <li><strong>Quick save (playing in Perform):</strong> Pressing <kbd>SAVE</kbd> saves immediately under the suggested name without stopping playback or changing the grid. Quick save never overwrites (if no letter suffix is free, it shows <code>NO FREE NAME</code>).</li>
+        <li><strong>Full save UI (stopped, in Compose, or <kbd>SHIFT</kbd>+<kbd>SAVE</kbd>):</strong> Opens the QWERTY pad keyboard and <code>RECIPES/</code> browser so you can type a custom name. If no letter suffix is free, it offers the remembered (or default) name and asks <code>OVERWRITE?</code> before replacing it.</li>
+      </ul>
+
+      <h3>Loading (<kbd>LOAD</kbd>) &amp; Sharing</h3>
+      <ul>
+        <li>Press <kbd>LOAD</kbd> in Perform or Compose (or pick <code>FILE...</code> from the entry menus) to browse <code>RECIPES/</code>.</li>
+        <li><strong>In Perform while playing:</strong> Choosing a file opens the Regenerate page (<code>TRANSITION</code> + <code>GO</code>) so the file transitions in smoothly at a Drop, Fade, or Cut.</li>
+        <li><strong>In Perform while stopped:</strong> No transition is asked; the file's sounds preload directly under the working animation (press <kbd>BACK</kbd> to cancel).</li>
+        <li><strong>Missing sounds:</strong> If a file references a preset or sample missing from your SD card, Generative mode re-rolls just that missing sound from your card's palette and shows <code>1 SOUND REPLACED</code> or <code>N SOUNDS REPLACED</code>. Your notes stay the same.</li>
+        <li><strong>Genre version notices:</strong> If a firmware update retuned a genre since the file was saved, the file still loads and briefly pops up <code>OLDER &lt;GENRE&gt;</code> (or <code>NEWER &lt;GENRE&gt;</code>). Re-saving updates the file to the current version.</li>
+      </ul>
+    </section>
+
+    <!-- 11. GENERATIVE PACK -->
+    <section id="pack">
+      <h2>11. The Generative Pack</h2>
+      <p>The firmware contains no embedded audio or synth patches. While Generative mode uses your factory Deluge card content wherever possible, the <strong>Generative pack</strong> adds essential custom presets and samples: risers, drop impacts, the dub siren, dry dub-techno chord presets, ambient drones/basses/brushes/mallets, a tight psy rolling bass, and tuned drum swaps.</p>
+
+      <h3>Installing on Your SD Card</h3>
+      <ol>
+        <li>Download the Generative pack <code>.zip</code> attached to the firmware release.</li>
+        <li>Unzip it straight onto the <strong>root of your SD card</strong> (merge into existing <code>SYNTHS/</code> and <code>SAMPLES/</code> folders—do not replace the factory files inside them).</li>
+        <li>Verify that your SD card has this structure:</li>
+      </ol>
+
+<pre><code>SD CARD ROOT/
+├── SYNTHS/
+│   └── GENERATIVE/          ← Custom synth presets + FX/ presets
+├── SAMPLES/
+│   ├── FX/Riser/            ← Pack risers (+ Riser/Short/ for Roots Dub)
+│   └── DRUMS/               ← GEN-prefixed one-shots in factory drum folders
+├── GENERATIVE/
+│   ├── LICENSES.md          ← Pack origins &amp; licences
+│   ├── PALETTES/            ← (Optional) your custom palette override XMLs
+│   └── CAPTURE/             ← Created by firmware for live Capture logs
+└── RECIPES/                 ← Created by firmware when saving Recipes</code></pre>
+
+      <div class="callout warn">
+        <span class="callout-title">Running Without the Pack?</span>
+        <p>Generative mode will still start: missing individual picks quietly fall back to the next entry in the genre's palette. A <code>SOUND MISSING</code> warning appears only if the entire fallback chain fails (leaving a synth part on the default synth patch, or a drum/FX lane silent). However, Risers, Impacts, Roots Dub's Siren, and Ambient's custom percussion and basses need the pack to sound as designed.</p>
+      </div>
+
+      <h3>Optional: Custom Palette Overrides</h3>
+      <p>Advanced users can swap which presets or sample folders a genre draws from by placing an XML file at <code>GENERATIVE/PALETTES/&lt;GENRE NAME&gt;.XML</code>—using the genre's exact OLED name (for example, <code>ACID TECHNO.XML</code>, <code>HOUSE.XML</code>, <code>ROOTS DUB.XML</code>, <code>CLASSIC PSY.XML</code>, or <code>AMBIENT.XML</code>). Any part, role, or drum lane you list overrides only that entry; everything else keeps the built-in palette. Keep override files under 8 KB and within the format's preset, tag, and folder limits—a file that exceeds any limit or is malformed is ignored completely and the built-in palette plays instead.</p>
+    </section>
+
+    <!-- 12. TIPS -->
+    <section id="tips">
+      <h2>12. Practical Tips</h2>
+      <ul>
+        <li><strong>Leave headroom around 25:</strong> Keeping Energy and Density near the middle lets Breaks dip noticeably and Drops hit with full impact. If you peg Density at 50, Drops have nowhere left to lift.</li>
+        <li><strong>Hold a Section vs. Motion 0:</strong> Tap the <strong>Hold</strong> sidebar pad (row 5) to stay in the current Section while letting mutation, fills, drop-outs, and sound drift keep moving. Turn <strong>Motion</strong> to <code>0</code> when you want to freeze everything—stopping the Arc from advancing <em>and</em> turning off mutation, fills, drop-outs, and drift.</li>
+        <li><strong>Quick-save happy accidents:</strong> Tap <kbd>SAVE</kbd> while playing to snapshot your Recipe without interrupting the beat (see <a href="#recipes">Recipe Files</a>).</li>
+        <li><strong>Restart clean vs. Restart original:</strong> Press <kbd>X</kbd>+<kbd>PLAY</kbd> (<code>AS IT IS</code>) to restart from bar 1 keeping your current knob tweaks and takes. Use <code>RESTART ▸ AS IT BEGAN</code> when you steered too far off course and want to snap back to how the piece started.</li>
+        <li><strong>Big tempo jumps? Use FADE:</strong> Leaving Roots Dub (75 BPM) for Psytrance (142 BPM) on <code>DROP</code> slams the tempo across a single 1-bar Build. Pick <code>FADE</code> for a smoother glide across the Outro.</li>
+        <li><strong>Sculpt one part fast:</strong> Double-tap a part on <kbd>SONG</kbd> to lock focus, jump to <kbd>KEYBOARD</kbd> to ride its <strong>Part bias</strong> faders (hold ≥ 0.3 s for temporary swells!), or hit <kbd>F7</kbd> twice for dedicated <strong>Thin / Drive</strong> knobs.</li>
+        <li><strong>Jump straight into the beat:</strong> Press <kbd>SHIFT</kbd>+<kbd>PLAY</kbd> from stop whenever you want to skip the Intro and land right in a Groove.</li>
+        <li><strong>Bring in Ambient's percussion:</strong> Raise <strong>Density</strong> from 29 to 47 to fade Ambient's six soft percussion lanes into Grooves one by one (see <a href="#genre-ambient">Ambient in Section 3</a>).</li>
+      </ul>
+    </section>
+
+    <!-- 13. TROUBLESHOOTING -->
+    <section id="troubleshooting">
+      <h2>13. Troubleshooting &amp; Messages</h2>
+
+      <h3>Common OLED Messages</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Message</th>
+              <th>What It Means &amp; What to Do</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>BUSY</code></td><td>Generative mode is still loading or freeing sounds in the background (watch the top-right working icon). Wait a moment and try again.</td></tr>
+            <tr><td><code>CHANGE PENDING</code></td><td>A genre change, Regenerate, Load, or Restart is already queued. Wait for it to land, or tap <kbd>BACK</kbd> to cancel it first.</td></tr>
+            <tr><td><code>QUEUE FULL</code></td><td>Too many quantised actions are waiting at once. Let the next bar/phrase land, or tap <kbd>BACK</kbd> to cancel an unneeded action.</td></tr>
+            <tr><td><code>LOG FULL</code></td><td>The Capture log's memory filled during very busy steering (shown when a <kbd>RECORD</kbd> mark or <code>RESTART ▸ AS IT BEGAN</code> is refused; status dot and <kbd>RECORD</kbd> LED blink). New marks are refused and the current piece stops logging at the last whole step.</td></tr>
+            <tr><td><strong>Stock card error</strong></td><td>The SD card failed, filled up, or was pulled. Mid-set, it stops Capture logging for the current piece and cancels any pending transition or sound re-roll while keeping the music playing. Check SD card seating and free space.</td></tr>
+            <tr><td><code>NOTHING PLAYED</code></td><td>You pressed <kbd>RECORD</kbd> or opened <code>CAPTURE ▸</code> before starting any piece. Press <kbd>PLAY</kbd> first.</td></tr>
+            <tr><td><code>BUILDING n OF m</code> / <code>SAVING n OF m</code></td><td>Capture is building or saving your kept pieces when leaving Perform. Press <kbd>BACK</kbd> (<code>BACK = STOP</code>) to stop early; songs already saved stay on the card.</td></tr>
+            <tr><td><code>n OF m SAVED</code></td><td>Shown alongside a stock card error if a save fails mid-Capture. Earlier songs are on the card, and the song that failed stays open unsaved so you can still try <kbd>SAVE</kbd>.</td></tr>
+            <tr><td><code>RESTART CANCELLED</code></td><td>You cancelled a queued Restart (via <kbd>BACK</kbd>, <kbd>X</kbd>+<kbd>PLAY</kbd>, or <code>AS IT BEGAN</code>) before it landed.</td></tr>
+            <tr><td><code>SOUND MISSING</code></td><td>Every entry in a part's or lane's palette failed to load, leaving a synth part on the default synth patch or a drum/FX lane silent. (Single missing files quietly fall back to the next palette entry without warning.) Check that the Generative pack and factory content are installed.</td></tr>
+            <tr><td><code>1 SOUND REPLACED</code> / <code>N SOUNDS REPLACED</code></td><td>A loaded Recipe referenced files missing from this SD card. Those picks were automatically re-rolled from your card's palette.</td></tr>
+            <tr><td><code>NO PREVIOUS SOUND</code></td><td>You pressed <kbd>SHIFT</kbd>+<kbd>SYNTH</kbd>/<kbd>KIT</kbd> (or <kbd>SHIFT</kbd>+<code>NEW SOUND</code>) on a part whose sound hasn't been changed yet in this session.</td></tr>
+            <tr><td><code>PATH TOO LONG</code></td><td>The chosen preset or sample path exceeds 127 characters. Move or shorten the folder/file name on your SD card.</td></tr>
+            <tr><td><code>NO FREE NAME</code></td><td>Quick save ran out of letter suffixes (<code>A</code>–<code>Z</code>) for this Recipe stem. Use <kbd>SHIFT</kbd>+<kbd>SAVE</kbd> to pick a fresh name (or overwrite).</td></tr>
+            <tr><td><code>UNKNOWN GENRE</code></td><td>The Recipe file names a genre this firmware doesn't recognise (or a parent name like <code>techno</code>). Pick another file or update firmware.</td></tr>
+            <tr><td><code>OLDER / NEWER &lt;GENRE&gt;</code></td><td>The Recipe file was saved with an older or newer tuning of that genre. It still loads, though notes may differ slightly; re-save to update.</td></tr>
+            <tr><td><code>TOO LONG: MAX m:ss</code> / <code>TOO LONG</code></td><td>In Compose, your chosen <code>LENGTH</code> exceeds available RAM for that Recipe. Lower <code>LENGTH</code> to the shown maximum (or less) and press <code>BUILD</code> again. Plain <code>TOO LONG</code> means not even 1:00 fits in free RAM.</td></tr>
+            <tr><td><code>AT REGEN</code></td><td>That variant set cannot switch live at a Drop because it changes song structure or a part's pattern pool. Set it from the Regenerate page instead.</td></tr>
+            <tr><td><code>&lt;PART&gt; OCT ±N LOWEST / HIGHEST</code></td><td>You hit the part's octave-shift limit: the fixed ±2 octave range, or narrower where further shifting would push its notes outside the MIDI note range.</td></tr>
+            <tr><td><code>EXT</code> (on Tempo popup)</td><td>Perform is synced to an external clock, so turning <kbd>TEMPO</kbd> or pressing <kbd>TAP</kbd> has no effect. Adjust tempo on your clock master.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Common Questions</h3>
+      <ul>
+        <li><strong>A part is lit green on MUTE, or dim, and I can't hear it:</strong> A dim MUTE pad means the Arc has silenced it (its Density gate is closed, a Break excluded it, a drop-out is active, or another part is soloed). Raise <strong>Density</strong>, wait for the Drop, or check for a blue solo pad.</li>
+        <li><strong>My MIDI keyboard isn't playing notes in Perform:</strong> By design in v1, Perform ignores external MIDI notes so Capture stays exact. Use MIDI-follow CCs (114–117 for macros) and global MIDI commands instead.</li>
+        <li><strong>My Capture song doesn't play my tempo changes:</strong> Tempo automation lives at song level—switch to <strong>Arranger view</strong> to play it back.</li>
+        <li><strong>I held End (row 8) and nothing happened:</strong> End requires a 0.6 s hold while Perform is the top screen. Close any open menu, browser, or sound editor first.</li>
+        <li><strong>A fader row on CLIP is completely dark:</strong> Either no part has been focused yet (focus one on <kbd>SONG</kbd> first), the part is FX (whose controls live per lane), or the loaded preset doesn't use any parameter for that control.</li>
+      </ul>
+    </section>
+
+    <!-- 14. GLOSSARY -->
+    <section id="glossary">
+      <h2>14. Glossary</h2>
+      <dl class="glossary">
+        <dt id="gloss-arc">Arc</dt>
+        <dd>The Generator's automatic progression through Sections (Intro, Groove, Break, Build, Outro) around your Recipe's Energy and Density values.</dd>
+
+        <dt id="gloss-capture">Capture</dt>
+        <dd>Replaying live Perform pieces from their steering log into editable Deluge songs saved in <code>SONGS/</code> when you leave Perform.</dd>
+
+        <dt id="gloss-compose">Compose</dt>
+        <dd>The mode that edits a Recipe and renders it into a normal, editable Deluge song in Session and Arranger views.</dd>
+
+        <dt id="gloss-current-recipe">Current Recipe</dt>
+        <dd>The active Recipe (with its seed and takes) kept in RAM until power-off and shared between Perform and Compose.</dd>
+
+        <dt id="gloss-drop">Drop</dt>
+        <dd>The moment a Build lands back in Groove, bringing all allowed parts back in with a temporary Energy and Density lift and snapping gesture filters open.</dd>
+
+        <dt id="gloss-dropout">Drop-out</dt>
+        <dd>Whole parts or drum lanes dropping silent for 1–16 bars during a Groove (often with their last hit thrown into reverb and delay) while sounding notes ring out.</dd>
+
+        <dt id="gloss-focus">Focus</dt>
+        <dd>The part currently targeted by the gold knobs, CLIP/part buttons, and KEYBOARD bias faders—held on <kbd>SONG</kbd>, or locked by double-tap or <kbd>AFFECT ENTIRE</kbd> on <kbd>CLIP</kbd>.</dd>
+
+        <dt id="gloss-gap">Gap</dt>
+        <dd>An optional brief silence (1 beat or 1 bar) at the very end of a Build, right before the Drop.</dd>
+
+        <dt id="gloss-pack">Generative Pack</dt>
+        <dd>The companion SD card zip of custom presets and samples (risers, impacts, siren, dry dub-techno stabs, ambient drones/basses/percussion, psy bass) that complements factory content.</dd>
+
+        <dt id="gloss-home">Home</dt>
+        <dd>The baseline position of a sound-controlled parameter (its preset value, or wherever you turn it). Macros, gestures, and drift move around home without fighting your edits.</dd>
+
+        <dt id="gloss-lane">Lane</dt>
+        <dd>One fixed drum or FX slot inside a Drums or FX part (Kick, Snare, Clap, Rim, Closed hat, Open hat, Ride, Crash, Tom, Perc 1, Perc 2; Riser, Fall, Impact, Siren).</dd>
+
+        <dt id="gloss-macro">Macro</dt>
+        <dd>One of the four 0–50 controls—Energy, Density, Complexity, Motion—that steer many musical behaviours at once across all genres.</dd>
+
+        <dt id="gloss-palette">Palette</dt>
+        <dd>A genre's built-in weighted list of synth presets and drum/FX samples for each part and lane. Can be overridden per genre on the SD card.</dd>
+
+        <dt id="gloss-part">Part</dt>
+        <dd>One instrument voice played by the Generator (Drums, Bass, Chords, Pad, Lead, or FX; 4–6 per genre).</dd>
+
+        <dt id="gloss-part-bias">Part Bias</dt>
+        <dd>A signed offset (−50 to +50) shifting one part above or below a global macro while still letting it follow the Arc.</dd>
+
+        <dt id="gloss-perform">Perform</dt>
+        <dd>The live, real-time mode where the Generator plays continuously and responds immediately to your steering.</dd>
+
+        <dt id="gloss-piece">Piece</dt>
+        <dd>One continuous run in Perform—from Start, Restart, Regenerate, genre change, or mid-set Load until stop or the next change. Capture saves each kept piece as its own song.</dd>
+
+        <dt id="gloss-punchin">Punch-in</dt>
+        <dd>A momentary or latched live effect on the <kbd>KEYBOARD</kbd> page: drum lane mutes, Hat Roll, Snare Roll, Flam, Double Kick, or Pump.</dd>
+
+        <dt id="gloss-recipe">Recipe</dt>
+        <dd>The set of parameters (genre, musical facts, macros, octave shifts, Part biases, sound picks, and variant picks) that tells the Generator what to play. Contains no notes.</dd>
+
+        <dt id="gloss-regenerate">Regenerate</dt>
+        <dd>Starting a fresh piece in the same genre with newly rolled tempo, key, scale, sounds, and seed while keeping your macros and Part biases.</dd>
+
+        <dt id="gloss-section">Section</dt>
+        <dd>One stretch of the Arc: Intro, Groove, Break, Build, or Outro. Distinct from the Deluge's own Session-view clip groups ("session sections").</dd>
+
+        <dt id="gloss-seed">Seed</dt>
+        <dd>A number beside the Recipe (shown as a 7-character code like <code>1A2B3C4</code>) that makes every random musical decision repeatable.</dd>
+
+        <dt id="gloss-sound-control">Sound Control</dt>
+        <dd>One of six macro/gesture/drift channels that shape sounds live: Brightness, Thin, Decay, Space, Drive, and Wobble.</dd>
+
+        <dt id="gloss-take">Take</dt>
+        <dd>A part's pattern re-roll counter (1–16). Stepping takes changes that part's patterns and melodies without touching any other part.</dd>
+
+        <dt id="gloss-throw">Throw</dt>
+        <dd>A gesture that spikes a part's reverb and synced delay feedback on its last hit before silence (Break, Gap, drop-out, or transition), letting that hit echo cleanly.</dd>
+
+        <dt id="gloss-transition">Transition</dt>
+        <dd>How Perform moves from one piece to the next on a genre change, Regenerate, or mid-set Load: <strong>DROP</strong> (Build into Drop), <strong>FADE</strong> (Outro into Intro), or <strong>CUT</strong> (hard cut at phrase line).</dd>
+
+        <dt id="gloss-variant">Variant Set / Variant</dt>
+        <dd>A genre rule with 2–8 weighted styles (such as Roots Dub's <code>ONE DROP</code>, <code>ROCKERS</code>, and <code>STEPPERS</code> drums). Drawn per piece, narrowable before Regenerate, and switchable at Drops for live sets.</dd>
+      </dl>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  const root = document.documentElement;
+  const saved = (function () {
+    try { return localStorage.getItem('deluge-gen-theme'); } catch (_) { return null; }
+  })();
+  if (saved === 'light' || saved === 'dark') {
+    root.setAttribute('data-theme', saved);
+  }
+
+  function currentEffectiveTheme() {
+    const explicit = root.getAttribute('data-theme');
+    if (explicit) return explicit;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function updateThemeLabels() {
+    const label = currentEffectiveTheme() === 'dark' ? '☀ Light' : '☾ Dark';
+    document.querySelectorAll('.theme-btn').forEach(function (btn) { btn.textContent = label; });
+  }
+
+  function toggleTheme() {
+    const next = currentEffectiveTheme() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('deluge-gen-theme', next); } catch (_) {}
+    updateThemeLabels();
+  }
+
+  document.querySelectorAll('.theme-btn').forEach(function (btn) {
+    btn.addEventListener('click', toggleTheme);
+  });
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) {
+      mq.addEventListener('change', updateThemeLabels);
+    } else if (mq.addListener) {
+      mq.addListener(updateThemeLabels);
+    }
+  }
+  updateThemeLabels();
+
+  // Mobile TOC drawer
+  const toc = document.getElementById('tocSidebar');
+  const backdrop = document.getElementById('tocBackdrop');
+  const toggle = document.getElementById('menuToggle');
+  function setDrawer(open) {
+    toc.classList.toggle('open', open);
+    backdrop.classList.toggle('open', open);
+    if (toggle) toggle.setAttribute('aria-expanded', String(open));
+  }
+  if (toggle) toggle.addEventListener('click', function () { setDrawer(!toc.classList.contains('open')); });
+  if (backdrop) backdrop.addEventListener('click', function () { setDrawer(false); });
+  toc.querySelectorAll('a').forEach(function (a) {
+    a.addEventListener('click', function () { setDrawer(false); });
+  });
+
+  // Active section highlight in sticky TOC (tracks accurately scrolling down and up)
+  const links = Array.from(toc.querySelectorAll('a[href^="#"]'));
+  const targets = links
+    .map(function (a) { return { link: a, el: document.querySelector(a.getAttribute('href')) }; })
+    .filter(function (item) { return item.el; });
+
+  if (targets.length) {
+    let activeLink = null;
+    let rafId = 0;
+
+    function setActive(link) {
+      if (link === activeLink) return;
+      if (activeLink) activeLink.classList.remove('active');
+      activeLink = link;
+      if (activeLink) activeLink.classList.add('active');
+    }
+
+    function updateActive() {
+      rafId = 0;
+      const threshold = 90;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (atBottom) {
+        setActive(targets[targets.length - 1].link);
+        return;
+      }
+      let current = targets[0].link;
+      for (let i = 0; i < targets.length; i++) {
+        const rect = targets[i].el.getBoundingClientRect();
+        if (rect.top <= threshold) {
+          current = targets[i].link;
+        } else {
+          break;
+        }
+      }
+      setActive(current);
+    }
+
+    function scheduleUpdate() {
+      if (!rafId) rafId = window.requestAnimationFrame(updateActive);
+    }
+
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    updateActive();
+  }
+})();
+</script>
+</body>
+</html>
