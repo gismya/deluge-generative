@@ -972,25 +972,24 @@ def build_capture(args):
 
 
 class IcountLink(deluge_probe.UdpLink):
-    """The test port's link to delugemu's DIN MIDI (a UDP bridge) under icount, where the VM moves only in run_to():
-    a receive runs the VM LINK_STEP_MS of virtual time a look until a message comes or `timeout` seconds (wall clock)
-    pass. Set .emu before the first receive."""
-
-    emu = None
+    """The test port's link to delugemu's DIN MIDI (a UDP bridge) under icount. It never runs the VM: a capture runs
+    it only in fixed virtual steps (send_recipe()), so the exchange is the same in every run."""
 
     def __init__(self):
         super().__init__("0:0")  # the OS picks our port; QEMU's end is .addr
 
-    def receive(self, timeout):
-        end = time.time() + timeout
-        while True:
-            msg = super().receive(0.001)
-            if msg is not None or time.time() >= end:
-                return msg
-            self.emu.wait(LINK_STEP_MS)
+    def send(self, msg):
+        # While the VM is stopped QEMU's main loop still runs: it hands the bytes to the UART's receive DMA, which
+        # takes each at once, so they all reach the firmware at the virtual time the VM next runs from.
+        super().send(msg)
+        time.sleep(LINK_DELIVER_S)
 
 
-LINK_STEP_MS = 10
+LINK_STEP_MS = 10  # virtual time between looks for a reply
+LINK_DELIVER_S = (
+    0.1  # wall-clock time a request's bytes get to reach the UART before the VM runs on
+)
+REPLY_LIMIT_MS = 2000  # virtual time a reply may take
 
 
 class Emu:
@@ -1037,7 +1036,6 @@ class Emu:
         except BaseException:
             link.close()
             raise
-        link.emu = self
         self.port = deluge_probe.TestPort(link, on_hardware=False)
 
     def close(self):
@@ -1211,12 +1209,38 @@ def boot(args, elf, out, tag, *, card=None, snapshot=True, test_port=False):
 
 
 def send_recipe(emu, lines):
-    """Sends a capture's "next recipe" lines over the test port, subscribed to its events, and runs the VM until the
-    firmware has taken them all: the next roll, the entry's, plays them."""
-    emu.port.subscribe()
+    """Sends a capture's "next recipe" lines over the test port, subscribed to its events: each line, then the VM in
+    LINK_STEP_MS steps until its status reply. Only virtual time decides where each step ends, so the exchange plays
+    out the same in every run (TestPort's own waits pump for wall-clock time). Raises on a refused line."""
+    port = emu.port
+    port.subscribe()
     for line in lines:
-        emu.port.inject(line)
-    emu.port.wait_idle()
+        seq = port._next_seq()
+        port.link.send(
+            deluge_probe.HDR
+            + [0x02, deluge_probe.INJECT, seq]
+            + port.key
+            + list(line.encode("ascii"))
+            + [0xF7]
+        )
+        for _ in range(REPLY_LIMIT_MS // LINK_STEP_MS):
+            emu.wait(LINK_STEP_MS)
+            reply = port.receive_until(
+                lambda m, seq=seq: (
+                    m[:6] == deluge_probe.HDR + [0x02]
+                    and m[6] == deluge_probe.STATUS_REPLY
+                    and m[7] == seq
+                ),
+                0.005,  # QEMU sent it before run_until returned
+            )
+            if reply is not None:
+                break
+        else:
+            raise RuntimeError(f"no test port reply to {line!r}")
+        if reply[8] != deluge_probe.QUEUED:
+            raise RuntimeError(
+                f"test port: {line!r}: {deluge_probe.STATUS.get(reply[8], reply[8])}"
+            )
 
 
 RECIPE_SETTLE_S = 3  # virtual seconds a test port exchange of a capture may take
@@ -1234,7 +1258,7 @@ def settle(emu, ns, what):
 def check_recipe_taken(emu):
     """Raises unless the entry's roll took the "next recipe" lines (its gen_next_recipe taken event), then stops the
     test events, so none goes out while the capture plays."""
-    emu.port.wait_idle(sent=True)
+    emu.port.pump(0.05)  # the events the entry sent, without running the VM
     emu.port.subscribe(False)
     if "gen_next_recipe taken" not in " ".join(emu.port.events):
         raise RuntimeError(

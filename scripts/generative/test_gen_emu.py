@@ -1217,23 +1217,50 @@ class AudioTail(unittest.TestCase):
 
 
 class RecipeOverTestPort(unittest.TestCase):
-    def test_it_sends_each_line_then_waits_until_the_firmware_has_taken_them(self):
-        port = mock.Mock()
-        gen_emu.send_recipe(
-            mock.Mock(port=port), ["next recipe seed 1", "next recipe entropy 0"]
-        )
-        self.assertEqual(
-            port.method_calls,
-            [
-                mock.call.subscribe(),
-                mock.call.inject("next recipe seed 1"),
-                mock.call.inject("next recipe entropy 0"),
-                mock.call.wait_idle(),
-            ],
-        )
+    def port(self, replies):
+        """A TestPort whose link records what it sends and answers each look from `replies` (seq filled in)."""
+        port = gen_emu.deluge_probe.TestPort(mock.Mock(), on_hardware=False)
+        self.sent = []
+        port.link.send = self.sent.append
+        answers = iter(replies)
+
+        def receive_until(match, timeout):
+            status = next(answers)
+            if status is None:
+                return None
+            msg = gen_emu.deluge_probe.HDR + [
+                0x02,
+                gen_emu.deluge_probe.STATUS_REPLY,
+                port.seq,
+                status,
+                0xF7,
+            ]
+            return msg if match(msg) else None
+
+        port.receive_until = receive_until
+        return port
+
+    def test_each_line_runs_the_vm_in_fixed_steps_until_its_reply(self):
+        emu = FakeEmu()
+        emu.port = self.port([None, None, 0, 0])
+        gen_emu.send_recipe(emu, ["next recipe seed 1", "next recipe entropy 0"])
+        self.assertEqual(emu.t, 4 * gen_emu.LINK_STEP_MS * gen_emu.MS)
+        lines = [bytes(m[8:-1]).decode() for m in self.sent[1:]]  # after the subscribe
+        self.assertEqual(lines, ["next recipe seed 1", "next recipe entropy 0"])
+
+    def test_a_refused_or_unanswered_line_fails_the_capture(self):
+        emu = FakeEmu()
+        emu.port = self.port([gen_emu.deluge_probe.PARSE_ERROR])
+        with self.assertRaises(RuntimeError):
+            gen_emu.send_recipe(emu, ["next recipe tempo 5"])
+        emu.port = self.port([None] * (gen_emu.REPLY_LIMIT_MS // gen_emu.LINK_STEP_MS))
+        with self.assertRaises(RuntimeError):
+            gen_emu.send_recipe(emu, ["next recipe seed 1"])
 
     def test_an_entry_that_never_took_the_recipe_fails_the_capture(self):
-        port = mock.Mock(events=["8.69: gen_perform_entered techno-acid"])
+        port = mock.Mock(
+            events=["8.69: gen_perform_entered techno-acid"]
+        )  # pump() reads none
         with self.assertRaises(RuntimeError):
             gen_emu.check_recipe_taken(mock.Mock(port=port))
         port.subscribe.assert_called_with(False)  # no test events while it plays
@@ -1250,19 +1277,16 @@ class RecipeOverTestPort(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             gen_emu.settle(emu, 3 * gen_emu.SEC, "x")
 
-    def test_the_link_runs_the_vm_until_a_message_comes(self):
+    def test_the_link_gives_qemu_time_to_hand_over_the_bytes(self):
         link = gen_emu.IcountLink()
         self.addCleanup(link.close)
-        link.emu = mock.Mock()
-        with mock.patch.object(
-            gen_emu.deluge_probe.UdpLink,
-            "receive",
-            side_effect=[None, None, [0xF0, 0xF7]],
+        with (
+            mock.patch.object(gen_emu.deluge_probe.UdpLink, "send") as send,
+            mock.patch.object(gen_emu.time, "sleep") as sleep,
         ):
-            self.assertEqual(link.receive(5), [0xF0, 0xF7])
-        self.assertEqual(
-            link.emu.wait.call_args_list, [mock.call(gen_emu.LINK_STEP_MS)] * 2
-        )
+            link.send([0xF0, 0xF7])
+        send.assert_called_once_with([0xF0, 0xF7])
+        sleep.assert_called_once_with(gen_emu.LINK_DELIVER_S)
 
 
 class CaptureOne(unittest.TestCase):
