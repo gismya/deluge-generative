@@ -409,7 +409,9 @@ void PerformAdapter::freeBlocks() {
 void PerformAdapter::swapIn(Song* song, const Roster& roster) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#if defined(__arm__) // the layout is the Deluge's; 64-bit hosts lay it out differently
 	static_assert(offsetof(PerformAdapter, steering_) == 20, "offset 20 is baked into decideNextStep()'s code");
+#endif
 #pragma GCC diagnostic pop
 	// Swap it in stopped (spec §14.3), as Clear song does. Perform keeps the undo log empty from entry (spec §12.9).
 	stopForSwap();
