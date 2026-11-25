@@ -349,21 +349,22 @@ constexpr Scale kScales[] = {Scale::Minor, Scale::Phrygian, Scale::HarmonicMinor
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 2}, {32, 1}};
 
 // Variant sets (#461, #497, ADR 0008): round 2's S1 and S3, and Classic sign-off 1's V1 (the Arp and the Lead
-// together), the Lead's amount and the Arp's accents. The genre as written first in each; weights are tuning.
+// together), the Lead's amount and the Arp's accents. The genre as written first in each; weights from sign-off 2
+// (#540).
 
-/// S1, the Arp's figure (round 2: "I like all, but D instead of B"): the seeded sequence (D, as written, heaviest),
-/// the walks up or up and down (A), the same notes in random order (C), or the walks on the triad (E: no 7th). Every
-/// variant plays kArpLine, so the figure keeps its Density tiers. Live: a part's flavour and its line data are read
-/// step by step, and the pool stays the same.
+/// S1, the Arp's figure (round 2: "I like all, but D instead of B"): the seeded sequence (D, as written, as heavy as
+/// C), the walks up or up and down (A), the same notes in random order (C), or the walks on the triad (E: no 7th).
+/// Every variant plays kArpLine, so the figure keeps its Density tiers. Live: a part's flavour and its line data are
+/// read step by step, and the pool stays the same.
 constexpr Variant kFigureVariants[] = {
     {.name = "sequence", .oledName = "SEQUENCE", .weight = 3},
     {.name = "walk",
      .oledName = "WALK",
-     .weight = 1,
+     .weight = 2,
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].flavour = Flavour::Arp; }},
     {.name = "shuffle",
      .oledName = "SHUFFLE",
-     .weight = 1,
+     .weight = 3,
      .apply =
          [](ResolvedGenre& resolved) {
 	         PartSpec& arp = resolved.parts[kArpPart];
@@ -372,7 +373,7 @@ constexpr Variant kFigureVariants[] = {
          }},
     {.name = "triad",
      .oledName = "TRIAD",
-     .weight = 1,
+     .weight = 2,
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.parts[kArpPart].flavour = Flavour::Arp;
@@ -394,11 +395,11 @@ void leadBreak(ResolvedGenre& resolved) {
 /// S3, the Break (round 2: today, "but weighing today"): the Drone, the Arp and the closed hat (as written), the Lead
 /// in and the Arp out (B), or B without the hat (C). Not live: the Arc reads the Break ahead.
 constexpr Variant kBreakVariants[] = {
-    {.name = "arp", .oledName = "ARP", .weight = 2},
-    {.name = "lead", .oledName = "LEAD", .weight = 1, .apply = leadBreak},
+    {.name = "arp", .oledName = "ARP", .weight = 3},
+    {.name = "lead", .oledName = "LEAD", .weight = 3, .apply = leadBreak},
     {.name = "leadnohat",
      .oledName = "NO HAT",
-     .weight = 1,
+     .weight = 2,
      .apply =
          [](ResolvedGenre& resolved) {
 	         leadBreak(resolved);
@@ -410,10 +411,10 @@ constexpr Variant kBreakVariants[] = {
 /// outside the Drop"): dropboth (as written: both in a Drop; elsewhere the Arp keeps its 8ths), turns (the Arp rests),
 /// or the Arp's 8ths everywhere. Never in a Build (yieldOn()). Live: the yield is read step by step.
 constexpr Variant kArpLeadVariants[] = {
-    {.name = "dropboth", .oledName = "DROP BOTH", .weight = 1},
+    {.name = "dropboth", .oledName = "DROP BOTH", .weight = 3},
     {.name = "turns",
      .oledName = "TURNS",
-     .weight = 2,
+     .weight = 3,
      .apply =
          [](ResolvedGenre& resolved) {
 	         resolved.parts[kArpPart].yield = {
@@ -436,11 +437,11 @@ constexpr Variant kLeadVariants[] = {
     {.name = "drops", .oledName = "DROPS", .weight = 1},
     {.name = "grooves",
      .oledName = "GROOVES",
-     .weight = 3,
+     .weight = 2,
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kLeadPart].densityGate = macroPoints(24); }}, // (tuning)
     {.name = "intro",
      .oledName = "INTRO",
-     .weight = 1,
+     .weight = 2,
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kLeadPart].densityGate = macroPoints(20); }}, // (tuning)
 };
 
@@ -456,14 +457,14 @@ constexpr uint16_t steps(std::initializer_list<int32_t> list) {
 	return mask;
 }
 constexpr Variant kAccentVariants[] = {
-    {.name = "anywhere", .oledName = "ANYWHERE", .weight = 1},
+    {.name = "anywhere", .oledName = "ANYWHERE", .weight = 2},
     {.name = "332",
      .oledName = "3-3-2",
      .weight = 3,
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].loop.jumpSteps = steps({0, 3, 6, 8, 11, 14}); }},
     {.name = "offbeat",
      .oledName = "OFFBEAT",
-     .weight = 2,
+     .weight = 3,
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].loop.jumpSteps = steps({2, 6, 10, 14}); }},
 };
 
@@ -542,7 +543,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 7; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 8; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),

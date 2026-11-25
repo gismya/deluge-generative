@@ -47,12 +47,12 @@ inline std::string pathOf(const Genre& genre) {
 }
 
 /// The genres that have a golden before v1 (spec §21.2): every subgenre of Techno, and each genre the owner signed
-/// off on #133 since (Dub, sign-off 1; Ambient, sign-off 1).
+/// off on #133 since (Dub, sign-off 1; Ambient, sign-off 1; Psytrance, sign-off 2).
 inline std::vector<const Genre*> goldenGenres() {
 	std::vector<const Genre*> out;
 	for (const Genre* genre : allGenres()) {
 		if (genre->parent == genres::technoAcid.parent // the Techno parent table
-		    || genre == &genres::dub || genre == &genres::ambient) {
+		    || genre == &genres::dub || genre == &genres::ambient || genre == &genres::psytranceClassic) {
 			out.push_back(genre);
 		}
 	}
