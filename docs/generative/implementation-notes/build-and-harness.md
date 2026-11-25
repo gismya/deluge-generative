@@ -10,6 +10,11 @@ otherwise.
   run showed text −108 B (`.text` −84, `.sdram_rodata` −24) with only those two functions resized. To show a change
   to a file is a no-op, A/B it instead: build HEAD with the base's copy of the file (`git show BASE:PATH > PATH`,
   `./dbt build release`) and diff `arm-none-eabi-size -A` and `arm-none-eabi-nm -S` with HEAD's build.
+  Keep the SHA and the dirty state the same on both sides (an untracked file keeps a tree dirty): the version string
+  gets `-dirty`. Sizes and symbols can match while the image doesn't: moving a one-line check into an out-of-line
+  method reordered the linker's ARM/Thumb interworking veneers (`*_from_thumb`), 135 bytes, every symbol's address and
+  size the same; the same method inline in the header gave a byte-identical image (deluge-engine#4). For byte
+  identity, compare `arm-none-eabi-objcopy -O binary` of both ELFs (the build is deterministic).
 - A base class only test builds need (`GenreSubmenu` in `gui/menu_item/generative/genre_rows.h`) is an alias of the
   stock class outside `ENABLE_SYSEX_TEST`: even an empty base between `Submenu` and its subclasses changed how LTO laid
   out the default build (−80 B text, other functions resized), which `./dbt sizediff` then shows.
