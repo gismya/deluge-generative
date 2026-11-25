@@ -1,6 +1,7 @@
 # Seam S7 (gismya/deluge-engine#21, spec §21.3): "next recipe" lines set the Recipe and Seed the next roll takes. They
-# set Dub techno, its facts, a seed and two sound picks (paths with spaces: the rest of the line), and the entry
-# picks ACID: Perform enters on the line's Recipe, which the Compose screen then shows. The next roll, the Compose
+# set Dub techno, its facts but the key, a seed and two sound picks (paths with spaces: the rest of the line), and the
+# entry picks ACID: Perform enters on the line's Recipe, which the Compose screen then shows, with the key entropy 7
+# rolls for Dub techno (F; entropy 0 rolls G: generator_render --genre techno-dub --entropy 7). The next roll, the Compose
 # screen's REGENERATE, draws fresh entropy again, and "next recipe clear" forgets fields that were set. Last, a
 # Regenerate in Perform takes the lines' facts but keeps its genre.
 # gen_next_recipe taken: a roll took the lines. gen_compose_recipe and gen_compose_seed: see compose_screen.txt.
@@ -18,7 +19,6 @@ next recipe seed 3
 next recipe entropy 7
 next recipe macro 0 40
 next recipe tempo 12345
-next recipe key 2
 next recipe scale 2
 next recipe swing 10
 next recipe part 3 SYNTHS/002 Basic Square Bass.XML
@@ -33,9 +33,9 @@ expect event gen_perform_entered techno-dub since=mark
 expect bpm=123.45
 include perform_leave.txt
 
-# ---- The Current Recipe is the line's: genre, facts, macros, seed ----
+# ---- The Current Recipe is the line's: genre, facts, macros, seed, and entropy 7's key ----
 compose screen
-expect event /^gen_compose_recipe opened genre=techno-dub tempo=12345 swing=10 key=2 scale=2 macros=40,/
+expect event /^gen_compose_recipe opened genre=techno-dub tempo=12345 swing=10 key=5 scale=2 macros=40,/
 expect event /^gen_compose_seed opened seed=0000003 takes=0,0,0,0,0,0 /
 
 # ---- REGENERATE? → OK rolls from fresh entropy again: no line taken, another seed ----
@@ -96,8 +96,10 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0
-expect event gen_next_recipe taken since=mark within=15
 expect event /^gen_pending_recipe tempo=12600 swing=-?\d+ interval=\d+ key=5 / within=15
+# Taken once the incoming roster has loaded, not when the preload rolled
+expect event gen_next_recipe taken within=5
 expect event gen_transition phase=idle within=30
-expect no_event gen_perform_entered techno-dub since=mark within=1
 include perform_leave.txt
+compose screen
+expect event /^gen_compose_recipe opened genre=techno-acid tempo=12600 swing=-?\d+ key=5 /

@@ -117,13 +117,14 @@ const Genre& nextGenre(const Genre& genre) {
 	return named != nullptr ? *named : genre;
 }
 
-void takeNextRecipe(Recipe& recipe, SoundPicks& sounds) {
+bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds) {
 	const NextRecipe* next = TestPort::nextRecipe();
-	if (next != nullptr) {
-		applyOverrides(recipe, next->overrides);
-		next->applySounds(sounds);
-		TestPort::nextRecipeTaken();
+	if (next == nullptr) {
+		return false;
 	}
+	applyOverrides(recipe, next->overrides);
+	next->applySounds(sounds);
+	return true;
 }
 #endif
 
@@ -236,7 +237,10 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
 #if ENABLE_SYSEX_TEST && !defined(GENERATIVE_CAPTURE)
-	takeNextRecipe(rolled, stagedSounds_);
+	// Not the golden case: it is the genre's default Recipe, and the lines stay for the next roll.
+	if (!TestPort::goldenHeld() && applyNextRecipe(rolled, stagedSounds_)) {
+		TestPort::nextRecipeTaken();
+	}
 #endif
 	activeOverride_ = 1 - activeOverride_;
 	overrideGenre_ = &rolledGenre;
@@ -281,7 +285,9 @@ Error CurrentRecipe::regenerate(Chunks* chunks) {
 	sounds = stagedSounds_;
 	seed = nextSeed(freshEntropy());
 #if ENABLE_SYSEX_TEST
-	takeNextRecipe(recipe, sounds);
+	if (applyNextRecipe(recipe, sounds)) {
+		TestPort::nextRecipeTaken();
+	}
 #endif
 	takes = Takes{};
 	replaced();
