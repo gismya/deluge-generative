@@ -22,6 +22,7 @@
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/genre.h"
+#include "generative/core/genres/lane_edits.h"
 #include "generative/core/variants.h"
 #include <array>
 #include <iterator>
@@ -609,27 +610,6 @@ constexpr Pattern kClaveStab[] = {
 
 using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
 
-/// House's drum lanes with `edit` applied to a copy.
-template <typename Edit>
-constexpr DrumLanes drumLanesWith(Edit edit) {
-	DrumLanes lanes{};
-	for (size_t l = 0; l < lanes.size(); l++) {
-		lanes[l] = kDrumLanes[l];
-	}
-	edit(lanes);
-	return lanes;
-}
-
-/// Lane `lane` of `lanes`.
-constexpr LaneSpec& laneOf(DrumLanes& lanes, Lane lane) {
-	for (LaneSpec& spec : lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "House's Drums have no such lane";
-}
-
 /// JACKIN's closed hat: today's feel with more ratchets, more often.
 constexpr Expression kJackinHatExpression = [] {
 	Expression expression = kClosedHatExpression;
@@ -641,30 +621,30 @@ constexpr Expression kJackinHatExpression = [] {
 }();
 
 /// DEEP: the thin closed hat, the open hat on the & of 4 alone, the shaker ungated.
-constexpr DrumLanes kDeepLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kDeepLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::ClosedHat).pool = kThinClosedHat;
 	laneOf(lanes, Lane::OpenHat).pool = kDeepOpenHat;
 	laneOf(lanes, Lane::Perc1).densityGate = 0;
 });
 /// JACKIN: the open hat on every & at home, the rim answering the clap, the closed hat's ratchets up.
-constexpr DrumLanes kJackinLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kJackinLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::Rim).pool = kJackinRim;
 	laneOf(lanes, Lane::ClosedHat).expression = kJackinHatExpression;
 	laneOf(lanes, Lane::OpenHat).pool = kJackinOpenHat;
 });
 /// TRIBAL: the thin closed hat, the shaker and a busier conga line ungated. (The round's toms need a Tom lane.)
-constexpr DrumLanes kTribalLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kTribalLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::ClosedHat).pool = kThinClosedHat;
 	laneOf(lanes, Lane::Perc1).densityGate = 0;
 	LaneSpec& congas = laneOf(lanes, Lane::Perc2);
 	congas.pool = kTribalConga;
 	congas.densityGate = 0;
 });
-// As many entries as each lane's own pool, in the same tiers, so a live switch or a Drop change keeps a frozen pick.
-static_assert(std::size(kThinClosedHat) == std::size(kClosedHat) && std::size(kDeepOpenHat) == std::size(kOpenHat)
-              && std::size(kJackinOpenHat) == std::size(kOpenHat) && std::size(kJackinRim) == std::size(kRim)
-              && std::size(kTribalConga) == std::size(kConga));
-static_assert(std::size(kOffbeatStab) == std::size(kStab) && std::size(kClaveStab) == std::size(kStab));
+// As many entries as each lane's own pool, each as long and in the same tier, so a live switch or a Drop change keeps
+// a frozen pick.
+static_assert(sameShape(kThinClosedHat, kClosedHat) && sameShape(kDeepOpenHat, kOpenHat)
+              && sameShape(kJackinOpenHat, kOpenHat) && sameShape(kJackinRim, kRim) && sameShape(kTribalConga, kConga));
+static_assert(sameShape(kOffbeatStab, kStab) && sameShape(kClaveStab, kStab));
 
 /// variants-2 DRUMS, the drum style: classic (the genre as written), deep (the shaker over a thin hat), jackin (open
 /// hats on every &, ratchets) or tribal (the shaker and congas at home), 3:2:2:2. Live, and at each Drop a 300‰
@@ -730,7 +710,7 @@ constexpr Variant kBreakVariants[] = {
      .apply =
          [](ResolvedGenre& resolved) {
 	         // The Lead's gate is 30: the Break's Density rises 6 over the Recipe's, not falls 5, as Psytrance's lead
-	         // Break does, else the Lead never plays there.
+	         // Break does, else the Lead never plays there (tuning).
 	         resolved.genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)] = {macroPoints(-10), macroPoints(-10),
 	                                                                                 macroPoints(6), macroPoints(6)};
 	         resolved.genre.arc.breakKeeps = {.parts = partBit(kStringsPart) | partBit(kLeadPart)};

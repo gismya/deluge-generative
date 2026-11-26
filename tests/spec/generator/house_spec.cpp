@@ -36,10 +36,6 @@ constexpr int32_t kStabPart = 2;
 constexpr int32_t kStringsPart = 3;
 constexpr int32_t kLeadPart = 4;
 constexpr int32_t kFxPart = 5;
-/// The variants-2 sets, by their index in House's list.
-constexpr size_t kDrumsSet = 4;
-constexpr size_t kStabSet = 5;
-constexpr size_t kBreakSet = 6;
 
 const LaneSpec& laneOf(Lane lane) {
 	return harness::laneOf(houseGenre, kDrumsPart, lane);
@@ -1024,10 +1020,11 @@ describe house("House", $ {
 			// The Build is read ahead of its line, the Bass pools differ in size, a live set may not move the chord
 			// lines (ADR 0008), and the Arc reads the Break ahead.
 			expect(live).to_equal(std::vector<bool>{true, false, false, false, true, true, false});
+			const auto drums = static_cast<size_t>(findVariantSet(houseGenre, "drums"));
 			for (size_t s = 0; s < sets.size(); s++) {
-				expect(sets[s].changeAt == (s == kDrumsSet ? ChangeAt::Drop : ChangeAt::Never)).to_be_true();
+				expect(sets[s].changeAt == (s == drums ? ChangeAt::Drop : ChangeAt::Never)).to_be_true();
 			}
-			expect(sets[kDrumsSet].changeChance).to_equal(int16_t{300}); // "turns tribal at the Drop": often
+			expect(sets[drums].changeChance).to_equal(int16_t{300}); // "turns tribal at the Drop": often
 		});
 
 		it("S1: a new Recipe draws a new loop on 1 Drop in 2 about two thirds of the time (the owner, #472 round 3)", _ {
@@ -1274,6 +1271,33 @@ describe house("House", $ {
 					expect(moved[lane]).to_be_greater_than(0);
 				}
 			}
+		});
+
+		it("plays deep's open hat on the & of 4 alone, and jackin's closed hat with more ratchets", _ {
+			std::map<std::string, int32_t> ratchetSteps; // closed hat steps with more than one hit
+			std::set<int32_t> deepOpen;                  // deep's open hat steps in the bar
+			for (const char* fix : {"drums=classic", "drums=deep", "drums=jackin"}) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const Walked played =
+					    walk(withVariants(beforeV2(movingRecipe(houseGenre, seed)), {fix}), seed, 96 * kStepsPerBar);
+					std::map<int32_t, int32_t> hits;
+					for (const Event& e : played.noteOns) {
+						if (e.part != kDrumsPart || e.muted) {
+							continue;
+						}
+						if (e.lane == Lane::ClosedHat) {
+							hits[stepAt(e)]++;
+						}
+						if (e.lane == Lane::OpenHat && std::string(fix) == "drums=deep") {
+							deepOpen.insert(stepAt(e) % kStepsPerBar);
+						}
+					}
+					ratchetSteps[fix] += static_cast<int32_t>(
+					    std::ranges::count_if(hits, [](const auto& step) { return step.second > 1; }));
+				}
+			}
+			expect(deepOpen == std::set<int32_t>{14}).to_be_true();
+			expect(ratchetSteps["drums=jackin"]).to_be_greater_than(ratchetSteps["drums=classic"] * 2);
 		});
 
 		it("plays each stab rhythm in the Stab only: offbeat on the &s, clave never on a beat", _ {

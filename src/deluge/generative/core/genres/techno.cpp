@@ -28,6 +28,7 @@
 
 #include "generative/core/capacity.h"
 #include "generative/core/genre.h"
+#include "generative/core/genres/lane_edits.h"
 
 #include <algorithm>
 #include <array>
@@ -200,40 +201,21 @@ static_assert(std::size(kTribalRim) == std::size(kRim) && std::size(kTribalClose
 
 using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
 
-/// The parent's drum lanes with `edit` applied to a copy.
-template <typename Edit>
-constexpr DrumLanes drumLanesWith(Edit edit) {
-	DrumLanes lanes{};
-	std::copy(std::begin(kDrumLanes), std::end(kDrumLanes), lanes.begin());
-	edit(lanes);
-	return lanes;
-}
-
-/// Lane `lane` of `lanes`.
-constexpr LaneSpec& laneOf(DrumLanes& lanes, Lane lane) {
-	for (LaneSpec& spec : lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "the parent's Drums have no such lane";
-}
-
 /// Running drops the closed hat's Lock: with it the 16ths thinned to 6 a bar (variant ideas 1).
-constexpr DrumLanes kRunningLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kRunningLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	LaneSpec& closed = laneOf(lanes, Lane::ClosedHat);
 	closed.pool = kRunningClosedHat;
 	closed.rules = {};
 	laneOf(lanes, Lane::OpenHat).pool = kRunningOpenHat;
 });
 
-constexpr DrumLanes kPumpLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kPumpLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::Kick).pool = kPumpKick;
 	laneOf(lanes, Lane::ClosedHat).pool = kPumpClosedHat;
 	laneOf(lanes, Lane::OpenHat).pool = kPumpOpenHat;
 });
 
-constexpr DrumLanes kTribalLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kTribalLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::Rim).pool = kTribalRim;
 	laneOf(lanes, Lane::ClosedHat).pool = kTribalClosedHat;
 	laneOf(lanes, Lane::Tom).pool = kTribalTom;
@@ -640,7 +622,7 @@ constexpr VariantSet kMelodicSets[] = {
 };
 
 /// The parent's drum lanes, but the kick holds only the beats.
-constexpr DrumLanes kMelodicDrumLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kMelodicDrumLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	LaneSpec& kick = laneOf(lanes, Lane::Kick);
 	kick.pool = kFourOnTheFloor;
 	kick.band = {0, 0};

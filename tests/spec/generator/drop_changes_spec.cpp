@@ -54,9 +54,13 @@ constexpr int32_t kBass = 4;
 constexpr int32_t kOneDrop = 0;
 constexpr int32_t kRockers = 1;
 constexpr int32_t kSteppers = 2;
-/// House's drums set (variants-2) and its tribal style.
-constexpr int32_t kHouseDrums = 4;
-constexpr int32_t kTribal = 3;
+/// House's drums set (variants-2) and its tribal style, by name.
+int32_t houseDrums() {
+	return findVariantSet(genres::house, "drums");
+}
+int32_t tribal() {
+	return findVariant(genres::house.variantSets[houseDrums()], "tribal");
+}
 
 /// Dub's default Recipe with its sets fixed by `fixes` (`set=name`).
 Recipe dubWith(std::initializer_list<const char*> fixes, uint32_t entropy = 0) {
@@ -470,7 +474,7 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			int32_t changes = 0;
 			for (uint32_t seed = 1; seed <= 24; seed++) {
 				Recipe every = withVariants(newRecipe(genres::house, 0), {"drums=classic"});
-				every.variants.allowed[kHouseDrums] = 0b1111;
+				every.variants.allowed[houseDrums()] = 0b1111;
 				const Stepped run = stepThrough(every, seed, 200 * kStepsPerBar);
 				drops += static_cast<int32_t>(run.drops.size());
 				VariantPicks before = every.variants;
@@ -478,7 +482,7 @@ describe drop_changes("Drop changes and live variant switches", $ {
 					const VariantPicks& now = run.picks[step];
 					for (size_t s = 0; s < genres::house.variantSets.size(); s++) {
 						if (now.pick[s] != before.pick[s]) {
-							expect(static_cast<int32_t>(s)).to_equal(kHouseDrums);
+							expect(static_cast<int32_t>(s)).to_equal(houseDrums());
 							expect(std::ranges::count(run.drops, static_cast<int32_t>(step))).to_equal(1);
 							changes++;
 						}
@@ -504,14 +508,14 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
 				const Recipe classic = withVariants(newRecipe(genres::house, 0), {"drums=classic"});
 				Recipe recipe = classic;
-				recipe.variants.allowed[kHouseDrums] = 0b1001; // classic or tribal
+				recipe.variants.allowed[houseDrums()] = 0b1001; // classic or tribal
 				const Stepped run = stepThrough(recipe, seed, 140 * kStepsPerBar);
-				if (run.drops.empty() || run.picks[run.drops[0]].pick[kHouseDrums] != kTribal) {
+				if (run.drops.empty() || run.picks[run.drops[0]].pick[houseDrums()] != tribal()) {
 					continue;
 				}
 				found = true;
 				const int32_t drop = run.drops[0];
-				expect(static_cast<int32_t>(run.picks[drop - 1].pick[kHouseDrums])).to_equal(0);
+				expect(static_cast<int32_t>(run.picks[drop - 1].pick[houseDrums()])).to_equal(0);
 				const Stepped stayed = stepThrough(classic, seed, 140 * kStepsPerBar);
 				expect(congas(run, 0, drop)).to_equal(congas(stayed, 0, drop));
 				expect(congas(run, drop, drop + 8 * kStepsPerBar))
