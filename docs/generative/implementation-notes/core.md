@@ -316,6 +316,14 @@ otherwise.
   (`compose_driver_spec`'s `shortBuildsOnly()`). A spec of a genre with no sets uses `genreWithNoSets()`
   (`no_sets_genre.h`). The patch-diff rule compares a live set's variants pairwise and lets an empty pool match any
   (Techno's `tribal` gives the Tom lane a groove pool): a lane with no pool never reads its pick's entry.
+- Trap: a set appended to a genre is drawn by every spec's `newRecipe()` and `movingRecipe()`, so a genre spec of
+  the drums or the Break starts measuring a random variant: House's variants-2 sets broke eight house_spec cases until
+  `beforeV2()` pinned the new sets to variant 0 everywhere in it (variants-2 build).
+- Trap: a Build ramps from wherever the Section before it left the macros (`Arc::buildFrom_`), so a Break variant that
+  moves the Break's Density offset (House's and Psytrance's `lead` Breaks, +6) also moves the next Build's first bars.
+- Trap: the test port's picks text (`gen_variants_landed`, `gen_pending_variants`) grows with a genre's set count and
+  names: House's seven sets take 113 chars. The event line is 192 (`kEventLength`), and `regenerate_page_spec` keeps
+  every genre's longest within 120; an eighth set may need short names or a longer line.
 - Trap: events due on one tick may leave the event buffer in another order when a lane's notes around them change
   (Techno's running hats under a roll punch-in): a spec comparing "everything else" across two runs sorts each tick.
 - Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
