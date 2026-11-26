@@ -54,6 +54,9 @@ constexpr int32_t kBass = 4;
 constexpr int32_t kOneDrop = 0;
 constexpr int32_t kRockers = 1;
 constexpr int32_t kSteppers = 2;
+/// House's drums set (variants-2) and its tribal style.
+constexpr int32_t kHouseDrums = 4;
+constexpr int32_t kTribal = 3;
 
 /// Dub's default Recipe with its sets fixed by `fixes` (`set=name`).
 Recipe dubWith(std::initializer_list<const char*> fixes, uint32_t entropy = 0) {
@@ -458,6 +461,63 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			expect(drums.live).to_be_true();
 			expect(drums.changeAt == ChangeAt::Drop).to_be_true();
 			expect(genres::dub.variantSets[kSkank].live).to_be_true(); // #495: no look-ahead reads the Extensions
+		});
+	});
+
+	context("House's drum styles (variants-2, #133)", _ {
+		it("moves House's drum style only on a Drop's first step, at about its 300 per-mille, and no other set", _ {
+			int32_t drops = 0;
+			int32_t changes = 0;
+			for (uint32_t seed = 1; seed <= 24; seed++) {
+				Recipe every = withVariants(newRecipe(genres::house, 0), {"drums=classic"});
+				every.variants.allowed[kHouseDrums] = 0b1111;
+				const Stepped run = stepThrough(every, seed, 200 * kStepsPerBar);
+				drops += static_cast<int32_t>(run.drops.size());
+				VariantPicks before = every.variants;
+				for (size_t step = 0; step < run.picks.size(); step++) {
+					const VariantPicks& now = run.picks[step];
+					for (size_t s = 0; s < genres::house.variantSets.size(); s++) {
+						if (now.pick[s] != before.pick[s]) {
+							expect(static_cast<int32_t>(s)).to_equal(kHouseDrums);
+							expect(std::ranges::count(run.drops, static_cast<int32_t>(step))).to_equal(1);
+							changes++;
+						}
+					}
+					before = now;
+				}
+			}
+			expect(drops).to_be_greater_than(30);
+			expect(changes * 1000).to_be_greater_than(drops * 150);
+			expect(changes * 1000).to_be_less_than(drops * 450);
+		});
+
+		it("plays the tribal congas from the Drop on: the genre copy is applied again there", _ {
+			const auto congas = [](const Stepped& run, int32_t from, int32_t to) {
+				return std::ranges::count_if(run.events, [&](const Event& e) {
+					const int32_t step = e.tick / kTicksPerStep;
+					return e.kind == EventKind::NoteOn && e.part == 0 && e.lane == Lane::Perc2 && !e.muted
+					       && step >= from && step < to;
+				});
+			};
+			// A seed whose first Drop turns the classic drums tribal.
+			bool found = false;
+			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
+				const Recipe classic = withVariants(newRecipe(genres::house, 0), {"drums=classic"});
+				Recipe recipe = classic;
+				recipe.variants.allowed[kHouseDrums] = 0b1001; // classic or tribal
+				const Stepped run = stepThrough(recipe, seed, 140 * kStepsPerBar);
+				if (run.drops.empty() || run.picks[run.drops[0]].pick[kHouseDrums] != kTribal) {
+					continue;
+				}
+				found = true;
+				const int32_t drop = run.drops[0];
+				expect(static_cast<int32_t>(run.picks[drop - 1].pick[kHouseDrums])).to_equal(0);
+				const Stepped stayed = stepThrough(classic, seed, 140 * kStepsPerBar);
+				expect(congas(run, 0, drop)).to_equal(congas(stayed, 0, drop));
+				expect(congas(run, drop, drop + 8 * kStepsPerBar))
+				    .to_be_greater_than(congas(stayed, drop, drop + 8 * kStepsPerBar) + 8 * 2);
+			}
+			expect(found).to_be_true();
 		});
 	});
 

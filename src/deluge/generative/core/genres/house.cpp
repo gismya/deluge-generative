@@ -23,6 +23,7 @@
 #include "generative/core/chord_walk.h"
 #include "generative/core/genre.h"
 #include "generative/core/variants.h"
+#include <array>
 #include <iterator>
 
 namespace deluge::generative::genres {
@@ -547,11 +548,208 @@ constexpr Variant kChordVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = vampOf(resolved.genre.harmony.graph); }},
 };
 
+// The variants-2 round's sets (#133): the drum style, the stab's rhythm and the breakdown. The owner marked each
+// variant "often", "sometimes" or "rarely", weighted 3, 2 and 1.
+
+// clang-format off
+/// DEEP and TRIBAL's closed hat: the &s, a ghosted a now and then, so the shaker carries the 16ths. The closed hat
+/// pool's 5 entries, tiers and lengths.
+constexpr Pattern kThinClosedHat[] = {
+    {"..8...8...8...8.", "................", 0, 2},
+    {"..8...8...8...86", "...............g", 0},
+    {"..8...8...8...8.", "................", 1, 2},
+    {"..85..8...85..8.", "...g.......g....", 1},
+    {"..85..85..85..85", "...g...g...g...g", 2},
+};
+/// DEEP's open hat: the & of 4 only, at every Density.
+constexpr Pattern kDeepOpenHat[] = {
+    {"..............7.", "................", 0},
+};
+/// JACKIN's open hat: every &, at home too.
+constexpr Pattern kJackinOpenHat[] = {
+    {"..7...7...7...7.", "................", 0},
+};
+/// JACKIN's rim: the a after each clap at full level, answering it.
+constexpr Pattern kJackinRim[] = {
+    {".......7.......7", "................", 0},
+    {"...5...7...5...7", "...g.......g....", 1},
+};
+/// TRIBAL's congas: a busier line off the beats.
+constexpr Pattern kTribalConga[] = {
+    {"...7..7...6..6.7", ".............g..", 0},
+    {".6.7..7..6.7.6.7", ".g.......g...g..", 1},
+};
+
+/// OFFBEAT stabs: every &, anchored on the & of 1. The stab pool's 9 entries, tiers and lengths.
+constexpr Pattern kOffbeatStab[] = {
+    {"..X...8...8...8.", "................", 0, 2},
+    {"..X...8...8...7.", "..............g.", 0},
+    {"..X...8...8...8.", "................", 1, 2},
+    {"..X...8..78...8.", ".........g......", 1},
+    {"..X...87..8...8.", ".......g........", 1},
+    {"..X...8...87..8.", "...........g....", 1},
+    {"..X...8...8...8." "..X...8...8...87", "...............................g", 1, 2},
+    {"..X...8...8...8." "..X...8...8...8.", "................................", 1},
+    {"..X7..87..87..8.", "...g...g...g....", 2},
+};
+/// CLAVE stabs: the a of 1, the & of 2 and the a of 3, a 3-3-2 push kept off the beats; the 2-bar lines answer with
+/// the &s of 2, 3 and 4. The stab pool's 9 entries, tiers and lengths.
+constexpr Pattern kClaveStab[] = {
+    {"...X..8....8....", "................", 0, 2},
+    {"...X..8....8..7.", "..............g.", 0},
+    {"...X..8....8..8.", "................", 1, 2},
+    {"...X..87...8..8.", ".......g........", 1},
+    {"...X..8....8..87", "...............g", 1},
+    {"..7X..8....8..8.", "..g.............", 1},
+    {"...X..8....8...." "......8...8...8.", "................................", 1, 2},
+    {"...X..8....8..7." "...X..8...8.....", "..............g.................", 1},
+    {"...X..87..88..87", ".......g...g...g", 2},
+};
+// clang-format on
+
+using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
+
+/// House's drum lanes with `edit` applied to a copy.
+template <typename Edit>
+constexpr DrumLanes drumLanesWith(Edit edit) {
+	DrumLanes lanes{};
+	for (size_t l = 0; l < lanes.size(); l++) {
+		lanes[l] = kDrumLanes[l];
+	}
+	edit(lanes);
+	return lanes;
+}
+
+/// Lane `lane` of `lanes`.
+constexpr LaneSpec& laneOf(DrumLanes& lanes, Lane lane) {
+	for (LaneSpec& spec : lanes) {
+		if (spec.lane == lane) {
+			return spec;
+		}
+	}
+	throw "House's Drums have no such lane";
+}
+
+/// JACKIN's closed hat: today's feel with more ratchets, more often.
+constexpr Expression kJackinHatExpression = [] {
+	Expression expression = kClosedHatExpression;
+	expression.ornaments.rateCeiling = 300;
+	expression.ornaments.ratchet[0] = 3;
+	expression.ornaments.ratchet[1] = 2;
+	expression.ornaments.ratchet[2] = 1;
+	return expression;
+}();
+
+/// DEEP: the thin closed hat, the open hat on the & of 4 alone, the shaker ungated.
+constexpr DrumLanes kDeepLanes = drumLanesWith([](DrumLanes& lanes) {
+	laneOf(lanes, Lane::ClosedHat).pool = kThinClosedHat;
+	laneOf(lanes, Lane::OpenHat).pool = kDeepOpenHat;
+	laneOf(lanes, Lane::Perc1).densityGate = 0;
+});
+/// JACKIN: the open hat on every & at home, the rim answering the clap, the closed hat's ratchets up.
+constexpr DrumLanes kJackinLanes = drumLanesWith([](DrumLanes& lanes) {
+	laneOf(lanes, Lane::Rim).pool = kJackinRim;
+	laneOf(lanes, Lane::ClosedHat).expression = kJackinHatExpression;
+	laneOf(lanes, Lane::OpenHat).pool = kJackinOpenHat;
+});
+/// TRIBAL: the thin closed hat, the shaker and a busier conga line ungated. (The round's toms need a Tom lane.)
+constexpr DrumLanes kTribalLanes = drumLanesWith([](DrumLanes& lanes) {
+	laneOf(lanes, Lane::ClosedHat).pool = kThinClosedHat;
+	laneOf(lanes, Lane::Perc1).densityGate = 0;
+	LaneSpec& congas = laneOf(lanes, Lane::Perc2);
+	congas.pool = kTribalConga;
+	congas.densityGate = 0;
+});
+// As many entries as each lane's own pool, in the same tiers, so a live switch or a Drop change keeps a frozen pick.
+static_assert(std::size(kThinClosedHat) == std::size(kClosedHat) && std::size(kDeepOpenHat) == std::size(kOpenHat)
+              && std::size(kJackinOpenHat) == std::size(kOpenHat) && std::size(kJackinRim) == std::size(kRim)
+              && std::size(kTribalConga) == std::size(kConga));
+static_assert(std::size(kOffbeatStab) == std::size(kStab) && std::size(kClaveStab) == std::size(kStab));
+
+/// variants-2 DRUMS, the drum style: classic (the genre as written), deep (the shaker over a thin hat), jackin (open
+/// hats on every &, ratchets) or tribal (the shaker and congas at home), 3:2:2:2. Live, and at each Drop a 300‰
+/// chance of another (the owner marked "turns tribal at the Drop" often): it swaps only the Drums' lanes, each pool as
+/// many entries in the same tiers as the lane's own.
+constexpr Variant kDrumVariants[] = {
+    {.name = "classic", .oledName = "CLASSIC", .weight = 3},
+    {.name = "deep",
+     .oledName = "DEEP",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kDeepLanes; }},
+    {.name = "jackin",
+     .oledName = "JACKIN",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kJackinLanes; }},
+    {.name = "tribal",
+     .oledName = "TRIBAL",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kTribalLanes; }},
+};
+
+/// variants-2 STAB, the stab's rhythm: syncopated (the genre as written), offbeat (every &) or clave (a 3-3-2 push),
+/// 3:1:2. Live: each pool has the stab pool's entries, tiers and lengths.
+constexpr Variant kStabVariants[] = {
+    {.name = "syncopated", .oledName = "SYNCO", .weight = 3},
+    {.name = "offbeat",
+     .oledName = "OFFBEAT",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kStabPart].pool = kOffbeatStab; }},
+    {.name = "clave",
+     .oledName = "CLAVE",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kStabPart].pool = kClaveStab; }},
+};
+
+/// variants-2 BREAK, what plays in the breakdown: the Stab and the Strings over the closed hat (the genre as written),
+/// the Strings alone over it, the Stab alone, the Bass over the hats, or the Strings and the Lead, 2:1:2:1:1. Not
+/// live: the Arc reads the Break ahead.
+constexpr Variant kBreakVariants[] = {
+    {.name = "stabpad", .oledName = "STAB+PAD", .weight = 2},
+    {.name = "pads",
+     .oledName = "PADS",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.breakKeeps = {.parts = partBit(kStringsPart), .lanes = laneBit(Lane::ClosedHat)};
+         }},
+    {.name = "piano",
+     .oledName = "PIANO",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.arc.breakKeeps = {.parts = partBit(kStabPart)}; }},
+    {.name = "bassline",
+     .oledName = "BASSLINE",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.breakKeeps = {.parts = partBit(kBassPart),
+	                                          .lanes = laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat)};
+         }},
+    {.name = "lead",
+     .oledName = "LEAD",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         // The Lead's gate is 30: the Break's Density rises 6 over the Recipe's, not falls 5, as Psytrance's lead
+	         // Break does, else the Lead never plays there.
+	         resolved.genre.arc.offsets[static_cast<int32_t>(SectionKind::Break)] = {macroPoints(-10), macroPoints(-10),
+	                                                                                 macroPoints(6), macroPoints(6)};
+	         resolved.genre.arc.breakKeeps = {.parts = partBit(kStringsPart) | partBit(kLeadPart)};
+         }},
+};
+
 constexpr VariantSet kVariantSets[] = {
     {.name = "loops", .oledName = "LOOPS", .variants = kLoopVariants, .live = true},
     {.name = "build", .oledName = "BUILD", .variants = kBuildVariants},
     {.name = "bass", .oledName = "BASS", .variants = kBassVariants},
     {.name = "chords", .oledName = "CHORDS", .variants = kChordVariants},
+    {.name = "drums",
+     .oledName = "DRUMS",
+     .variants = kDrumVariants,
+     .live = true,
+     .changeAt = ChangeAt::Drop,
+     .changeChance = 300},
+    {.name = "stab", .oledName = "STAB", .variants = kStabVariants, .live = true},
+    {.name = "break", .oledName = "BREAK", .variants = kBreakVariants},
 };
 
 constexpr Genre kHouse{
