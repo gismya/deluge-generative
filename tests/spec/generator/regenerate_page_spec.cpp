@@ -116,8 +116,8 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 			expect(std::string(text)).to_equal(std::string("-"));
 		});
 
-		it("fit every built-in genre's longest picks text in kPicksTextChars, within 100 chars for the test port's line", _ {
-			// The test port's 160-char event line holds a timestamp and the event's fields before the picks.
+		it("fit every built-in genre's longest picks text in kPicksTextChars, within 120 chars for the test port's line", _ {
+			// The test port's 192-char event line holds a timestamp and the event's fields before the picks.
 			for (const Genre* genre : allGenres()) {
 				VariantPicks picks = allRandom(*genre);
 				for (size_t s = 0; s < genre->variantSets.size(); s++) {
@@ -130,7 +130,7 @@ describe regenerate_page("The Regenerate and genre-change page", $ {
 				}
 				char wide[512];
 				picksText(*genre, picks, wide);
-				expect(std::strlen(wide)).to_be_less_than(size_t{101});
+				expect(std::strlen(wide)).to_be_less_than(size_t{121});
 				expect(std::strlen(wide)).to_be_less_than(kPicksTextChars);
 			}
 		});

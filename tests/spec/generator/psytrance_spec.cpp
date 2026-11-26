@@ -14,6 +14,8 @@
 #include "cppspec.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -59,9 +61,30 @@ std::vector<int32_t> buildEnds(const Walked& walked) {
 	return out;
 }
 
+/// `walked`'s note-ons and note-offs that `keep` takes, as (tick, kind, part, lane, pitch, velocity), sorted: events
+/// due on one tick may leave in another order when a lane's notes around them change.
+std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t>>
+notesWhere(const Walked& walked, const std::function<bool(const Event&)>& keep) {
+	std::vector<std::tuple<int32_t, int32_t, int32_t, int32_t, int32_t, int32_t>> out;
+	for (const Event& e : walked.notes) {
+		if (keep(e)) {
+			out.emplace_back(e.tick, static_cast<int32_t>(e.kind), e.part, static_cast<int32_t>(e.lane), e.pitch,
+			                 e.velocity);
+		}
+	}
+	std::ranges::sort(out);
+	return out;
+}
+
+/// The Section `e` starts in.
+SectionKind walkedSection(const Walked& walked, const Event& e) {
+	return walked.steps[std::min<int32_t>(stepAt(e), static_cast<int32_t>(walked.steps.size()) - 1)].section;
+}
+
 /// `recipe` with every variant set on its first variant: the genre as written (#497).
 Recipe asWritten(const Recipe& recipe) {
-	return withVariants(recipe, {"figure=sequence", "break=arp", "arplead=dropboth", "lead=drops", "accents=anywhere"});
+	return withVariants(
+	    recipe, {"figure=sequence", "break=arp", "arplead=dropboth", "lead=drops", "accents=anywhere", "hats=closed"});
 }
 
 /// Per bar of a walk: its Section, whether it is in a Groove that started on a Drop, and the onset steps (0–15) of
@@ -364,7 +387,8 @@ describe psytrance("Psytrance", $ {
 			}
 			int32_t bars = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
-				const Walked walked = walk(harness::movingRecipe(psyGenre, Scale::Minor, seed), seed, 96 * kStepsPerBar);
+				const Walked walked =
+				    walk(withVariants(harness::movingRecipe(psyGenre, Scale::Minor, seed), {"hats=closed"}), seed, 96 * kStepsPerBar);
 				std::set<int32_t> hatBars;
 				for (const Event& e : walked.noteOns) {
 					if (e.part == kDrumsPart && e.lane == Lane::OpenHat) {
@@ -895,7 +919,7 @@ describe psytrance("Psytrance", $ {
 	});
 
 	context("its sign-off 1 retune and variant sets (#497, ADR 0008)", _ {
-		it("lists five sets, the genre as written first in each: figure, break, arplead, lead and accents", _ {
+		it("lists six sets, the genre as written first in each: figure, break, arplead, lead, accents and hats", _ {
 			std::vector<std::vector<std::string>> names;
 			std::vector<std::vector<int32_t>> weights;
 			std::vector<bool> live;
@@ -907,7 +931,10 @@ describe psytrance("Psytrance", $ {
 					weights.back().push_back(variant.weight);
 				}
 				expect(set.variants[0].apply == nullptr).to_be_true();
-				expect(set.changeAt == ChangeAt::Never).to_be_true();
+				// Only the hats change at a Drop (variants-2): 300 per mille.
+				const bool hats = std::string(set.name) == "hats";
+				expect(set.changeAt == (hats ? ChangeAt::Drop : ChangeAt::Never)).to_be_true();
+				expect(set.changeChance).to_equal(static_cast<int16_t>(hats ? 300 : 0));
 				live.push_back(set.live);
 			}
 			expect(names).to_equal(std::vector<std::vector<std::string>>{
@@ -915,10 +942,11 @@ describe psytrance("Psytrance", $ {
 			    {"break", "BREAK", "arp", "lead", "leadnohat"},
 			    {"arplead", "ARP+LEAD", "dropboth", "turns", "eighths"},
 			    {"lead", "LEAD", "drops", "grooves", "intro"},
-			    {"accents", "ACCENTS", "anywhere", "332", "offbeat"}});
+			    {"accents", "ACCENTS", "anywhere", "332", "offbeat"},
+			    {"hats", "HATS", "closed", "open", "ride"}});
 			expect(weights).to_equal(
-			    std::vector<std::vector<int32_t>>{{3, 2, 3, 2}, {3, 3, 2}, {3, 3, 2}, {1, 2, 2}, {2, 3, 3}});
-			expect(live).to_equal(std::vector<bool>{true, false, true, false, true});
+			    std::vector<std::vector<int32_t>>{{3, 2, 3, 2}, {3, 3, 2}, {3, 3, 2}, {1, 2, 2}, {2, 3, 3}, {3, 3, 1}});
+			expect(live).to_equal(std::vector<bool>{true, false, true, false, true, true});
 		});
 
 		it("plays the figure set's walk, shuffle and triad as an Arp walking kArpLine's walks (triad: no 7th), and the "
@@ -1248,6 +1276,66 @@ describe psytrance("Psytrance", $ {
 		const harness::Lost lost = harness::lostAtEveryCorner(psyGenre, psyGenre.facts.scales);
 		expect(lost.dropped).to_equal(0U);
 		expect(lost.evicted).to_equal(0U);
+	});
+
+	context("its hats set (variants-2, #133)", _ {
+		it("plays each hat sound in the hat lanes only: open on every &, ride on the ride with no open hat", _ {
+			const std::vector<Lane> hatLanes = {Lane::ClosedHat, Lane::OpenHat, Lane::Ride};
+			std::map<std::string, std::map<Lane, int32_t>> counts;
+			for (const char* fix : {"hats=closed", "hats=open", "hats=ride"}) {
+				for (uint32_t seed = 1; seed <= 4; seed++) {
+					const Recipe written = asWritten(newRecipe(psyGenre, seed));
+					const Walked as = walk(written, seed, 128 * kStepsPerBar);
+					const Walked played = walk(withVariants(written, {fix}), seed, 128 * kStepsPerBar);
+					const auto notHat = [&](const Event& e) {
+						return !(e.part == kDrumsPart && std::ranges::count(hatLanes, e.lane) > 0);
+					};
+					expect(notesWhere(played, notHat) == notesWhere(as, notHat)).to_be_true();
+					for (const Event& e : played.noteOns) {
+						if (e.part == kDrumsPart && !e.muted && walkedSection(played, e) == SectionKind::Groove) {
+							counts[fix][e.lane]++;
+						}
+					}
+				}
+			}
+			// Open: the open hat on the &s, where it replaces the closed hat (spec §5.7).
+			expect(counts["hats=open"][Lane::OpenHat]).to_be_greater_than(counts["hats=closed"][Lane::OpenHat] * 4);
+			expect(counts["hats=open"][Lane::ClosedHat]).to_be_less_than(counts["hats=closed"][Lane::ClosedHat] / 2);
+			// Ride: the ride at home, no open hat, the closed hat down to its anchored ghost and what the Lock leaves.
+			expect(counts["hats=ride"][Lane::OpenHat]).to_equal(0);
+			expect(counts["hats=ride"][Lane::Ride]).to_be_greater_than(counts["hats=closed"][Lane::Ride] * 4);
+			expect(counts["hats=ride"][Lane::ClosedHat]).to_be_less_than(counts["hats=closed"][Lane::ClosedHat] / 2);
+		});
+
+		it("keeps the Break's pulse in every hat sound: the closed hat plays in each Break that keeps it", _ {
+			for (const char* fix : {"hats=closed", "hats=open", "hats=ride"}) {
+				int32_t breaks = 0;
+				int32_t withHat = 0;
+				for (uint32_t seed = 1; seed <= 6; seed++) {
+					const Walked played =
+					    walk(withVariants(asWritten(newRecipe(psyGenre, seed)), {fix}), seed, 160 * kStepsPerBar);
+					std::map<int32_t, int32_t> hatsIn; // by the Break's first bar
+					for (size_t step = 0; step < played.steps.size(); step++) {
+						if (played.steps[step].section == SectionKind::Break && played.steps[step].sectionStart) {
+							hatsIn[static_cast<int32_t>(step)] = 0;
+						}
+					}
+					for (const Event& e : played.noteOns) {
+						if (e.part == kDrumsPart && e.lane == Lane::ClosedHat && !e.muted
+						    && walkedSection(played, e) == SectionKind::Break) {
+							auto after = hatsIn.upper_bound(stepAt(e));
+							hatsIn[std::prev(after)->first]++;
+						}
+					}
+					for (const auto& [first, hats] : hatsIn) {
+						breaks++;
+						withHat += hats > 0 ? 1 : 0;
+					}
+				}
+				expect(breaks).to_be_greater_than(3);
+				expect(withHat).to_equal(breaks);
+			}
+		});
 	});
 
 	context("its palette (spec §10.1, §18.2, §18.3)", _ {

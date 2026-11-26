@@ -54,6 +54,8 @@ constexpr int32_t kBass = 4;
 constexpr int32_t kOneDrop = 0;
 constexpr int32_t kRockers = 1;
 constexpr int32_t kSteppers = 2;
+/// Psytrance's hats set (variants-2).
+constexpr int32_t kPsyHats = 5;
 
 /// Dub's default Recipe with its sets fixed by `fixes` (`set=name`).
 Recipe dubWith(std::initializer_list<const char*> fixes, uint32_t entropy = 0) {
@@ -257,6 +259,64 @@ describe drop_changes("Drop changes and live variant switches", $ {
 				expect(static_cast<int32_t>(run.picks[drop - 1].pick[kDrums])).to_equal(kOneDrop);
 				expect(offbeatKicks(run, 0, drop)).to_equal(0);
 				expect(offbeatKicks(run, drop, drop + 8 * kStepsPerBar)).to_be_greater_than(8);
+			}
+			expect(found).to_be_true();
+		});
+	});
+
+	context("Psytrance's hat sounds (variants-2, #133)", _ {
+		it("moves Psytrance's hats only on a Drop's first step, at about its 300 per-mille, and no other set", _ {
+			int32_t drops = 0;
+			int32_t changes = 0;
+			for (uint32_t seed = 1; seed <= 24; seed++) {
+				Recipe every = withVariants(newRecipe(genres::psytranceClassic, 0), {"hats=closed"});
+				every.variants.allowed[kPsyHats] = 0b111;
+				const Stepped run = stepThrough(every, seed, 200 * kStepsPerBar);
+				drops += static_cast<int32_t>(run.drops.size());
+				VariantPicks before = every.variants;
+				for (size_t step = 0; step < run.picks.size(); step++) {
+					const VariantPicks& now = run.picks[step];
+					for (size_t s = 0; s < genres::psytranceClassic.variantSets.size(); s++) {
+						if (now.pick[s] != before.pick[s]) {
+							expect(static_cast<int32_t>(s)).to_equal(kPsyHats);
+							expect(std::ranges::count(run.drops, static_cast<int32_t>(step))).to_equal(1);
+							changes++;
+						}
+					}
+					before = now;
+				}
+			}
+			expect(drops).to_be_greater_than(30);
+			expect(changes * 1000).to_be_greater_than(drops * 150);
+			expect(changes * 1000).to_be_less_than(drops * 450);
+		});
+
+		it("plays the open hats from the Drop on: the genre copy is applied again there", _ {
+			const auto openHats = [](const Stepped& run, int32_t from, int32_t to) {
+				return std::ranges::count_if(run.events, [&](const Event& e) {
+					const int32_t step = e.tick / kTicksPerStep;
+					return e.kind == EventKind::NoteOn && e.part == 0 && e.lane == Lane::OpenHat && !e.muted
+					       && step >= from && step < to;
+				});
+			};
+			// A seed whose first Drop turns the closed hats open.
+			bool found = false;
+			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
+				const Recipe closed = withVariants(newRecipe(genres::psytranceClassic, 0), {"hats=closed"});
+				Recipe recipe = closed;
+				recipe.variants.allowed[kPsyHats] = 0b011; // closed or open
+				const Stepped run = stepThrough(recipe, seed, 160 * kStepsPerBar);
+				if (run.drops.empty() || run.picks[run.drops[0]].pick[kPsyHats] != 1) {
+					continue;
+				}
+				found = true;
+				const int32_t drop = run.drops[0];
+				expect(static_cast<int32_t>(run.picks[drop - 1].pick[kPsyHats])).to_equal(0);
+				const Stepped stayed = stepThrough(closed, seed, 160 * kStepsPerBar);
+				expect(openHats(run, 0, drop)).to_equal(openHats(stayed, 0, drop));
+				// Every & (4 a bar) against one every other bar.
+				expect(openHats(run, drop, drop + 8 * kStepsPerBar))
+				    .to_be_greater_than(openHats(stayed, drop, drop + 8 * kStepsPerBar) + 8 * 2);
 			}
 			expect(found).to_be_true();
 		});
