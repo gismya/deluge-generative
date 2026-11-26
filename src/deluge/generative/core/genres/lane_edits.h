@@ -15,8 +15,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Copies of a genre's lane table with a few lanes edited, for a variant that swaps a part's lanes (spec §3.6): Techno's
-// and House's drum styles.
+// Copies of a genre's lane table with a few lanes edited, for a variant that swaps a part's lanes (spec §3.6): the
+// genres' drum styles.
 
 #pragma once
 
