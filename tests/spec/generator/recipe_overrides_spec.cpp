@@ -59,6 +59,24 @@ describe recipe_overrides("Recipe overrides", $ {
 		// The Techno parent's name, Acid techno's before #218: no genre plays by it.
 		expect(rollWithOverrides(fallback, RecipeOverrides{.genre = "techno"}).recipe.genre == &fallback).to_be_true();
 	});
+
+	it("fixes each variant set it names and NextRecipe::clear() resets them", _ {
+		NextRecipe next;
+		next.overrides.genre = genres::dub.name;
+		next.overrides.variant[0] = 1; // skank=plain
+		next.overrides.variant[1] = 2; // drums=steppers
+		next.variantGenre = &genres::dub;
+		RolledRecipe rolled = rollWithOverrides(genres::dub, next.overrides);
+		expect(rolled.recipe.variants.pick[0]).to_equal(uint8_t{1});
+		expect(rolled.recipe.variants.allowed[0]).to_equal(uint8_t{1U << 1});
+		expect(rolled.recipe.variants.pick[1]).to_equal(uint8_t{2});
+		expect(rolled.recipe.variants.allowed[1]).to_equal(uint8_t{1U << 2});
+		next.clear();
+		expect(next.variantGenre == nullptr).to_be_true();
+		for (int8_t pick : next.overrides.variant) {
+			expect(pick).to_equal(int8_t{-1});
+		}
+	});
 });
 
 CPPSPEC_SPEC(recipe_overrides)
