@@ -144,7 +144,7 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
+	it("has 1–kMaxParts parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(genre->parts.size()).to_be_between(size_t{1}, size_t{kMaxParts});
 			int32_t drumsParts = 0;

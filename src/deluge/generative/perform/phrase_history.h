@@ -32,6 +32,12 @@ public:
 	/// Phrases kept, the newest included.
 	static constexpr int32_t kPhrases = 16;
 
+	constexpr PhraseHistory() {
+		for (int32_t& tick : lastNote_) {
+			tick = INT32_MIN;
+		}
+	}
+
 	/// Forgets everything: a piece starts, `phraseSteps` long phrases.
 	/// `playing` is the Section playing before step 0: a transition's outgoing one, so a new roster that starts on a
 	/// Drop shows one.
@@ -77,8 +83,7 @@ private:
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
-	static_assert(kMaxParts == 7, "one INT32_MIN per part slot below");
-	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
+	int32_t lastNote_[kMaxParts] = {};
 	/// Bit k of part p: a note of key k that was sent rings.
 	uint32_t ringing_[kMaxParts][kKeyWords] = {};
 	/// Bit p: part p has a note ringing.
