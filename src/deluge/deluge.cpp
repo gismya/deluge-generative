@@ -528,7 +528,44 @@ extern "C" volatile uint32_t usbLock;
 
 extern "C" void usb_main_host(void);
 
+// DIAGNOSTIC ONLY: shows which DMA channels were running (CHSTAT EN or TACT) when resetprg() started.
+extern "C" uint32_t bootDmaChstat[16];
+extern "C" uint32_t bootDmaCrla[16];
+static void appendHex(char*& p, uint32_t v, int digits) {
+	for (int i = digits - 1; i >= 0; i--) {
+		*p++ = "0123456789ABCDEF"[(v >> (i * 4)) & 0xF];
+	}
+}
+static void showBootDma() {
+	static char text[64];
+	char* p = text;
+	uint32_t mask = 0;
+	int first = -1;
+	for (int ch = 0; ch < 16; ch++) {
+		if (bootDmaChstat[ch] & 0x5) {
+			mask |= 1u << ch;
+			if (first < 0) {
+				first = ch;
+			}
+		}
+	}
+	for (const char* s = "BOOTDMA "; *s;) {
+		*p++ = *s++;
+	}
+	appendHex(p, mask, 4);
+	if (first >= 0) {
+		*p++ = '\n';
+		*p++ = 'C';
+		appendHex(p, first, 1);
+		*p++ = ' ';
+		appendHex(p, bootDmaCrla[first], 8);
+	}
+	*p = 0;
+	display->popupText(text);
+}
+
 void registerTasks() {
+	addRepeatingTask(showBootDma, 250, 1.0, 1.0, 2.0, "diag boot dma", RESOURCE_NONE);
 	// addRepeatingTask arguments are:
 	//
 	// - priority (lower = more important)

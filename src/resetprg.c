@@ -58,6 +58,7 @@
 #include "RZA1/compiler/asm/inc/asm.h"
 #include "RZA1/gpio/gpio.h"
 #include "RZA1/stb/stb.h"
+#include "RZA1/system/iodefines/dmac_iodefine.h"
 #include "RZA1/uart/sio_char.h" // IWYU pragma: keep false positive, needed for R_INTC_Init
 #include "definitions.h"        // IWYU pragma: keep false positive, needed for memory limits
 #include "deluge/deluge.h"
@@ -132,7 +133,15 @@ static void relocateSDRAMSection(uint32_t* start, uint32_t* end, uint32_t* src) 
  * Arguments    : none
  * Return Value : none
  *******************************************************************************/
+// DIAGNOSTIC ONLY: each DMA channel's status and link address as this firmware found them, before anything else.
+uint32_t bootDmaChstat[16];
+uint32_t bootDmaCrla[16];
+
 void resetprg(void) {
+	for (int ch = 0; ch < 16; ch++) {
+		bootDmaChstat[ch] = DMACn(ch).CHSTAT_n;
+		bootDmaCrla[ch] = DMACn(ch).CRLA_n;
+	}
 	emptySection(&__frunk_bss_start, &__frunk_bss_end);
 	emptySection(&__sdram_bss_start, &__sdram_bss_end);
 	// Enable all modules' clocks --------------------------------------------------------------
