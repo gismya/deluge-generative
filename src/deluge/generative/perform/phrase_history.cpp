@@ -88,6 +88,7 @@ void PhraseHistory::played(const Event& event) {
 			at.heard.startKind = event.section; // on the line; a short Build starts partway in
 		}
 		playing_ = event.section;
+		sectionHeard_ = true;
 		break;
 	}
 	case EventKind::NoteOn:

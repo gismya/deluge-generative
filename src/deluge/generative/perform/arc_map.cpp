@@ -105,7 +105,9 @@ bool known(const Frame& frame, int32_t phrase, int32_t now, ArcPhrase& out) {
 	if (phrase < 0) {
 		return false;
 	}
-	if (phrase <= now && frame.history->at(phrase, out)) {
+	// Before the first Section event plays (the lookahead before tick 0), the history's slot for phrase 0 holds the
+	// Section from before the start: the plan knows the phrase.
+	if (phrase <= now && frame.history->sectionHeard() && frame.history->at(phrase, out)) {
 		return true;
 	}
 	if (phrase < now) {
@@ -341,7 +343,9 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 
 	// The Arc's next change: the next Section to start, a Drop, or the line where the piece stops. A Build shorter than
 	// a phrase starts partway into its phrase: until it is heard, it is next.
-	if (nowIsPlanned && nowPlanned->kind != frame.history->playing()) {
+	const SectionKind heard =
+	    frame.history->sectionHeard() || !nowIsPlanned ? frame.history->playing() : nowPlanned->startKind;
+	if (nowIsPlanned && nowPlanned->kind != heard) {
 		const int32_t ticks = stepTick(now * frame.phraseSteps + nowPlanned->kindFrom) - frame.clock;
 		if (ticks > 0) {
 			char when[12];

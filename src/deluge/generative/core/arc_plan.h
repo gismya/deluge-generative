@@ -45,7 +45,7 @@ struct ArcPhrase {
 	int16_t energy = 0;
 	/// Planned only: the step in the phrase where `kind`'s Section starts, or 0 if it started in an earlier phrase. A
 	/// Build shorter than a phrase starts partway into the phrase before its Drop; every other Section starts on a
-	/// line. A phrase is at most 16 bars (phraseFitsPlan()), so 255 steps.
+	/// line. A phrase is at most 16 bars (phraseFitsPlan()), so steps 0..255.
 	uint8_t kindFrom = 0;
 	/// The Section playing the phrase's first step: `kind` unless another starts partway in (a Break or a Groove
 	/// that a short Build ends). Planned: the plan's first phrase has it from the last decided step on.

@@ -52,6 +52,10 @@ public:
 	bool at(int32_t phrase, ArcPhrase& out) const;
 	/// The Section heard last.
 	[[nodiscard]] SectionKind playing() const { return playing_; }
+	/// Whether a Section event has played since begin(). Before it, in the lookahead before tick 0, step 0 is decided
+	/// and its phrase's slot open, but what it holds of the Section is the one before the start (a transition's
+	/// outgoing one): the ARC page reads the plan there instead.
+	[[nodiscard]] bool sectionHeard() const { return sectionHeard_; }
 	/// The tick of part `part`'s last note-on sent, or INT32_MIN.
 	[[nodiscard]] int32_t lastNote(int32_t part) const { return lastNote_[part]; }
 
@@ -78,6 +82,7 @@ private:
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
+	bool sectionHeard_ = false;
 	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
 	/// Bit k of part p: a note of key k that was sent rings.
 	uint32_t ringing_[kMaxParts][kKeyWords] = {};
