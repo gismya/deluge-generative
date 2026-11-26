@@ -1568,6 +1568,11 @@ constexpr bool sweepsValid(const Genre& genre) {
 	return true;
 }
 
+/// Whether a phrase is at most 16 bars, so a step in it fits the Arc plan's ArcPhrase::kindFrom (spec §13.5).
+constexpr bool phraseFitsPlan(const Genre& genre) {
+	return genre.phraseBars > 0 && genre.phraseSteps() <= 256;
+}
+
 /// Whether every Build length is 1, 2, 4, 8, 16 or 32 bars and lands its Drop on a phrase line (fitsPhrase(), spec
 /// §9.3). Arc::buildSteps() plays a phrase in place of one that doesn't land.
 constexpr bool buildBarsValid(const Genre& genre) {

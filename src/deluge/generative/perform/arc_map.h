@@ -184,7 +184,10 @@ void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kCol
 
 /// One phrase box on the ARC page.
 struct ArcBox {
-	char tag[3] = {}; ///< "GR", "BR"…; empty after the piece has stopped
+	char tag[3] = {}; ///< "GR", "BR"…, the Section the phrase ends with; empty after the piece has stopped
+	/// A split box: the Section the phrase starts with when another starts partway in ("BR" in a box whose tag is
+	/// "BU"); empty otherwise.
+	char startTag[3] = {};
 	bool now = false;
 	bool drop = false;
 	bool blink = false; ///< a queued action lands in it
@@ -193,7 +196,9 @@ struct ArcBox {
 };
 
 /// The ARC page (spec §13.5): now and the next 7 phrases as boxes, and the Arc's next change with its countdown, as
-/// "NEXT BREAK 6 BARS", "NEXT DROP 2 BARS" or "STOP 3 BARS"; "NO CHANGE PLANNED" if the plan holds none.
+/// "NEXT BREAK 6 BARS", "NEXT DROP 2 BARS" or "STOP 3 BARS"; "NO CHANGE PLANNED" if the plan holds none. The next
+/// change is the next Section to start, a Section starting partway into a phrase included: a phrase that starts with
+/// a Break and ends with a short Build names the Break first, then the Build.
 struct ArcPage {
 	static constexpr int32_t kBoxes = 8;
 	ArcBox box[kBoxes];

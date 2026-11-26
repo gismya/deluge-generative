@@ -41,16 +41,11 @@ otherwise.
   its check either way (a Riser's doesn't, above): a pack pick quietly plays its fallback chain's factory preset. To hear a pack preset, pass `--card` a copy
   of the image with pack/ put on it: `test_port_emu.apply_overlay(copy, folder)` with a folder holding only a
   `card.txt` of `copy pack -> /`.
-- `gen_emu.py capture` boots the test-port build (`-DENABLE_SYSEX_TEST=ON`, in `--build-dir`) and sends the Recipe
-  and seed as the test port's `next recipe` lines (seam S7, spec §21.3) before it enters Perform, so a new Recipe
-  builds nothing (#523). delugemu's DIN MIDI goes to a UDP socket (run.sh's `--midi`, which
+- `gen_emu.py capture` boots the test-port build (`-DENABLE_SYSEX_TEST=ON`, in `--build-dir`) and sends the Recipe,
+  variants (`--variant`) and seed as the test port's `next recipe` lines (seam S7, spec §21.3) before it enters Perform,
+  so a new Recipe builds nothing (#523, #548). delugemu's DIN MIDI goes to a UDP socket (run.sh's `--midi`, which
   `DelugeSession.launch()` has no argument for, so `launch_with_midi()` starts run.sh itself). The capture checks the
-  entry's `gen_next_recipe taken` event, then stops the test events before PLAY. A `--variant` capture still takes
-  the older route, since S7 has no variant lines yet (#548): a `-DGENERATIVE_CAPTURE=ON` build in
-  `<--build-dir>-variants/` whose `CaptureRecipe` (GENCAP2, with the variant pairs) gen_emu patches into a copy of
-  the ELF (#401, `capture_recipe()`, `write_capture_elf()`). The two routes build in separate dirs, so a session
-  mixing them never reconfigures one; each dir builds once. Keep `CAPTURE_LAYOUT` and `CaptureRecipe` in step until
-  #548 retires the route.
+  entry's `gen_next_recipe taken` event, then stops the test events before PLAY.
 - Under icount the VM moves only in `run_to()`, and any wait whose length the host decides makes captures differ run
   to run (#523 saw three WAVs from one build): `TestPort.wait_idle()` and `pump()` run for wall-clock time, so a VM
   stepped inside them moves a host-dependent distance. So `send_recipe()` sends each line while the VM is stopped,
@@ -151,11 +146,8 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   on a palette-override card (`listen.py card --palette`) plays other presets: give the clip's timeline `sounds`
   ({PART: name}, merged over the listed names). A sample lane's file can differ too (the card's file order). Every
   render the page runs goes through `variants.current_render`, which refuses a `bin/<name>` whose stamp is stale.
-- `gen_emu.py capture --variant`: the firmware's capture field is 64 B ("set=name,…" with its NUL), so Psytrance's
-  five sets don't all fit: leave out one the clip doesn't reach (`break` for a piece with no Break) (#497).
-- `gen_emu.py capture --elf` wants a test-port build (`-DENABLE_SYSEX_TEST=ON`), and with `--variant` a
-  `GENERATIVE_CAPTURE` build (its `generative_capture_recipe`), not `./dbt build release`'s ELF: give `--build-dir`
-  and let it build one. To compare two firmwares, run each capture from its own tree (a scratch
+- `gen_emu.py capture --elf` wants a test-port build (`-DENABLE_SYSEX_TEST=ON`), not `./dbt build release`'s ELF: give
+  `--build-dir` and let it build one. To compare two firmwares, run each capture from its own tree (a scratch
   worktree for the base) with its own `--build-dir`, on the same card, with one `--render` (when the events match).
 - A power difference between a Bass+Drums and a Bass-alone capture misreads the kick's share once the bass is the
   louder: phase and the bass's ducking move the sum by more than a faded kick's remainder. Capture the Drums alone

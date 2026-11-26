@@ -154,10 +154,12 @@ struct OledScreen {
 /// Composes the screen. `count` is the view's, kept from frame to frame.
 void composeOled(const OledInput& in, SectionCount& count, OledScreen& out);
 
-/// The longest gen_arcpage text: three characters a box, '|', the next change.
-constexpr int32_t kArcPageTextChars = 3 * ArcPage::kBoxes + 1 + kQueueLineChars;
+/// The longest gen_arcpage text: six characters a box (a split one), '|', the next change.
+constexpr int32_t kArcPageTextChars = 6 * ArcPage::kBoxes + 1 + kQueueLineChars;
 /// The test port's gen_arcpage text, the ARC page without its blink phase: each box's tag (-- once stopped, .. with
-/// nothing known), * on a Drop, then the next change. "GR BR*BU -- -- -- -- -- |NEXT BREAK 6 BARS".
+/// nothing known), * on a Drop, then the next change. A split box gives the Section its phrase starts with, then >
+/// and the one it ends with. "GR BR*BU -- -- -- -- -- |NEXT BREAK 6 BARS", "GR BR>BU GR*GR GR GR GR GR |NEXT BREAK 2
+/// BARS".
 void describeArcPage(const ArcPage& page, char (&out)[kArcPageTextChars + 1]);
 
 /// The longest gen_macropage text: "NN/NN" a macro, a space between two.

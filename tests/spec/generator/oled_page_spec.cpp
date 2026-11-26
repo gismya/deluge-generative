@@ -20,6 +20,7 @@
 
 #include "generative/perform/oled_page.h"
 #include "stream_helpers.h"
+#include <algorithm>
 #include <cppspec.hpp>
 #include <string>
 
@@ -396,6 +397,27 @@ describe oled_page("Perform's OLED", $ {
 		// A peek takes the page's place.
 		piece.peek = OledPeek::Recipe;
 		expect(piece.screen().arc).to_be_false();
+	});
+
+	it("ARC page: its text gives a split box's Sections in turn, BR>BU (#545)", _ {
+		ArcPage page;
+		const char* tags[] = {"GR", "BU", "GR", "GR", "GR", "GR", "GR", "GR"};
+		for (int32_t i = 0; i < ArcPage::kBoxes; i++) {
+			std::copy_n(tags[i], 2, page.box[i].tag);
+			// Every box split, the longest text.
+			std::copy_n(i == 1 ? "BR" : "BU", 2, page.box[i].startTag);
+		}
+		page.box[2].drop = true;
+		std::copy_n("NEXT BREAK 2 BARS", 17, page.next);
+		char text[kArcPageTextChars + 1];
+		describeArcPage(page, text);
+		expect(std::string{text}).to_equal(
+		    std::string{"BU>GR BR>BU BU>GR*BU>GR BU>GR BU>GR BU>GR BU>GR |NEXT BREAK 2 BARS"});
+		page.box[0].startTag[0] = '\0';
+		page.box[3].startTag[0] = '\0';
+		describeArcPage(page, text);
+		expect(std::string{text}).to_equal(
+		    std::string{"GR BR>BU BU>GR*GR BU>GR BU>GR BU>GR BU>GR |NEXT BREAK 2 BARS"});
 	});
 
 	it("ARC page: its text marks a Drop with *, and the boxes after the piece's end with --", _ {

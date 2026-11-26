@@ -279,7 +279,8 @@ def parser():
     )
     r.add_argument(
         "--render",
-        help="the generator_render the Recipe check uses (default: the newest in build/tests)",
+        help="the generator_render the Recipe check uses (default: the newest in build/tests); a variant's job "
+        "uses <scratch>/bin/<variant> where prove kept one",
     )
     r.add_argument(
         "--dry-run",
@@ -300,7 +301,8 @@ def parser():
     )
     o.add_argument(
         "--render",
-        help="the base generator_render for the Recipe check (default <scratch>/bin/base)",
+        help="the base generator_render for the Recipe check (default <scratch>/bin/base); a variant's job uses "
+        "<scratch>/bin/<variant> where prove kept one",
     )
     o.add_argument("jobs", nargs="+")
 

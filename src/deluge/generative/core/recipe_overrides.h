@@ -18,14 +18,14 @@
 // The Recipe a genre tuning tool plays (spec §21.5): genre + Recipe overrides + seed. The harness rough render takes
 // them as arguments, and a delugemu capture sets them at run time with a test build's "next recipe" lines (NextRecipe,
 // seam S7), so the same arguments give the same Recipe in both. Facts are rolled from a fixed entropy instead of a
-// timer, so a capture is a function of its arguments. (M5's --variant captures still patch them into a
-// GENERATIVE_CAPTURE build's ELF, on m5-variants.) Header-only: the default firmware build never uses it.
+// timer, so a capture is a function of its arguments. Header-only: the default firmware build never uses it.
 
 #pragma once
 
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/variants.h"
+#include <algorithm>
 #include <cstdint>
 
 namespace deluge::generative {
@@ -50,6 +50,8 @@ struct RecipeOverrides {
 	/// Per variant set of the genre, by index: a variant that set is fixed to (its pick, and its allowed variants that
 	/// one alone), or -1 to keep the drawn pick (spec §3.6). The goldens fix every set to 0 (golden_case.h).
 	int8_t variant[kMaxVariantSets] = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+	void clearVariants() { std::ranges::fill(variant, int8_t{-1}); }
 
 	static constexpr int8_t kKeepSwing = INT8_MIN;
 };
@@ -107,14 +109,23 @@ inline RolledRecipe rollWithOverrides(const Genre& fallback, const RecipeOverrid
 /// from the palette.
 struct NextRecipe {
 	RecipeOverrides overrides;
+	/// The genre `overrides.variant` was resolved against (nullptr when no variant line was set): a Regenerate that
+	/// keeps another genre skips them rather than indexing its sets with the wrong genre's indices.
+	const Genre* variantGenre = nullptr;
 	bool entropySet = false;
 	bool seedSet = false;
 	/// An empty pick is rolled from the palette as usual.
 	SoundPicks sounds;
 
+	/// Drops any resolved variant picks (e.g. when `overrides.genre` changes to another genre).
+	void forgetVariants() {
+		overrides.clearVariants();
+		variantGenre = nullptr;
+	}
 	/// As constructed, without a SoundPicks temporary (several KB) on the stack.
 	void clear() {
 		overrides = RecipeOverrides{};
+		variantGenre = nullptr;
 		entropySet = seedSet = false;
 		for (SoundPath& path : sounds.part) {
 			path.clear();

@@ -34,56 +34,8 @@
 #include <cstring>
 #include <string_view>
 
-#if defined(GENERATIVE_CAPTURE) || ENABLE_SYSEX_TEST
+#if ENABLE_SYSEX_TEST
 #include "generative/core/recipe_overrides.h"
-#endif
-#ifdef GENERATIVE_CAPTURE
-#include <array>
-#endif
-
-#ifdef GENERATIVE_CAPTURE
-namespace deluge::generative::firmware {
-
-/// The Recipe a GENERATIVE_CAPTURE build plays: a RecipeOverrides with the genre's name inline. On m5-variants,
-/// gen_emu.py's --variant captures write it into a copy of the ELF before each boot (CAPTURE_LAYOUT there; the two
-/// layouts must agree). On generative, gen_emu.py capture uses seam S7's "next recipe" lines instead (#523).
-struct CaptureRecipe {
-	char magic[8];
-	char genre[32]; ///< NUL-terminated. Empty, or a name no genre has: the fallback genre.
-	uint32_t entropy;
-	uint32_t seed;
-	int32_t tempo;
-	int8_t macroPoints[kNumMacros];
-	int8_t keyRoot;
-	int8_t scale;
-	int8_t swing;
-	uint8_t unused;
-	char variants[64]; ///< NUL-terminated `set=name,set=name` (gen_emu.py's --variant): each fixes a set (spec §3.6).
-};
-static_assert(sizeof(CaptureRecipe) == 124 && offsetof(CaptureRecipe, entropy) == 40
-              && offsetof(CaptureRecipe, macroPoints) == 52 && offsetof(CaptureRecipe, swing) == 58
-              && offsetof(CaptureRecipe, variants) == 60);
-
-} // namespace deluge::generative::firmware
-
-using CaptureRecipe = deluge::generative::firmware::CaptureRecipe;
-
-// Volatile, so LTO reads it at run time instead of folding the values the build wrote; `used` and
-// `externally_visible`, so it stays in .data under this name (LTO would make it local and rename it) for gen_emu.py
-// to find.
-extern "C" __attribute__((used, externally_visible)) volatile CaptureRecipe generative_capture_recipe = {
-    .magic = "GENCAP2",
-    .genre = "",
-    .entropy = 0,
-    .seed = 1,
-    .tempo = 0,
-    .macroPoints = {-1, -1, -1, -1},
-    .keyRoot = -1,
-    .scale = -1,
-    .swing = deluge::generative::RecipeOverrides::kKeepSwing,
-    .unused = 0,
-    .variants = "",
-};
 #endif
 
 namespace deluge::generative::firmware {
@@ -127,7 +79,11 @@ bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds) {
 	if (next == nullptr) {
 		return false;
 	}
-	applyOverrides(recipe, next->overrides);
+	RecipeOverrides overrides = next->overrides;
+	if (next->variantGenre != nullptr && next->variantGenre != recipe.genre) {
+		overrides.clearVariants();
+	}
+	applyOverrides(recipe, overrides);
 	next->applySounds(sounds);
 	return true;
 }
@@ -191,44 +147,6 @@ Error CurrentRecipe::stagePalette(const Genre& genre) {
 }
 
 Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
-#ifdef GENERATIVE_CAPTURE
-	// A capture build plays the Recipe, seed and sounds gen_emu.py patched into its ELF, so a capture is a function
-	// of its arguments.
-	const volatile CaptureRecipe& capture = generative_capture_recipe;
-	std::array<char, sizeof(capture.genre)> genreName{};
-	for (size_t i = 0; i + 1 < genreName.size(); i++) { // the last stays NUL
-		genreName[i] = capture.genre[i];
-	}
-	RecipeOverrides overrides;
-	overrides.genre = genreName.data();
-	overrides.entropy = capture.entropy;
-	overrides.seed = capture.seed;
-	for (int32_t m = 0; m < kNumMacros; m++) {
-		overrides.macroPoints[m] = capture.macroPoints[m];
-	}
-	overrides.tempo = capture.tempo;
-	overrides.keyRoot = capture.keyRoot;
-	overrides.scale = capture.scale;
-	overrides.swing = capture.swing;
-	// Each `set=name` the capture names fixes that set; a name the genre doesn't have is skipped (the harness render
-	// that checks a capture refuses it).
-	std::array<char, sizeof(capture.variants)> variantText{};
-	for (size_t i = 0; i + 1 < variantText.size(); i++) {
-		variantText[i] = capture.variants[i];
-	}
-	const Genre* named = findGenre(genreName.data());
-	for (std::string_view left = variantText.data(); named != nullptr && !left.empty();) {
-		const size_t comma = left.find(',');
-		if (const std::optional<VariantFix> fix = parseVariantFix(*named, left.substr(0, comma))) {
-			overrides.variant[fix->set] = static_cast<int8_t>(fix->variant);
-		}
-		left = comma == std::string_view::npos ? std::string_view{} : left.substr(comma + 1);
-	}
-	RolledRecipe rolledRecipe = rollWithOverrides(genre, overrides);
-	Recipe rolled = rolledRecipe.recipe;
-	uint32_t rolledSeed = rolledRecipe.seed;
-	uint32_t soundEntropy = overrides.entropy;
-#else
 	Recipe rolled = newRecipe(nextGenre(genre), nextEntropy(freshEntropy()));
 	uint32_t rolledSeed = nextSeed(freshEntropy());
 	uint32_t soundEntropy = freshEntropy();
@@ -240,7 +158,6 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 	else {
 		soundEntropy = nextEntropy(soundEntropy);
 	}
-#endif
 #endif
 	const Genre& rolledGenre = *rolled.genre;
 	// Staged: the override, the picks and the Recipe replace the current ones only once all of them are in, so a card
@@ -258,7 +175,7 @@ Error CurrentRecipe::rollFromGenre(const Genre& genre, Chunks* chunks) {
 		error = StorageManager::initSD();
 		return error != Error::NONE ? error : Error::SD_CARD;
 	}
-#if ENABLE_SYSEX_TEST && !defined(GENERATIVE_CAPTURE)
+#if ENABLE_SYSEX_TEST
 	// Not the golden case: it is the genre's default Recipe, and the lines stay for the next roll.
 	if (!TestPort::goldenHeld() && applyNextRecipe(rolled, stagedSounds_)) {
 		TestPort::nextRecipeTaken();
