@@ -7,7 +7,6 @@ that takes it (#402).
 """
 
 import concurrent.futures
-import json
 import math
 import os
 import subprocess
@@ -68,22 +67,12 @@ def render_all(job_list, scratch, session, base_render=None):
     captures = _jobs.merge(job_list)
     renders = {}
     for c in captures:
-        render = os.path.join(bins, c.variant)
-        if not os.path.exists(render):
-            raise _jobs.JobError(
-                f"{c.name}: no {render}; prove the variant first (it keeps its generator_render)"
-            )
-        stamp = _variants.render_stamp(_runner.REPO, session, c.variant)
         try:
-            with open(render + ".json") as fh:
-                built = json.load(fh)
-        except (OSError, ValueError):
-            built = None
-        if built != stamp:
-            raise _jobs.JobError(
-                f"{c.name}: {render} was built from another commit or diff than the repo's now; prove "
-                f"{c.variant} again"
+            render = _variants.current_render(
+                _runner.REPO, scratch, session, c.variant, fallback_base=False
             )
+        except _jobs.JobError as e:
+            raise _jobs.JobError(f"{c.name}: {e}") from None
         if c.job.mutes and not takes_mute(render):
             raise _jobs.JobError(
                 f"{c.name}: --mute needs a generator_render that takes it (#402)"

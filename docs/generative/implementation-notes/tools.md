@@ -7,10 +7,14 @@ otherwise.
   (`computeFinalValueForStandardMenuItem`), not `50 * 85899345 - 2^31` (`0x7FFFFFD2`): `SoundControls::uses()`'s
   `SustainBelowFull` compares with `INT32_MAX`, so the formula's value bound Decay to env1's decay on full-sustain
   presets (#483). A sample preset (`sample_preset()`) leaves its samples on the factory card: only the XML is in the
-  pack. Past the volume knob's top: `clippingAmount` (the voice's saturation) is `tanh(x << (5+c)) >> (6+c) << (c-2)`,
-  so its ceiling is the same at every amount. On a hot sample (the 808 boom) it lowered the peak and added 0-2 dB;
-  on the noise wash, 4 added 6 dB. A sample on both oscillators adds 6.0 dB; a velocity->volume cable adds gain
-  for velocities over 64 (the source is bipolar), about 5.5 dB at 50 for an Impact's 80-94 (#472).
+  pack, unless it names a `DERIVED` sample (`LeadTrim`, Dub's `GEN DDD1 Snare wet`). Trap: `main()` runs `to_wav()`
+  (mono, normalised) only over `SAMPLES`' synthesized lists; a `DERIVED` WAV is written as its edits leave it. A factory
+  drum sample can start late: `DDD1 Snare wet` sits near silent for 33 ms, a flam on a backbeat; check a new drum file's
+  attack against the others on its lane. Past the volume knob's top: `clippingAmount` (the voice's saturation) is
+  `tanh(x << (5+c)) >> (6+c) << (c-2)`, so its ceiling is the same at every amount. On a hot sample (the 808 boom) it
+  lowered the peak and added 0-2 dB; on the noise wash, 4 added 6 dB. A sample on both oscillators adds 6.0 dB; a
+  velocity->volume cable adds gain for velocities over 64 (the source is bipolar), about 5.5 dB at 50 for an Impact's
+  80-94 (#472).
 - `osc_octaves.py` (in `check_all.py` after the harness specs, local only) reads the presets the built-in pitched parts
   can pick from `generator_render --list-palettes`, which prints them from the genre tables, so a new genre's palette is
   covered with no edit to the script. It looks each up in pack/ and then the factory card, and fails on a preset whose
@@ -41,9 +45,12 @@ otherwise.
   and seed as the test port's `next recipe` lines (seam S7, spec §21.3) before it enters Perform, so a new Recipe
   builds nothing (#523). delugemu's DIN MIDI goes to a UDP socket (run.sh's `--midi`, which
   `DelugeSession.launch()` has no argument for, so `launch_with_midi()` starts run.sh itself). The capture checks the
-  entry's `gen_next_recipe taken` event, then stops the test events before PLAY. The older route, a
-  `-DGENERATIVE_CAPTURE=ON` build whose `CaptureRecipe` gen_emu patched into a copy of the ELF (#401), stays in the
-  firmware for M5's `--variant` captures (they patch it on m5-variants) until S7 carries variant sets (ADR 0008).
+  entry's `gen_next_recipe taken` event, then stops the test events before PLAY. A `--variant` capture still takes
+  the older route, since S7 has no variant lines yet (#548): a `-DGENERATIVE_CAPTURE=ON` build in
+  `<--build-dir>-variants/` whose `CaptureRecipe` (GENCAP2, with the variant pairs) gen_emu patches into a copy of
+  the ELF (#401, `capture_recipe()`, `write_capture_elf()`). The two routes build in separate dirs, so a session
+  mixing them never reconfigures one; each dir builds once. Keep `CAPTURE_LAYOUT` and `CaptureRecipe` in step until
+  #548 retires the route.
 - Under icount the VM moves only in `run_to()`, and any wait whose length the host decides makes captures differ run
   to run (#523 saw three WAVs from one build): `TestPort.wait_idle()` and `pump()` run for wall-clock time, so a VM
   stepped inside them moves a host-dependent distance. So `send_recipe()` sends each line while the VM is stopped,
@@ -136,5 +143,20 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
   commit and the diff only, so a change to `build_render` itself (flags, target) needs the stamp extended.
 - The page's script is tested in node on a stub DOM (`test_listening.page_export`): keep `exportText()` a top-level
   function and the page free of anything a Proxy stub can't stand in for at load.
-- The pack holds no drum samples: a kit's lanes come from the card folder, so `generator_render --list-sounds` over
-  `pack/` alone prints `-` for every drum lane.
+- The pack holds few drum samples (the GEN rides, claps and brushes, Dub's snare, Psytrance's `GEN PSYKICK-` kicks):
+  most of a kit's lanes come from the card folder, so `generator_render --list-sounds` over `pack/` alone prints `-`
+  for most drum lanes.
+- A clip's timeline strip (`listening/timeline.py`, #513) names each part's sound from `generator_render
+  --list-sounds`: the harness's palette roll over `pack/` and the stock card, not what the capture loaded. A capture
+  on a palette-override card (`listen.py card --palette`) plays other presets: give the clip's timeline `sounds`
+  ({PART: name}, merged over the listed names). A sample lane's file can differ too (the card's file order). Every
+  render the page runs goes through `variants.current_render`, which refuses a `bin/<name>` whose stamp is stale.
+- `gen_emu.py capture --variant`: the firmware's capture field is 64 B ("set=name,…" with its NUL), so Psytrance's
+  five sets don't all fit: leave out one the clip doesn't reach (`break` for a piece with no Break) (#497).
+- `gen_emu.py capture --elf` wants a test-port build (`-DENABLE_SYSEX_TEST=ON`), and with `--variant` a
+  `GENERATIVE_CAPTURE` build (its `generative_capture_recipe`), not `./dbt build release`'s ELF: give `--build-dir`
+  and let it build one. To compare two firmwares, run each capture from its own tree (a scratch
+  worktree for the base) with its own `--build-dir`, on the same card, with one `--render` (when the events match).
+- A power difference between a Bass+Drums and a Bass-alone capture misreads the kick's share once the bass is the
+  louder: phase and the bass's ducking move the sum by more than a faded kick's remainder. Capture the Drums alone
+  for the kick's level per 16th (#497).

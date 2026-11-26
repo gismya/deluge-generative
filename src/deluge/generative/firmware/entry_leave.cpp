@@ -358,6 +358,17 @@ Error PerformAdapter::allocateBlocks() {
 		}
 		block = new (memory) Generator();
 	}
+	// Each block's genre copy (spec §3.6, §20), after both blocks, so a 1.4 KB copy never takes the internal span a
+	// 13.6 KB block needed. The step reads it, so the internal heap first too.
+	for (size_t i = 0; i < std::size(blocks_); i++) {
+		void* resolved = GeneralMemoryAllocator::get().allocMaxSpeed(sizeof(ResolvedGenre));
+		if (resolved == nullptr) {
+			freeBlocks();
+			return Error::INSUFFICIENT_RAM;
+		}
+		resolved_[i] = new (resolved) ResolvedGenre();
+		blocks_[i]->useResolvedGenre(resolved_[i]);
+	}
 	// The steering log's buffer, in SDRAM: not the fast heap (spec §17.2, §20). Its pieces stream to the card.
 	constexpr int32_t logBytes = SteeringLog::bytesFor(kLogHeaderBytes, kLogRingBytes);
 	logBuffer_ = static_cast<uint8_t*>(GeneralMemoryAllocator::get().allocExternal(logBytes));
@@ -402,6 +413,13 @@ void PerformAdapter::freeBlocks() {
 			block->~Generator();
 			delugeDealloc(block);
 			block = nullptr;
+		}
+	}
+	for (ResolvedGenre*& resolved : resolved_) {
+		if (resolved != nullptr) {
+			resolved->~ResolvedGenre();
+			delugeDealloc(resolved);
+			resolved = nullptr;
 		}
 	}
 }

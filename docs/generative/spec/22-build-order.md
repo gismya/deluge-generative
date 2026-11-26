@@ -21,6 +21,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | M2 All genres + Generative pack | Ambient, Psytrance, Dub and House in that order, with the mechanisms each is first to play, their palettes and pack content | Beta 2 |
 | M3 Compose + Recipe files + Generative menu | Compose driver, Compose screen, the Generative menu and source lists, Recipe files, the firmware-matches-harness check | Beta 3 |
 | M4 Capture | steering log, marking, the leave menu builds | v1 |
+| M5 Variants | variant sets ([§3.6](03-recipe.md#36-variant-sets), [ADR 0008](../../adr/0008-a-piece-draws-its-genres-variants-into-the-recipe.md)): the mechanism with Dub's skank 7ths, the Regenerate and genre-change page, Drop changes and live steering with Dub's drum styles, House's and Psytrance's retunes, and swing ranges ([#492](https://github.com/gismya/deluge-generative/issues/492)) | after v1 |
 
 - The Generative menu ([§14.1](14-entry-and-compose-screen.md#141-the-generative-menu)) is needed in M1 to enter Perform, so M1 built PERFORM with GENRE ▸ only; CURRENT RECIPE, FILE... and COMPOSE arrive in M3 (§23.9).
 - Every beta ships the pack zip as it stands.

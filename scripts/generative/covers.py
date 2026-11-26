@@ -20,7 +20,7 @@ check_all.py picks its delugemu scripts with it, unless --full or --scripts. The
 session or a delugemu run needs for the changes since the merge base with origin/BASE (pr_base.py, as check_all.py
 finds it), one repo-relative path a line, test_port_smoke.txt first: --hardware lists the scripts a Deluge can run
 (scripts/generative/*.txt with a start_state, but not those whose "# needs:" line names a delugemu card, gen_emu.py or
-someone listening); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
+someone at the Deluge); without it, the scripts check_all.py runs in delugemu. --full lists every one. --check fails
 naming each covers path that matches no file, each src/ file that sends an event a script expects (or rules out)
 that its covers lines miss (a string literal whose first word is the event's kind), each event expect that doesn't
 start with its kind, each that pins a timing figure (TIMING_FIELDS) without hardware_only, and each orphan: a
@@ -153,11 +153,43 @@ BUILDERS = {
         *_L10N,
     ),  # laneName() + MUTE, or punch-in l10n name
     "gen_compose": (),  # the outcome's name
+    "gen_riser_fallback": (
+        *_GENRE,
+        "src/deluge/generative/perform/riser_timing.h",
+    ),  # the part's name and the fallback's path (kPackRisers)
     "gen_compose_pick": (
         *_GENRE,
         "src/deluge/generative/core/lane_names.h",
     ),  # a part's or laneName()'s row
     "gen_compose_recipe": _GENRE,  # the genre's name
+    "gen_compose_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText(): each set's stable name, its pick's and the allowed mask
+    "gen_pending_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText()
+    "gen_variants": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+        *_L10N,
+    ),  # a set's stable name, what its row shows (RANDOM, a variant's OLED name, n OF m)
+    "gen_variants_row": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+        *_L10N,
+    ),  # a set's OLED name, what its row shows
+    "gen_variants_press": (
+        "src/deluge/generative/core/genres/dub.cpp",
+    ),  # a set's stable name
+    "gen_variants_landed": (
+        "src/deluge/generative/core/genres/dub.cpp",
+        "src/deluge/generative/perform/regenerate_page.*",
+    ),  # picksText()
+    "gen_variants_live": (
+        "src/deluge/generative/core/genres/dub.cpp",
+    ),  # a set's stable name
     "gen_compose_seed": ("src/deluge/generative/perform/clip_page.*",),  # seedCode()
     "gen_compose_song": (
         *_GENRE,
@@ -271,8 +303,11 @@ RELAYS = {
         "src/deluge/generative/firmware/sound_swaps.*",
     ),
 }
-# "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a listener.
-NOT_ON_HARDWARE = re.compile(r"^# needs: (card |gen_emu\.py|.*listening)", re.MULTILINE)
+# "# needs:" text a hardware session can't give: a delugemu card overlay, the leak check's runner, a person at the
+# Deluge (someone listening, or someone to pull its power).
+NOT_ON_HARDWARE = re.compile(
+    r"^# needs: (card |gen_emu\.py|.*\bsomeone\b)", re.MULTILINE
+)
 
 
 def git_lines(*args, repo=REPO):

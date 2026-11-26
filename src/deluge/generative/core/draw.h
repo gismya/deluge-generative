@@ -61,8 +61,12 @@ enum class Purpose : uint8_t {
 	HoldShared,    ///< position: Section kind and occurrence, phrase in the Section, bar in the phrase. Whether an open
 	               ///< voicing holds its shared notes on this bar line (SustainSpec::holdSharedChance)
 	ChordLoop,     ///< position: Groove occurrence at a Drop, or the loop's index; bar in the loop; field (whether,
-	               ///< length, chord). Part kArcPart. Never keyed on the take
+	               ///< length, chord, return, which earlier loop). Part kArcPart. Never keyed on the take
 	AlternateLane, ///< position: held bar index. Whether a Drums lane swaps to its alternate lane for a Groove bar
+	VariantChange, ///< position: Groove occurrence at a Drop, variant set, field (whether, which). Part kArcPart.
+	               ///< Never keyed on the take
+	LoopTie,       ///< position: the step, held (a frozen part replays its phrase). Whether a Loop note on the pitch
+	               ///< the part still sounds ties into it (LoopSpec::tieChance)
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

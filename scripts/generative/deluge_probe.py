@@ -841,40 +841,67 @@ def _release_holds(port, warn):
 # How long start_state waits for gen_recipe_reset: delugemu's DIN link delays events
 RECIPE_RESET_TIMEOUT = 10.0
 
+# What start_state resets once it has left Perform, in order: (the word after "reset", what a build older than the
+# command leaves as it was). Each answers gen_<word>_reset done, or refused why=...
+RESETS = (
+    (
+        "recipe",
+        "the Current Recipe stays as the last script left it",
+    ),
+    (
+        "settings",
+        (
+            "the Perform settings (GLIDE, BROWSER PREVIEW) and the sample browser's last file stay as the last "
+            "script left them"
+        ),
+    ),
+)
 
-def _reset_recipe(port, warn, timeout=RECIPE_RESET_TIMEOUT):
-    """Sends "reset recipe": the Current Recipe as after boot, so the next Perform entry opens GENRE on the default
-    genre (techno-acid) and rolls a fresh Recipe whatever genre the last script left playing. Returns (ok, detail).
-    A refusal for a runner job still running (why=busy, right after a leave) is retried until `timeout`. A build
-    older than the command rejects it as a parse error: a warn(), and the Current Recipe stays as it was."""
+
+def _reset(port, warn, what, unchanged, timeout=RECIPE_RESET_TIMEOUT):
+    """Sends "reset WHAT" and waits for its gen_WHAT_reset event. Returns (ok, detail). "reset recipe" puts the Current
+    Recipe back as after boot, so the next Perform entry opens GENRE on the default genre (techno-acid) and rolls a
+    fresh Recipe whatever genre the last script left playing; "reset settings" puts back the Perform settings kept
+    until power-off (spec §13.3) and stock's sample browser's last loaded file (#500). A refusal for a runner job
+    still running (why=busy, right after a leave) is retried until `timeout`. A build older than the command rejects
+    it as a parse error: a warn() naming what stays (`unchanged`), and the run goes on."""
+    command, kind = f"reset {what}", f"gen_{what}_reset"
     end = time.time() + timeout
     while True:
         since = len(port.events)
         try:
-            port.inject("reset recipe")
+            port.inject(command)
         except InjectRejected as exc:
             if exc.status != PARSE_ERROR:
                 raise
             warn(
-                "the build doesn't know `reset recipe` (older than it), went on without it: the Current Recipe "
-                f"stays as the last script left it: {exc}"
+                f"the build doesn't know `{command}` (older than it), went on without it: {unchanged}: {exc}"
             )
             return True, ""
         # At least a second: a retry sent just before the deadline still gets its answer read.
         found = _expect_event(
             port,
-            lambda line: "gen_recipe_reset " in line,
+            lambda line: f"{kind} " in line,
             since,
             max(end - time.time(), 1.0),
         )
         if found is None:
-            return False, "no gen_recipe_reset event after `reset recipe`"
+            return False, f"no {kind} event after `{command}`"
         result = EVENT_TIME.sub("", port.events[found - 1], count=1)
-        if result == "gen_recipe_reset done":
+        if result == f"{kind} done":
             return True, ""
         if "why=busy" not in result or time.time() > end:
-            return False, f"`reset recipe` got {result}"
+            return False, f"`{command}` got {result}"
         port.pump(0.3)
+
+
+def _reset_all(port, warn):
+    """Each of RESETS in turn; the first that fails stops it. Returns (ok, detail)."""
+    for what, unchanged in RESETS:
+        ok, detail = _reset(port, warn, what, unchanged)
+        if not ok:
+            return ok, detail
+    return True, ""
 
 
 def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
@@ -885,8 +912,8 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
     gets a warn() and the rest goes ahead, so current scripts still run on old builds when bisecting). Then each step
     looks at the state and does one thing: stop PLAY, close
     what's open over the root UI (BACK), leave Perform, or go into the current clip (CLIP from session, automation;
-    KEYBOARD from the keyboard screen). Last, outside Perform, it resets the Current Recipe (see _reset_recipe(); a
-    build older than that gets a warn() too).
+    KEYBOARD from the keyboard screen). Last, outside Perform, it resets the Current Recipe, then the Perform settings
+    and the sample browser's last file (RESETS, _reset(); a build older than one gets a warn() too).
     """
     detail = ""
     _release_holds(port, warn)
@@ -904,7 +931,7 @@ def to_start_state(port, steps=START_STATE_STEPS, warn=lambda text: None):
         elif ui != root:
             _press(port, "BACK")
         elif root == "instrument_clip" and s["ui_mode"] == 0 and booted(s):
-            return _reset_recipe(port, warn)
+            return _reset_all(port, warn)
         elif root == "generative_perform":
             _leave_perform(port)
         elif root in ("session", "automation"):
@@ -962,11 +989,12 @@ def run_script(port, lines, out=print, on_start_state=None):
       include FILE                                 the lines of FILE, relative to the script (read_script() only)
       start_state                                  puts the device where scripts start: transport stopped, in an
                                                    instrument clip (leaves Perform, closes menus, stops PLAY, then
-                                                   CLIP), then sends "reset recipe". Counts as an expect. Put it
-                                                   first, so scripts run in any order on one load. It first sends
+                                                   CLIP), then sends "reset recipe" and "reset settings".
+                                                   Counts as an expect. Put it first, so scripts run in any order
+                                                   on one load. It first sends
                                                    "release all"; on a build older than that it releases the holds
                                                    by name, and prints a WARNING line for each one the build doesn't
-                                                   know, and one if it doesn't know "reset recipe"
+                                                   know, and one for each reset it doesn't know
       button ..., pad ..., encoder ..., wait ...   queued on the firmware (see parseLine() in test_port.cpp)
       button F1..F8 down|up                        a mod button by its panel name (button 1 1 is F2)
       encoder 4|5 DETENTS                          a gold knob: each detent 4 edges 0.16 s apart, each a one-step
@@ -980,7 +1008,11 @@ def run_script(port, lines, out=print, on_start_state=None):
       release all                                  queued too: sets every hold off. start_state sends it first
       reset recipe                                 queued too: the Current Recipe as after boot (event
                                                    gen_recipe_reset done, or refused why=perform|busy, nothing
-                                                   changed). start_state sends it last
+                                                   changed). start_state sends it, then "reset settings"
+      reset settings                               queued too: GLIDE and BROWSER PREVIEW at their defaults and the
+                                                   sample browser's last file cleared, as after boot (event
+                                                   gen_settings_reset done, or refused why=perform). start_state
+                                                   sends it last
       pick genre NAME                              queued too: focuses genre NAME's row (techno-dub) in the open GENRE
                                                    menu, its parent's row in GENRE itself (event gen_genre_pick NAME
                                                    row=LABEL, or refused): pick a genre by name, not by counting rows
@@ -1644,6 +1676,19 @@ def main():
         "--events",
         metavar="PATTERN",
         help="session: after each script, print its test events matching the regex PATTERN (. for all of them)",
+    )
+    ap.add_argument(
+        "--max-minutes",
+        type=float,
+        default=90,
+        help="session: refuse a set whose last measured times pass this, and print it split into sessions under it "
+        "(0: no limit)",
+    )
+    ap.add_argument(
+        "--keep-writes",
+        action="store_true",
+        help="session: keep each script's declared new files (# writes:), which it otherwise deletes when the script "
+        "ends",
     )
     ap.add_argument(
         "--clear-hung",

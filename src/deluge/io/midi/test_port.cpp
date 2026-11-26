@@ -36,6 +36,8 @@
 #include "gui/menu_item/generative/compose_screen.h"
 #include "gui/menu_item/generative/genre_rows.h"
 #include "gui/ui/audio_recorder.h"
+#include "gui/ui/browser/perform_sound_browser.h"
+#include "gui/ui/browser/sample_browser.h"
 #include "gui/ui/load/load_song_ui.h"
 #include "gui/ui/save/save_song_ui.h"
 #include "gui/ui/sound_editor.h"
@@ -97,6 +99,7 @@ enum class Kind : uint8_t {
 	ReportBootDma,
 	ReportSidebar,
 	ResetRecipe,
+	ResetSettings,
 	PickGenre,
 	Compose,
 	ComposeScreen,
@@ -589,6 +592,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   hold <name> | release <name>  sets a hold on or off: <name> is a row of kHolds, which says what each does
 ///   release all                 sets every hold off
 ///   reset recipe                the Current Recipe as after boot, see resetRecipe()
+///   reset settings              the Perform settings and the sample browser's last file as after boot, see
+///                               resetSettings()
 ///   pick genre <name>           focuses a genre's row in the open GENRE menu by its name (techno-dub), see
 ///                               pickGenre()
 ///   load song <path>            loads the song file at <path> on the card (the rest of the line), see loadSong()
@@ -728,6 +733,10 @@ bool parseLine(char* line, Entry* entry, const char** path) {
 			*entry = {Kind::ResetRecipe, 0, 0};
 			return true;
 		}
+		if (t.count == 2 && strcmp(t.token[1], "settings") == 0) {
+			*entry = {Kind::ResetSettings, 0, 0};
+			return true;
+		}
 		return false;
 	}
 
@@ -819,7 +828,9 @@ int32_t checkKey(uint8_t* data, int32_t len) {
 // loop, each after the last has gone). In SDRAM: test builds only.
 constexpr uint32_t kEventQueueSize = 64;
 static_assert((kEventQueueSize & (kEventQueueSize - 1)) == 0, "a power of two: % stays right as the counters wrap");
-constexpr size_t kEventLength = 120;
+// A line holds its timestamp and a Recipe's variant picks after the event's own fields (Dub's five sets: 80 chars;
+// regenerate_page_spec keeps every genre's picks text within 100).
+constexpr size_t kEventLength = 160;
 PLACE_SDRAM_BSS char events[kEventQueueSize][kEventLength];
 uint32_t eventHead = 0;
 uint32_t eventTail = 0;
@@ -1190,6 +1201,23 @@ void resetRecipe() {
 	event("gen_recipe_reset done");
 }
 
+/// "reset settings": puts back what boot gives and a script can leave outside the Current Recipe (#500): the Perform
+/// settings kept until power-off (spec §13.3: GLIDE, BROWSER PREVIEW) at their defaults, and stock's sample browser's
+/// last loaded file cleared, so a file browser opens in SAMPLES and not in the folder of a sample an earlier script
+/// chose. start_state sends it after "reset recipe". Sends gen_settings_reset done, or gen_settings_reset refused
+/// why=perform (Perform is open or still holds its generator; nothing changed).
+void resetSettings() {
+	using namespace deluge::generative;
+	if (rootUIIsGenerativePerform() || firmware::performAdapter.active()) {
+		event("gen_settings_reset refused why=perform");
+		return;
+	}
+	firmware::performAdapter.steering().setGlide(perform::kDefaultGlide);
+	PerformSoundBrowser::setPreviewSetting(perform::kDefaultBrowserPreview);
+	sampleBrowser.lastFilePathLoaded.clear();
+	event("gen_settings_reset done");
+}
+
 /// "pick genre <name>": focuses the genre's row in the GENRE ▸ menu or the parent's submenu the sound editor shows
 /// (pickGenreForTest()), so a script picks a genre by name, whatever rows other genres add. In GENRE ▸ a subgenre's
 /// row is its parent's: open it with SELECT, then pick the genre again. Sends gen_genre_pick <name> row=<label now
@@ -1367,6 +1395,10 @@ std::optional<HidEvent> takeHidEvent() {
 
 		case Kind::ResetRecipe:
 			resetRecipe();
+			break;
+
+		case Kind::ResetSettings:
+			resetSettings();
 			break;
 
 		case Kind::PickGenre:

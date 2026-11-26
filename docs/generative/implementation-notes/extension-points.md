@@ -105,3 +105,18 @@ otherwise.
   Restart command once loaded; at the line `restartPiece()` puts the piece header's Recipe, takes and param snapshot
   back before `Generator::start()`. #143's `openPiece()` (set by `begin()` and `switchToIncoming()`) also needs
   setting in `restartOnLine()`, so the new piece gets its header.
+- **Variant sets (#493, ADR 0008).** Data: `Variant`/`VariantSet` in `core/genre.h` (slot 11, `Genre::variantSets`),
+  the rules in `variantSetsValid()` (`core/variants.h`, in `genreValid()`). A genre's new set lists today's behaviour
+  first (apply nullptr) and bumps the genre's version; its spec pins the set's names. The draw is `drawVariants()`,
+  called last in `newRecipe()`, after #498's swing roll. The menus (#494) edit `Recipe::variants.allowed`
+  and pass it as `newRecipe()`'s `narrowed` (the Compose screen's REGENERATE already does,
+  `CurrentRecipe::regenerate()`; Perform's `rollPending()` passes none: its page opens on RANDOM). Drop changes and
+  live switches (#495): a set's `changeAt = Drop` + `changeChance`, or `live`, is all a retune adds; the draw is
+  `dropChange()`, the landing `Generator::dropVariants()`, the patch-diff rule `variant_sets_spec`'s
+  `patchesKeepLookAhead()` (look-ahead fields and pool sizes). The tools' `--variant SET=NAME` is `fixVariant()`.
+- **Yield and the jump mask (#497).** `PartSpec::yield` (`YieldSpec`: the part yielded to, a mode in Drops and one
+  elsewhere) is worked out in `Generator::updateSilent()`, in a second pass after every part's own silence: Rest
+  goes into `yieldRest_` (read by `silenced()`, so the part is silenced and its MUTE dims) and `silent_`, Eighths into
+  `yieldEighths_` (read by `plays()`). The Arc plan asks the same `yieldOn()` (`ArcPlanner::advance()`). A new mode
+  adds to `YieldMode` and those two readers. `LoopSpec::jumpSteps` is applied in `rollLineStep()` after the draws, so
+  a mask never moves a keyed draw; Rotate Answers still move the line a beat.

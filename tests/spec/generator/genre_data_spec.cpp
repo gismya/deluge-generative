@@ -404,6 +404,15 @@ describe genre_data("Every built-in genre", $ {
 		static constexpr PartSpec kBadRootOnAnchors[] = {
 		    {.role = Role::Lead, .flavour = Flavour::Motif, .loop = {.rootOnAnchors = true}}};
 		expect(loopNotesValid(Genre{.name = "bad-root-anchor", .parts = kBadRootOnAnchors})).to_be_false();
+		// A tie chance is a per-mille, and a tie strikes nothing, so a Loop that ties carries no Ornament (spec §5.2).
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 1000}, {})).to_be_true();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 1001}, {})).to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 500}, {.ornaments = kRatchet}))
+		    .to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep, .tieChance = 500},
+		                 {.ornaments = {.rateFloor = 500, .rateCeiling = 500, .flam = 1}}))
+		    .to_be_false();
+		expect(loopValid({.slide = 0, .gateTicks = kTicksPerStep}, {.ornaments = kRatchet})).to_be_true();
 	});
 
 	it("gives each Arp part a walk per pool entry, a Register that holds its widest, and the note bound (spec §5.2, §7.3)", _ {
@@ -706,6 +715,17 @@ describe genre_data("Every built-in genre", $ {
 		// A Build longer than the phrase: the phrase still bounds them, as the Arc plan leaves them out of it.
 		expect(ends(8, kSixteen, 8, GapLength::None)).to_be_false();
 		expect(ends(8, kSixteen, 7, GapLength::Bar)).to_be_true();
+		// A leading cut covers a Build but its last bars: at least one bar left, and under a phrase in every Build.
+		const auto leads = [](std::span<const WeightedBars> builds, uint8_t cutBars) {
+			return cutAndGapUnderBuild(Genre{
+			    .name = "leads",
+			    .phraseBars = 8,
+			    .arc = {.buildBars = builds, .buildCutBars = cutBars, .buildCutLeads = true, .gap = GapLength::None}});
+		};
+		expect(leads(kEight, 1)).to_be_true(); // House's: 7 bars of an 8-bar Build
+		expect(leads(kEight, 0)).to_be_false();
+		expect(leads(kSixteen, 8)).to_be_false(); // 8 bars: a whole phrase
+		expect(leads(kSixteen, 9)).to_be_true();
 	});
 
 	it("holds a Siren's note 1 bar up to a phrase, and no other lane's (sirensValid(), spec §9.5)", _ {
@@ -726,6 +746,36 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(2, 0, Role::Drums)).to_be_false();
 	});
 
+	it("lets a patterned pitched part yield to another part that doesn't yield, with a mode (yieldValid(), spec §5.6)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(yieldValid(*genre)).to_be_true();
+		}
+		static constexpr Pattern kPool[] = {{"X...............", "................", 0}};
+		static constexpr LaneSpec kLanes[] = {{.lane = Lane::Kick, .pool = kPool}};
+		const auto valid = [](YieldSpec arp, YieldSpec lead, bool kit) {
+			const PartSpec parts[] = {
+			    {.role = Role::Drums, .lanes = kLanes},
+			    {.role = Role::Lead, .flavour = Flavour::Loop, .pool = kPool, .yield = lead},
+			    {.role = Role::Lead,
+			     .flavour = kit ? Flavour::None : Flavour::Loop,
+			     .lanes = kit ? std::span<const LaneSpec>(kLanes) : std::span<const LaneSpec>(),
+			     .pool = kit ? std::span<const Pattern>() : std::span<const Pattern>(kPool),
+			     .yield = arp}};
+			return yieldValid(Genre{.name = "yields", .parts = parts});
+		};
+		constexpr YieldSpec kNone{};
+		constexpr YieldSpec kToLead{.part = 1, .inDrops = YieldMode::Rest, .outside = YieldMode::None};
+		expect(valid(kNone, kNone, false)).to_be_true();
+		expect(valid(kToLead, kNone, false)).to_be_true();
+		expect(valid({.part = 1, .outside = YieldMode::Eighths}, kNone, false)).to_be_true();
+		expect(valid({.part = 1}, kNone, false)).to_be_false();                          // no mode
+		expect(valid({.inDrops = YieldMode::Rest}, kNone, false)).to_be_false();       // a mode, no part
+		expect(valid({.part = 2, .inDrops = YieldMode::Rest}, kNone, false)).to_be_false(); // itself
+		expect(valid({.part = 6, .inDrops = YieldMode::Rest}, kNone, false)).to_be_false(); // past the roster
+		expect(valid(kToLead, {.part = 2, .inDrops = YieldMode::Rest}, false)).to_be_false(); // to a yielding part
+		expect(valid(kToLead, kNone, true)).to_be_false();                               // a Kit part
+	});
+
 	it("keeps every pitched anchor a MIDI note two octaves either way (registersShiftValid(), spec §7.3)", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(registersShiftValid(*genre)).to_be_true();
@@ -739,6 +789,20 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid(23, Role::Bass)).to_be_false();
 		expect(valid(104, Role::Lead)).to_be_false();
 		expect(valid(10, Role::Drums)).to_be_true(); // no Register: the anchor is never read
+	});
+
+	it("has an ordered swing range inside the Recipe's swing bounds (swingRangeValid(), spec §3.2)", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(swingRangeValid(*genre)).to_be_true();
+		}
+		const auto valid = [](int8_t low, int8_t high) {
+			return swingRangeValid(Genre{.name = "swing", .facts = {.swingLow = low, .swingHigh = high}});
+		};
+		expect(valid(0, 0)).to_be_true();
+		expect(valid(-49, 49)).to_be_true();
+		expect(valid(10, 5)).to_be_false();
+		expect(valid(-50, 0)).to_be_false();
+		expect(valid(0, 50)).to_be_false();
 	});
 
 	it("has a phrase whose every Glide length fits a SetTempo or SetSwing command's 16 bits (spec §13.3)", _ {

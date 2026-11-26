@@ -37,10 +37,20 @@ struct VariantSet {
 | House S1: a per-piece new-loop chance at each Drop | `ChordGraph::loopChance`, through an alternate graph | probably |
 | House S4a: the Build's shape | `ArcSpec` Build fields and roll | no |
 | House S6: the Bass's pickup | the Bass part's pattern pool | yes |
-| Psytrance S1: the Arp's figure | the Arp part's `ArpSpec` | yes |
+| House feel-1 Build (#518): the `filter` Build and `nokick`'s lead-in | `ArcSpec` keeps, roll, Gap, and the Build fields `buildCut`, `buildCutBars`, `buildCutLeads`, `buildRiser` | no |
+| House feel-1 Bass (#518): the riff, or the offbeat line | the Bass part's pool, tier band and `LoopSpec` | no |
+| House feel-1 chords (#518): the loop or the vamp | `HarmonySpec::graph`, through alternate graphs (the vamp's moves, cadence and loop length, keeping S1's loop chance) | no: it moves the chord lines |
+| Psytrance S1: the Arp's figure | the Arp part's flavour (Loop → Arp), its `ArpSpec` walks, and for the triad `HarmonySpec::extensionCeiling` | yes |
 | Psytrance S3: the Break | `ArcSpec` Break offsets and keeps | no |
+| Psytrance ARP+LEAD (#497) | the Arp part's `yield` (§5.6) | yes |
+| Psytrance LEAD amount (#497) | the Lead part's `densityGate` | no (kept per piece) |
+| Psytrance ACCENTS (#497) | the Arp's `LoopSpec::jumpSteps` | yes |
 | Dub Q359: 7th or plain skank | the skank's chord Extensions | probably |
 | Dub S5: drum style (#460) | the Drums lanes' pools, `ChangeAt::Drop` | yes |
+| Dub MIX (#532): version, tubby, light | `dropOuts` and `dropOutChance` | yes: drawn a bar ahead in a Groove, and no drop-out runs over a Drop; the switch forgets the last drop-out's entry, which indexed the old table |
+| Dub BASS (#532): bursts, rolling, heavy | the Bass part's pool (13 entries in their tiers) and, for heavy, its `LoopSpec` (degrees, gate) | yes: the gate is read per note, the degrees with the line, rolled again at the Drop |
+
+Psytrance's live `extensionCeiling` patch is safe as Dub's skank's is (#495): only a bar line's voicing reads the Extensions, and nothing reads them across a Drop's line before it. A live flavour switch is safe because the flavour and its line or walk data are read step by step, and the pool, the only thing a held pick reads across the Drop, stays the same.
 
 For the "probably" rows, the build ticket confirms the voicing look-ahead, and that a change lands before the Drop's loop draw. House S1's "return to an earlier loop" is a Chord-loop change in House's retune: the `ChordLoop` draw already keys on the loop's index, so a return re-keys an earlier index.
 
@@ -62,9 +72,9 @@ Per set, `uint8_t pick` (the variant playing, by index in the genre's list) and 
 
 ## Drop changes and live steering
 
-- An instance builds its `ResolvedGenre` when it takes a Recipe: Perform entry, a transition's preload, LOAD, the Compose build, the harness. This happens in task context, alongside the roster preload.
-- **ChangeAt::Drop** (Dub's drums). At each Drop, one keyed draw `(seed, kArcPart, VariantChange, Drop occurrence, set)` against `changeChance` decides whether the variant changes. A second draw picks the new one by weight within the allowed variants, leaving out the one playing. A set allowed only one variant never changes. Capture replays it from the seed, with nothing logged.
-- **Live switch.** A pick from the Perform menu is a new steering command, queued for the next Drop and logged where it lands (ADR 0005), so Capture replays it. Only a `live` set takes one.
+- An instance builds its `ResolvedGenre` when it begins (`Generator::begin()`, #493): Perform's start, a restart and AS IT BEGAN, a transition's incoming instance, the Compose build, Capture's replay, the harness. A transition's incoming instance begins in task context; a Perform start, a restart and AS IT BEGAN begin in the tick, which the orchestrator accepted for #493 (#503 R1): it is a 1,396 B copy on ARM and the patches, next to the larger reset `begin()` already does. It isn't timed on its own (estimate: a few µs at 400 MHz). On hardware (#503 R1, Release test-port build at c60280e19), the H1 windows around starts held a mean of 77–121 µs a decision. Transitions' start steps into Dub took 266–275 µs, against 212–390 µs for the session's other starts; the incoming copy is built outside that timed window.
+- **ChangeAt::Drop** (Dub's drums). At each Drop, one keyed draw `(seed, kArcPart, VariantChange, the Drop's Groove occurrence, set)` against `changeChance` decides whether the variant changes. A second draw picks the new one by weight within the allowed variants, leaving out the one playing. A set allowed only one variant never changes. Capture replays it from the seed, with nothing logged.
+- **Live switch.** The Perform menu's ticks for a set are a new steering command carrying them as a mask, queued for the next Drop and logged where it lands (ADR 0005), so Capture replays it. Only a `live` set takes one. At that Drop the set allows the ticks: the variant playing stays if ticked, else a keyed draw picks within them, so replay needs nothing more logged. That replaces the Drop's own change for the set; later Drop changes draw within the ticks, and one tick fixes the variant. A set that never changes at a Drop plays what the ticks decide there until a Regenerate. (Owner, #508 R1: a multi-select, as on the Regenerate page, rather than a plain pick.)
 - **Both** re-apply the instance's copy from the constexpr genre with the new picks, at the decision of the Drop's first step. That is a 1.4 KB copy and a patch, once at a Drop.
 - **Rule for a live or Drop-changing set:** its patches may touch only data the Drop reads afresh, such as pattern pools, fills, drop-out entries and a part's flavour spec. They may never touch what the look-ahead reads across the line: Arc lengths, the Build, the Break, Registers. A harness spec checks this by diffing each variant's copy against the genre's.
 
@@ -79,9 +89,9 @@ All of them are stock submenus and editors in the stock fonts (§13.5).
   - **GO**, last. The cursor starts on GO, so SELECT, SELECT is as quick as today.
 
   BACK cancels. The page always opens with every set on RANDOM: drawing between variants is the point, and narrowing a set is for that one Regenerate. A mid-set LOAD shows the same page with only TRANSITION (and later OPTIONS), because the file brings its own variants.
-- **The Perform menu** gets **VARIANTS ▸**, with one row per set showing the variant playing now. Pushing a live set's row opens a plain list of its variants (no RANDOM, no subset). A pick queues for the next Drop, shows as `VARIANT DROP` in QUEUE, and BACK cancels it like other queued actions. A set that isn't live shows `AT REGEN` when pushed.
+- **The Perform menu** gets **VARIANTS ▸**: the page's rows and multi-selects on the playing piece's sets, each row showing its ticks (`RANDOM`, a name, `n OF m`). Pushing a live set's row opens its multi-select. A change queues for the next Drop, shows as `VARIANT DROP` in QUEUE, and BACK cancels it like other queued actions; leaving with the ticks as they were queues nothing. A set that isn't live shows `AT REGEN` when pushed.
 - **The Compose screen** gets a single **VARIANTS ▸** row after SCALE, shown only when the genre has sets. It opens the same per-set submenu, with the multi-select. REGENERATE there draws within each set's allowed variants, which the Recipe keeps.
-- **Names.** A set's OLED name is at most 8 characters and a variant's at most 9, so a row fits 128 px in the menu font. A harness spec checks every genre's names against the font metrics `oled_page_spec` already uses.
+- **Names.** A set's OLED name is at most 8 characters and a variant's at most 9, so a row fits 128 px in the menu font. `regenerate_page_spec` checks every genre's names, and the page's titles, against the stock fonts' metrics (`src/deluge/gui/fonts/fonts.c`, linked into the harness).
 
 ## Costs
 

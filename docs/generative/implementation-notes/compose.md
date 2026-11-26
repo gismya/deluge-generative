@@ -25,7 +25,9 @@ otherwise.
   It works a bar at a time: a bar within `kBarTolerance` (16) of the line across it keeps only its end, else every step
   line; then a cone (`kNodeTolerance`, 2) merges what lines up. The drift spec turns gestures, Section offsets, the
   Drop lift and Drop-outs off, and skips a lane's bar with a snap and the bar after it: Dub's Siren release Throw is
-  always on. Tolerances below 16 left two nodes in some bar of Ambient's Wobble at Motion 100.
+  always on. Its Recipe pins every set to variant 0: a variant's patch runs on the edited genre and can put back what
+  `driftOnly()` took out (#540: Psytrance's `break=lead` sets the Break's offsets, so the Break's step gave 2 nodes).
+  Tolerances below 16 left two nodes in some bar of Ambient's Wobble at Motion 100.
 - A bar is measured from the last point the cone took. After a long hold that point is bars back, and a ramp's start
   lies within 16 of the line to its end: the held bars then climb. So a ramp after a hold of a bar or more sends its
   start straight to the cone (`Track::move()`). Drift is not "every step": it holds a step or several often, and a bar
@@ -42,7 +44,9 @@ otherwise.
 - A sample Riser's note-on moves later in `ComposeDriver::timeRiser()` (`perform::riserStart()` at the Recipe's tempo,
   from `Generator::riserDropTick()`, shared with `PerformDriver::holdRiser()`), asked through `SongWriter::sampleMicros()`
   as Perform asks its `NoteSink`. The harness's `play()` sets Perform's tempo to the Recipe's, or a sample Riser there is
-  timed at the driver's default tempo and the equivalence fails.
+  timed at the driver's default tempo and the equivalence fails. Where the drawn sample is longer than the Build,
+  `perform::pickRiserSample()` (with `SongWriter::fallbackMicros()`) puts the note on the FX Kit's fallback row
+  (`kRiserFallbackPitch`) or, where neither fits, `timeRiser()` returns false and Compose writes no note (spec §9.5).
 - `ClipBuilder` holds a sounding-note table (`SoundingNotes::kTotal`) and `kMaxTracks` lanes, each with a bar of
   buffered points (2 B each): it lives in the Compose job, not the Generator block, so it isn't under H18.
 - Harness traps: CppSpec's `it` is a macro, so a local named `it` doesn't compile in a spec; `expect()` works only

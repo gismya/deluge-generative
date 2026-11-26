@@ -169,8 +169,8 @@ describe part_bias("Part bias", $ {
 	it("plans an interplay target at its own biased Density", _ {
 		const Genre& genre = genres::technoAcid;
 		constexpr int32_t kBias = -15;
-		auto biasedRun = std::make_shared<Generator>();
-		auto plainRun = std::make_shared<Generator>();
+		auto biasedRun = std::make_shared<harness::Instance>();
+		auto plainRun = std::make_shared<harness::Instance>();
 		Recipe recipe = newRecipe(genre, 0);
 		plainRun->start(recipe, 1, Takes{}, true);
 		recipe.bias.set(1, Macro::Density, macroPoints(kBias));

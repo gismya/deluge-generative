@@ -133,6 +133,24 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Impact, .synths = kImpactSynths},
 };
 
+/// Acid's Impact: its own boom, 1.6 dB under the others' (#472 impact round 3). The owner took the boom 3 dB louder,
+/// and at that level Acid's hot Drop (the distorted 909 kick under the acid line) reached full scale, at +2 dB too at
+/// one Recipe; at +1.4 dB its Drops peak at -0.1 to -1.3 dBFS over four Recipes (delugemu, the pack card).
+constexpr PaletteEntry kAcidImpactSynths[] = {{"SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML"},
+                                              {"SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML"}};
+
+/// Techno's lanes, but the Impact's boom.
+constexpr auto kAcidLanes = [] {
+	std::array<LaneSounds, std::size(kLanes)> lanes{};
+	std::copy(std::begin(kLanes), std::end(kLanes), lanes.begin());
+	for (LaneSounds& lane : lanes) {
+		if (lane.lane == Lane::Impact) {
+			lane.synths = kAcidImpactSynths;
+		}
+	}
+	return lanes;
+}();
+
 // ---- Melodic techno (#226) ----
 
 /// The rolling bass: short, plucky presets with no long tail, so the 16ths stay apart. 000's env2 filter pluck is the
@@ -268,12 +286,19 @@ constexpr RoleSounds kDetroitRoles[] = {
     {Role::Lead, kMotifSounds},
 };
 
+static_assert(levelsValid(kAcidParts, kAcidRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kMelodicParts, kMelodicRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kDubParts, kDubRoles), "a palette level is 1 to kFullLevel");
+static_assert(levelsValid(kDetroitParts, kDetroitRoles), "a palette level is 1 to kFullLevel");
+
 } // namespace
 
 const Palette technoPalette{.lanes = kLanes, .kits = {.machines = kMachines}};
-/// The acid line and the Drone over Techno's drum and FX lanes.
-const Palette technoAcidPalette{
-    .parts = kAcidParts, .roles = kAcidRoles, .lanes = kLanes, .kits = {.machines = kMachines, .swaps = kAcidSwaps}};
+/// The acid line and the Drone over Techno's drum and FX lanes, with its own boom.
+const Palette technoAcidPalette{.parts = kAcidParts,
+                                .roles = kAcidRoles,
+                                .lanes = kAcidLanes,
+                                .kits = {.machines = kMachines, .swaps = kAcidSwaps}};
 /// Its own bass, Pad and Arp over Techno's drum and FX lanes.
 const Palette technoMelodicPalette{.parts = kMelodicParts,
                                    .roles = kMelodicRoles,

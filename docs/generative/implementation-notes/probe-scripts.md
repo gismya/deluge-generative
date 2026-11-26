@@ -92,9 +92,15 @@ otherwise.
 - `start_state` ends with `reset recipe` (`resetRecipe()` in `io/midi/test_port.cpp`), which zero-fills the Current
   Recipe as boot does (`forgetCurrentRecipe()`): with `exists` false, GENRE ▸ opens on the default genre and entry
   rolls a fresh Recipe. Entry picks ACID by name anyway (`pick genre`, in `perform_pick_acid.txt`), so a session
-  stopped partway through a genre change can't move the next script onto another genre. It resets only the Current
-  Recipe: other Generative state a script leaves outside Perform
-  outlives `start_state`, so a probe script that depends on more than the genre after boot must set it itself.
+  stopped partway through a genre change can't move the next script onto another genre. Then `reset settings`
+  (`resetSettings()`, #500) puts back GLIDE and BROWSER PREVIEW (Perform settings kept until power-off, spec §13.3)
+  and clears stock's sample browser's `lastFilePathLoaded`. Other state a script leaves until power-off outlives `start_state`: add it to
+  `resetSettings()` and to `perform_start_state.txt`'s check, or put it back at the script's end. Trap: a lane
+  browser's sample preview (`AudioEngine::previewSample()`, which loads with `manuallySelected`) sets
+  `lastFilePathLoaded`, so a later OSC 1 file browser opened in that kick's folder, where a BACK tap goes up a folder
+  instead of closing it (`perform_retire.txt` after `perform_lane_browser.txt`). To find a leak between scripts, run
+  the earlier scripts and the failing one in one delugemu boot (`test_port_emu.py --script A --script B`):
+  `check_all.py` boots each script alone, so it never sees one.
 - Test events from `PerformAdapter::tick()` come when the Generator decides a step; those from `OutputSink::play()`
   (`gen_section`, `gen_key`, notes) come when the step plays, a little later. So `gen_phrase bar=8` (decided) arrives
   before bar 8's `gen_section` (played): an `expect no_event gen_section ...` right after it sees that line's Section.
@@ -106,6 +112,14 @@ otherwise.
   (`/^gen_outputs_freed outputs=\d+ total=5$/`) whether it came in one batch or several. A batch can reach the total
   with another still to come: `mark` after it and `expect no_event gen_outputs_freed since=mark` later
   (`perform_genre_change.txt`).
+- Trap (#505): after a stop's commit, give `gen_transition phase=idle` the whole cap (a phrase of the genre that
+  played), not a few seconds. Stopped, an Output still sounding is freed only at its cap (spec §12.9), and an Impact
+  with an echo keeps its FX Kit sounding: `GEN Impact Wash`'s delay (feedback 24) keeps rendering for stock's 110
+  repeats, about 38 s. Which Impact a piece draws depends on the run (`perform_transition.txt` after a fresh load draws
+  the Wash every time; delugemu doesn't), so a short wait can pass in one run and fail in another. Until idle, a Regenerate is refused (`refused
+  phase=retiring`), so the expects after it fail too.
+- A script that needs someone at the Deluge (a listener, a power pull) says `# needs: a Deluge and someone ...`:
+  `covers.py --hardware` leaves out every needs line with the word `someone`.
 - The firmware queues test events (`TestPort::event()`, 64 lines) and sends one a pass of the main loop, each after
   the last has left, so a burst can fill the queue. With 16 lines a transition's start step (about 25 events in 160
   ms) dropped a few in every delugemu run, now and then one a script waited for: #272's "phase stays retiring" was a
@@ -180,6 +194,10 @@ otherwise.
   moves `gen_sound` expects: since #488 an FX lane with no sample picks one of its presets per piece (`pick ...
   SYNTHS/...`, not `fallback`), and on delugemu's factory card, which has no pack, the Impact is `silent` and counts
   in `gen_sound_missing` as the Riser does. A script that runs on both cards matches either.
+- The Regenerate page (#494) opens on GO: SELECT, SELECT keeps a one-press confirm's flow. A style other than the
+  entry: `include perform_regen_transition.txt`, the `encoder 3 N` turn, `include perform_regen_go.txt`, then SELECT.
+  Its multi-selects and FROM's list remember their row across scripts on one boot: choose a variant from the top
+  (`encoder 3 -5`). Menu events carry l10n's text (`title=Regenerate`, `Random`), not the capitals the OLED draws.
 - Seam S7's `next recipe` lines (spec §21.3) are queued like presses, so they land in order with the script's other
   lines. `NextRecipe` lives in `.sdram_bss`, zero-filled, not constructed: the first field a line sets calls `clear()`
   to put its defaults in (`macroPoints` -1, `swing` kept). A pick's path is the rest of its line and waits in

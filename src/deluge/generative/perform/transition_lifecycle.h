@@ -427,10 +427,11 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 		adapter().traced(Trace::RequestBusy, style);
 		return Request::Busy;
 	}
-	// The confirm drops the takes and sounds still queued, and cancels a Queued one it replaces (spec §12.9), each
-	// with a press in the steering queue. Without room for all of them it is refused, before anything is dropped: a
-	// press that didn't fit would leave its take, sound or transition to land.
-	if (queue().room() < cancelPlaces() + steering().waitingTakes() + adapter().waitingSounds()) {
+	// The confirm drops the takes, variant switches and sounds still queued, and cancels a Queued one it replaces (spec
+	// §12.9), each with a press in the steering queue. Without room for all of them it is refused, before anything is
+	// dropped: a press that didn't fit would leave its take, sound or transition to land.
+	if (queue().room()
+	    < cancelPlaces() + steering().waitingTakes() + steering().waitingVariants() + adapter().waitingSounds()) {
 		adapter().traced(Trace::RequestQueueFull, style);
 		return Request::QueueFull;
 	}
@@ -448,6 +449,7 @@ TransitionRequest TransitionLifecycle<Adapter>::request(TransitionStyle style, c
 		cancelQueued(Trace::CancelReplaced);
 	}
 	steering().dropWaitingTakes();
+	steering().dropWaitingVariants();
 	adapter().dropWaitingSounds();
 	// Confirmed while stopped, it commits when loaded, as a stop during the preload would (spec §12.9): no piece may
 	// start on the old roster meanwhile. A PLAY already waiting for an earlier request waits for this one.

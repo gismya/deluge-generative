@@ -1,8 +1,8 @@
-// What each Techno subgenre plays under steering (spec §12.5, §13.4, §8.7, §9.6, §13.2): a stream fingerprint of
-// pieces with a mute, a solo, a SHIFT + mute, a held fill (Techno's held entry, a Rest, and a fresh pick, which holds
-// a Swap in one piece, checked), a force and End, each pressed and released. The goldens play without steering, so this
-// pins how the silencers combine with a mute, a solo, a held fill, a force and End. A retune that moves a stream moves
-// its fingerprint here too: update it with the genre's golden (spec §21.2).
+// What each signed-off genre plays under steering (spec §12.5, §13.4, §8.7, §9.6, §13.2): a stream fingerprint of
+// pieces with a mute, a solo, a SHIFT + mute, a held fill (the genre's held entry, a Rest in Techno and Psytrance, a
+// Swap in Dub and none in Ambient, and a fresh pick, checked), a force and End, each pressed and released. The goldens
+// play without steering, so this pins how the silencers combine with a mute, a solo, a held fill, a force and End. A
+// retune that moves a stream moves its fingerprint here too: update it with the genre's golden (spec §21.2).
 
 #include "harness.h"
 #include "stream_fingerprint.h"
@@ -69,14 +69,21 @@ struct Pinned {
 	const Genre* genre;
 	uint64_t hash;
 	uint64_t events;
+	Held held{kPieces, 1}; ///< The pieces where FILL held a Rest, and a Swap: Techno's held entry is a Rest.
 };
 
-/// Each subgenre's steered fingerprint; a retune copies the printed value here (spec §21.2).
+/// Each signed-off genre's steered fingerprint; a retune copies the printed value here (spec §21.2).
 const Pinned kPinned[] = {
     {&genres::technoAcid, 0x650d70516f3a92b7ULL, 76223},
     {&genres::technoDub, 0x1138b48161167ffcULL, 95566},
     {&genres::technoMelodic, 0xef5f7658034c7711ULL, 87623},
     {&genres::technoDetroit, 0x2bfae2340291f5abULL, 103237},
+    // Dub's held entry is its Snare and Tom Swap, and it has no Rest.
+    {&genres::dub, 0xd875be1a6d1e427aULL, 107341, {0, kPieces}},
+    // Ambient has no fills, so FILL holds nothing.
+    {&genres::ambient, 0x891e6393c330e75bULL, 64643, {0, 0}},
+    // Psytrance's held entry is its 2-beat Rest on Kick and Bass, and it has no Swap.
+    {&genres::psytranceClassic, 0x80431cb5c79fff2fULL, 111242, {kPieces, 0}},
 };
 
 std::string hex(uint64_t value) {
@@ -89,16 +96,17 @@ std::string hex(uint64_t value) {
 
 // clang-format off
 describe steering_fingerprint("A steered stream's fingerprint", $ {
-	it("is pinned for every Techno subgenre, under a mute, a solo, SHIFT + mute, a held fill, a force and End", _ {
+	it("is pinned for every signed-off genre, under a mute, a solo, SHIFT + mute, a held fill, a force and End", _ {
 		for (const Pinned& pinned : kPinned) {
 			Held held;
 			const StreamFingerprint fingerprint = steeredFingerprintOf(*pinned.genre, held);
 			const std::string name = pinned.genre->name;
 			expect(name + " " + hex(fingerprint.hash) + " " + std::to_string(fingerprint.events))
 			    .to_equal(name + " " + hex(pinned.hash) + " " + std::to_string(pinned.events));
-			// FILL holds Techno's held entry, a Rest, in every piece, and its fresh pick a Swap in one.
+			// FILL holds the genre's held entry in every piece, and its fresh pick, in Techno, a Swap in one.
 			expect(name + " rests " + std::to_string(held.rests) + " swaps " + std::to_string(held.swaps))
-			    .to_equal(name + " rests " + std::to_string(kPieces) + " swaps 1");
+			    .to_equal(name + " rests " + std::to_string(pinned.held.rests) + " swaps "
+			              + std::to_string(pinned.held.swaps));
 			expect(fingerprint.lost).to_equal(0U);
 			expect(fingerprint.ended).to_equal(kPieces);
 		}

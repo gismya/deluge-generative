@@ -22,6 +22,7 @@
 
 #include "generative/core/capacity.h"
 #include "generative/core/genre.h"
+#include "generative/core/variants.h"
 
 namespace deluge::generative::genres {
 
@@ -137,13 +138,15 @@ constexpr int16_t kSlowDrift = 1500;
 constexpr LineWeight kRootOnly[] = {{0, 1}};
 
 /// The root alone, never sliding and with no octave down (owner, round 1's I2: the lowest octave is mud); each note
-/// held two bars, to the pattern's end, ending before the next pick may start (loopNotesValid()).
+/// held two bars, to the pattern's end, ending before the next pick may start (loopNotesValid()). Half its notes on
+/// the root it still holds tie on instead of striking again (owner, sign-off 1's BASS, #337).
 constexpr LoopSpec kSubLoop{
     .degrees = kRootOnly,
     .draws = {.leap = 0, .octaveUp = 0, .octaveDown = 0, .accent = 0},
     .slide = 0,
     .mutation = 60,
     .gateTicks = 2 * kTicksPerBar,
+    .tieChance = 500,
 };
 
 /// Chord positions: mostly the root, the 3rd and the 5th, then the Extensions (spec §4.5).
@@ -270,16 +273,92 @@ constexpr ChordGraph kGraph{
     .barsPerChord = 8,
 };
 
+/// The MOTION set's still graph (variant ideas 1): I, IV and vi only, 16 bars a chord, a heavy repeat and home pull.
+/// The guard closes I–IV in Lydian (#iv°) and I–vi in Dorian (vi°), but each keeps a move: Lydian's colour move I–II
+/// and I–vi, Dorian's I–IV. A mode's colour moves widen it too: Mixolydian also plays its ♭VII.
+constexpr ChordMove kStillMoves[] = {
+    {kI, kIV, 25},
+    {kIV, kI, 25},
+    {kI, kVI, 20},
+    {kVI, kI, 25},
+};
+constexpr ChordGraph kStillGraph{
+    .homePull = 60,
+    .moves = kStillMoves,
+    .repeatWeight = 60,
+    .barsPerChord = 16,
+};
+
+/// The MOTION set's wander graph (variant ideas 1): rules round 1's wider graph (iii and ♭VII paths, IV–vi, vi–iii),
+/// a lower home pull and repeat, 8 bars a chord.
+constexpr ChordMove kWanderMoves[] = {
+    {kI, kIV, 25},   {kI, kVI, 20},  {kI, kIII, 20}, {kI, kVII, 15},  {kI, kV, 8},     {kIV, kI, 20},
+    {kIV, kVI, 10},  {kVI, kIV, 20}, {kVI, kI, 15},  {kVI, kIII, 10}, {kIII, kIV, 20}, {kIII, kVI, 15},
+    {kVII, kIV, 20}, {kVII, kI, 15}, {kII, kI, 25},  {kV, kI, 25},
+};
+constexpr ChordGraph kWanderGraph{
+    .homePull = 25,
+    .moves = kWanderMoves,
+    .repeatWeight = 20,
+    .barsPerChord = 8,
+};
+
+/// The COLOUR set's lush order (variant ideas 1): the 9th, then the 7th.
+constexpr ExtensionOrder kLushOrder{{Extension::Ninth, Extension::Seventh, Extension::Sixth, Extension::Sus4}};
+
 /// Minor and Mixolydian: owner, rules round 1's S6-scales A.
 constexpr Scale kScales[] = {Scale::Major, Scale::Lydian, Scale::Dorian, Scale::Minor, Scale::Mixolydian};
 
 constexpr WeightedBars kBuildBars[] = {{16, 1}};
 
+/// The chords' colour (variant ideas 1, #533): add9 as written (Extensions 1–2, the 9th and sus4 first), pure triads
+/// (no Extension) or lush 7/9 (Extensions 2, the 9th then the 7th), 3:2:3 (the owner: often, sometimes, often).
+/// Live, as Dub's skank: only a bar line's voicing reads the Extensions, and nothing reads them across a Drop's line.
+constexpr Variant kColourVariants[] = {
+    {.name = "add9", .oledName = "ADD9", .weight = 3},
+    {.name = "pure",
+     .oledName = "PURE",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.harmony.extensionFloor = 0;
+	         resolved.genre.harmony.extensionCeiling = 0;
+         }},
+    {.name = "lush",
+     .oledName = "LUSH 7/9",
+     .weight = 3,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.harmony.extensionFloor = 2;
+	         resolved.genre.harmony.extensionCeiling = 2;
+	         resolved.genre.harmony.extensionOrder = kLushOrder;
+         }},
+};
+
+/// How far the chords move (variant ideas 1, #533): the graph as written, still (I, IV and vi, 16 bars a chord) or
+/// wander (the wider graph), 3:1:3 (the owner: often, rarely, often). Not live: the walk's look-ahead reads the graph.
+constexpr Variant kMotionVariants[] = {
+    {.name = "drift", .oledName = "DRIFT", .weight = 3},
+    {.name = "still",
+     .oledName = "STILL",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kStillGraph; }},
+    {.name = "wander",
+     .oledName = "WANDER",
+     .weight = 3,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kWanderGraph; }},
+};
+
+constexpr VariantSet kVariantSets[] = {
+    {.name = "colour", .oledName = "COLOUR", .variants = kColourVariants, .live = true},
+    {.name = "motion", .oledName = "MOTION", .variants = kMotionVariants},
+};
+
 constexpr Genre kAmbient{
     .name = "ambient",
     .oledName = "AMBIENT",
-    .version = 2, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
-    .facts = {.tempoLowBpm = 60, .tempoHighBpm = 90, .scales = kScales, .swing = 0},
+    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .facts = {.tempoLowBpm = 60, .tempoHighBpm = 90, .scales = kScales},
     .phraseBars = 8,
     .parts = kParts,
     .repickChance = 400,
@@ -328,6 +407,7 @@ constexpr Genre kAmbient{
             .accentLane = Lane::None,
             .transitionEntry = TransitionEntry::Intro,
         },
+    .variantSets = kVariantSets,
 };
 static_assert(genreValid(kAmbient), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 

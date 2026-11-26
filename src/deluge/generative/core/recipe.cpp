@@ -18,31 +18,19 @@
 #include "generative/core/recipe.h"
 #include "generative/core/draw.h"
 #include "generative/core/genre.h"
+#include "generative/core/variants.h"
 #include <bit>
 
 namespace deluge::generative {
 
-Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom) {
-	Recipe recipe;
-	recipe.genre = &genre;
-	recipe.macros = genre.defaults;
-	recipe.swing = genre.facts.swing;
+namespace {
 
-	// Facts are rolled from fresh entropy, never the seed (spec §3.2). Each fact takes its own mix of it.
-	EntropyStream rolls(entropy);
-	int32_t tempoSpan = genre.facts.tempoHighBpm - genre.facts.tempoLowBpm + 1;
-	recipe.tempo = (genre.facts.tempoLowBpm + rolls.below(tempoSpan > 0 ? tempoSpan : 1)) * 100;
-	const uint32_t rootDraw = rolls.next();
-	const uint32_t scaleDraw = rolls.next();
-	// The scale first, so a lean knows which keys are related (spec §9.7).
-	if (!genre.facts.scales.empty()) {
-		recipe.scale = genre.facts.scales[scaleBelow(scaleDraw, static_cast<int32_t>(genre.facts.scales.size()))];
-	}
-	const uint16_t related = leanFrom.has_value() ? relatedRoots(*leanFrom, recipe.scale) : 0;
+/// The key's root: an even roll, or one leaning towards the roots related to `leanFrom` (spec §9.7).
+uint8_t rollRoot(uint32_t rootDraw, Scale scale, std::optional<Key> leanFrom) {
+	const uint16_t related = leanFrom.has_value() ? relatedRoots(*leanFrom, scale) : 0;
 	const int32_t relatedCount = std::popcount(related);
 	if (relatedCount == 0) {
-		recipe.keyRoot = static_cast<uint8_t>(scaleBelow(rootDraw, 12));
-		return recipe;
+		return static_cast<uint8_t>(scaleBelow(rootDraw, 12));
 	}
 	// In units of 1/(12 × 1000 × relatedCount) of the roll: each related root gets the lean's share split between
 	// them, and every root an even share of the rest.
@@ -50,9 +38,32 @@ Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFr
 	const int32_t root = rollWeighted(
 	    12, [&](int32_t r) { return everyRoot + ((related >> r) & 1U ? 12 * kKeyLeanPerMille : 0); },
 	    [&](int32_t total) { return scaleBelow(rootDraw, total); });
-	if (root >= 0) {
-		recipe.keyRoot = static_cast<uint8_t>(root);
+	return static_cast<uint8_t>(root >= 0 ? root : 0);
+}
+
+} // namespace
+
+Recipe newRecipe(const Genre& genre, uint32_t entropy, std::optional<Key> leanFrom, const VariantPicks* narrowed) {
+	Recipe recipe;
+	recipe.genre = &genre;
+	recipe.macros = genre.defaults;
+
+	// Facts are rolled from fresh entropy, never the seed (spec §3.2). Each fact takes its own mix of it.
+	EntropyStream rolls(entropy);
+	int32_t tempoSpan = genre.facts.tempoHighBpm - genre.facts.tempoLowBpm + 1;
+	recipe.tempo = (genre.facts.tempoLowBpm + rolls.below(tempoSpan > 0 ? tempoSpan : 1)) * 100;
+	const uint32_t rootDraw = rolls.next();
+	const uint32_t scaleDraw = rolls.next();
+	// Swing after tempo, root and scale, so the facts any entropy gave before stay the same (ADR 0008).
+	const int32_t swingSpan = genre.facts.swingHigh - genre.facts.swingLow + 1;
+	recipe.swing = static_cast<int8_t>(genre.facts.swingLow + rolls.below(swingSpan > 0 ? swingSpan : 1));
+	// The scale first, so a lean knows which keys are related (spec §9.7).
+	if (!genre.facts.scales.empty()) {
+		recipe.scale = genre.facts.scales[scaleBelow(scaleDraw, static_cast<int32_t>(genre.facts.scales.size()))];
 	}
+	recipe.keyRoot = rollRoot(rootDraw, recipe.scale, leanFrom);
+	// The variant sets last, one value a set: a later draw appends after them (spec §3.6, ADR 0008).
+	drawVariants(genre, narrowed != nullptr ? *narrowed : VariantPicks{}, rolls, recipe.variants);
 	return recipe;
 }
 

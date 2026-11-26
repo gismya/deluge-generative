@@ -19,6 +19,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
 #include "generative/core/palette_file.h"
+#include "generative/core/variants.h"
 #include "generative/core/xml_tags.h"
 
 namespace deluge::generative {
@@ -85,6 +86,33 @@ void writeNumber(RecipeFileWriter& writer, const char* name, int64_t value) {
 	writer.attribute(name, Number(value).text);
 }
 
+/// A variant set's child: `<variant set="skank" pick="plain" allow="sevenths,plain" />`, `allow` left out when every
+/// variant is allowed (spec §16.1).
+void writeVariant(RecipeFileWriter& writer, const VariantSet& set, uint8_t pick, uint8_t allowed) {
+	writer.openTag("variant");
+	writer.attribute("set", set.name);
+	writer.attribute("pick", set.variants[pick < set.variants.size() ? pick : 0].name);
+	allowed = allowedIn(set, allowed);
+	if (allowed != allVariants(set)) {
+		char list[kMaxVariants * (kMaxVariantNameChars + 1)] = {}; // each name and its comma
+		int32_t at = 0;
+		for (size_t v = 0; v < set.variants.size(); v++) {
+			if (((allowed >> v) & 1U) == 0) {
+				continue;
+			}
+			for (const char* c = at == 0 ? "" : ","; *c != 0; c++) {
+				list[at++] = *c;
+			}
+			for (const char* c = set.variants[v].name; *c != 0 && at < static_cast<int32_t>(sizeof(list)) - 1; c++) {
+				list[at++] = *c;
+			}
+		}
+		list[at] = 0;
+		writer.attribute("allow", list);
+	}
+	writer.closeEmptyTag();
+}
+
 /// Reads a Recipe file's tags into a RecipeFile.
 class RecipeParser {
 public:
@@ -138,7 +166,12 @@ private:
 		Recipe& recipe = out_.recipe;
 		recipe.genre = genre;
 		recipe.macros = genre->defaults;
-		recipe.swing = genre->facts.swing;
+		recipe.swing = genre->facts.swingMiddle();
+		// A set the file leaves out is drawn fresh within every variant (drawUnsetVariants(), spec §16.1).
+		for (size_t v = 0; v < genre->variantSets.size() && v < kMaxVariantSets; v++) {
+			recipe.variants.pick[v] = kUnsetVariant;
+			recipe.variants.allowed[v] = allVariants(genre->variantSets[v]);
+		}
 		int64_t version = genre->version;
 		int64_t tempo = recipe.tempo;
 		int64_t swing = recipe.swing;
@@ -182,6 +215,10 @@ private:
 			}
 			return true;
 		}
+		if (tag.name == "variant") {
+			variant(tag);
+			return true;
+		}
 		std::string_view name;
 		if (!xml::attribute(tag, "name", name)) {
 			return true; // a part or lane with no name, or an element a newer firmware writes: skipped
@@ -220,6 +257,32 @@ private:
 			}
 		}
 		return true;
+	}
+
+	/// A `<variant>`: a set by its stable name, its pick and the variants it allows (spec §16.1). An unknown set is
+	/// skipped, an unknown name in `allow` dropped, and a pick this genre's set doesn't have left for
+	/// drawUnsetVariants().
+	void variant(const xml::Tag& tag) {
+		const Genre& genre = *out_.recipe.genre;
+		std::string_view value;
+		const int32_t s = xml::attribute(tag, "set", value) ? findVariantSet(genre, value) : -1;
+		if (s < 0) {
+			return;
+		}
+		const VariantSet& set = genre.variantSets[s];
+		VariantPicks& picks = out_.recipe.variants;
+		if (xml::attribute(tag, "allow", value)) {
+			uint8_t allowed = 0;
+			while (!value.empty()) {
+				const size_t comma = value.find(',');
+				const int32_t v = findVariant(set, value.substr(0, comma));
+				allowed |= v >= 0 ? static_cast<uint8_t>(1U << v) : 0;
+				value = comma == std::string_view::npos ? std::string_view{} : value.substr(comma + 1);
+			}
+			picks.allowed[s] = allowedIn(set, allowed);
+		}
+		const int32_t pick = xml::attribute(tag, "pick", value) ? findVariant(set, value) : -1;
+		picks.pick[s] = pick >= 0 ? static_cast<uint8_t>(pick) : kUnsetVariant;
 	}
 
 	/// The tag's sound path into `pick`, which stays empty if it has none, or one too long for a pick.
@@ -296,6 +359,9 @@ void writeRecipeFile(RecipeFileWriter& writer, const RecipeFile& file) {
 		writer.attribute("name", lanePaletteName(static_cast<Lane>(l)));
 		writer.attribute("sound", Encoded(file.sounds.lane[l].c_str()).text);
 		writer.closeEmptyTag();
+	}
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		writeVariant(writer, genre.variantSets[s], recipe.variants.pick[s], recipe.variants.allowed[s]);
 	}
 	writer.closeTag(kRecipeFileTag);
 }

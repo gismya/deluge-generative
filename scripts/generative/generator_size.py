@@ -1,12 +1,13 @@
-"""sizeof(Generator) and sizeof(PartSpec) on ARM, against H18 and the figure spec §20 states.
+"""sizeof(Generator), sizeof(PartSpec) and sizeof(ResolvedGenre) on ARM, against H18 and the figures spec §20 states.
 
     python3 scripts/generative/generator_size.py
 
 The harness builds for the host, where int32_t is int rather than long, so the size that counts is the firmware
 compiler's. It compiles a probe with arm-none-eabi-g++ -fsyntax-only that names Size<sizeof(...)>, an incomplete
 template, and reads each size from the error. Exits 1 if the Generator is over the static_assert in generator.h (H18)
-or differs from §20's "The core is N B": when it changes, update that sentence (implementation notes, "Capacity
-is sized by construction"). check_all.py runs it.
+or differs from §20's "The core is N B", or a genre's copy (ResolvedGenre, spec §3.6) differs from §20's "A genre's
+copy is N B": when one changes, update that sentence (implementation notes, "Capacity is sized by construction").
+check_all.py runs it.
 """
 
 import os
@@ -27,6 +28,7 @@ template <int N>
 struct Size;
 Size<sizeof(deluge::generative::Generator)> generatorSize;
 Size<sizeof(deluge::generative::PartSpec)> partSpecSize;
+Size<sizeof(deluge::generative::ResolvedGenre)> resolvedGenreSize;
 """
 
 
@@ -50,6 +52,25 @@ def limit_from(header):
 def spec_figure(spec_text):
     m = re.search(r"The core is ([\d,]+) B", spec_text)
     return int(m.group(1).replace(",", ""))
+
+
+def resolved_figure(spec_text):
+    m = re.search(r"A genre's copy is ([\d,]+) B", spec_text)
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def resolved_verdict(size, spec):
+    """(ok, lines) for a ResolvedGenre of `size` bytes, against §20's figure (None: §20 states none)."""
+    lines = [
+        f"sizeof(ResolvedGenre) {size:,} B on ARM, one per Generator instance, outside its block"
+    ]
+    if size != spec:
+        lines.append(
+            f"FAIL: spec §20 says {'nothing' if spec is None else f'{spec:,} B'}: update spec §20's sentence "
+            '"A genre\'s copy is N B"'
+        )
+        return False, lines
+    return True, lines
 
 
 def measure(repo=REPO):
@@ -104,8 +125,11 @@ def main():
         sizes["generatorSize"], limit_from(read(HEADER)), spec_figure(read(SPEC))
     )
     lines.insert(1, f"sizeof(PartSpec) {sizes['partSpecSize']:,} B on ARM")
-    print("\n".join(lines))
-    return 0 if ok else 1
+    copy_ok, copy_lines = resolved_verdict(
+        sizes["resolvedGenreSize"], resolved_figure(read(SPEC))
+    )
+    print("\n".join(lines + copy_lines))
+    return 0 if ok and copy_ok else 1
 
 
 if __name__ == "__main__":

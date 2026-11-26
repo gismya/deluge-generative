@@ -1,5 +1,5 @@
 # Regenerate and the transition lifecycle (#115, spec §9.7, §12.9, §12.10, §13.6) over the sysex test port: the
-# Perform menu's REGENERATE and GENRE (= REGEN), the three-way confirm, each style while playing, a second Regenerate
+# Perform menu's REGENERATE and GENRE (= REGEN), the Regenerate page's TRANSITION and GO, each style while playing, a second Regenerate
 # while Queued and while Committed, CANCEL CHANGE, BACK during a preload, a confirm refused with QUEUE FULL during
 # one, what's refused while a transition is pending, a stop committing one, a Regenerate confirmed while stopped
 # (PLAY waits for its preload, PLAY again cancels the wait, a cancelled preload starts the roster that plays), and the
@@ -29,6 +29,7 @@
 # covers: src/deluge/generative/firmware/adapter_timing.cpp src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/gui/views/perform_view_screen.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -38,13 +39,14 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- REGENERATE → BUILD INTO A DROP (the default) ----
+# ---- REGENERATE → GO: a Drop (the default), SELECT, SELECT ----
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0 variants=1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -73,14 +75,16 @@ wait 200
 encoder 2 1
 expect event gen_tempo refused
 
-# ---- A second Regenerate while Queued replaces the first: HARD CUT AT PHRASE ----
+# ---- A second Regenerate while Queued replaces the first: CUT ----
 include perform_transition_menu.txt
 encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -109,7 +113,7 @@ expect event gen_fill_press value=0
 expect event gen_fill entry=-1 step=
 expect event gen_fill_notes kick=0 pitched=0
 
-# ---- FADE THROUGH: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
+# ---- FADE: during Committed a second Regenerate is refused (so it is during Retiring: one rule) ----
 # First the Drums part takes a new sound on its line, so it has a previous one, which the start step forgets (spec
 # §12.9)
 include perform_new_sound_drums.txt
@@ -120,8 +124,10 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -130,7 +136,7 @@ expect event gen_transition_preload done within=15
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=40
 expect event gen_section OUTRO within=5
-# GENRE ▸ TECHNO ▸ ACID (= REGEN): the same confirm. GENRE opens on the playing genre's row and submenu.
+# GENRE ▸ TECHNO ▸ ACID (= REGEN): the same page, titled REGENERATE. GENRE opens on the playing genre's row and submenu.
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -143,7 +149,8 @@ wait 200
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -165,7 +172,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -187,7 +195,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -209,7 +218,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -224,7 +234,8 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -249,7 +260,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -263,7 +275,10 @@ button PLAY up
 expect playing=false
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
-expect event gen_transition phase=idle within=10
+# Stopped, an outgoing Output still sounding is freed at its cap, a phrase of Acid techno (8 bars, at most 15.4 s at
+# 125 BPM; spec §12.9). GEN Impact Wash's echo (feedback 24: stock keeps it for 110 repeats) holds the FX Kit there
+# when the piece drew it and its Impact played (#505)
+expect event gen_transition phase=idle within=20
 button PLAY down
 wait 50
 button PLAY up
@@ -282,7 +297,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -308,7 +324,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -324,7 +341,9 @@ expect playing=false
 expect event /gen_commit_song tempo=(?P=tempo) swing=(?P=swing) interval=(?P=interval) key=(?P=key) mode_notes=(?P=mode_notes)$/
 expect event gen_transition start stopped
 expect event gen_outputs_freed within=30
-expect event gen_transition phase=idle within=10
+# At most the cap, as after the first stop's commit above. The piece the Drop above started drew GEN Impact Wash on the
+# Deluge (#505), and its Impact played at that Drop
+expect event gen_transition phase=idle within=20
 # SHIFT + NEW SOUND on Drums: the new roster has no previous sound (result=3, NO PREVIOUS SOUND)
 include perform_previous_sound_drums.txt
 expect event gen_press sound part=0 previous=1 result=3
@@ -348,7 +367,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -376,7 +396,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -404,7 +425,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -434,7 +456,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

@@ -6,7 +6,7 @@
 # transport stopped, the current clip a synth or kit clip.
 #
 # Menus remember their last row, so each row is chosen from the top (encoder 3 -5 first). With no transition to
-# cancel, the rows are GENRE, REGENERATE, KEY / SCALE, GLIDE, SEED + TAKES. gen_menu PERFORM|KEY_SCALE:
+# cancel, the rows are GENRE, REGENERATE, VARIANTS (Techno has sets, #531), KEY / SCALE, GLIDE, SEED + TAKES. gen_menu PERFORM|KEY_SCALE:
 # a menu opened. gen_key_set root= scale= stopped|queued|refused: the editor set the key (stopped: the Recipe's at
 # once). gen_key root= scale= phrase_line=yes|no: a key change landed. gen_scale_led blink|off. gen_glide <n>: the
 # Glide setting (0 Instant .. 5 1 phrase). gen_rings macros ok|stale: the knob rings show the macros' centres.
@@ -33,7 +33,7 @@ button SELECT_ENC up
 expect event gen_menu PERFORM
 expect ui=sound_editor
 encoder 3 -20
-encoder 3 2
+encoder 3 3
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -198,7 +198,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 3
+encoder 3 4
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -253,7 +253,7 @@ wait 50
 button SELECT_ENC up
 expect event gen_menu PERFORM
 encoder 3 -20
-encoder 3 4
+encoder 3 5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

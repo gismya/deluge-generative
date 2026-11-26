@@ -239,15 +239,26 @@ constexpr bool mayPlay(const PartSpec& spec, Gates gates, Lane rollLane, RollSta
 	return maySound(spec, gates, test) || rollsIn(spec, rollLane, roll);
 }
 
+/// The mode a part yielding by `yield` plays in on a step of `arc` (spec §5.6): None in a Build, when it yields to
+/// no one, or when the part it yields to doesn't sound there (bit p of `sounding`: part p sounds by the Arc's rules
+/// alone). The Generator (updateSilent()) and the Arc plan (ArcPlanner::advance()) both ask it.
+constexpr YieldMode yieldOn(const YieldSpec& yield, const Arc& arc, uint8_t sounding) {
+	if (yield.part < 0 || (sounding & partBit(yield.part)) == 0 || arc.section() == SectionKind::Build) {
+		return YieldMode::None;
+	}
+	return arc.inDrop() ? yield.inDrops : yield.outside;
+}
+
 struct PartState {
 	PatternState lanes[kMaxLanesPerPart]; ///< Drums and FX: one per lane. A patterned pitched part uses lanes[0].
 	LineStep line[kMaxPatternSteps];      ///< Loop and Motif parts.
 	uint16_t passes = 0;                  ///< Passes since the line was rolled; keys mutation.
 	/// The Answer playing this bar, or None for the call (spec §5.2). Drawn at its first step.
 	AnswerKind answer = AnswerKind::None;
-	int8_t answerWay = 1; ///< A pitch shift's way: +1 up, -1 down.
-	bool slid = false;    ///< The part's last Loop note slides into the next step.
-	bool newTake = false; ///< A new take landed on this step: every pattern re-picks.
+	int8_t answerWay = 1;   ///< A pitch shift's way: +1 up, -1 down.
+	bool slid = false;      ///< The part's last Loop note slides into the next step.
+	bool newTake = false;   ///< A new take landed on this step: every pattern re-picks.
+	bool loopMuted = false; ///< The part's last struck Loop note was muted: a tie holds only under the same mute.
 	Gates gates;
 	/// While frozen: the first step of the phrase it froze in, whose draws it replays (spec §6.7).
 	int32_t frozenPhraseStart = 0;
@@ -281,6 +292,10 @@ public:
 	/// Regenerate keep them (spec §12.9), and the Part biases `bias` (a Regenerate's live ones, spec §3.3), and a held
 	/// Arc stays held from its first Groove (spec §9.7).
 	void carryOver(const Macros& macros, const PartBiases& bias, bool held);
+	/// Where this instance copies its genre when a Recipe's variant picks patch it (spec §3.6): owned beside the
+	/// instance, outside its block (spec §20), and kept while it plays. Without one, an instance plays every genre as
+	/// written, whatever its picks, so each owner that can play a genre with variant sets gives one.
+	void useResolvedGenre(ResolvedGenre* storage) { resolved_ = storage; }
 
 	/// The step function. Decides nextStep(): drains the steering queue onto it (logging each command where it
 	/// lands), moves the Arc, and buffers the step's events and the note-offs due before the next decision.
@@ -306,7 +321,7 @@ public:
 		while (next(record)) {
 			replay(record);
 		}
-		decideLanded();
+		decideLanded(nullptr);
 	}
 
 	/// Once ended(): moves the queued line-bound commands into the pending list, as the end line's decision would,
@@ -424,6 +439,11 @@ public:
 	[[nodiscard]] int32_t takeWaiting(int32_t part) const { return waitingValue(CommandKind::SetTake, part); }
 	/// A part's octave shift on the last decided step (spec §7.3): 0 for Drums and FX.
 	[[nodiscard]] int32_t octave(int32_t part) const { return recipe_.octave[part]; }
+	/// The variant each set plays, and the variants each allows, as of the last decided step (spec §3.6): the Recipe's,
+	/// moved by the Drops' changes and the live switches landed since the start.
+	[[nodiscard]] const VariantPicks& variants() const { return recipe_.variants; }
+	/// The variants a live switch waits to allow in set `set` from the next Drop (a bit each), or -1.
+	[[nodiscard]] int32_t maskWaiting(int32_t set) const { return waitingValue(CommandKind::SetVariantMask, set); }
 	/// The octave shift waiting for a part's next bar line, or kNoOctaveWaiting.
 	[[nodiscard]] int32_t octaveWaiting(int32_t part) const {
 		const Command* waiting = pending_.waiting({CommandKind::SetOctave, static_cast<uint8_t>(part)});
@@ -460,8 +480,10 @@ public:
 	/// The actions waiting in the pending list, oldest first (QUEUE, the status line, spec §13.5).
 	[[nodiscard]] int32_t queuedCount() const { return pending_.size(); }
 	[[nodiscard]] const Command& queued(int32_t i) const { return pending_.at(i); }
-	/// The step a waiting action lands on: its next line from nextStep().
+	/// The step a waiting action lands on: its next line from nextStep(), or kNoLine for a variant switch with no Drop
+	/// ahead as things stand.
 	[[nodiscard]] int32_t landsAt(const Command& command) const;
+	static constexpr int32_t kNoLine = INT32_MAX;
 	/// Whether the piece is over: the Outro's last step is decided, and nextStep() is the phrase line where the
 	/// transport stops (spec §13.2). Nothing is decided after it. A force waiting to land on that line cancels the
 	/// ending: the piece goes on in the forced Section.
@@ -547,7 +569,8 @@ private:
 	[[nodiscard]] bool barBeforeAutoFill() const;
 	/// Where the phrase's automatic fill starts, in steps from the phrase line, for an entry `beats` long.
 	[[nodiscard]] int32_t autoFillStart(int32_t beats) const;
-	/// Whether section rules or a drop-out keep a part's notes on `lane` (Lane::None for a pitched part) from starting.
+	/// Whether section rules, a drop-out or a Rest yield keep a part's notes on `lane` (Lane::None for a pitched part)
+	/// from starting.
 	[[nodiscard]] bool silenced(const Step& step, int32_t part, Lane lane) const;
 	/// Whether section rules or a Rest keep a part's notes on `lane` from starting.
 	[[nodiscard]] bool keptOut(const Step& step, int32_t part, Lane lane) const {
@@ -698,8 +721,13 @@ private:
 	void noteWaitingMoves();
 	/// One replayed record (decideReplayed()).
 	void replay(const LogRecord& record);
-	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide.
-	void decideLanded();
+	/// The rest of nextStep()'s decision, once its steering has landed: the Arc moves and the parts decide. A live
+	/// variant switch waiting for a Drop lands in it, logged to `log` (nullptr in replay, which applied it already).
+	void decideLanded(SteeringLog* log);
+	/// On a Drop's first step, after the Arc entered it (spec §3.6): a live switch waiting lands (logged to `log`),
+	/// each ChangeAt::Drop set not switched draws its change, and if any pick moved, the genre copy is applied again
+	/// from the constant genre with the new picks, before the step reads it.
+	void dropVariants(SteeringLog* log);
 	/// The start step: every note still sounding ends on it, as on a Section line, except a hit leaning past it, which
 	/// keeps its own note-off (spec §12.9). The new roster plays from here.
 	void endAtStop();
@@ -894,6 +922,10 @@ private:
 	};
 	/// @return false if the Answer silences the step.
 	[[nodiscard]] bool linePitch(int32_t partIndex, const Pattern& pattern, int32_t patternStep, LinePitch& out) const;
+	/// Whether a Loop part's plain note on `step` may tie into the note it still sounds (LoopSpec::tieChance, spec
+	/// §8.6): its draw, and the rules a tie keeps. `slide` and `level` are the new note's, `muted` the part's mute now.
+	[[nodiscard]] bool loopTies(int32_t partIndex, const LoopSpec& loop, bool slide, VelocityLevel level, bool muted,
+	                            const Step& step) const;
 	/// The Chord-graph walk (spec §7.4): on a chord line of a genre with a Chord graph, draws the chord that plays
 	/// from step `step` on. Call it on bar lines only, after the Arc enters the step and a key change lands there.
 	/// @return The playing chord's degree from this step on.
@@ -945,10 +977,11 @@ private:
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
 	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
 	              "lastSpaceMacro_ holds the macro layer in 16 bits");
-	const Genre* genre_ = nullptr; ///< Constant data, never owned.
+	const Genre* genre_ = nullptr; ///< Constant data, or *resolved_: never owned.
+	ResolvedGenre* resolved_ = nullptr;
 
 	int32_t nextStep_ = 0;
-	static constexpr int32_t kNever = INT32_MAX;
+	static constexpr int32_t kNever = kNoLine;
 	/// A landed transition's start step: nothing at or after it is decided. kNever otherwise.
 	int32_t stopAt_ = kNever;
 	Arc arc_;
@@ -962,9 +995,15 @@ private:
 	MuteSolo mutes_;
 	/// Bit p: part p is frozen. Performance state, like mutes (spec §6.7, §13.1).
 	uint8_t frozen_ = 0;
+	/// Variant sets a live switch landed on since the last Drop's changes: that Drop lands their ticks (landMask())
+	/// instead of drawing a change.
+	uint8_t switchedSets_ = 0;
 	/// Bit p: the Arc silences part p on the last decided step (its gate, Break keeps, a drop-out, the cut, the Gap),
 	/// unless the Build roll plays one of its lanes and the cut or the Gap doesn't stop it.
 	uint8_t silent_ = 0;
+	/// Bit p: part p yields on the last decided step (spec §5.6), resting (in silent_ too) or keeping its 8ths.
+	uint8_t yieldRest_ = 0;
+	uint8_t yieldEighths_ = 0;
 	/// The tier 2 punch-ins on (spec §8.9). Performance state, like mutes.
 	PunchIns punch_;
 	/// Each part's last landed SetSound token, kNoSound before any in this piece.
@@ -995,9 +1034,10 @@ private:
 	/// crosses, so a jump leaves the walk where it is.
 	int8_t previousChord_ = -1;
 	uint8_t chordCount_ = 0;
-	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255). Moved only
-	/// on a Drop's chord line.
+	/// A looping graph's loop (spec §7.4): the one playing, counted from 0 at the start (wrapping past 255), and the
+	/// newest drawn, which a return to an earlier loop leaves where it is. Moved only on a Drop's chord line.
 	uint8_t chordLoop_ = 0;
+	uint8_t newestLoop_ = 0;
 	/// The playing chord, voiced on the last bar line (spec §7.4): the walk's degree is its root, `steps[0]`, and its
 	/// Extension level the Recipe's Complexity then, within the genre's floor and ceiling. Chords, Extensions and keys
 	/// change only on bar lines (a key change lands on a phrase line), so every part that plays chord tones reads it
@@ -1032,9 +1072,10 @@ private:
 	uint32_t evicted_ = 0;
 };
 
-static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts,
-              "the pending list holds a key change, a force, a transition, a restart, and a take, a mute, a solo, a "
-              "sound and an octave shift per part at once");
+static_assert(PendingList::kCapacity >= 4 + 5 * kMaxParts + kMaxVariantSets,
+              "the pending list holds a key change, a force, a transition, a restart, a take, a mute, a solo, a sound "
+              "and an octave shift per part, and a switch per variant set at once");
+static_assert(kMaxVariantSets <= 8, "Generator::switchedSets_ holds a bit per set");
 
 /// H18 (spec §20): the state block stays small. Perform allocates two of them on entry.
 static_assert(sizeof(Generator) <= 16 * 1024, "the Generator state block outgrew its budget");

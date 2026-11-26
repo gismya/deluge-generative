@@ -74,6 +74,7 @@ public:
 	/// §17.6).
 	void end(int32_t tick, uint32_t soundingParts) override;
 	int32_t sampleMicros(const Event& noteOn) override;
+	int32_t fallbackMicros(const Event& noteOn) override;
 
 	// Capture's calls (spec §17.6).
 	void cutClip(uint8_t part, int32_t tick) override;

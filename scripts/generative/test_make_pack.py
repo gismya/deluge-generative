@@ -8,10 +8,12 @@ import hashlib
 import io
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -191,6 +193,207 @@ class DerivedTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "0 matches"):
             derived.make(self.tmp)
+
+
+class LeadTrimTest(unittest.TestCase):
+    """A derived sample: a factory WAV with its leading silence cut (Dub sign-off 1's snare)."""
+
+    FRAMES = ((0, 0), (1, -1), (2, -2), (1000, -1000), (2000, -2000), (3000, -3000))
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "SAMPLES"))
+        self.path = os.path.join(self.tmp, "SAMPLES", "A.wav")
+        with wave.open(self.path, "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(44100)
+            w.writeframes(b"".join(struct.pack("<hh", *f) for f in self.FRAMES))
+        with open(self.path, "rb") as f:
+            self.sha = hashlib.sha256(f.read()).hexdigest()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def frames(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            params = (w.getnchannels(), w.getsampwidth(), w.getframerate())
+            raw = w.readframes(w.getnframes())
+        return params, [
+            struct.unpack_from("<hh", raw, i) for i in range(0, len(raw), 4)
+        ]
+
+    def test_cuts_the_lead_and_fades_the_rest_in_keeping_the_format(self):
+        derived = make_pack.Derived("SAMPLES/A.wav", self.sha, make_pack.LeadTrim(3, 2))
+
+        params, frames = self.frames(derived.make(self.tmp))
+
+        self.assertEqual(params, (2, 2, 44100))
+        self.assertEqual(frames, [(0, 0), (1000, -1000), (3000, -3000)])
+
+    def test_refuses_no_edits_and_a_mix_of_sample_and_preset_edits(self):
+        with self.assertRaisesRegex(ValueError, "no edits"):
+            make_pack.Derived("SAMPLES/A.wav", self.sha).make(self.tmp)
+        mixed = make_pack.Derived(
+            "SAMPLES/A.wav",
+            self.sha,
+            make_pack.LeadTrim(1, 0),
+            make_pack.Field("volume", "0"),
+        )
+        with self.assertRaisesRegex(ValueError, "a mix"):
+            mixed.make(self.tmp)
+
+    def test_refuses_a_cut_past_the_end(self):
+        derived = make_pack.Derived("SAMPLES/A.wav", self.sha, make_pack.LeadTrim(6, 0))
+
+        with self.assertRaisesRegex(ValueError, "frames"):
+            derived.make(self.tmp)
+
+    def test_the_pack_snare_starts_on_its_attack(self):
+        derived = make_pack.DERIVED["SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav"]
+        self.assertEqual(derived.source, "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav")
+        trim = derived.edits[0]
+        # The factory file's attack (its first frame over -26 dBFS) is at frame 1464, 33.2 ms: the copy keeps under
+        # 1 ms before it, as the other Dub snares' files do.
+        self.assertTrue(0 < 1464 - trim.frames < 44, trim.frames)
+
+
+class TailFadeTest(unittest.TestCase):
+    """A derived sample: a factory WAV held, then faded out and cut (Psytrance's kicks, #497)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "SAMPLES"))
+        self.path = os.path.join(self.tmp, "SAMPLES", "K.wav")
+        with wave.open(
+            self.path, "wb"
+        ) as w:  # 24-bit stereo at 1 kHz: a frame a millisecond
+            w.setnchannels(2)
+            w.setsampwidth(3)
+            w.setframerate(1000)
+            w.writeframes(
+                b"".join(
+                    (1000).to_bytes(3, "little", signed=True) * 2 for _ in range(20)
+                )
+            )
+        with open(self.path, "rb") as f:
+            self.sha = hashlib.sha256(f.read()).hexdigest()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_holds_then_fades_to_silence_and_cuts_keeping_the_format(self):
+        data = make_pack.Derived(
+            "SAMPLES/K.wav", self.sha, make_pack.TailFade(4, 8)
+        ).make(self.tmp)
+        with wave.open(io.BytesIO(data)) as w:
+            params = (
+                w.getnchannels(),
+                w.getsampwidth(),
+                w.getframerate(),
+                w.getnframes(),
+            )
+            raw = w.readframes(w.getnframes())
+        left = [
+            int.from_bytes(raw[i : i + 3], "little", signed=True)
+            for i in range(0, len(raw), 6)
+        ]
+        self.assertEqual(params, (2, 3, 1000, 8))
+        self.assertEqual(left[:4], [1000] * 4)
+        self.assertEqual(left[4:], [1000, 854, 500, 146])
+
+    def test_refuses_a_fade_past_the_end(self):
+        derived = make_pack.Derived(
+            "SAMPLES/K.wav", self.sha, make_pack.TailFade(10, 30)
+        )
+        with self.assertRaisesRegex(ValueError, "frames"):
+            derived.make(self.tmp)
+
+    def test_the_pack_psy_kicks_are_20_db_down_before_the_bass_speaks(self):
+        """The committed copies, measured: from 115 ms on, every 5 ms window is 20 dB under the loudest, and nothing
+        sounds past 130 ms (the bass's first 16th starts at 105 ms at 143 BPM). It reads the left channel only: the
+        TailFade that makes them applies to every channel alike."""
+        for name in ("Bonus01", "Radar", "Silence"):
+            path = f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav"
+            self.assertEqual(
+                make_pack.DERIVED[path].source,
+                f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav",
+            )
+            with wave.open(os.path.join(make_pack.PACK, path)) as w:
+                channels, width, rate = (
+                    w.getnchannels(),
+                    w.getsampwidth(),
+                    w.getframerate(),
+                )
+                raw = w.readframes(w.getnframes())
+            frame = channels * width
+            left = [
+                int.from_bytes(raw[i : i + width], "little", signed=True)
+                for i in range(0, len(raw), frame)
+            ]
+            step = rate * 5 // 1000
+            power = [
+                sum(v * v for v in left[i : i + step]) / step
+                for i in range(0, len(left) - step + 1, step)
+            ]
+            loudest = max(power)
+            for k, p in enumerate(power):
+                if k * 5 >= 115:
+                    self.assertLess(p, loudest / 100, f"{name} at {k * 5} ms")
+            self.assertLessEqual(len(left), rate * 130 // 1000 + 1, name)
+
+
+class DelayFeedbackTest(unittest.TestCase):
+    """No pack preset saves delay feedback of 25 or more: each repeat's gain is the menu value / 25, and at 25 and over
+    the Deluge's delay never abandons in Perform (spec §11.4), so an echo plays on for good (GEN Dub Impact Crack at
+    26, the Dub sign-off)."""
+
+    def test_reads_every_delay_feedback_in_menu_units(self):
+        xml = (
+            f"<sound><defaultParams><delayFeedback>{make_pack.knob(20)}</delayFeedback></defaultParams>"
+            f"<kit><delayFeedback>{make_pack.knob(26)}</delayFeedback></kit></sound>"
+        )
+        self.assertEqual(make_pack.delay_feedbacks(xml), [20, 26])
+
+    def test_reads_a_kits_delay_attribute(self):
+        xml = f'<kit><delay pingPong="1" feedback="{make_pack.knob(26)}" rate="0x00000000"/></kit>'
+        self.assertEqual(make_pack.delay_feedbacks(xml), [26])
+        self.assertTrue(make_pack.runaway_delay(xml))
+
+    def test_flags_a_feedback_of_25_or_more(self):
+        for value, runaway in (
+            (0, False),
+            (24, False),
+            (25, True),
+            (26, True),
+            (50, True),
+        ):
+            xml = (
+                f"<sound><delayFeedback>{make_pack.knob(value)}</delayFeedback></sound>"
+            )
+            self.assertEqual(make_pack.runaway_delay(xml), runaway, value)
+
+    def test_no_generated_preset_saves_a_runaway_delay(self):
+        for rel, make in make_pack.PRESETS.items():
+            if rel.endswith(".XML"):
+                data = make()
+                self.assertFalse(
+                    make_pack.runaway_delay(
+                        data if isinstance(data, str) else data.decode()
+                    ),
+                    rel,
+                )
+
+    def test_no_preset_in_the_pack_saves_a_runaway_delay(self):
+        for root, _, files in os.walk(make_pack.PACK):
+            for name in files:
+                if name.upper().endswith(".XML") and not name.startswith("._"):
+                    with open(
+                        os.path.join(root, name), encoding="utf-8", errors="replace"
+                    ) as f:
+                        self.assertFalse(
+                            make_pack.runaway_delay(f.read()), os.path.join(root, name)
+                        )
 
 
 if __name__ == "__main__":

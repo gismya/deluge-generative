@@ -24,6 +24,7 @@
 #include "generative/firmware/retirements.h"
 #include "generative/firmware/sound_controls.h"
 #include "generative/perform/one_shot.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/views/view.h"
 #include "io/midi/midi_follow.h"
 #include "io/midi/test_port.h"
@@ -320,13 +321,9 @@ bool plays(const PartSpec& part, Lane lane) {
 	return laneIndexOf(part, lane) >= 0;
 }
 
-/// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
-/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
-/// `rangesOut`.
-Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
-	Song* song = build.song;
-	ParamManagerForTimeline paramManager;
-	Error error = paramManager.setupWithPatching();
+/// A new sample drum with its params set up in `paramManager`, for a Kit row to load into.
+Error newSampleDrum(ParamManagerForTimeline& paramManager, SoundDrum** out) {
+	const Error error = paramManager.setupWithPatching();
 	if (error != Error::NONE) {
 		return error;
 	}
@@ -336,6 +333,21 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	}
 	Sound::initParams(&paramManager);
 	drum->setupAsSample(&paramManager);
+	*out = drum;
+	return Error::NONE;
+}
+
+/// Builds one Kit row: a sample drum, or for an FX lane with no sample a synth drum from a pack preset. The drum is
+/// added to the Kit with its ParamManager backed up in the song. An FX lane's synth drum's control ranges go to
+/// `rangesOut`.
+Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** rowOut, ControlRanges* rangesOut) {
+	Song* song = build.song;
+	ParamManagerForTimeline paramManager;
+	SoundDrum* drum = nullptr;
+	Error error = newSampleDrum(paramManager, &drum);
+	if (error != Error::NONE) {
+		return error;
+	}
 
 	RowLoader loader(song, drum);
 	bool played = plays(part, lane);
@@ -405,6 +417,43 @@ Error buildRow(Build& build, Kit* kit, const PartSpec& part, Lane lane, Drum** r
 	return Error::NONE;
 }
 
+/// Adds the FX Kit's fallback Riser row (spec §9.5, §10.5) when its Riser row plays a sample: the longest pack short
+/// Riser shorter than it that the card has, which the driver plays in a Build the drawn one is longer than. With none
+/// on the card it adds no row: the driver then plays no Riser in such a Build.
+Error buildFallbackRiser(Build& build, Kit* kit, const PartSpec& part, PartOutput* out) {
+	const int32_t drawn = sampleRowMicros(out->drums[laneRow(Lane::Riser)]);
+	const perform::PackRiser* fallback = perform::fallbackFor(drawn);
+	if (fallback == nullptr || !plays(part, Lane::Riser) || previewBuild()) {
+		return Error::NONE;
+	}
+	Song* song = build.song;
+	ParamManagerForTimeline paramManager;
+	SoundDrum* drum = nullptr;
+	Error error = newSampleDrum(paramManager, &drum);
+	if (error != Error::NONE) {
+		return error;
+	}
+	// The longest shorter one the card has: kPackRisers is longest first.
+	RowLoader loader(song, drum);
+	const perform::PackRiser* end = std::end(perform::kPackRisers);
+	while (fallback != end && loader.loadSample(fallback->path) != LoadOutcome::Loaded) {
+		fallback++;
+	}
+	if (fallback == end) {
+		deleteLooseDrum(song, drum);
+		TEST_EVENT("gen_riser_fallback none part=%s", part.name);
+		return Error::NONE; // no fallback: a card without the pack
+	}
+	applySyncDefaults(drum, song);
+	applySoundSettings(*drum, paramManager, laneSoundSettings(part, Lane::Riser), *song);
+	song->backUpParamManager(drum, nullptr, &paramManager, true);
+	kit->addDrum(drum); // the Kit owns it from here
+	drum->drumName = "RISER FALLBACK";
+	out->drums[perform::kRiserFallbackRow] = drum;
+	TEST_EVENT("gen_riser_fallback loaded part=%s path=%s", part.name, fallback->path);
+	return Error::NONE;
+}
+
 /// Assembles a Kit with one sound per lane (spec §10.2, §10.4): a row for every lane of its kind in the fixed order,
 /// so laneRow() holds. Lanes the genre doesn't play, or with nothing loadable, are silent sample rows.
 Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
@@ -430,6 +479,12 @@ Error buildKit(Build& build, const PartSpec& part, PartOutput* out) {
 	for (int32_t row = 0; row < kitRows(fx) && error == Error::NONE; row++) {
 		error = buildRow(build, kit, part, laneAtRow(fx, row), &out->drums[row], fx ? &out->ranges[row] : nullptr);
 		// A row's loads (its fallback chain included) are one chunk; then the runner job yields (spec §12.10).
+		if (error == Error::NONE && build.chunks.boundary()) {
+			error = Error::ABORTED_BY_USER;
+		}
+	}
+	if (fx && error == Error::NONE) {
+		error = buildFallbackRiser(build, kit, part, out);
 		if (error == Error::NONE && build.chunks.boundary()) {
 			error = Error::ABORTED_BY_USER;
 		}
@@ -527,7 +582,8 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	const int32_t presetLevel = synth->paramFinalValues[kPostFxVolume];
 	const int32_t savedTranspose = synth->transpose;
 #endif
-	applySoundSettings(*synth, out->clip->paramManager, partSoundSettings(part), *song);
+	const SoundSettings settings = partSoundSettings(part, load.volume);
+	applySoundSettings(*synth, out->clip->paramManager, settings, *song);
 #if ENABLE_SYSEX_TEST
 	if (part.delay.on) {
 		reportDelay(synth->delay, SoundControls::delayFeedback(out->clip->paramManager, false), part.name, "-");
@@ -539,7 +595,8 @@ Error loadSynth(Build& build, int32_t partIndex, const PartSpec& part, PartOutpu
 	}
 	const int32_t playedLevel = synth->paramFinalValues[kPostFxVolume];
 	if (!previewBuild()) {
-		TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name, static_cast<int>(part.volume),
+		TEST_EVENT("gen_sound_level %s volume=%d %s played=%ld preset=%ld", part.name,
+		           static_cast<int>(settings.volume),
 		           playedLevel < presetLevel   ? "lower"
 		           : playedLevel > presetLevel ? "higher"
 		                                       : "same",

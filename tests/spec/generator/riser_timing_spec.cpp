@@ -34,6 +34,7 @@ double tickMicros(int32_t tempo) {
 struct RiserSink final : perform::NoteSink {
 	const perform::PerformDriver* driver = nullptr;
 	int32_t riserMicros = 0; ///< The Riser's sample length; 0 for a synth Riser.
+	int32_t fallback = 0;    ///< The fallback Riser's length; 0 for none.
 	int32_t startTempo = 0;
 	int32_t base = 0;
 	int32_t outgoingBase = 0;
@@ -55,7 +56,13 @@ struct RiserSink final : perform::NoteSink {
 		}
 	}
 	bool tempoFollowsMaster() override { return master; }
-	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
+	int32_t sampleMicros(const Event& noteOn) override {
+		if (noteOn.lane != Lane::Riser) {
+			return 0;
+		}
+		return noteOn.pitch == perform::kRiserFallbackPitch ? fallback : riserMicros;
+	}
+	int32_t fallbackMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? fallback : 0; }
 
 	[[nodiscard]] int32_t tempoAt(int32_t tick) const {
 		int32_t tempo = startTempo;
@@ -102,7 +109,7 @@ constexpr Command kForceGroove = {CommandKind::ForceSection, static_cast<uint8_t
 /// Techno from its first Groove at `tempo`, with a Build forced on step 1 (unless `forceBuild` is false) and a Riser
 /// of `riserMicros`.
 struct Piece : StepwisePiece<RiserSink> {
-	std::unique_ptr<Generator> incoming = std::make_unique<Generator>();
+	std::unique_ptr<harness::Instance> incoming = std::make_unique<harness::Instance>();
 
 	Piece(const Genre& genre, int32_t tempo, int32_t riserMicros, bool forceBuild = true)
 	    : StepwisePiece(startOf(genre, tempo)) {
@@ -259,14 +266,56 @@ describe riser_timing("Riser timing", $ {
 		expectEndsOnDrop(q.sink, q.drop().at, tickMicros(12500));
 	});
 
-	it("starts on the Build's first step when it is longer than the Build", _ {
-		Piece p(BuildOf<8>::genre, 12500, 40 * kSeconds);
+	it("plays the fallback, ending on the Drop, when the drawn sample is longer than the Build (spec §9.5)", _ {
+		for (int32_t tempo : {12500, 13500}) {
+			// A 4-bar Build is 7.1 to 7.7 s: an 8 s Riser overshoots it, the 6 s fallback fits.
+			Piece p(BuildOf<4>::genre, tempo, 8 * kSeconds);
+			p.sink.fallback = 6 * kSeconds;
+			p.runBars(32);
+			std::vector<Played> ons = p.sink.riser(EventKind::NoteOn);
+			expect(ons.size()).to_equal(1U);
+			if (!ons.empty()) {
+				expect(static_cast<int32_t>(ons[0].event.pitch)).to_equal(perform::kRiserFallbackPitch);
+				expect(ons[0].at).to_be_greater_than(p.build().at);
+				expect(std::abs(p.sink.micros(ons[0].at, p.drop().at) - 6 * kSeconds)).to_be_less_than(tickMicros(tempo));
+			}
+		}
+	});
+
+	it("plays its own sample when it fits, though a fallback is loaded", _ {
+		Piece p(BuildOf<8>::genre, 12500, 8 * kSeconds);
+		p.sink.fallback = 6 * kSeconds;
 		p.runBars(48);
 		std::vector<Played> ons = p.sink.riser(EventKind::NoteOn);
 		expect(ons.size()).to_equal(1U);
 		if (!ons.empty()) {
-			expect(ons[0].at).to_equal(p.build().at);
+			expect(static_cast<int32_t>(ons[0].event.pitch)).to_equal(0);
 		}
+		expectEndsOnDrop(p.sink, p.drop().at, tickMicros(12500));
+	});
+
+	it("plays no Riser when neither its sample nor the fallback fits the Build, or it has no fallback", _ {
+		for (int32_t fallback : {0, 20 * kSeconds}) {
+			Piece p(BuildOf<8>::genre, 12500, 40 * kSeconds);
+			p.sink.fallback = fallback;
+			p.runBars(48);
+			expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
+		}
+	});
+
+	it("picks by the time planned to the Drop: the drawn sample, the fallback or none, with no draw", _ {
+		const auto at125 = [](int32_t) { return 12500; };
+		const int32_t bar = 4 * kStepsPerBar / 4 * perform::stepMicros(12500); // 1.92 s
+		const int32_t drop = 4 * kBarTicks;                                    // 4 bars: 7.68 s
+		expect(static_cast<int32_t>(perform::plannedMicros(0, drop, at125))).to_equal(4 * bar);
+		expect(perform::pickRiser(0, drop, 4 * bar, 0, at125) == perform::RiserPick::Drawn).to_be_true();
+		expect(perform::pickRiser(0, drop, 4 * bar + 1, 3 * bar, at125) == perform::RiserPick::Fallback).to_be_true();
+		expect(perform::pickRiser(0, drop, 4 * bar + 1, 0, at125) == perform::RiserPick::None).to_be_true();
+		expect(perform::pickRiser(0, drop, 5 * bar, 4 * bar + 1, at125) == perform::RiserPick::None).to_be_true();
+		// The fallback for each pack length: the longest shorter one.
+		expect(std::string(perform::fallbackFor(8 * kSeconds)->path)).to_equal(std::string("SAMPLES/FX/Riser/GEN Riser 2.wav"));
+		expect(std::string(perform::fallbackFor(6 * kSeconds)->path)).to_equal(std::string("SAMPLES/FX/Riser/GEN Riser 3.wav"));
+		expect(perform::fallbackFor(2 * kSeconds) == nullptr).to_be_true();
 	});
 
 	it("never sounds when a forced Groove cuts the Build before it starts", _ {
@@ -311,6 +360,25 @@ describe riser_timing("Riser timing", $ {
 		bool swapped = false;
 		for (const Played& played : p.sink.played) {
 			swapped = swapped || (played.event.kind == EventKind::Sound && played.event.part == fx);
+		}
+		expect(swapped).to_be_true();
+		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();
+	});
+
+	it("never sounds when its part's sound swaps while it waits as the fallback: the swap ends the part's notes", _ {
+		// A 16-bar Build (30.7 s) is shorter than the 40 s sample: the 4 s fallback waits until bar 14, and the swap
+		// lands on bar 8's phrase line.
+		Piece p(BuildOf<16>::genre, 12500, 40 * kSeconds);
+		p.sink.fallback = 4 * kSeconds;
+		p.reachBuild();
+		const int32_t buildAt = p.build().at;
+		p.runToTick(buildAt + 2 * kStepsPerBar * kTicksPerStep);
+		const auto fx = static_cast<uint8_t>(partCount(BuildOf<16>::genre) - 1);
+		p.push({CommandKind::SetSound, fx, 1});
+		p.runBars(32);
+		bool swapped = false;
+		for (const Played& played : p.sink.played) {
+			swapped = swapped || (played.event.kind == EventKind::Sound && played.event.part == fx && played.at < p.drop().at);
 		}
 		expect(swapped).to_be_true();
 		expect(p.sink.riser(EventKind::NoteOn).empty()).to_be_true();

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <generativeRecipe
 	genre="techno-acid"
-	genreVersion="4"
+	genreVersion="5"
 	tempo="12345"
 	swing="0"
 	swingInterval="0"
@@ -26,4 +26,13 @@
 	<lane
 		name="kick"
 		sound="SAMPLES/DRUMS/Kick/Gone Kick.wav" />
+	<variant
+		set="drums"
+		pick="offbeat" />
+	<variant
+		set="acid"
+		pick="classic" />
+	<variant
+		set="build"
+		pick="roll" />
 </generativeRecipe>

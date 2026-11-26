@@ -18,9 +18,10 @@ differs from what it would write, and any file here it doesn't write.
 | `SYNTHS/GENERATIVE/FX/GEN Riser.XML` | Riser lane synth fallback: two saws and noise swelling over seconds, the filter and pitch lifting |
 | `SYNTHS/GENERATIVE/FX/GEN Fall.XML` | Fall lane synth fallback: a bright hit whose pitch and filter sink as it decays |
 | `SYNTHS/GENERATIVE/FX/GEN Impact.XML` | Impact lane synth fallback: a sine boom with a fast pitch drop and a noise crack |
-| `SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML` | Impact for Techno and Psytrance: the factory `808 Kick sustained.wav` on both oscillators, played once through (the preset only: the sample is the factory card's) |
+| `SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML` | Impact for Techno, Psytrance and House: the factory `808 Kick sustained.wav` on both oscillators, played once through (the preset only: the sample is the factory card's) |
+| `SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML` | Acid techno's Impact: `GEN Impact Boom` 1.6 dB quieter, so its Drop doesn't clip (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact Wash.XML` | Impact for Techno: white noise and a quiet square and detuned saw through a swept resonant low-pass, a short splash into reverb and a dotted 8th ping-pong echo |
-| `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the factory `DDD1 Snare wet.wav` and `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
+| `SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML` | Dub's Impact: the pack's `GEN DDD1 Snare wet.wav` (below) and the factory `808 Rim.wav` thrown into a dotted 8th ping-pong echo (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Impact KickCrash Dub.XML` | Dub's Impact: the factory `808 Kick.wav` and `808 Cymbal.wav` layered into some reverb (the preset only) |
 | `SYNTHS/GENERATIVE/FX/GEN Siren.XML` | Dub's Siren: a square and a saw a fifth apart, a triangle LFO sweeping the pitch, a long release, velocity to volume |
 | `SAMPLES/FX/Riser/GEN Riser 1.wav` | 8 s noise riser, a resonant band-pass sweeping up, peaking at the file end |
@@ -38,7 +39,8 @@ differs from what it would write, and any file here it doesn't write.
 | `SYNTHS/GENERATIVE/GEN Ambient Bass 2.XML` | Ambient's Bass, felt pulse: two squares a few cents apart into a 12 dB low-pass blooming over half a second, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Ambient Bass 3.XML` | Ambient's Bass, folded sine: a sine with a quiet saw an octave up through the wavefolder, velocity to volume and fold |
 | `SYNTHS/GENERATIVE/GEN Ambient Bass 4.XML` | Ambient's Bass, tape bass: a saw and a triangle into a dark 24 dB low-pass with a filter bloom, a little noise and a slow pitch wobble, velocity to volume |
-| `SYNTHS/GENERATIVE/GEN Psy Bass.XML` | Psytrance's Bass: a saw and a square an octave down into a resonant low-pass, a filter envelope, sustain 0, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Psy Bass.XML` | Psytrance's Bass before Classic sign-off 1: a saw and a square an octave down into a resonant low-pass, a filter envelope, sustain 0, velocity to volume |
+| `SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML` | Psytrance's Bass (#497): a sine sub and a saw top at the note, a 70 ms pluck, a fast filter envelope, a 30 Hz high-pass, light ducking under the Kick, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Dub Sub.XML` | Dub's Bass: a sine with a quiet triangle, a soft attack, a quick release, velocity to volume |
 | `SYNTHS/GENERATIVE/GEN Melodica.XML` | Dub's Melodica: a square reed and a detuned saw, a breath of noise, a soft attack, velocity to volume and filter |
 | `SYNTHS/GENERATIVE/GEN House Stab.XML` | House's Stab: a plain saw and square at one pitch, no portamento, sustain 0, a filter pluck, velocity to volume and filter |
@@ -55,7 +57,7 @@ differs from what it would write, and any file here it doesn't write.
 
 ## Derived from the factory presets
 
-Each file below is a copy of a preset from the Deluge's factory card content by Synthstrom Audible, with a few edits.
+Each file below is a copy of a preset or sample from the Deluge's factory card content by Synthstrom Audible, with a few edits.
 They are derived from that factory content and are distributed on its terms, not under CC0. `make_pack.py` writes them
 from the factory file (read from the card's files, checked by its SHA-256) and the edits recorded in its `DERIVED`
 table, never by hand; `make_pack.py --check` fails while a `DERIVED` file has no row here naming its source. To add
@@ -67,6 +69,11 @@ one: a `DERIVED` entry, a row here, then run the script.
 | `SYNTHS/GENERATIVE/GEN Short Sharp Dry.XML` | `SYNTHS/082 Short Sharp Delay.XML` | delay feedback 0, volume 34 | Dub techno's Stab (#322) |
 | `SYNTHS/GENERATIVE/GEN Kyoto Phono Dry.XML` | `SYNTHS/072 Kyoto Phono.XML` | delay feedback 0, volume 28 | Dub techno's Stab (#322) |
 | `SYNTHS/GENERATIVE/GEN Dark FM Pad High.XML` | `SYNTHS/126 Dark FM Pad.XML` | every oscillator and modulator an octave up | Dub techno's Pad, an octave over 126 (#120) |
+| `SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav` | `SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav` | its first 1,440 frames (32.7 ms, near silence before the attack) cut, the rest faded in over 22 frames | Dub's Snare swap and its Impact crack, so the backbeat snare doesn't flam behind the kick and hats (Dub sign-off 1) |
+| `SYNTHS/GENERATIVE/GEN FM Lead Soft.XML` | `SYNTHS/057 FM Lead.XML` | modulator 1 an octave lower (+12), low-pass 18 | Psytrance's Lead, 057 without its shrill top (#497) |
+| `SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-Bonus01.wav` | `SAMPLES/Artists/Dean Daughters/Psy/KICK-Bonus01.wav` | held 60 ms, faded out by 130 ms (raised cosine) and cut there | Psytrance's Psy-kit kick, its tail gone before the rolling bass's first 16th (#497) |
+| `SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-Radar.wav` | `SAMPLES/Artists/Dean Daughters/Psy/KICK-Radar.wav` | held 60 ms, faded out by 130 ms (raised cosine) and cut there | Psytrance's Psy-kit kick, its tail gone before the rolling bass's first 16th (#497) |
+| `SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-Silence.wav` | `SAMPLES/Artists/Dean Daughters/Psy/KICK-Silence.wav` | held 60 ms, faded out by 130 ms (raised cosine) and cut there | Psytrance's Psy-kit kick, its tail gone before the rolling bass's first 16th (#497) |
 
 Every pack synth preset must respond to velocity (spec §10.1). Check with
 `python3 scripts/generative/check_pack_velocity.py`.

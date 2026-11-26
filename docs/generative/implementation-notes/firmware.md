@@ -58,6 +58,24 @@ otherwise.
   (each control's first param's range, 0 if it binds none). An event line is 120 bytes with its timestamp, so keep it
   short: a param count or lane names overflowed it.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
+- A sound-control target whose stock stage switches on at "> 0" can step the level the moment a "+"-only control
+  (Drive, Thin) leaves home. `LOCAL_FOLD` did (#516): `voice.cpp` runs `foldBufferPolyApproximation` from any fold
+  above 0, starting at `FOLD_MIN`, and the folder's gain there is −1 to −34 dB depending on input level. So every
+  synth part dropped 1.5–5 dB (about 4 on most) when a Build took Energy past home, and the harness can't see it (it
+  doesn't model sound). Another gate of this shape: `Sound` runs `doHPF` once `LOCAL_HPF_FREQ` leaves its minimum
+  (`processing/sound/sound.cpp:2537`), and Thin crosses it on subtractive and Ringmod parts (`kThin` has no
+  `Needs::HpfInUse`); its level step isn't measured. Before adding a target, measure the level at its first step with
+  a delugemu capture pair (`gen_emu.py capture`, the part alone, with and without the target).
+- A Kit's affect-entire LPF moves further per menu unit than a Sound's. `GlobalEffectable` takes its unpatched exp
+  params through `cableToExpParamShortcut` (>> 2) into `getExp` (an octave per 2^26): 16/50 of an octave a unit. A
+  Sound's exp params mostly move the same (`paramRanges`' default 2^30), but its `LOCAL_LPF_FREQ` has 1.4 × 2^29,
+  0.22 an octave, and its delay rate 2^29. So the Kit's LPF and delay rate are the steeper ones; its HPF matches a
+  Sound's. From fully open the Kit LPF's first ~9 units do nothing audible, then a few more bury anything bright.
+  Kit-level Brightness at −20 played a House Break of closed hats alone at −54 dBFS (32 dB down, #524), while the
+  harness, which models no filter, played 8 hats a bar; `gen_emu.py capture`'s silence check caught it (Drums alone:
+  `--mute` every other part). It is −14 now, and `scaledRange(engine, ...)` clamps a widened kit-level range there.
+  Measure a kit-level LPF range on a Break of hats alone. Kit-level Thin (HPF 0..+25) moves 0.32 an octave a unit
+  like a Sound's HPF (0..+20), over a wider range.
 - A lane sample of 2 s or more loads in CUT mode (`perform/one_shot.h`, §10.4), so its note-off stops it: a lane's
   note length is what you hear, not the file's. Before #423 the Fall's 6-tick note cut the 8 s Downers to a beat
   while the rough render, which played every sample out, rendered all 8 s. The render now follows the same rule, so a
@@ -184,3 +202,17 @@ otherwise.
   is no longer the newest want. It used to cancel on any frame mid-build, so a build longer than a frame
   was cancelled and resubmitted forever (`gen_preset_preview cancelled` every ~45 ms). It showed once #488 made the FX
   Kit's Impact pick a pack preset: on a card without the pack, the missing preset's lookup made the build span frames.
+- The FX Kit's fallback Riser (spec §9.5, #551) is a row past the lane rows, `perform::kRiserFallbackRow`, loaded by
+  `buildFallbackRiser()` when the Riser row plays a sample longer than a pack short Riser (`kPackRisers`), so every
+  owner of `buildPerformSong()` gets it: Perform, Compose and Capture. A Riser note-on the driver gave the fallback
+  carries `kRiserFallbackPitch`; route a laned note by `kitRowOf(lane, pitch)`, never `laneRow(lane)` alone. The core's
+  note-off doesn't know which row played, so `OutputSink::playNote()` ends both; Compose's ClipBuilder pairs by lane
+  and writes the note-on's pitch, so its note lands on the fallback's row by itself. The fallback row follows the lane:
+  `SoundControls::mirror_` (a `Mirror`, the row's NoteRow, Sound and ParamManager, plus `outgoingMirror_` for a
+  transition's Throws) shares the Riser lane set's params and homes, and `mirrored()` makes the set's copy on that row
+  for `applyIn()`, `writeNode()`, `writeBase()`, `restoreIn()`, `moveToClip()` and a player's control edit
+  (`mirrorEdit()`). `PerformAdapter::playerEdited()` copies other param edits (`mirrorRiserEdit()`), and the log replay
+  (`paramsOf()`, `loggedParam(..., fallback)`) and the settings tracker (`resolveTarget(..., fallback)`) apply to both
+  rows, a sample path aside. Every FX Kit with a sample Riser longer than a pack short Riser loads the fallback,
+  whatever the piece's Builds: a load that depended on the piece would differ between Perform and Capture's song.
+  `perform_riser_fallback.txt` checks it in delugemu (the 8 s Riser on its card).

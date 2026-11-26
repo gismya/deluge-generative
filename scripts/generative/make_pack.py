@@ -328,6 +328,35 @@ def cable(value):
     return f"0x{(value * 21474836) & 0xFFFFFFFF:08X}"
 
 
+def delay_feedbacks(xml):
+    """Every delay feedback a preset's XML saves, in 0–50 menu units (knob()'s inverse, rounded): a sound's
+    `<delayFeedback>` param and a kit's `<delay ... feedback="...">` attribute."""
+    values = []
+    params = re.findall(r"<delayFeedback>(0x[0-9A-Fa-f]{8})</delayFeedback>", xml)
+    attributes = re.findall(r"<delay\b[^>]*\bfeedback=\"(0x[0-9A-Fa-f]{8})\"", xml)
+    for raw in params + attributes:
+        param = int(raw, 16)
+        param -= 2**32 if param >= 2**31 else 0
+        values.append(round((param + 2**31) / 85899345))
+    return values
+
+
+# Each repeat's gain is the menu value / 25 (dsp/delay/delay.cpp): at 25 or more an echo never dies in Perform, where
+# the firmware's 15/16 clamp doesn't apply (spec §11.4).
+RUNAWAY_DELAY_FEEDBACK = 25
+
+
+def runaway_delay(xml):
+    """Whether a preset saves a delay feedback whose echo never dies in Perform."""
+    return any(value >= RUNAWAY_DELAY_FEEDBACK for value in delay_feedbacks(xml))
+
+
+# The firmware's sidechain envelope rates (attackRateTable[6] * 4, releaseRateTable[12] * 8): attack about 0.5 ms,
+# release about 64 ms at 44.1 kHz, unsynced.
+SIDECHAIN_ATTACK_FAST = 386472
+SIDECHAIN_RELEASE_64_MS = 2976
+
+
 def preset(
     osc1,
     osc2,
@@ -356,13 +385,15 @@ def preset(
     osc1_volume=50,
     delay=None,
     clipping=None,
+    sidechain=None,
 ):
     """A subtractive synth preset. Fields left out take the firmware's defaults when it loads. `lfo1_type`
     and `lfo1_rate` (a knob) set LFO 1, unsynced; left out, LFO 1 keeps its defaults; `lfo2_type` and `lfo2_rate`
     LFO 2 (per voice) the same way. `unison` is (voices, detune, stereo spread); `mod_fx` is (type, rate knob, depth
     knob); `hpf`, `fold` (wavefolder) and `pulse_width` (both oscillators) are knobs, left out at the defaults.
     `delay` is a Delay (its feedback a knob, left out at 0); `clipping` the saturation (`clippingAmount`), left out at
-    none."""
+    none. `sidechain` is the sound's own ducking envelope, (attack, release) as the firmware's rates, unsynced (a
+    cable from `compressor` reads it)."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         "<firmwareVersion>c1.3.0</firmwareVersion>",
@@ -400,6 +431,14 @@ def preset(
             f"\t\t<detune>{detune}</detune>",
             f"\t\t<spread>{spread}</spread>",
             "\t</unison>",
+        ]
+    if sidechain is not None:
+        lines += [
+            "\t<compressor>",
+            "\t\t<syncLevel>0</syncLevel>",
+            f"\t\t<attack>{sidechain[0]}</attack>",
+            f"\t\t<release>{sidechain[1]}</release>",
+            "\t</compressor>",
         ]
     lines.append(f"\t<lpfMode>{lpf_mode}</lpfMode>")
     if mod_fx is not None:
@@ -492,12 +531,13 @@ def sample_preset(
     delay=None,
     clipping=None,
     velocity=8,
+    volume=50,
 ):
     """A preset playing one or two factory samples once through (loopMode 1, ONCE), with an open filter, full
-    sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob full,
-    `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume. Velocity is bipolar
-    about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples stay on the factory
-    card: the pack holds only the preset."""
+    sustain, decay and release (so the Decay sound control never reaches sustain, #483), the volume knob at `volume`
+    (full by default), `clipping` as its saturation (`clippingAmount`) and a velocity cable of `velocity` to volume.
+    Velocity is bipolar about 64, so a stronger cable makes a note over 64 louder than the knob's top. The samples
+    are the factory card's (or a DERIVED copy in the pack): the preset names them."""
     oscillators = []
     for name, path in (("osc1", osc1), ("osc2", osc2)):
         if path is None:
@@ -531,7 +571,7 @@ def sample_preset(
         f"\t\t<oscAVolume>{knob(osc1_volume)}</oscAVolume>",
         f"\t\t<oscBVolume>{knob(osc2_volume if osc2 is not None else 0)}</oscBVolume>",
         f"\t\t<noiseVolume>{knob(0)}</noiseVolume>",
-        f"\t\t<volume>{knob(50)}</volume>",
+        f"\t\t<volume>{knob(volume)}</volume>",
         "\t\t<pan>0x00000000</pan>",
         f"\t\t<lpfFrequency>{knob(50)}</lpfFrequency>",
         f"\t\t<lpfResonance>{knob(0)}</lpfResonance>",
@@ -614,10 +654,21 @@ PRESETS = {
     # the volume knob's top measured in delugemu (Acid techno and Dub, the FX part alone). Saturation
     # (`clippingAmount`) caps a voice at a fixed level, under round 2's boom peak, so it lifts only the wash.
     # The boom: the factory 808 Kick sustained (a clean 1.5 s fall from about 100 Hz to 50 Hz) on both
-    # oscillators, in phase: +6.0 dB.
+    # oscillators, in phase: +6.0 dB. Impact round 3 (owner) took it 3 dB louder again everywhere it plays, by a
+    # velocity cable of 30: +3.0 dB peak (the FX part alone) at an Impact's top velocity, 94; about +1.8 dB at 80.
     "SYNTHS/GENERATIVE/FX/GEN Impact Boom.XML": lambda: sample_preset(
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
         "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        velocity=30,
+    ),
+    # Acid techno's boom: the same at a velocity cable of 18, +1.4 dB over round 2's build (peak, the FX part alone, at
+    # velocity 94; about +0.8 dB at 80). At the others' +3 dB, Acid's Drop mix reached full scale (8 samples clipped,
+    # seed 1, entropy 5), and at 22 (+2.0 dB) still at entropy 3 (2 samples); at 18 its Drops peak at -0.1 to -1.3 dBFS
+    # over four Recipes (impact round 3, delugemu).
+    "SYNTHS/GENERATIVE/FX/GEN Impact Boom Acid.XML": lambda: sample_preset(
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        "SAMPLES/DRUMS/Kick/808 Kick sustained.wav",
+        velocity=18,
     ),
     # The wash: white noise and a quiet square and a detuned saw a fifth over it (+7 st, +37 cents) through the
     # high-pass and an env2-swept resonant 24 dB low-pass, a 0.4 s splash (sustain 0), into a big reverb and a dotted
@@ -646,18 +697,22 @@ PRESETS = {
         delay=Delay(**DOTTED_EIGHTH, feedback=24),
         clipping=4,
     ),
-    # Dub's crack: the factory DDD1 Snare wet and 808 Rim thrown into a dotted 8th analog ping-pong echo (feedback 26:
-    # five or six repeats over about 3 s) and some reverb. Its two oscillators are taken, so a velocity cable of 50
-    # lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about 5.6 dB (peak);
-    # at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level or under.
+    # Dub's crack: the pack's DDD1 Snare wet (its leading silence cut, DERIVED) and the factory 808 Rim thrown into a
+    # dotted 8th analog ping-pong echo and some reverb. Feedback 20: each repeat's gain is the menu value / 25 (0.8,
+    # about -1.9 dB), so the echo dies within about 3 s at 72 BPM. At 25 or more it never dies in Perform (spec §11.4);
+    # its first build's 26 held the echo at -23 to -26 dBFS for 53 repeats (Dub sign-off diagnosis). Its two oscillators
+    # are taken, so a velocity cable of 50 lifts it: velocity is bipolar about 64, so at an Impact's 80-94 it adds about
+    # 5.6 dB (peak); at low Energy, where steering pulls velocity toward 64 or below, it falls back to round 2's level
+    # or under. Impact round 3 (owner) took it 3 dB quieter: the volume knob at 42 (-3.1 dB peak, the FX part alone).
     "SYNTHS/GENERATIVE/FX/GEN Dub Impact Crack.XML": lambda: sample_preset(
-        "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
+        "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav",
         "SAMPLES/DRUMS/Rim/808 Rim.wav",
         osc1_volume=48,
         osc2_volume=44,
         reverb=24,
-        delay=Delay(**DOTTED_EIGHTH, feedback=26),
+        delay=Delay(**DOTTED_EIGHTH, feedback=20),
         velocity=50,
+        volume=42,
     ),
     # Dub's kick and crash: the factory 808 Kick and 808 Cymbal layered, into some reverb; velocity 50 as the crack's
     # (about 5.1 dB, peak).
@@ -687,6 +742,36 @@ PRESETS = {
         osc2_volume=40,
         reverb=0,
         volume=50,
+    ),
+    # Psytrance's rolling bass since Classic sign-off 1 (#313, #497): a sine sub and a saw top, both at the note (the
+    # old preset's square an octave down sat at 19 Hz in D#), each 16th a short pluck: amp decay about 70 ms, sustain
+    # 0, a short release; a fast env2 opening the resonant 24 dB low-pass for the "brrp", a little clipping for its
+    # mids, the high-pass at about 30 Hz. Its own sidechain envelope (attack about 0.5 ms, release 64 ms: back within
+    # the 105 ms 16th at 143 BPM) ducks it a little under the Kick, which sends at full (spec §10.4), while the bass
+    # rests on the beat. Velocity moves its volume a little. No reverb. Set against delugemu captures (Song 3's Drop,
+    # the Bass alone, notes/497.md): its 120 Hz-1 kHz band within 1 dB of the Arp's at 75 % (the old preset sat 3.7 dB
+    # under; with the low-pass at 22 and no clipping this one sat 14.8 under), most of it from the clipping. Release 2:
+    # at 3 the clipped tail of each bar's last 16th rang into the kick's 16th, 5 dB under it; at 2 it is 49 dB under.
+    "SYNTHS/GENERATIVE/GEN Psy Roll Bass.XML": lambda: preset(
+        "sine",
+        "saw",
+        noise=0,
+        lpf=44,
+        resonance=14,
+        env1=(0, 11, 0, 2),
+        env2=(0, 8, 0, 3),
+        cables=[
+            ("velocity", "volume", 20),
+            ("envelope2", "lpfFrequency", 20),
+            ("compressor", "volumePostReverbSend", 7),
+        ],
+        osc1_volume=50,
+        osc2_volume=50,
+        hpf=6,
+        clipping=4,
+        reverb=0,
+        volume=50,
+        sidechain=(SIDECHAIN_ATTACK_FAST, SIDECHAIN_RELEASE_64_MS),
     ),
     # The dub siren (spec §10.5, §18.2): a square and a saw a fifth apart, a triangle LFO sweeping the pitch up and
     # down about twice a second, a slow-ish attack and a long release that rings into its release Throw. Velocity
@@ -977,6 +1062,84 @@ class Transpose:
         return replace_once(pattern, rf"\g<1>{self.semitones}\g<2>", text, what)
 
 
+class LeadTrim:
+    """Cut a WAV's first `frames` frames (its leading silence) and fade what is left in over `fade` frames, against
+    a click; the format (channels, width, rate) stays the source's. 16-bit PCM only. Extra chunks are dropped."""
+
+    binary = True
+
+    def __init__(self, frames, fade):
+        self.frames, self.fade = frames, fade
+
+    def apply(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            channels, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
+            count = w.getnframes()
+            raw = w.readframes(count)
+        if width != 2:
+            raise ValueError(f"{width * 8}-bit samples: LeadTrim reads 16-bit PCM only")
+        if self.frames + self.fade >= count:
+            raise ValueError(
+                f"cutting {self.frames} frames and fading {self.fade} leaves nothing of {count} frames"
+            )
+        samples = list(struct.unpack(f"<{count * channels}h", raw))[
+            self.frames * channels :
+        ]
+        for i in range(self.fade * channels):
+            samples[i] = int(samples[i] * (i // channels) / self.fade)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as w:
+            w.setnchannels(channels)
+            w.setsampwidth(width)
+            w.setframerate(rate)
+            w.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+        return out.getvalue()
+
+
+class TailFade:
+    """Keep a WAV's first `hold_ms`, then fade it out to silence over a raised-cosine to `end_ms` and cut it there;
+    the format (channels, width, rate) stays the source's. 16- and 24-bit PCM. Extra chunks are dropped."""
+
+    binary = True
+
+    def __init__(self, hold_ms, end_ms):
+        self.hold_ms, self.end_ms = hold_ms, end_ms
+
+    def apply(self, data):
+        with wave.open(io.BytesIO(data)) as w:
+            channels, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
+            count = w.getnframes()
+            raw = w.readframes(count)
+        if width not in (2, 3):
+            raise ValueError(
+                f"{width * 8}-bit samples: TailFade reads 16- or 24-bit PCM only"
+            )
+        hold = round(rate * self.hold_ms / 1000)
+        end = round(rate * self.end_ms / 1000)
+        if not 0 < hold < end < count:
+            raise ValueError(
+                f"holding {self.hold_ms} ms and ending at {self.end_ms} ms doesn't fit {count} frames"
+            )
+        out = bytearray()
+        for frame in range(end):
+            gain = (
+                1.0
+                if frame < hold
+                else 0.5 * (1 + math.cos(math.pi * (frame - hold) / (end - hold)))
+            )
+            for c in range(channels):
+                at = (frame * channels + c) * width
+                sample = int.from_bytes(raw[at : at + width], "little", signed=True)
+                out += round(sample * gain).to_bytes(width, "little", signed=True)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as w:
+            w.setnchannels(channels)
+            w.setsampwidth(width)
+            w.setframerate(rate)
+            w.writeframes(bytes(out))
+        return buffer.getvalue()
+
+
 def replace_once(pattern, replacement, text, what):
     new, count = pattern.subn(replacement, text)
     if count != 1:
@@ -1001,6 +1164,19 @@ class Derived:
             raise ValueError(
                 f"{path}: SHA-256 {digest}, the edits were written against {self.sha256}"
             )
+        if not self.edits:
+            raise ValueError(
+                f"{self.source}: no edits, so the pack would ship a plain factory copy"
+            )
+        binary = [getattr(edit, "binary", False) for edit in self.edits]
+        if any(binary) and not all(binary):
+            raise ValueError(
+                f"{self.source}: a mix of sample (binary) and preset (text) edits"
+            )
+        if all(binary):
+            for edit in self.edits:
+                data = edit.apply(data)
+            return data
         text = data.decode("utf-8")
         for edit in self.edits:
             text = edit.apply(text)
@@ -1042,6 +1218,53 @@ DERIVED = {
         Transpose("modulator1", -12),
         Transpose("modulator2", 16),
     ),
+    # Dub's swap snare and its Impact crack (Dub sign-off 1): the factory DDD1 Snare wet with its leading 32.7 ms cut.
+    # The factory file is near silent until its attack at frame 1464 (33.2 ms), so on the backbeat it sounded 33 ms
+    # behind the kick and hats it lands with, a flam with the lazy +2 lean on top (every other Dub snare file starts
+    # within 0.4 ms). 24 frames (0.5 ms) stay before the attack, faded in over 22. A folder of its own, so no lane's
+    # tags reach it: only Dub's swap names it, by its path.
+    "SAMPLES/DRUMS/Snare/Dub/GEN DDD1 Snare wet.wav": Derived(
+        "SAMPLES/DRUMS/Snare/DDD1 Snare wet.wav",
+        "56ad8d3411d31ddd026caade6d1e15e0ac31210ad923932841a0582578e7f15d",
+        LeadTrim(1440, 22),
+    ),
+    # Psytrance's Lead (Classic sign-off 1, #497): 057 FM Lead with its first modulator an octave lower (+12, not +24)
+    # and its low-pass at 18 (was about 24). 057's top notes were shrill: with the modulator at four times the note, a
+    # 1.2 kHz D#6 put its sidebands at about 4-8 kHz, and every pitch's band over 4 kHz sat within 2-4 dB of its whole
+    # level. Halving its Brightness range alone moved that band by under 1 dB; this copy puts it 7.6-8.2 dB under
+    # (delugemu captures, notes/497.md).
+    "SYNTHS/GENERATIVE/GEN FM Lead Soft.XML": Derived(
+        "SYNTHS/057 FM Lead.XML",
+        "842d4f6ccabc77c834f5c60985175db9730335fc215a818cbd1c49e70157cdcb",
+        Transpose("modulator1", 12),
+        Field("lpfFrequency", knob(18)),
+    ),
+    # Psytrance's kicks (Classic sign-off 1, #497): Dean Daughters' Psy set's three, each held for 60 ms and faded out
+    # by 130 ms (a raised cosine), so the tail is 20 dB down by 110-115 ms (195-255 ms in the factory files) and gone
+    # before the rolling bass's first 16th (the e, from 105 ms at 143 BPM) speaks: it sat 2-6 dB under the beat there
+    # and masked the bass. A folder of their own and a tag no factory file holds (PSYKICK-): the Psy kit and
+    # Psytrance's Kick lane list name it. Without the pack the lane list's Deep Sky Kick HQ plays instead.
+    **{
+        f"SAMPLES/DRUMS/Kick/Psy/GEN PSYKICK-{name}.wav": Derived(
+            f"SAMPLES/Artists/Dean Daughters/Psy/KICK-{name}.wav",
+            sha,
+            TailFade(60, 130),
+        )
+        for name, sha in (
+            (
+                "Bonus01",
+                "459f95e312938dcb3dd3755c835e8ba1894bad9922989ef114e49cf8a53fe42c",
+            ),
+            (
+                "Radar",
+                "44e1761f6faa6ab3403b9a1c5baf832c771ade43b0e6213ced0585052e0e9c57",
+            ),
+            (
+                "Silence",
+                "1aaaad60a8199951878401c26af4d314097dcef6ac68a50a15e9df9fdd001326",
+            ),
+        )
+    },
 }
 
 
@@ -1144,7 +1367,7 @@ def main(argv=None):
         except ValueError as e:
             print(e, file=sys.stderr)
             return 1
-        data = to_wav(data) if path.endswith(".wav") else data
+        data = to_wav(data) if path in SAMPLES else data
         target = os.path.normpath(os.path.join(args.pack, path))
         current = None
         if os.path.exists(target):

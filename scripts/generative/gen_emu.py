@@ -37,10 +37,13 @@ capture  the tuning loop's main step: builds the test-port firmware in build-cap
          built before, and nothing builds), boots it, sends the Recipe and seed over the test port as "next recipe"
          lines (seam S7, spec §21.3; from the arguments: genre, Recipe overrides, seed, the same flags as the
          harness's generator_render), so the entry's roll plays them, plays Perform for --seconds and writes the
-         rendered audio to a WAV, then plays it (afplay) unless --no-play. Deterministic: the same arguments give
-         the same WAV. The Recipe isn't in the build, so a new Recipe rebuilds nothing; a source change rebuilds
-         and relinks. --out is a folder (the WAV is named after the arguments, never overwriting one) or a .wav
-         path.
+         rendered audio to a WAV. With --variant, which S7 has no line for yet (#548), it builds a GENERATIVE_CAPTURE
+         firmware in <--build-dir>-variants/ instead (--elf: one of those) and boots a copy of its ELF, written
+         beside the WAV, whose CaptureRecipe holds the Recipe, seed and variants. --play then plays the WAV (afplay);
+         by default it stays silent, so agents' captures don't sound on the desk (--no-play is kept, a no-op).
+         Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new Recipe
+         rebuilds nothing; a source change rebuilds and relinks. --out is a folder (the WAV is named after the
+         arguments, never overwriting one) or a .wav path.
          --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
          --end-after-drop [N] (default 1; put WAV paths before it, or give N, or it reads the WAV as N) or
@@ -53,12 +56,13 @@ capture  the tuning loop's main step: builds the test-port firmware in build-cap
          --ab with --mute: two captures, without and with the mutes, then their levels and the muted parts' estimated
          level (wav_levels.py --full). Leave the first second out of a level of your own (--skip 1): the mute lands
          on the first step.
-         Each capture keeps its raw dump and run log as <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV, so
-         captures sharing a --out folder never read each other's audio. The emulator's audio runs a little behind its
+         Each capture keeps its raw dump and run log as <WAV stem>-pid<N>-boot<attempt>.s32/.log beside the WAV (and
+         a --variant capture its patched ELF as <WAV stem>-pid<N>.elf), so captures sharing a --out folder never
+         read each other's audio or patch the same firmware. The emulator's audio runs a little behind its
          virtual clock (13-60 ms over a few minutes), so a capture runs on past --seconds until the dump holds the
-         whole --seconds (at most TAIL_LIMIT_S more): the WAV is exactly --seconds long. The dumps are deleted after, the logs
-         when the audio is whole; a capture also deletes the dumps (and the empty WAV) of captures that were killed,
-         and the patched ELFs captures from before #523 left. It
+         whole --seconds (at most TAIL_LIMIT_S more): the WAV is exactly --seconds long. The dumps and ELFs are deleted
+         after, the logs when the audio is whole; a capture also deletes the dumps, ELFs (and the empty WAV) of
+         captures that were killed. It
          then runs the check below on its WAV and exits 1 if the audio isn't whole: after the firmware it builds
          generator_render (only that target, in build/tests/) and renders the same Recipe, so the check reads what
          the firmware plays (--render: that one instead). --no-check skips it: the length and a corrupt run still
@@ -593,6 +597,92 @@ def recipe_lines(args):
     return lines
 
 
+# The GENERATIVE_CAPTURE firmware's CaptureRecipe (generative/firmware/current_recipe.cpp): the Recipe a --variant
+# capture plays, which write_capture_elf patches into a copy of its ELF. The two layouts must agree; the firmware
+# static_asserts its own. A capture without --variant sends recipe_lines() over the test port instead.
+CAPTURE_SYMBOL = b"generative_capture_recipe"
+CAPTURE_MAGIC = b"GENCAP2\0"
+CAPTURE_LAYOUT = struct.Struct(
+    "<8s32sIIi4bbbbx64s"
+)  # magic, genre, entropy, seed, tempo, macros, key, scale, swing, variants
+CAPTURE_GENRE_BYTES = 32
+CAPTURE_VARIANT_BYTES = 64  # "set=name,set=name", NUL-terminated
+KEEP_SWING = -128  # RecipeOverrides::kKeepSwing
+
+
+def capture_recipe(args):
+    """The CaptureRecipe bytes for these arguments: a RecipeOverrides (generative/core/recipe_overrides.h) with the
+    genre's name and the --variant pairs inline. Exits on an unknown genre, key or scale."""
+    recipe_lines(args)  # exits on an unknown genre, key or scale
+    key = -1 if args.key is None else KEYS[args.key]
+    scale = -1 if args.scale is None else scale_names().index(args.scale)
+    genre = args.genre.encode()
+    if len(genre) >= CAPTURE_GENRE_BYTES:  # the firmware needs its terminating NUL
+        sys.exit(f"genre name too long for a capture: {args.genre}")
+    variants = ",".join(getattr(args, "variant", None) or []).encode()
+    if len(variants) >= CAPTURE_VARIANT_BYTES:
+        sys.exit(f"--variant too long for a capture: {variants.decode()}")
+    return CAPTURE_LAYOUT.pack(
+        CAPTURE_MAGIC,
+        genre,
+        args.entropy,
+        args.seed,
+        0 if args.tempo is None else hundredths(args.tempo),
+        *(-1 if getattr(args, m) is None else getattr(args, m) for m in MACROS),
+        key,
+        scale,
+        KEEP_SWING if args.swing is None else args.swing,
+        variants,
+    )
+
+
+def capture_recipe_offset(elf, path):
+    """The file offset of the CaptureRecipe in `elf` (an ELF32 file's bytes). Exits if it has none."""
+    if elf[:6] != b"\x7fELF\x01\x01":
+        sys.exit(f"{path}: not a little-endian 32-bit ELF")
+    shoff, shentsize, shnum = (
+        struct.unpack_from("<I", elf, 32)[0],
+        *struct.unpack_from("<HH", elf, 46),
+    )
+    sections = [
+        struct.unpack_from("<10I", elf, shoff + i * shentsize) for i in range(shnum)
+    ]  # name, type, flags, addr, offset, size, link, info, addralign, entsize
+    for _, kind, _, _, offset, size, link, _, _, entsize in sections:
+        if kind != 2:  # SHT_SYMTAB
+            continue
+        strtab = sections[link][4]
+        for at in range(offset, offset + size, entsize):
+            name, value, sym_size, _, _, shndx = struct.unpack_from("<IIIBBH", elf, at)
+            end = elf.index(b"\0", strtab + name)
+            if elf[strtab + name : end] != CAPTURE_SYMBOL:
+                continue
+            if shndx >= len(
+                sections
+            ):  # SHN_ABS, SHN_COMMON or out of range: not a capture build's
+                break
+            home = sections[shndx]
+            if home[1] != 1 or sym_size != CAPTURE_LAYOUT.size:  # SHT_PROGBITS
+                break
+            start = home[4] + value - home[3]
+            if elf[start : start + len(CAPTURE_MAGIC)] != CAPTURE_MAGIC:
+                break
+            return start
+    sys.exit(
+        f"{path} has no {CAPTURE_LAYOUT.size}-byte {CAPTURE_SYMBOL.decode()} of this gen_emu's layout: not a capture "
+        "build (gen_emu.py capture --variant builds one in <--build-dir>-variants), or one from another gen_emu"
+    )
+
+
+def write_capture_elf(src, dst, recipe):
+    """Writes a copy of the capture firmware `src` to `dst` that plays `recipe` (capture_recipe's bytes)."""
+    with open(src, "rb") as fh:
+        elf = bytearray(fh.read())
+    start = capture_recipe_offset(elf, src)
+    elf[start : start + len(recipe)] = recipe
+    with open(dst, "wb") as fh:
+        fh.write(elf)
+
+
 def uint32(text):
     """A seed or entropy, as generator_render takes it: 0 <= n < 2^32."""
     n = int(text)  # base 10, as generator_render reads it
@@ -639,6 +729,8 @@ def capture_path(args, out, mutes=()):
         name += f"-tempo{args.tempo:g}"
     if args.swing is not None:
         name += f"-swing{args.swing}"
+    for variant in getattr(args, "variant", None) or []:
+        name += f"-{variant}"
     for part in sorted(set(mutes)):
         name += f"-mute{part}"
     if getattr(args, "end_after_drop", None):
@@ -668,8 +760,7 @@ BOOT_FILE = re.compile(
 )
 
 
-# A capture's copy of the firmware, patched with its Recipe, from before #523 (a GENERATIVE_CAPTURE build):
-# <capture_tag>.elf. clear_dead_captures() still removes those a killed capture left.
+# A --variant capture's copy of the GENERATIVE_CAPTURE firmware, patched with its Recipe: <capture_tag>.elf.
 CAPTURE_ELF = re.compile(r"^(?P<stem>.+)-pid(?P<pid>\d+)\.elf$")
 
 
@@ -810,6 +901,8 @@ def render_command(render, args, out, bars):
         cmd += ["--tempo", f"{args.tempo:g}"]
     if args.swing is not None:
         cmd += ["--swing", str(args.swing)]
+    for variant in getattr(args, "variant", None) or []:
+        cmd += ["--variant", variant]
     return cmd + end_flags(args) + ["--bars", str(bars), "--midi-only", "--out", out]
 
 
@@ -945,25 +1038,45 @@ def dbt(command):
     subprocess.run([os.path.join(REPO, "dbt"), "exec", command], cwd=REPO, check=True)
 
 
-def build_capture(args):
-    """Builds the capture firmware, the test-port build (Release, -DENABLE_SYSEX_TEST=ON), in --build-dir and returns
-    its ELF. The Recipe isn't in the build (capture_one sends it over the test port), so a new Recipe builds nothing:
-    only a source change does."""
+def capture_build_dir(args):
+    """Where capture builds its firmware: --build-dir, or for a --variant capture (a GENERATIVE_CAPTURE build, not
+    the test-port one) <--build-dir>-variants, so captures with and without --variant never reconfigure each
+    other's build."""
     build = os.path.abspath(args.build_dir)
+    return build + "-variants" if getattr(args, "variant", None) else build
+
+
+def build_capture(args):
+    """Builds the capture firmware in capture_build_dir() and returns its ELF: the test-port build (Release,
+    -DENABLE_SYSEX_TEST=ON), or with --variant a GENERATIVE_CAPTURE build. The Recipe isn't in either (capture_one
+    sends it over the test port, or patches it into a copy of the ELF), so a new Recipe builds nothing: only a
+    source change does."""
+    build = capture_build_dir(args)
+    variants = bool(getattr(args, "variant", None))
     cache = os.path.join(build, "CMakeCache.txt")
     configured = False
     if os.path.exists(cache):
         with open(cache) as fh:
             lines = fh.read().splitlines()
-        configured = (
-            "ENABLE_SYSEX_TEST:BOOL=ON" in lines
-            and "GENERATIVE_CAPTURE:BOOL=ON" not in lines
+        if variants:
+            configured = (
+                "GENERATIVE_CAPTURE:BOOL=ON" in lines
+                and "ENABLE_SYSEX_TEST:BOOL=ON" not in lines
+            )
+        else:
+            configured = (
+                "ENABLE_SYSEX_TEST:BOOL=ON" in lines
+                and "GENERATIVE_CAPTURE:BOOL=ON" not in lines
+            )
+    if not configured:  # a new build dir, or one configured for the other route
+        flags = (
+            "-DGENERATIVE_CAPTURE:BOOL=ON -DENABLE_SYSEX_TEST:BOOL=OFF"
+            if variants
+            else "-DENABLE_SYSEX_TEST:BOOL=ON -DGENERATIVE_CAPTURE:BOOL=OFF"
         )
-    if not configured:  # a new build dir, or one from before #523 (GENERATIVE_CAPTURE)
         dbt(
             f"cmake -B {shlex.quote(build)} -S {shlex.quote(REPO)} -G 'Ninja Multi-Config' -DCMAKE_CROSS_CONFIGS:STRING=all "
-            "'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' -DENABLE_SYSEX_TEST:BOOL=ON -DGENERATIVE_CAPTURE:BOOL=OFF "
-            "-UGENERATIVE_CAPTURE_DIR"
+            f"'-DCMAKE_DEFAULT_CONFIGS=Debug;Release' {flags} -UGENERATIVE_CAPTURE_DIR"
         )
     dbt(f"cmake --build {shlex.quote(build)} --config Release --target deluge")
     return os.path.join(build, "Release", "deluge.elf")
@@ -1274,7 +1387,7 @@ def check_recipe_taken(emu):
 def enter_perform(emu):
     """SHIFT+SONG to Song view, SHIFT+SONG again for GENERATIVE, then PERFORM FROM -> GENRE -> TECHNO -> the default
     genre -> DISCARD SONG? -> OK (spec §14.1, §14.3): GENRE opens on the default genre's row and submenu. A capture
-    plays the genre its "next recipe" lines set whatever row is picked."""
+    plays the genre its "next recipe" lines (or, with --variant, its CaptureRecipe) set whatever row is picked."""
     emu.shift_tap("SESSION_VIEW")
     emu.wait(1500)  # the zoom out to Song view; SHIFT+SONG needs no UI mode active
     emu.shift_tap("SESSION_VIEW")
@@ -1692,19 +1805,33 @@ def capture_one(args, elf, mutes, harness=None, end=None):
     tag = capture_tag(wav)
     warnings = []
     writing = False
+    # S7 has no variant lines (#548): a --variant capture boots its own copy of the GENERATIVE_CAPTURE firmware with
+    # the Recipe patched in (the tag holds the pid, so captures from one build dir at once never patch the same file).
+    patched = (
+        os.path.join(out, tag + ".elf") if getattr(args, "variant", None) else None
+    )
     try:
-        emu = boot(args, elf, out, tag, test_port=True)
+        if patched:
+            write_capture_elf(elf, patched, capture_recipe(args))
+            emu = boot(args, patched, out, tag)
+        else:
+            emu = boot(args, elf, out, tag, test_port=True)
         try:
-            # The test port's exchanges run the VM for as long as the host takes to answer, so each ends at a fixed
-            # virtual time: entry and PLAY land where they always do, and the same arguments give the same WAV.
-            booted = emu.t
-            send_recipe(emu, recipe_lines(args))
-            settle(emu, booted + RECIPE_SETTLE_S * SEC, "sending the Recipe")
-            if not enter_perform(emu):
-                raise RuntimeError("Perform's song never finished loading")
-            entered = emu.t
-            check_recipe_taken(emu)
-            settle(emu, entered + RECIPE_SETTLE_S * SEC, "the entry's events")
+            if patched:
+                if not enter_perform(emu):
+                    raise RuntimeError("Perform's song never finished loading")
+            else:
+                # The test port's exchanges run the VM for as long as the host takes to answer, so each ends at a
+                # fixed virtual time: entry and PLAY land where they always do, and the same arguments give the
+                # same WAV.
+                booted = emu.t
+                send_recipe(emu, recipe_lines(args))
+                settle(emu, booted + RECIPE_SETTLE_S * SEC, "sending the Recipe")
+                if not enter_perform(emu):
+                    raise RuntimeError("Perform's song never finished loading")
+                entered = emu.t
+                check_recipe_taken(emu)
+                settle(emu, entered + RECIPE_SETTLE_S * SEC, "the entry's events")
             pcm = check_perform_plays(
                 emu,
                 args.seconds,
@@ -1725,6 +1852,9 @@ def capture_one(args, elf, mutes, harness=None, end=None):
     finally:
         # every boot attempt's raw dump: up to 100 MB each, and nothing reads it again
         remove_boot_files(out, tag, "s32")
+        if patched:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(patched)
     if harness:
         parts, step_seconds = harness
         verdict = wav_failures(
@@ -1766,7 +1896,8 @@ def capture_one(args, elf, mutes, harness=None, end=None):
 
 def capture(args):
     check_capture_args(args)
-    recipe_lines(args)  # an unknown genre, key or scale stops before the build
+    # an unknown genre, key or scale (or a --variant too long) stops before the build
+    capture_recipe(args) if getattr(args, "variant", None) else recipe_lines(args)
     warn_pin(args)
     check = not args.no_check
     if check and args.render:
@@ -1803,7 +1934,7 @@ def capture(args):
         )
     if not args.ab:
         wav, failures = capture_one(args, elf, args.mute or [], harness, end)
-        if not args.no_play:
+        if args.play:
             subprocess.run(["afplay", wav], check=False)
         return 1 if failures else 0
     full, full_failures = capture_one(args, elf, [], harness, end)
@@ -1863,6 +1994,14 @@ def add_leak_args(p):
     )
 
 
+def variant_arg(text):
+    """A --variant value: SET=NAME, stable names as the genre's data writes them (lowercase letters and digits; a
+    variant's name may start with a digit, as Psytrance's accents=332)."""
+    if not re.fullmatch(r"[a-z][a-z0-9]*=[a-z0-9]+", text):
+        raise argparse.ArgumentTypeError(f"takes SET=NAME, not {text!r}")
+    return text
+
+
 def add_recipe_args(p):
     """The capture's Recipe, length and mutes: capture and check take the same."""
     p.add_argument("--genre", default="techno-acid")
@@ -1881,6 +2020,14 @@ def add_recipe_args(p):
     p.add_argument("--scale", help="minor, phrygian, harmonic-minor ...")
     p.add_argument("--tempo", type=bpm, help="BPM, 20 to 999")
     p.add_argument("--swing", type=int, choices=range(-49, 50), metavar="-49..49")
+    p.add_argument(
+        "--variant",
+        action="append",
+        type=variant_arg,
+        metavar="SET=NAME",
+        help="fix one of the genre's variant sets to a variant by stable names (skank=plain); repeatable. The "
+        "harness render refuses a name the genre doesn't have",
+    )
     p.add_argument(
         "--seconds", type=float, default=60.0, help="Perform time to capture"
     )
@@ -1993,7 +2140,14 @@ def parser():
         action="store_true",
         help="capture without and then with --mute, and print both levels and the muted parts' estimated level",
     )
-    c.add_argument("--no-play", action="store_true")
+    c.add_argument(
+        "--play",
+        action="store_true",
+        help="play the WAV (afplay) once written; silent without it",
+    )
+    c.add_argument(
+        "--no-play", action="store_true", help="the default; kept for old command lines"
+    )
     c.add_argument(
         "--no-check",
         action="store_true",
@@ -2004,7 +2158,8 @@ def parser():
     c.add_argument(
         "--elf",
         help="capture with this firmware and build nothing: a test-port build (-DENABLE_SYSEX_TEST=ON), as a "
-        "--build-dir's Release/deluge.elf is; "
+        "--build-dir's Release/deluge.elf is, or with --variant a GENERATIVE_CAPTURE build, as "
+        "<--build-dir>-variants/Release/deluge.elf is; "
         "--build-dir is then ignored, and the check renders with the current checkout's harness, which may differ "
         "from the one the ELF was built from (--no-check skips it)",
     )

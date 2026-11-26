@@ -40,12 +40,22 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    records another commit than `git rev-parse HEAD` (a `<sha>-dirty` load counts as `<sha>`), or no load at all.
    `--force-build-mismatch` runs anyway with a warning; results from someone else's build say nothing about yours.
 
-   Before the first script and after the last, the session lists `SONGS/` and `RECIPES/` and prints every new file as
-   `session: new on the card, declared: /PATH` or `session: FAIL new on the card, undeclared: /PATH`. An undeclared
-   one fails the session (exit 1), and so does a listing that gets no reply (a card still busy with a song load or
-   save): that writes no hung marker. A script that saves
-   names what it writes in `# writes: GLOB` lines ([scripts.md](scripts.md)). Delete the files your run wrote, declared
-   or not, with [card-files.md](card-files.md); never files that were there before.
+   Before the first script and after each, the session lists `SONGS/` and `RECIPES/`. When a script ends it deletes
+   the new files that script's own `# writes: GLOB` lines declare ([scripts.md](scripts.md)), printing `session:
+   deleted /PATH`, so the next script can save under the same name (`--keep-writes` keeps them). After the last
+   script it prints every file still new as `session: new on the card, declared: /PATH` or `session: FAIL new on the
+   card, undeclared: /PATH`. An undeclared one fails the session (exit 1), and so does a listing before the first
+   script or after the last that gets no reply (a card still busy with a song load or save): that writes no hung
+   marker. Delete the files your run left, declared or not, with [card-files.md](card-files.md); never files that
+   were there before.
+
+   **Length.** Keep each session well under 2 h, the longest a background command may run: one killed mid-script
+   leaves the device in a state where the next load can go silent. Each script that runs to its end records its time
+   in `times.json`. A set whose estimate by those times (plus about 3 min for the load, and 3 min for a script never
+   timed) passes `--max-minutes` (default 90) runs nothing: the session prints it split into parts under the limit,
+   in order with the smoke script first in each when it's in the set, one command a part (with this run's options),
+   and exits 1. Run the parts one after another, each its own session. The whole hardware set (`covers.py --hardware --full`) takes about 2.5 h, so it always
+   splits.
 
    Writing or changing a script: read [scripts.md](scripts.md) first.
 
@@ -54,7 +64,8 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    'gen_mem|gen_entry|gen_left'` gives each enter/leave cycle's free memory and entry and leave times. `--events .`
    prints every event.
 2. **Read the exit code.**
-   - `1`: a script failed, the lock was held past `--wait`, the build wasn't loadable, the load didn't take (the
+   - `1`: a script failed, the set is longer than `--max-minutes` (it printed the parts to run instead), the lock was
+     held past `--wait`, the build wasn't loadable, the load didn't take (the
      build that was running still answered near the end of the wait, and no fresh one did), `--no-load` found
      another build on the device, or the run left an undeclared new file in `SONGS/` or `RECIPES/`. The output says
      which.
@@ -69,7 +80,8 @@ To put files on the card or fetch them (a pack, a test song), with no one at the
    touches boot, startup or flash storage: read [troubleshooting.md](troubleshooting.md).
 
 State lives in `~/.cache/deluge-generative/hardware/` (`$DELUGE_HARDWARE_DIR` overrides it): `lock/` with its owner,
-`hung`, `pending.md`, `loaded.json` (the last load the session saw) and `released/`, where locks and old markers are
+`hung`, `pending.md`, `loaded.json` (the last load the session saw), `times.json` (each script's last time) and
+`released/`, where locks and old markers are
 moved. Nothing there is ever deleted.
 
 ## The device hung

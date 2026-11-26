@@ -26,6 +26,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/core/steering_log.h"
+#include "generative/core/variants.h"
 #include "generative/firmware/current_recipe.h"
 #include "generative/firmware/entry_source.h"
 #include "generative/firmware/log_header.h"
@@ -65,6 +66,7 @@ public:
 	void jumped() override { allNotesOff(); }
 	/// A sample's length at the system rate, for a lane row that plays one to its end (spec §9.5): 0 for a synth row.
 	int32_t sampleMicros(const Event& noteOn) override;
+	int32_t fallbackMicros(const Event& noteOn) override;
 	/// Under an external clock the master owns tempo, and setTempo() writes nothing (spec §9.7, §12.7).
 	bool tempoFollowsMaster() override;
 	/// A transition's new roster plays from here (spec §12.9): `roster` becomes `outgoing`, and the incoming roster
@@ -369,6 +371,10 @@ private:
 	int32_t nextTempoSample_ = 0;
 	/// The steering log, over its 16 KB SDRAM buffer from entry to the teardown, its pieces on the card (spec §17.2).
 	uint8_t* logBuffer_ = nullptr;
+	/// Each block's copy of its genre with a Recipe's variants applied (spec §3.6), allocated beside it on entry:
+	/// outside the block, so it doesn't count against H18 (spec §20). Here, past steering_ and sink_, whose offsets
+	/// the step's code bakes in.
+	ResolvedGenre* resolved_[2] = {};
 	SteeringLog log_;
 	uint32_t restarts_ = 0;
 	/// A leave kept pieces: freeBlocks() leaves the log for Capture (spec §17.7).

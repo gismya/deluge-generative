@@ -80,6 +80,14 @@ otherwise.
   that fits. All groups share one list of genre items, which read the open parent (set in `GenreGroup::beginSession()`).
   All three open on the Current Recipe's genre (`GenreMenu::beginSession()`), so a probe script that picks a genre
   counts rows from there, not from the top.
+- The Regenerate page (§13.6, #494) is a stock `Submenu` (`gui/menu_item/generative/regenerate_page.*`) over the
+  Perform menu, entered with `soundEditor.enterSubmenu()`: a leaf's `selectButtonPress()` return value is ignored by
+  the sound editor (only a submenu's current item is entered), so a genre item can't navigate by returning the page.
+  Its state is portable (`perform/regenerate_page.h`, harness-tested); the firmware items read it. The VARIANTS set
+  rows and their toggles are shared by the page and the Compose screen's VARIANTS ▸ through a `VariantsTarget` the
+  open VARIANTS menu sets in `beginSession()`, as GENRE ▸'s groups share their genre items. A mid-set LOAD opens it with
+  `soundEditor.setup(nullptr, &page)` once the browser has closed. `beginSession(nullptr)` also runs when the sound
+  editor regains focus (a popup closing): only a fresh open (`freshOpen`) jumps to GO.
 - FILL has several holders: SYNC-SCALING and the KEYBOARD page's 12 FILL pads (`perform::FillHolds`). Under the sound
   editor and Perform's menus, SYNC-SCALING reaches Perform only through F7 (`SoundEditor::buttonAction()`), ahead of
   the community setting's fill toggle; in SHIFT+SELECT's settings menu it stays stock.
@@ -234,3 +242,13 @@ otherwise.
 - Trap (#413 part 2, merging #437): the restart's two flags and `stutterOn_` share the last padding byte before
   `fillSent_`; they are 1-bit bitfields there. Another flag in that run grows the steering by 4 and breaks the pinned
   size (Release build only): find padding elsewhere, or make it a bit beside them.
+- Perform's VARIANTS ▸ (#495) sits after REGENERATE and shows only for a genre with sets, so in Dub, and in every Techno
+  subgenre since #531 (Acid techno, the scripts' default), every Perform menu row below REGENERATE is one further down
+  than in a genre without sets, as is every Compose screen row below SCALE, and the Regenerate page has a VARIANTS row
+  between TRANSITION and GO: a probe script that counts rows from the top counts it. It is the Regenerate page's
+  `VariantsMenu` over the same `VariantSetRow`s and `VariantToggle`s, with a third `VariantsTarget` (`perform`): the
+  ticks read `maskAhead()`, a turned tick is `pressVariantMask()`, and a set that isn't live doesn't open (AT REGEN). A
+  recipe's `allowed` may be 0 (RANDOM): compare masks through `allowedIn()`. Perform's target has no `allowed` array
+  (nullptr): a toggle path that falls through to the page's `target.allowed[...] =` hangs the firmware.
+  `Submenu::selectButtonPress()` is `final`, so a row that must not open refuses in `checkPermissionToBeginSession()`
+  (the sound editor asks it before entering).

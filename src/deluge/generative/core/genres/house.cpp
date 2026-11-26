@@ -14,14 +14,16 @@
  * You should have received a copy of the GNU General Public License along with this program.
  * If not, see <https://www.gnu.org/licenses/>.
  */
-// House (#132, spec §4.5): a genre of its own with no parent. Four on the floor with claps on 2 and 4, an offbeat bass
-// on the &s between the kicks, chord stabs that always carry a 7th, Strings under them, swung hats leaning late on the
-// e and the a, and a Lead that Responds to the bass, answering in each bar's second half, over a Chord graph that
-// walks. Every value is starting data, tuned by ear in #133 (spec §21.5).
+// House (#132, spec §4.5): a genre of its own with no parent. Four on the floor with claps on 2 and 4, a 3-3-2 bass
+// riff (or, in some pieces, the offbeat bass on the &s between the kicks), chord stabs that always carry a 7th, Strings
+// under them, swung hats leaning late on the e and the a, and a Lead that Responds to the bass, answering in each bar's
+// second half, over a Chord graph that walks. Every value is starting data, tuned by ear in #133 (spec §21.5).
 
 #include "generative/core/capacity.h"
 #include "generative/core/chord_walk.h"
 #include "generative/core/genre.h"
+#include "generative/core/variants.h"
+#include <iterator>
 
 namespace deluge::generative::genres {
 
@@ -58,13 +60,11 @@ constexpr Pattern kClosedHat[] = {
     {"4596459645964597", "gg.ggg.ggg.ggg.g", 2},
 };
 
-/// An open hat on the & of 4, or the & of 2 and 4, then on all four &s from tier 1: each replaces the closed hat there
-/// (spec §5.7).
+/// One open hat a bar, on the & of 4, at home; the other three &s only above it (importance 5 under House's jitter:
+/// none at Density 25, about half at 28, all from 31), so "boots and cats" comes in late in a Build and early in a Drop
+/// (feel-1 F2). Each replaces the closed hat there (spec §5.7).
 constexpr Pattern kOpenHat[] = {
-    {"..............7.", "................", 0},
-    {"......7.......7.", "................", 0},
-    {"..7...7...7...7.", "................", 1, 3},
-    {"......7.......7.", "................", 1},
+    {"..5...5...5...7.", "................", 0},
 };
 
 /// The ride on the &s, behind its gate.
@@ -73,10 +73,9 @@ constexpr Pattern kRide[] = {
     {"..8.5.8...8.5.8.", "....g.......g...", 1},
 };
 
-/// Shaker and tambourine on the e, & and a, behind their gate.
+/// Shaker and tambourine on every 16th, the & loud and the e and the a ghosted, behind its gate (feel-1 F2).
 constexpr Pattern kShaker[] = {
-    {"..6...6...6...6.", "................", 0},
-    {".56.5.6..56.5.67", ".g..g....g..g...", 1},
+    {"8798879887988798", ".gag.gag.gag.gag", 0},
 };
 
 /// Congas and cowbell off the beat, behind their gate.
@@ -95,15 +94,39 @@ constexpr Pattern kClapFill[] = {
     {"....X...7.8.X8XX", "........g....g..", 1},
 };
 
-/// The offbeat bass: the & of every beat, anchored, never a beat (the kick's). 16th pickups as Complexity rises, each
-/// line's in one half: the first, so the Lead's Respond rule leaves the second free for answers, except one tier-1
-/// line's in the second, which moves the answers to the first half (#368).
+/// The 3-3-2 riff (feel-1 F1, riff-332): on the 1 with the kick, then the a of 1, the & of 2, the & of 3 and the e of
+/// 4. Its closest onsets are 3 16ths apart, so the Bass's 60-tick gate fits (spec §5.2). Three onsets in the first
+/// half, two in the second, so the Lead answers in the second (spec §5.5).
+constexpr Pattern kRiffBass[] = {
+    {"X..8..X...8..7..", "................", 0},
+};
+
+/// The offbeat bass (the `bass` set's `fifth` and `root` variants, the base of its `pickups`): the & of every beat,
+/// anchored, never a beat (the kick's). 16th pickups as Complexity rises, each line's in one half: the first, so the
+/// Lead's Respond rule leaves the second free for answers, except one tier-1 line's in the second, which moves the
+/// answers to the first half (#368).
 constexpr Pattern kOffbeatBass[] = {
     {"..X...X...X...X.", "................", 0, 3},
     {"..X..7X...X...X.", ".....g..........", 0},
     {"..X..7X7..X...X.", ".....g.g........", 1},
     {"..X7..X...X...X.", "...g............", 1},
     {"..X...X..7X7..X.", ".........g.g....", 1},
+    {".7X7.7X...X...X.", ".g.g.g..........", 2},
+};
+
+/// S6's pickups (round 2's B, #369): the offbeat bass with five more rhythms, two of them 2 bars long. Its first five
+/// rows and its last repeat kOffbeatBass's six, in order: change them together.
+constexpr Pattern kPickupBass[] = {
+    {"..X...X...X...X.", "................", 0, 3},
+    {"..X..7X...X...X.", ".....g..........", 0},
+    {"..X..7X7..X...X.", ".....g.g........", 1},
+    {"..X7..X...X...X.", "...g............", 1},
+    {"..X...X..7X7..X.", ".........g.g....", 1},
+    {"..X...X7..X...X.", ".......g........", 1},
+    {".7X...X...X...X.", ".g..............", 1},
+    {"..X7..X7..X...X.", "...g...g........", 1},
+    {"..X...X...X...X." "..X..7X7..X...X.", ".....................g.g........", 1, 2},
+    {"..X7..X...X...X." ".7X...X7..X...X.", "...g.............g.....g........", 1},
     {".7X7.7X...X...X.", ".g.g.g..........", 2},
 };
 
@@ -144,7 +167,10 @@ constexpr Expression kClosedHatExpression = [] {
 	return expression;
 }();
 
-constexpr int16_t kPercGate = macroPoints(35);
+/// The Ride and the Congas: only in a Drop's first bars and a Build's last, over Density 29 (feel-1 F6, tuning).
+constexpr int16_t kPercGate = macroPoints(29);
+/// The shaker's 16ths come in a little before them (feel-1 F2: for the intense parts, not the Groove at home; tuning).
+constexpr int16_t kShakerGate = macroPoints(28);
 
 /// In the fixed lane order (spec §5.4). The Snare plays only the Swap, the Roll fill and the Build roll; the Crash
 /// only the Phrase accent.
@@ -154,10 +180,10 @@ constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Clap, .pool = kClap, .fillPool = kClapFill, .band = {0, 1}, .expression = {.spread = 8}},
     {.lane = Lane::Rim, .pool = kRim, .band = {0, 1}, .expression = {.spread = 10}},
     {.lane = Lane::ClosedHat, .pool = kClosedHat, .band = {0, 2}, .expression = kClosedHatExpression},
-    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 1}, .expression = {.spread = 6}},
+    {.lane = Lane::OpenHat, .pool = kOpenHat, .band = {0, 0}, .expression = {.spread = 6}},
     {.lane = Lane::Ride, .pool = kRide, .band = {0, 1}, .densityGate = kPercGate, .expression = kHatExpression},
     {.lane = Lane::Crash}, // the Phrase accent's lane
-    {.lane = Lane::Perc1, .pool = kShaker, .band = {0, 1}, .densityGate = kPercGate, .expression = kHatExpression},
+    {.lane = Lane::Perc1, .pool = kShaker, .band = {0, 0}, .densityGate = kShakerGate, .expression = kHatExpression},
     {.lane = Lane::Perc2, .pool = kConga, .band = {0, 1}, .densityGate = kPercGate, .expression = {.spread = 10}},
 };
 
@@ -167,13 +193,27 @@ constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.
 /// The Intro stays unfiltered: no part Rises across it, while every Build still does (spec §11.4).
 constexpr GestureSpec kGestures{.off = momentBit(GestureMoment::RiseIntro)};
 
-/// The chord root, its 5th as Complexity rises. The Register's span (−5 to +7) holds the line under the Strings, so
-/// no octave jumps.
-constexpr LineWeight kBassDegrees[] = {{0, 8}, {4, 2}};
+/// The riff's: the root, the 5th and the 7th below, the anchors on the root (feel-1, tuning).
+constexpr LineWeight kRiffDegrees[] = {{0, 5}, {4, 3}, {6, 2}};
+/// The offbeat line's: the chord root, its 5th as Complexity rises.
+constexpr LineWeight kOffbeatDegrees[] = {{0, 8}, {4, 2}};
+/// S6's pickups: the 5th most, the root and the 7th below about as often; the anchors stay on the root (tuning).
+constexpr LineWeight kPickupDegrees[] = {{0, 3}, {4, 4}, {6, 3}};
 
-/// Short offbeat notes, rare slides, a line that changes slowly.
+/// The riff: 60-tick notes, an octave up now and then, rare slides, a line that changes slowly; the leap and the
+/// octave chance are tuning. The Register's span (−5 to +7) holds the line under the Strings, so an octave up lands
+/// only from the root's low end.
 constexpr LoopSpec kBassLoop{
-    .degrees = kBassDegrees,
+    .degrees = kRiffDegrees,
+    .draws = {.leap = {4, 6}, .octaveUp = 150, .octaveDown = 0, .accent = 120},
+    .rootOnAnchors = true,
+    .slide = {0, 30},
+    .mutation = 60,
+    .gateTicks = 60,
+};
+/// The offbeat line's: short notes, no octave, the anchors free.
+constexpr LoopSpec kOffbeatLoop{
+    .degrees = kOffbeatDegrees,
     .draws = {.leap = {3, 6}, .octaveUp = 0, .octaveDown = 0, .accent = 120},
     .slide = {0, 30},
     .mutation = 60,
@@ -183,6 +223,7 @@ constexpr LoopSpec kBassLoop{
 /// Chord positions: mostly the root, the 3rd and the 5th, the 7th now and then, the note under the root rarely.
 constexpr LineWeight kAnswerPositions[] = {{-1, 1}, {0, 4}, {1, 3}, {2, 3}, {3, 2}};
 
+constexpr int32_t kDrumsPart = 0;
 constexpr int32_t kBassPart = 1;
 constexpr int32_t kStabPart = 2;
 constexpr int32_t kStringsPart = 3;
@@ -203,15 +244,15 @@ constexpr Register kStringsRegister{51, -4, 10};
 constexpr Register kStabRegister{63, -1, 12};
 constexpr Register kLeadRegister{75, 1, 17};
 
-/// Drums, an offbeat bass, the Stab, Strings, the Lead and FX (spec §4.5): Detroit's shape.
+/// Drums, a riff bass, the Stab, Strings, the Lead and FX (spec §4.5): Detroit's shape.
 constexpr PartSpec kParts[] = {
     {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kGestures},
     {
         .role = Role::Bass,
         .flavour = Flavour::Loop,
         .name = "BASS",
-        .pool = kOffbeatBass,
-        .band = {0, 2},
+        .pool = kRiffBass,
+        .band = {0, 0},
         .densityGate = macroPoints(9),
         .reg = kBassRegister,
         .loop = kBassLoop,
@@ -271,6 +312,7 @@ constexpr PartSpec kParts[] = {
     },
     {.role = Role::FX, .name = "FX", .lanes = kFxLanes, .gestures = kGestures},
 };
+static_assert(kParts[kDrumsPart].role == Role::Drums);
 static_assert(kParts[kBassPart].role == Role::Bass);
 static_assert(kParts[kStabPart].role == Role::Chords && kParts[kStabPart].flavour == Flavour::Stab);
 static_assert(kParts[kStringsPart].role == Role::Pad && kParts[kStringsPart].flavour == Flavour::Sustain);
@@ -287,6 +329,19 @@ constexpr FillEntry kFills[] = {
      .beats = 2,
      .weight = 2},
     {.kind = FillKind::Rest, .mask = {.lanes = laneBit(Lane::Kick)}, .beats = 4, .weight = 1},
+};
+
+/// Layers leave a Groove for 4 or 8 bars on 4-bar lines and come back (feel-1 F3, spec §8.8): the Stab, the Strings,
+/// both, the kick or the hats. Weights tuning.
+constexpr DropOutEntry kDropOuts[] = {
+    {.mask = {.parts = partBit(kStabPart)}, .bars = 4, .weight = 2},
+    {.mask = {.parts = partBit(kStabPart)}, .bars = 8, .weight = 1},
+    {.mask = {.parts = partBit(kStringsPart)}, .bars = 8, .weight = 2},
+    {.mask = {.parts = static_cast<uint8_t>(partBit(kStabPart) | partBit(kStringsPart))}, .bars = 8, .weight = 2},
+    {.mask = {.lanes = laneBit(Lane::Kick)}, .bars = 4, .weight = 1},
+    {.mask = {.lanes = static_cast<uint16_t>(laneBit(Lane::ClosedHat) | laneBit(Lane::OpenHat))},
+     .bars = 4,
+     .weight = 1},
 };
 
 /// Home i, with the brief's moves each played both ways, the way back to i by the home pull (kMaxChordMoves was 8), so
@@ -306,7 +361,8 @@ constexpr ChordMove kHouseMoves[] = {
 /// 2 bars a chord, a repeat now and then so some last 4 and a few longer, the cadence on ♭VII every 4 chords (spec
 /// §4.5). The repeat weight has no cap and weighs most where the guard thins the other ways on: at 15 one bar in 7
 /// sat in a hold of 6 bars or more, at 8 one in 16. The chords loop (spec §7.4, round 2's S1): a 2- or 4-chord loop
-/// held through the Break and the Build, a new one on 1 Drop in 3.
+/// held through the Break and the Build, a new one on 1 Drop in 3 (S1's other variants change that), and one Drop's
+/// move in 3 goes back to an earlier loop (the owner, round 2: "might also go back to a previous loop", tuning).
 constexpr ChordGraph kHouseGraph{
     .homePull = 20,
     .moves = kHouseMoves,
@@ -316,24 +372,207 @@ constexpr ChordGraph kHouseGraph{
     .barsPerChord = 2,
     .loopChance = 333,
     .halfLoopChance = 333,
+    .returnChance = 333,
 };
+
+/// The vamp (feel-1 F5): i–iv and back, 2 bars each, every loop two chords. The home pull brings iv back to i.
+constexpr ChordMove kVampMoves[] = {
+    {kI, kIV, 30}, // i–iv (tuning)
+};
+constexpr ChordGraph kVampGraph = [] {
+	ChordGraph graph = kHouseGraph;
+	graph.moves = kVampMoves;
+	graph.repeatWeight = 0;
+	graph.cadenceTarget = kIV;
+	graph.halfLoopChance = 1000;
+	return graph;
+}();
+
+/// `graph` moving to another loop at `chance` per-mille on each Drop (S1).
+constexpr ChordGraph loopsAt(const ChordGraph& graph, int16_t chance) {
+	ChordGraph out = graph;
+	out.loopChance = chance;
+	return out;
+}
+constexpr ChordGraph kHalfDropsGraph = loopsAt(kHouseGraph, 500);
+constexpr ChordGraph kEveryDropGraph = loopsAt(kHouseGraph, 1000);
+constexpr ChordGraph kOneLoopGraph = loopsAt(kHouseGraph, 0);
+constexpr ChordGraph kHalfDropsVamp = loopsAt(kVampGraph, 500);
+constexpr ChordGraph kEveryDropVamp = loopsAt(kVampGraph, 1000);
+constexpr ChordGraph kOneLoopVamp = loopsAt(kVampGraph, 0);
+
+/// Each loops variant's graph (S1, in kLoopVariants' order) and the vamp with its loop chance.
+struct VampPair {
+	const ChordGraph* loop;
+	const ChordGraph* vamp;
+};
+constexpr VampPair kVampPairs[] = {
+    {&kHouseGraph, &kVampGraph},
+    {&kHalfDropsGraph, &kHalfDropsVamp},
+    {&kEveryDropGraph, &kEveryDropVamp},
+    {&kOneLoopGraph, &kOneLoopVamp},
+};
+
+/// The vamp with the loop chance the loops set (S1) left in `graph`: the chords set comes after it, so both hold. A
+/// graph kVampPairs lacks plays the genre's vamp; the static_assert after kLoopVariants keeps the table whole.
+constexpr const ChordGraph* vampOf(const ChordGraph* graph) {
+	for (const VampPair& pair : kVampPairs) {
+		if (pair.loop == graph) {
+			return pair.vamp;
+		}
+	}
+	return &kVampGraph;
+}
 
 constexpr Scale kScales[] = {Scale::Minor, Scale::Dorian, Scale::Mixolydian};
 
-/// 4 bars once in three, 8 bars twice (spec §4.5).
-constexpr WeightedBars kBuildBars[] = {{4, 1}, {8, 2}};
+/// 8 bars: a Build never takes half a 1-phrase Break, so no Break is 4 bars (feel-1 F6, spec §4.5).
+constexpr WeightedBars kBuildBars[] = {{8, 1}};
+
+// Variant sets (#461, #496, ADR 0008): the owner asked in round 2 for S1, S4a and S6 to vary per piece, and in feel-1
+// (#518) for the Bass, the Build and the chords. The genre as written first in each (the golden case pins it); weights
+// are tuning.
+
+/// S1, how often a Drop brings another chord loop: 1 Drop in 3 (round 2's pick), half of them (the owner's note: about
+/// two thirds of pieces draw it, #472 round 3), every Drop or never (one loop for the whole piece). Weights tuning.
+/// Live: only the graph's loop chance moves, read on the Drop's own step after dropVariants() lands it.
+constexpr Variant kLoopVariants[] = {
+    {.name = "third", .oledName = "1 IN 3", .weight = 1},
+    {.name = "half",
+     .oledName = "1 IN 2",
+     .weight = 6,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kHalfDropsGraph; }},
+    {.name = "every",
+     .oledName = "EVERY",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kEveryDropGraph; }},
+    {.name = "never",
+     .oledName = "NEVER",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = &kOneLoopGraph; }},
+};
+static_assert(std::size(kVampPairs) == std::size(kLoopVariants), "every loops variant's graph has its vamp (vampOf())");
+
+/// The kickless Builds' keeps and cut (feel-1 F4): no kick for the whole Build, and the Bass only in its last bar,
+/// where it enters filtered at the Rise's peak and leads into the Drop (#518).
+constexpr PartsAndLanes kNoKick = kEverything.without({.parts = partBit(kDrumsPart), .lanes = laneBit(Lane::Kick)});
+constexpr PartsAndLanes kBassOnly{.parts = partBit(kBassPart)};
+/// `arc` with no kick in its Builds and the Bass leading in on their last bar.
+constexpr void bassLeadsIn(ArcSpec& arc) {
+	arc.buildKeeps = kNoKick;
+	arc.buildCut = kBassOnly;
+	arc.buildCutBars = 1;
+	arc.buildCutLeads = true;
+}
+
+/// S4a and feel-1 F4, the Build's shape: the roll Build with everything, with no Lead (it returns on the Drop), or with
+/// no kick and the Bass only in its last bar; or the filter Build, with no roll, Gap or Riser, the kick out and the
+/// Bass entering on its last bar, 5 to the roll Builds' 4 (the owner: "both work"; feel-2 G2 dropped the Build that cut
+/// the kick and Bass for its last 2 bars). Not live: the Arc reads the Build ahead.
+constexpr Variant kBuildVariants[] = {
+    {.name = "full", .oledName = "FULL", .weight = 2},
+    {.name = "nolead",
+     .oledName = "NO LEAD",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildKeeps = kEverything.without({.parts = partBit(kLeadPart)});
+         }},
+    {.name = "nokick",
+     .oledName = "NO KICK",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { bassLeadsIn(resolved.genre.arc); }},
+    {.name = "filter",
+     .oledName = "FILTER",
+     .weight = 5,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         ArcSpec& arc = resolved.genre.arc;
+	         bassLeadsIn(arc);
+	         arc.buildRiser = false;
+	         arc.gap = GapLength::None;
+	         arc.roll = {.lane = Lane::None};
+         }},
+};
+
+/// `bass` playing the offbeat line: its pool, its tiers and its Loop.
+constexpr void offbeatBass(PartSpec& bass) {
+	bass.pool = kOffbeatBass;
+	bass.band = {0, 2};
+	bass.loop = kOffbeatLoop;
+}
+
+/// S6 and feel-1 F1, the Bass: the 3-3-2 riff (the genre as written), or the offbeat line, with the 5th from
+/// Complexity 25, with the root alone below 34, or with S6's pickups, the riff 3 to 1 over the three (the owner: "B
+/// should be the default, A has its place sometimes"). `fifth` keeps its stable name from before the riff, so a
+/// Recipe file that picked it still plays it; on the OLED it reads OFFBEAT, which is what the player hears. Not live:
+/// the pools differ in size, and a frozen Bass holds its entry across a Drop.
+constexpr Variant kBassVariants[] = {
+    {.name = "riff", .oledName = "RIFF", .weight = 9},
+    {.name = "fifth",
+     .oledName = "OFFBEAT",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { offbeatBass(resolved.parts[kBassPart]); }},
+    {.name = "root",
+     .oledName = "OFF ROOT",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         PartSpec& bass = resolved.parts[kBassPart];
+	         offbeatBass(bass);
+	         bass.loop.draws.leap = {0, 6};
+         }},
+    {.name = "pickups",
+     .oledName = "PICKUPS",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         PartSpec& bass = resolved.parts[kBassPart];
+	         offbeatBass(bass);
+	         bass.pool = kPickupBass;
+	         bass.loop.degrees = kPickupDegrees;
+	         bass.loop.draws.leap = {4, 8}; // tuning
+	         bass.loop.rootOnAnchors = true;
+         }},
+};
+
+/// feel-1 F5, the chords: the graph's loops (the genre as written), or the i–iv vamp, 1 to 2 (feel-2 G4 picked the
+/// vamp: "barely hear a difference, but A might be better"). It keeps the loop chance the loops set (S1) drew, so it
+/// comes after it. Not live: a live set may not move the chord lines (ADR 0008).
+constexpr Variant kChordVariants[] = {
+    {.name = "loop", .oledName = "LOOP", .weight = 1},
+    {.name = "vamp",
+     .oledName = "VAMP",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.genre.harmony.graph = vampOf(resolved.genre.harmony.graph); }},
+};
+
+constexpr VariantSet kVariantSets[] = {
+    {.name = "loops", .oledName = "LOOPS", .variants = kLoopVariants, .live = true},
+    {.name = "build", .oledName = "BUILD", .variants = kBuildVariants},
+    {.name = "bass", .oledName = "BASS", .variants = kBassVariants},
+    {.name = "chords", .oledName = "CHORDS", .variants = kChordVariants},
+};
 
 constexpr Genre kHouse{
     .name = "house",
     .oledName = "HOUSE",
-    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
-    .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swing = 15},
+    .version = 8, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .facts = {.tempoLowBpm = 120, .tempoHighBpm = 126, .scales = kScales, .swingLow = 10, .swingHigh = 14},
     .phraseBars = 8,
     .parts = kParts,
+    // ±45, not the default ±60: an importance 5 then never plays at home (Density 25) and always from 31, so the open
+    // hat's other &s join only above home (feel-1 F2). Genre-wide: at home every importance-6 step plays and no
+    // importance-5 one (the closed hat's tier-0 a's, the Rim's a of 2), where ±60 played about 92 % and 9 % of them.
+    .densityJitter = 45,
     .fills = kFills,
     .heldFill = 0,
     .fillChance = 350,
     .sectionEndChance = 1000,
+    .dropOuts = kDropOuts,
+    .dropOutChance = 500, // tuning
+    .dropOutGapBars = 4,
+    .dropOutGridBars = 4,
     // Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
     .harmony = {.graph = &kHouseGraph, .extensionFloor = 1, .extensionCeiling = 2, .guard = {.factor = 0}},
     .palette = &housePalette,
@@ -361,11 +600,12 @@ constexpr Genre kHouse{
             .buildKeeps = kEverything,
             .buildCutBars = 0,
             .gap = GapLength::Beat,
-            .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
+            .roll = {.lane = Lane::Snare, .top = RollStage::Sixteenth},
             .accentLane = Lane::Crash,
             // a Crash on Drops, after a fill that ends a phrase, and at 150 per-mille on other phrase starts
             .accentChance = 150,
         },
+    .variantSets = kVariantSets,
 };
 static_assert(genreValid(kHouse), "the genre data holds every rule genreValid() lists (genre_data_spec names one)");
 

@@ -29,6 +29,7 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/firmware/working_animation.h"
+#include "generative/perform/regenerate_page.h"
 #include "gui/l10n/l10n.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
@@ -83,9 +84,10 @@ public:
 	TransitionJob() : Job(Kind::Live) {}
 
 	/// `load`: a LOAD's file and name (this job's own copy), or nullptr for a genre change or Regenerate.
-	void prepare(uint32_t request, const Genre* genre, const LoadSlot* load) {
+	void prepare(uint32_t request, const Genre* genre, const VariantPicks& narrowed, const LoadSlot* load) {
 		request_ = request;
 		genre_ = genre;
+		narrowed_ = narrowed;
 		load_ = load;
 		error_ = Error::NONE;
 		missing_ = 0;
@@ -181,6 +183,9 @@ public:
 				           static_cast<int>(swingSyncLevel(pendingRecipe.recipe.swingInterval)),
 				           static_cast<int>(pendingRecipe.recipe.keyRoot),
 				           static_cast<unsigned>(scaleNotes(pendingRecipe.recipe.scale)));
+				char picks[perform::kPicksTextChars];
+				perform::picksText(*pendingRecipe.recipe.genre, pendingRecipe.recipe.variants, picks);
+				TEST_EVENT("gen_pending_variants %s", picks);
 #if ENABLE_SYSEX_TEST
 				if (appliedNext_) {
 					// Its roster loaded. A CANCEL CHANGE while queued, or a full queue in loaded(), can still drop
@@ -207,10 +212,10 @@ public:
 
 private:
 	/// A genre change or Regenerate (spec §9.7): facts rolled from the incoming genre, leaning towards the key that
-	/// plays, a new seed and every take at 0. A genre change rolls the new roster's sound picks from its palette, with
-	/// its card override read into the Current Recipe's spare one; a Regenerate rolls every pick away from the one
-	/// playing. The macros are the live ones, copied at the start step. False on a cancel, or on a card error (then
-	/// error_ is set).
+	/// plays, each variant set drawn within the page's narrowed masks (spec §13.6), a new seed and every take at 0. A
+	/// genre change rolls the new roster's sound picks from its palette, with its card override read into the Current
+	/// Recipe's spare one; a Regenerate rolls every pick away from the one playing. The macros are the live ones,
+	/// copied at the start step. False on a cancel, or on a card error (then error_ is set).
 	bool rollPending(Chunks& chunks, const Genre& genre, const Genre& playing) {
 		const bool change = &genre != &playing;
 		if (change) {
@@ -221,7 +226,7 @@ private:
 		}
 		const Palette& palette = change ? currentRecipe.stagedPalette() : currentRecipe.palette();
 		pendingRecipe.recipe = newRecipe(genre, nextEntropy(freshEntropy()),
-		                                 Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale});
+		                                 Key{currentRecipe.recipe.keyRoot, currentRecipe.recipe.scale}, &narrowed_);
 		pendingRecipe.stagedPalette = change;
 		pendingRecipe.macros = perform::HandoverMacros::Live;
 		pendingRecipe.seed = nextSeed(freshEntropy());
@@ -266,6 +271,7 @@ private:
 
 	uint32_t request_ = 0;
 	const Genre* genre_ = nullptr; ///< The incoming genre
+	VariantPicks narrowed_;        ///< A genre change's or Regenerate's: what each set draws within
 	const LoadSlot* load_ = nullptr;
 	Error error_ = Error::NONE;
 	int32_t missing_ = 0;
@@ -308,7 +314,7 @@ int32_t Transitions::cutGlideTicks() const {
 	return performAdapter.steering().glideLengthTicks();
 }
 
-Transitions::Request Transitions::change(const Genre& genre, TransitionStyle style) {
+Transitions::Request Transitions::change(const Genre& genre, TransitionStyle style, const VariantPicks& narrowed) {
 #if ENABLE_SYSEX_TEST
 	if (TestPort::queueFullHeld()) {
 		// Test hook: as if the steering queue had no room for the confirm's presses, which request() refuses first.
@@ -317,7 +323,7 @@ Transitions::Request Transitions::change(const Genre& genre, TransitionStyle sty
 	}
 #endif
 	// A refused request leaves the preload running, and what it rolls from, alone.
-	return request(style, Incoming{.genre = &genre});
+	return request(style, Incoming{.genre = &genre, .narrowed = narrowed});
 }
 
 Transitions::Request Transitions::load(const RecipeFile& file, const perform::RecipeName& name, TransitionStyle style) {
@@ -349,7 +355,7 @@ bool Transitions::submitPreload(uint32_t request, const Incoming& incoming) {
 		load->file = *incoming.file;
 		load->name = *incoming.name;
 	}
-	job.prepare(request, incoming.genre, load);
+	job.prepare(request, incoming.genre, incoming.narrowed, load);
 	if (runner.next() != &job && !runner.submitReplacing(job, first ? jobs[1] : jobs[0])) {
 		return false;
 	}

@@ -1,8 +1,7 @@
 # Ambient's genre changes (#125, spec §9.7, §21.3) over the sysex test port, in one boot: Acid techno into Ambient
-# and back out in all three styles. AMBIENT is a GENRE row of its own (no parent), so picking it opens the confirm at
-# once. Its transition entry is Intro, so the confirm asks AMBIENT? on FADE THROUGH: accepting with no turn plays
-# style=1, and each other style into Ambient is one detent from it. Back to ACID, the confirm starts on BUILD INTO A
-# DROP. In Ambient after the first change a forced Break keeps the Pad, Drone and bells sounding (gen_h16 voices=), and
+# and back out in all three styles. AMBIENT is a GENRE row of its own (no parent), so picking it opens the Regenerate
+# page at once. Its transition entry is Intro, so the page, titled AMBIENT?, starts on FADE: GO with no turn plays
+# style=1, and each other style into Ambient is one detent from it. Back to ACID, the page starts on DROP. In Ambient after the first change a forced Break keeps the Pad, Drone and bells sounding (gen_h16 voices=), and
 # the last change out of it plays Ambient's 16-bar Build, sounding too. Runs on a Deluge (deluge_probe.py session) or
 # in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 #
@@ -20,6 +19,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/types.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -30,7 +30,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- AMBIENT -> FADE THROUGH, the highlighted style: Acid techno's Outro, then Ambient's Intro at the seam ----
+# ---- AMBIENT -> FADE, the highlighted style: Acid techno's Outro, then Ambient's Intro at the seam ----
 mark
 include perform_transition_menu.txt
 button SELECT_ENC down
@@ -42,7 +42,8 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -64,7 +65,7 @@ expect event gen_section BREAK within=90
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=40
 expect event gen_h1 steps= within=20
 
-# ---- TECHNO > ACID -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Ambient's 6 parts to 4 ----
+# ---- TECHNO > ACID -> CUT: two detents from DROP, Ambient's 6 parts to 4 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -81,8 +82,10 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -93,7 +96,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- AMBIENT -> BUILD INTO A DROP: one detent back from FADE THROUGH; Acid techno's Build into Ambient's Drop ----
+# ---- AMBIENT -> DROP: one detent back from FADE; Acid techno's Build into Ambient's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -104,8 +107,10 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 -1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -116,7 +121,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- TECHNO > ACID -> FADE THROUGH: one detent from BUILD INTO A DROP; Ambient's 2-phrase Outro ----
+# ---- TECHNO > ACID -> FADE: one detent from DROP; Ambient's 2-phrase Outro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -133,8 +138,10 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -146,7 +153,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- AMBIENT -> HARD CUT AT PHRASE: one detent on from FADE THROUGH ----
+# ---- AMBIENT -> CUT: one detent on from FADE ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -157,8 +164,10 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -169,7 +178,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- TECHNO > ACID -> BUILD INTO A DROP, the highlighted style: Ambient's 16-bar Build, sounding, into Acid's Drop ----
+# ---- TECHNO > ACID -> DROP, the highlighted style: Ambient's 16-bar Build, sounding, into Acid's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -186,7 +195,8 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

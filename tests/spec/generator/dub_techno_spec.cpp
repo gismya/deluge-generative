@@ -181,7 +181,8 @@ describe dub_techno("Dub techno", $ {
 				const std::set<int32_t> m9{r % 12, (r + 3) % 12, (r + 10) % 12, (r + 2) % 12};
 				expect(expected == (level == 1 ? m7 : m9)).to_be_true();
 				for (uint32_t seed = 1; seed <= 2; seed++) {
-					const Walked walked = walk(recipe, seed, 96 * kStepsPerBar);
+					// The Build as written, so the walk reaches a Drop.
+					const Walked walked = walk(writtenVariants(recipe), seed, 96 * kStepsPerBar);
 					expect(walked.dropped).to_equal(0U);
 					expect(walked.evicted).to_equal(0U);
 					// "Throughout": the walk crosses a Break (bar 56 here) and a Drop (bar 80 or 88).

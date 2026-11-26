@@ -50,6 +50,8 @@ enum class Target : uint8_t {
 	Modulator2Level,
 	ModulatorFeedback, ///< each modulator in use
 	CarrierFeedback,   ///< both carriers
+	/// Kept out of every table: the stock folder cuts the level as it switches in (spec §11.2). Kept for a future
+	/// crossfaded folder; sound_mapping_spec keeps it out of the tables.
 	Fold,
 	Env1Release,
 	Env1Decay,
@@ -87,7 +89,8 @@ struct TargetRange {
 
 namespace mapping {
 
-// The spec §11.2 table, one list per control and engine. Every range is a starting estimate (tuning).
+// The spec §11.2 table, one list per control and engine. Every range is a starting estimate (tuning). No list moves
+// the wavefolder (Target::Fold): see spec §11.2's engine notes.
 
 // Shared by the synth engines.
 inline constexpr TargetRange kDecay[] = {
@@ -112,7 +115,6 @@ inline constexpr TargetRange kSubtractiveBrightness[] = {
 };
 inline constexpr TargetRange kSubtractiveDrive[] = {
     {Target::LpfMorph, 0, 15, Needs::LpfInUse},
-    {Target::Fold, 0, 10},
 };
 
 inline constexpr TargetRange kFmBrightness[] = {
@@ -122,7 +124,6 @@ inline constexpr TargetRange kFmBrightness[] = {
 inline constexpr TargetRange kFmDrive[] = {
     {Target::ModulatorFeedback, 0, 8},
     {Target::CarrierFeedback, 0, 8},
-    {Target::Fold, 0, 10},
 };
 
 inline constexpr TargetRange kRingmodBrightness[] = {
@@ -136,7 +137,6 @@ inline constexpr TargetRange kDx7Decay[] = {
     {Target::Env1Decay, -6, 0, Needs::SustainBelowFull},
     {Target::Env2Decay, -6, 0, Needs::Env2InUse},
 };
-inline constexpr TargetRange kDx7Drive[] = {{Target::Fold, 0, 10}};
 inline constexpr TargetRange kDx7Thin[] = {{Target::HpfFrequency, 0, 20, Needs::HpfInUse}};
 
 // Factory kit rows are one-shots with sustain 50 and the LPF open, so Brightness only darkens and Decay only
@@ -148,7 +148,12 @@ inline constexpr TargetRange kKitRowDecay[] = {
 };
 inline constexpr TargetRange kReverbOnly[] = {{Target::ReverbSend, 0, 10}};
 
-inline constexpr TargetRange kKitLevelBrightness[] = {{Target::LpfFrequency, -20, 0}};
+// A Kit's affect-entire LPF is an unpatched param: it moves 16/50 of an octave per menu unit (a Sound's LPF 0.22), and
+// from fully open its top ~9 units sit above the audio. At -20 (6.4 octaves at full) a Break's Close and dip played a
+// Break of closed hats alone 32 dB down, near silent (#524); at -14 (4.5 octaves) the same Break plays them 9 dB down
+// (tuning, measured). No range override takes it further: scaledRange() clamps it there.
+inline constexpr int8_t kKitDarkest = -14;
+inline constexpr TargetRange kKitLevelBrightness[] = {{Target::LpfFrequency, kKitDarkest, 0}};
 inline constexpr TargetRange kKitLevelWobble[] = {{Target::ModFxDepth, -8, 8, Needs::ModFxInUse}};
 inline constexpr TargetRange kKitLevelThin[] = {{Target::HpfFrequency, 0, 25}};
 
@@ -160,8 +165,8 @@ inline constexpr std::span<const TargetRange> kTable[kNumEngines][kNumSoundContr
     // Brightness, Decay, Drive, Space, Wobble, Thin
     {kSubtractiveBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},      // Subtractive
     {kFmBrightness, kDecay, kFmDrive, kSpace, kWobble, kNone},                        // FM: no HPF on factory FM
-    {kRingmodBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},          // Ringmod: fold and ladder morph
-    {kDx7Brightness, kDx7Decay, kDx7Drive, kSpace, kWobble, kDx7Thin},                // DX7
+    {kRingmodBrightness, kDecay, kSubtractiveDrive, kSpace, kWobble, kThin},          // Ringmod: ladder morph
+    {kDx7Brightness, kDx7Decay, kNone, kSpace, kWobble, kDx7Thin},                    // DX7: no Drive
     {kKitRowBrightness, kKitRowDecay, kNone, kReverbOnly, kNone, kThin},              // Kit row
     {kKitLevelBrightness, kNone, kNone, kReverbOnly, kKitLevelWobble, kKitLevelThin}, // Kit level
 };
@@ -207,6 +212,17 @@ constexpr int8_t scaledEnd(int8_t end, int32_t percent) {
 constexpr TargetRange scaledRange(TargetRange range, int32_t percent) {
 	range.low = scaledEnd(range.low, percent);
 	range.high = scaledEnd(range.high, percent);
+	return range;
+}
+
+/// scaledRange() on `engine`, where a Kit's affect-entire LPF never goes below mapping::kKitDarkest: past it a Break of
+/// hats alone plays near silent (#524). A Kit's kit-wide set keeps the default ranges today (spec §11.1), so this only
+/// guards an override that might reach it later.
+constexpr TargetRange scaledRange(Engine engine, TargetRange range, int32_t percent) {
+	range = scaledRange(range, percent);
+	if (engine == Engine::KitLevel && range.target == Target::LpfFrequency && range.low < mapping::kKitDarkest) {
+		range.low = mapping::kKitDarkest;
+	}
 	return range;
 }
 

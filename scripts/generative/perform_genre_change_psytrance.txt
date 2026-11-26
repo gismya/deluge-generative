@@ -1,6 +1,6 @@
 # Psytrance's genre changes (#127, spec §9.7, §21.3) over the sysex test port, in one boot: Acid techno into Psytrance
 # and back out in all three styles, then Ambient into Psytrance and back out in all three. PSYTRANCE is a parent's GENRE
-# row (#319): SELECT opens its submenu, and picking CLASSIC there opens the confirm on BUILD INTO A DROP (Classic
+# row (#319): SELECT opens its submenu, and picking CLASSIC there opens the Regenerate page on DROP (Classic
 # psytrance's transition entry). The first
 # change lands Acid's Build on Psytrance's Drop, which sounds (gen_h16 voices=); a forced Break in Psytrance keeps the
 # Drone, Arp and hats sounding; the last change out of it plays Psytrance's own Build (16 or 32 bars, its kick and bass
@@ -24,6 +24,7 @@
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/types.h
 # covers: src/deluge/generative/core/genres/ambient.cpp src/deluge/generative/core/genres/ambient_palette.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -34,7 +35,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP, the highlighted style: Acid techno's Build into Psytrance's Drop, sounding ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP, the highlighted style: Acid techno's Build into Psytrance's Drop, sounding ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -51,7 +52,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -73,7 +75,7 @@ expect event gen_section BREAK within=90
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- TECHNO > ACID -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Psytrance's 6 parts to 4 ----
+# ---- TECHNO > ACID -> CUT: two detents from DROP, Psytrance's 6 parts to 4 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -90,8 +92,10 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -102,7 +106,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> FADE THROUGH: one detent from BUILD INTO A DROP; Acid's Outro, Psytrance's Intro ----
+# ---- PSYTRANCE ▸ CLASSIC -> FADE: one detent from DROP; Acid's Outro, Psytrance's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -119,8 +123,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -132,7 +138,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- TECHNO > ACID -> FADE THROUGH: one detent from BUILD INTO A DROP; Psytrance's 1-phrase Outro ----
+# ---- TECHNO > ACID -> FADE: one detent from DROP; Psytrance's 1-phrase Outro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -149,8 +155,10 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -162,7 +170,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: two detents from DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -179,8 +187,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -191,7 +201,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- TECHNO > ACID -> BUILD INTO A DROP, the highlighted style: Psytrance's Build (16 or 32 bars), its kick and bass
+# ---- TECHNO > ACID -> DROP, the highlighted style: Psytrance's Build (16 or 32 bars), its kick and bass
 # cut for the last 2 bars and a beat's Gap, sounding, into Acid's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
@@ -209,7 +219,8 @@ expect event /^gen_genre_pick techno-acid row=ACID/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -225,7 +236,7 @@ expect event gen_h1 steps= within=20
 
 # ==== Ambient <-> Psytrance in all three styles (#127's acceptance criteria), from Acid by a cut into Ambient ====
 
-# ---- AMBIENT -> HARD CUT AT PHRASE: one detent on from FADE THROUGH (Ambient's entry), Acid's 4 parts to 6 ----
+# ---- AMBIENT -> CUT: one detent on from FADE (Ambient's entry), Acid's 4 parts to 6 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -236,8 +247,10 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -248,7 +261,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP, the highlight: Ambient's 16-bar Build into Psytrance's Drop, sounding ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP, the highlight: Ambient's 16-bar Build into Psytrance's Drop, sounding ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -265,7 +278,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -278,7 +292,7 @@ expect event gen_transition phase=idle within=10
 expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 
-# ---- AMBIENT -> FADE THROUGH, the highlight: Psytrance's 1-phrase Outro, then Ambient's Intro ----
+# ---- AMBIENT -> FADE, the highlight: Psytrance's 1-phrase Outro, then Ambient's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -289,7 +303,8 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -301,7 +316,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> FADE THROUGH: one detent from BUILD INTO A DROP; Ambient's 2-phrase Outro ----
+# ---- PSYTRANCE ▸ CLASSIC -> FADE: one detent from DROP; Ambient's 2-phrase Outro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -318,8 +333,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -331,7 +348,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- AMBIENT -> HARD CUT AT PHRASE: one detent on from FADE THROUGH ----
+# ---- AMBIENT -> CUT: one detent on from FADE ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -342,8 +359,10 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -354,7 +373,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: two detents from DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -371,8 +390,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -383,7 +404,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- AMBIENT -> BUILD INTO A DROP: one detent back from FADE THROUGH; Psytrance's Build into Ambient's Drop ----
+# ---- AMBIENT -> DROP: one detent back from FADE; Psytrance's Build into Ambient's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -394,8 +415,10 @@ expect event gen_genre_pick ambient row=AMBIENT
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 -1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

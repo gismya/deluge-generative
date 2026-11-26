@@ -56,6 +56,8 @@ public:
 	[[nodiscard]] bool sectionStartsHere() const { return stepInSection_ == 0; }
 	/// Whether this step is an Arc Drop: the Groove a Build lands on starts here.
 	[[nodiscard]] bool dropStartsHere() const { return stepInSection_ == 0 && afterDrop_; }
+	/// Whether this step is in a Groove that started on a Drop, any phrase of it (a yield's `inDrops`, spec §5.6).
+	[[nodiscard]] bool inDrop() const { return kind_ == SectionKind::Groove && afterDrop_; }
 
 	[[nodiscard]] int32_t stepInBar() const { return stepInPhrase_ % kStepsPerBar; }
 	[[nodiscard]] int32_t barInPhrase() const { return stepInPhrase_ / kStepsPerBar; }
@@ -205,6 +207,11 @@ private:
 /// `macro` on `arc`'s step: the Recipe's `centre` plus the Section's offset, within 0..kMacroFull (spec §9.4). The
 /// play path (Generator::effectiveMacro()) and the Arc plan, on its copy of the Arc, both read it here.
 int32_t effectiveOn(const Genre& genre, const Arc& arc, const Macros& centre, Macro macro);
+
+/// The lowest Density gate of any part or lane that plays patterns, or of any Sustain part, which has no pool but
+/// plays by its gate (spec §9.4): a lane opens only with its part, so its gate is the higher of the two. Lanes and
+/// other parts without a pool play only by section rules and never in an Intro, so they don't count.
+int32_t lowestGate(const Genre& genre);
 
 /// The Build roll's hits on `step` at `stage` (spec §8.3): none off the stage's grid (beats, 8ths, then every 16th),
 /// otherwise 1, or a ratchet of 2 for 32nds and 4 for 64ths.

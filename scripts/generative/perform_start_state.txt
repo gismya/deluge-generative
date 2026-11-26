@@ -1,7 +1,9 @@
 # start_state releases every hold (#193) over the sysex test port: a script that stopped mid-hold leaves nothing held
 # for the next one on the same load. It also resets the Current Recipe ("reset recipe"): a script that left another
 # genre playing doesn't move the next one's entry off Acid techno (#234's hardware run: Dub left behind gave
-# perform_sound_controls.txt Dub's control sets). Runs on a Deluge (deluge_probe.py run) or in delugemu
+# perform_sound_controls.txt Dub's control sets), and then ("reset settings") the Perform settings kept until
+# power-off and stock's sample browser's last file: a lane preview's kick folder made perform_retire.txt's OSC 1
+# browser open there, and BROWSER PREVIEW left OFF stopped perform_preset_preview.txt's previews (#500). Runs on a Deluge (deluge_probe.py run) or in delugemu
 # (test_port_emu.py). Start as after boot: transport stopped, the current clip a synth or kit clip.
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/generative/firmware/current_recipe.* src/deluge/generative/firmware/entry_leave.cpp
@@ -9,6 +11,12 @@
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/generative/firmware/perform_song.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp
 # covers: src/deluge/generative/core/lane_names.h
+# covers: src/deluge/io/midi/test_port.* src/deluge/gui/ui/browser/perform_sound_browser.*
+# covers: src/deluge/gui/ui/browser/sample_browser.* src/deluge/gui/menu_item/generative/perform_menu.cpp
+# covers: src/deluge/generative/firmware/preset_preview.* src/deluge/generative/perform/perform_steering.h
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_knobs.cpp
+# covers: src/deluge/generative/core/palette_file.* src/deluge/gui/menu_item/generative/perform_lanes.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 
 # ---- A script stops here, with card reads failing, the next preload parked and fill mode on ----
@@ -49,7 +57,8 @@ expect event gen_genre_pick techno-dub row=DUB from=ACID
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -71,5 +80,149 @@ expect event gen_sound ACID - pick mode=3 prio=2 arp=0 SYNTHS/ within=20
 expect event gen_perform_entered techno-acid within=20
 expect root_ui=generative_perform within=10
 expect ui=generative_perform
+
+# ---- #500: what a script leaves outside the Current Recipe, kept until power-off. A lane browser's preview sets
+# stock's sample browser's last file (a kick in a SAMPLES subfolder), GLIDE goes to INSTANT and BROWSER PREVIEW to
+# OFF. Inside Perform "reset settings" is refused ----
+pad 9 7 down
+wait 50
+pad 9 7 up
+wait 50
+pad 9 7 down
+wait 50
+pad 9 7 up
+expect event gen_focus part=0 locked=0
+button KIT down
+wait 50
+button KIT up
+expect event /gen_lane_list part=0 rows=reroll,kick,/ within=5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event /gen_browser_preview sounding=1 playing=0 path=SAMPLES\/[^\/]+\/.+$/ within=5
+expect event gen_browser open part=0 lane=kick within=10
+button BACK down
+wait 800
+button BACK up
+expect event gen_browser closed within=5
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 4
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+expect event gen_glide 0
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 20
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 -5
+expect event gen_browser_preview_setting 0
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+reset settings
+expect event gen_settings_reset refused why=perform within=10
+
+# ---- The next script's start_state puts them back as after boot: GLIDE at 1 BAR (a detent up is 2 BARS, gen_glide
+# 3), the preset browser previews at WHEN STOPPED, and ACID's OSC 1 file browser opens in SAMPLES, where BACK closes
+# it (in the kick's folder BACK would go up a folder, as perform_retire.txt hit after perform_lane_browser.txt) ----
+start_state
+include perform_open.txt
+include perform_confirm.txt
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_menu PERFORM
+encoder 3 -20
+encoder 3 4
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+encoder 3 1
+expect event gen_glide 3
+button BACK down
+wait 50
+button BACK up
+wait 200
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+pad 9 6 down
+wait 50
+pad 9 6 up
+wait 50
+pad 9 6 down
+wait 50
+pad 9 6 up
+expect event gen_focus part=1 locked=1
+button SYNTH down
+wait 50
+button SYNTH up
+expect event /gen_browser open part=1 pick=(?P<pick>SYNTHS\/.+\.XML) at=(?P=pick)$/ within=10
+expect event /gen_preset_preview built part=1 error=0 ms=\d+ path=(?P=pick)$/ within=10
+button BACK down
+wait 800
+button BACK up
+expect event gen_browser closed within=5
+expect event gen_preset_preview freed part=1 within=5
+button BACK down
+wait 50
+button BACK up
+expect ui=generative_perform within=5
+# SYNTH MODE turned to SUBTRACTIVE, so OSC 1 has a file browser (as perform_retire.txt)
+button SHIFT down
+wait 50
+pad 6 4 down
+wait 50
+pad 6 4 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+encoder 3 -3
+button SHIFT down
+wait 50
+pad 0 5 down
+wait 50
+pad 0 5 up
+wait 300
+button SHIFT up
+expect event gen_editor open part=1
+expect ui=sample_browser
+button BACK down
+wait 50
+button BACK up
+expect event gen_editor closed within=5
+expect ui=generative_perform within=5
 
 include perform_leave.txt

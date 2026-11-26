@@ -18,9 +18,10 @@
 // Techno (spec §4.5, ADR 0006): a parent genre, never played, and its subgenres. The parent holds what they share:
 // straight time, a four-on-the-floor kick, offbeat hats and a rim, no claps on 2 and 4, the fills (a kick and bass
 // drop, and a snare and tom run), the Arc and its section rules (a snare roll, the kick cut for the Build's last bar, a
-// beat's Gap, a Crash accent on Drops and after fills), the FX part (Riser, Fall, Impact), the gestures, and the drum
-// and FX lanes of the palette (techno_palette.cpp). Each subgenre sets its tempo range, scales, pitched parts, Harmony
-// slot, Break keeps and palette. Every value is starting data, tuned by ear later (spec §21.5).
+// beat's Gap, a Crash accent on Drops and after fills), the FX part (Riser, Fall, Impact), the gestures, the drum
+// and FX lanes of the palette (techno_palette.cpp), and the BUILD variant set every subgenre lists (ADR 0008). Each
+// subgenre sets its tempo range, scales, pitched parts, Harmony slot, Break keeps, palette and own variant sets. Every
+// value is starting data, tuned by ear later (spec §21.5).
 //
 // Its four subgenres (#218–#221): Acid techno (#218), the default genre, Melodic techno (#226, with its Pad from #123
 // and its Arp from #219), Dub techno (#221) and Detroit techno (#220).
@@ -35,6 +36,10 @@
 namespace deluge::generative::genres {
 
 namespace {
+
+/// Every subgenre's roster opens with the Drums, then its bass (technoRosterValid()).
+constexpr int32_t kDrumsPart = 0;
+constexpr int32_t kBassPart = 1;
 
 // Patterns: one character per 16th. Importance '.' never, '1'-'9' as Density allows, 'X' anchor.
 // Levels 'g' ghost, 'a' accent, else normal. Then the Complexity tier and, if not 1, the pick weight.
@@ -118,6 +123,145 @@ constexpr LaneSpec kDrumLanes[] = {
     {.lane = Lane::Tom, .fillPool = kTomFill, .band = {0, 1}}, // only a Swap plays it
 };
 
+// ---- The hat styles (variant ideas 1, #531): the DRUMS set Acid and Detroit techno each list ----
+
+// clang-format off
+/// Running: the closed hat carries the groove on 16ths, ghosts on the e and a.
+constexpr Pattern kRunningClosedHat[] = {
+    {"8898889888988898", ".g.g.g.g.g.g.g.g", 0, 2},
+    {"8898889888988898", ".g.g.g.g.g.g.gag", 0},
+    {"8999899989998999", ".g.g.g.g.g.g.g.g", 1},
+    {"8898889888988998", ".g.g.g.g.g.g.g.g", 1},
+    {"9999999999999999", ".g.g.g.g.g.g.g.g", 2},
+};
+
+/// Running: the open hat only at high Density.
+constexpr Pattern kRunningOpenHat[] = {
+    {"..............5.", "................", 0, 2},
+    {"..............5.", "................", 0},
+    {"..............6.", "................", 1},
+};
+
+/// Pump: the kick strictly on the beats, at every Complexity (as many entries in the same tiers as kKick, so a live
+/// switch keeps a frozen pick).
+constexpr Pattern kPumpKick[] = {
+    {"X...X...X...X...", "................", 0},
+    {"X...X...X...X...", "................", 1, 2},
+    {"X...X...X...X...", "................", 1},
+    {"X...X...X...X...", "................", 2},
+    {"X...X...X...X...", "................", 2},
+};
+
+/// Pump: closed hats only as ghosts on the a.
+constexpr Pattern kPumpClosedHat[] = {
+    {"...7.......7....", "...g.......g....", 0, 2},
+    {"...7...7...7...7", "...g...g...g...g", 0},
+    {"...7...7...7...7", "...g...g...g...g", 1},
+    {"...7...7...7...7", "...g...g...g...g", 1},
+    {"...7...7...7...7", "...g...g...g...g", 2},
+};
+
+/// Pump: the open hat on every &.
+constexpr Pattern kPumpOpenHat[] = {
+    {"..9...9...9...9.", "................", 0, 2},
+    {"..9...9...9...9.", "................", 0},
+    {"..9...9...9...9.", "................", 1},
+};
+
+/// Tribal: a busier rim.
+constexpr Pattern kTribalRim[] = {
+    {"...8..8...8..8..", "...g......g.....", 0},
+    {"...8..8.8.8..8.8", "...g....g.g.....", 1},
+    {".8.8..8...88.8..", ".g........g.....", 1},
+};
+
+/// Tribal: thinner closed hats.
+constexpr Pattern kTribalClosedHat[] = {
+    {"..8.......8.....", "................", 0, 2},
+    {"..8.......8...8.", "................", 0},
+    {"..8...8...8.....", "................", 1},
+    {"..8.......8.4.8.", "............g...", 1},
+    {"..8...8...8...8.", "................", 2},
+};
+
+/// Tribal: a tom pattern in the groove, where the other styles' Tom lane plays only a Swap.
+constexpr Pattern kTribalTom[] = {
+    {"......8.......89", "................", 0},
+    {"....8.8...8...89", "..........g.....", 1},
+};
+// clang-format on
+// As many entries as each lane's own pool, in the same tiers, so a live switch keeps a frozen pick (Tribal's Tom
+// pool stands where the others have none).
+static_assert(std::size(kRunningClosedHat) == std::size(kClosedHat)
+              && std::size(kRunningOpenHat) == std::size(kOpenHat));
+static_assert(std::size(kPumpKick) == std::size(kKick) && std::size(kPumpClosedHat) == std::size(kClosedHat)
+              && std::size(kPumpOpenHat) == std::size(kOpenHat));
+static_assert(std::size(kTribalRim) == std::size(kRim) && std::size(kTribalClosedHat) == std::size(kClosedHat));
+
+using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
+
+/// The parent's drum lanes with `edit` applied to a copy.
+template <typename Edit>
+constexpr DrumLanes drumLanesWith(Edit edit) {
+	DrumLanes lanes{};
+	std::copy(std::begin(kDrumLanes), std::end(kDrumLanes), lanes.begin());
+	edit(lanes);
+	return lanes;
+}
+
+/// Lane `lane` of `lanes`.
+constexpr LaneSpec& laneOf(DrumLanes& lanes, Lane lane) {
+	for (LaneSpec& spec : lanes) {
+		if (spec.lane == lane) {
+			return spec;
+		}
+	}
+	throw "the parent's Drums have no such lane";
+}
+
+/// Running drops the closed hat's Lock: with it the 16ths thinned to 6 a bar (variant ideas 1).
+constexpr DrumLanes kRunningLanes = drumLanesWith([](DrumLanes& lanes) {
+	LaneSpec& closed = laneOf(lanes, Lane::ClosedHat);
+	closed.pool = kRunningClosedHat;
+	closed.rules = {};
+	laneOf(lanes, Lane::OpenHat).pool = kRunningOpenHat;
+});
+
+constexpr DrumLanes kPumpLanes = drumLanesWith([](DrumLanes& lanes) {
+	laneOf(lanes, Lane::Kick).pool = kPumpKick;
+	laneOf(lanes, Lane::ClosedHat).pool = kPumpClosedHat;
+	laneOf(lanes, Lane::OpenHat).pool = kPumpOpenHat;
+});
+
+constexpr DrumLanes kTribalLanes = drumLanesWith([](DrumLanes& lanes) {
+	laneOf(lanes, Lane::Rim).pool = kTribalRim;
+	laneOf(lanes, Lane::ClosedHat).pool = kTribalClosedHat;
+	laneOf(lanes, Lane::Tom).pool = kTribalTom;
+});
+
+/// The hat style (variant ideas 1, DRUMS): the offbeat hats Techno played before the set, running 16ths, the pump (open
+/// hats on every &, the kick on the beats) or tribal (a busier rim and toms in the groove), 2:2:2:1 (tuning: the
+/// owner's "sometimes" and "rarely"). Acid and Detroit techno each list it as their own set; Melodic and Dub techno
+/// have their own drums. Live: it swaps only the Drums' lanes, which a Drop re-picks, each pool as many entries in the
+/// same tiers as the lane's own (Tribal's Tom pool where the others have none, which a pick reads fresh).
+constexpr Variant kDrumVariants[] = {
+    {.name = "offbeat", .oledName = "OFFBEAT", .weight = 2},
+    {.name = "running",
+     .oledName = "RUNNING",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kRunningLanes; }},
+    {.name = "pump",
+     .oledName = "PUMP",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kPumpLanes; }},
+    {.name = "tribal",
+     .oledName = "TRIBAL",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kTribalLanes; }},
+};
+
+constexpr VariantSet kDrumSet{.name = "drums", .oledName = "DRUMS", .variants = kDrumVariants, .live = true};
+
 /// FX lanes have no pools: only section rules play them (spec §5.4).
 constexpr LaneSpec kFxLanes[] = {{.lane = Lane::Riser}, {.lane = Lane::Fall}, {.lane = Lane::Impact}};
 
@@ -141,6 +285,47 @@ constexpr FillEntry kFills[] = {
 };
 
 constexpr WeightedBars kBuildBars[] = {{8, 2}, {16, 1}};
+
+/// The Build's shape (variant ideas 1, BUILD), on the parent's Arc, so every subgenre lists it: the roll Build of 8 or
+/// 16 bars as written; long, 16 or 32 bars with the kick cut for the last 2; no roll, 8 bars; or hard, 4 or 8 bars
+/// with no Gap; 3:1:2:2 (tuning: the owner's "often", "rarely" and "sometimes"; "make the no roll version 8 bars"). Not
+/// live: the Arc reads the Build ahead.
+constexpr WeightedBars kLongBuildBars[] = {{16, 2}, {32, 1}};
+constexpr WeightedBars kNoRollBuildBars[] = {{8, 1}};
+constexpr WeightedBars kHardBuildBars[] = {{4, 1}, {8, 1}};
+
+constexpr Variant kBuildVariants[] = {
+    {.name = "roll", .oledName = "ROLL", .weight = 3},
+    {.name = "long",
+     .oledName = "LONG",
+     .weight = 1,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildBars = kLongBuildBars;
+	         resolved.genre.arc.buildCutBars = 2;
+         }},
+    {.name = "noroll",
+     .oledName = "NO ROLL",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildBars = kNoRollBuildBars;
+	         resolved.genre.arc.roll = {.lane = Lane::None};
+         }},
+    {.name = "hard",
+     .oledName = "HARD",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.genre.arc.buildBars = kHardBuildBars;
+	         resolved.genre.arc.gap = GapLength::None;
+         }},
+};
+
+constexpr VariantSet kBuildSet{.name = "build", .oledName = "BUILD", .variants = kBuildVariants};
+
+/// The parent's sets (BUILD), which Dub techno inherits.
+constexpr VariantSet kParentSets[] = {kBuildSet};
 
 /// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
 /// stem of its subgenres' names; no Recipe names it (findGenre() lists only playable genres). Its Break keeps the
@@ -169,6 +354,7 @@ constexpr Genre kTechnoParent{
             .roll = {.lane = Lane::Snare, .top = RollStage::ThirtySecond},
             .accentLane = Lane::Crash,
         },
+    .variantSets = kParentSets,
 };
 
 // ---- Acid techno (#218): a mutating acid Loop over the parent's drums, and a Drone under it ----
@@ -198,6 +384,62 @@ constexpr LoopSpec kBassLoop{
     .mutation = 150,
     .answers = kBassAnswers,
     .answerBars = 4,
+};
+
+// clang-format off
+/// Talking: a busier acid line, accents on the &s (as many entries in the same tiers as kBass, so a live switch keeps a
+/// frozen pick).
+constexpr Pattern kTalkingBass[] = {
+    {"8.8.98.8.88.9.8.", "....a.......a...", 0},
+    {"8.898.8.8.898.88", "..a.....a...a...", 1, 2},
+    {"9.8.8.988.8.9.88", "......a.....a...", 1},
+    {"9898989898989898", "..a...a.g.a...a.", 2},
+};
+// clang-format on
+static_assert(std::size(kTalkingBass) == std::size(kBass));
+
+/// Talking adds the 2nd (Phrygian's ♭2) and weighs the root less (tuning).
+constexpr LineWeight kTalkingDegrees[] = {{0, 4}, {1, 2}, {2, 1}, {3, 2}, {4, 2}, {6, 2}};
+/// Hypnotic: the root alone, and its octave by the Octave Answer and the octave jumps.
+constexpr LineWeight kHypnoticDegrees[] = {{0, 1}};
+constexpr Answer kHypnoticAnswers[] = {{AnswerKind::Octave}};
+
+/// How the 303 talks (variant ideas 1, ACID): the line as written; talking, leaping wider, jumping octaves, accenting
+/// and sliding more on a busier pool; or hypnotic, the root and its octave with few slides and a slow mutation;
+/// 3:2:2 (tuning: the owner's "often" and "sometimes"). Live: it swaps the Loop's data, which each roll and mutation
+/// reads afresh, and a pool as many entries in the same tiers.
+constexpr Variant kAcidVariants[] = {
+    {.name = "classic", .oledName = "CLASSIC", .weight = 3},
+    {.name = "talking",
+     .oledName = "TALKING",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         PartSpec& acid = resolved.parts[kBassPart];
+	         acid.pool = kTalkingBass;
+	         acid.loop.degrees = kTalkingDegrees;
+	         // (tuning)
+	         acid.loop.draws = {.leap = {6, 12}, .octaveUp = {250, 350}, .octaveDown = {150, 250}, .accent = 400};
+	         acid.loop.slide = {320, 450}; // (tuning)
+         }},
+    {.name = "hypnotic",
+     .oledName = "HYPNOTIC",
+     .weight = 2,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         LoopSpec& loop = resolved.parts[kBassPart].loop;
+	         loop.degrees = kHypnoticDegrees;
+	         loop.answers = kHypnoticAnswers;
+	         loop.draws = {.leap = {2, 10}, .octaveUp = {120, 200}, .octaveDown = 0, .accent = 300}; // (tuning)
+	         loop.slide = {30, 60};                                                                  // (tuning)
+	         loop.mutation = 40;                                                                     // (tuning)
+         }},
+};
+
+constexpr VariantSet kAcidSets[] = {
+    kDrumSet,
+    {.name = "acid", .oledName = "ACID", .variants = kAcidVariants, .live = true},
+    kBuildSet,
 };
 
 /// Drums, the acid Loop, the Drone and FX. The Drone is a pedal Sustain Pad: the key's root and the 5th above, held
@@ -250,11 +492,12 @@ constexpr Genre kTechnoAcid = [] {
 	genre.name = "techno-acid";
 	genre.oledName = "ACID TECHNO";
 	genre.shortName = "ACID";
-	genre.version = 4; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 5; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kAcidScales;
 	genre.parts = kAcidParts;
+	genre.variantSets = kAcidSets;
 	genre.palette = &technoAcidPalette;
 	// The breakdown is the Drone under the parent's kick, rim and closed hat.
 	genre.arc.breakKeeps.parts = partBit(2);
@@ -262,6 +505,8 @@ constexpr Genre kTechnoAcid = [] {
 	softBreakDip(genre);
 	return genre;
 }();
+static_assert(kAcidParts[kDrumsPart].role == Role::Drums);
+static_assert(kAcidParts[kBassPart].role == Role::Bass && kAcidParts[kBassPart].flavour == Flavour::Loop);
 static_assert(technoRosterValid(kTechnoAcid),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(genreValid(kTechnoAcid),
@@ -323,15 +568,83 @@ constexpr ArpWalk kArpWalks[] = {
 };
 static_assert(std::size(kArpWalks) == std::size(kArpLead), "a walk for each Arp pool entry");
 
-/// The parent's drum lanes, but the kick holds only the beats.
-constexpr auto kMelodicDrumLanes = [] {
-	std::array<LaneSpec, std::size(kDrumLanes)> lanes{};
-	std::copy(std::begin(kDrumLanes), std::end(kDrumLanes), lanes.begin());
-	static_assert(kDrumLanes[0].lane == Lane::Kick);
-	lanes[0].pool = kFourOnTheFloor;
-	lanes[0].band = {0, 0};
-	return lanes;
+// clang-format off
+/// Pulse: 16ths throughout, each tier as many entries as kArpLead's.
+constexpr Pattern kPulseArp[] = {
+    {"X898989898989898", "a...a...a...a...", 0, 2},
+    {"X898989898989898", "a.......a.......", 0},
+    {"X898989898989898", "a...a...a...a...", 1},
+    {"X898989898989898", "a.......a.......", 1},
+    {"X999999999999999", "a...a...a...a...", 2},
+    {"X999999999999999", "a.......a.......", 2},
+};
+
+/// Sparse: onsets a dotted 8th apart.
+constexpr Pattern kSparseArp[] = {
+    {"X..9..9..9..9...", "a.....a.....a...", 0, 2},
+    {"X..9..9..9..9.8.", "a.....a.....a...", 0},
+    {"X..9..9..9..9..8", "a..a..a..a..a...", 1},
+    {"X..9..9..98.9...", "a.....a.....a...", 1},
+    {"X..9..9..9..9.88", "a..a..a..a..a...", 2},
+    {"X.89..9.89..9...", "a.....a.....a...", 2},
+};
+// clang-format on
+static_assert(std::size(kPulseArp) == std::size(kArpLead) && std::size(kSparseArp) == std::size(kArpLead));
+
+constexpr ArpWalk kPulseWalks[] = {
+    {.order = ArpOrder::Pulse, .octaves = 2}, {.order = ArpOrder::Pulse, .octaves = 2},
+    {.order = ArpOrder::Pulse, .octaves = 2}, {.order = ArpOrder::Pulse, .octaves = 2},
+    {.order = ArpOrder::Pulse, .octaves = 2}, {.order = ArpOrder::Pulse, .octaves = 2},
+};
+
+/// Down: kArpWalks with each walk falling, so a retune of their octaves moves both.
+constexpr auto kDownWalks = [] {
+	std::array<ArpWalk, std::size(kArpWalks)> walks{};
+	std::copy(std::begin(kArpWalks), std::end(kArpWalks), walks.begin());
+	for (ArpWalk& walk : walks) {
+		walk.order = ArpOrder::Down;
+	}
+	return walks;
 }();
+static_assert(std::size(kPulseWalks) == std::size(kArpLead) && std::size(kDownWalks) == std::size(kArpLead));
+
+constexpr int32_t kArpPart = 3;
+
+/// The Arp's figure (variant ideas 1, ARP): the walks as written, up and up-down; pulse, the root and its octave on
+/// 16ths; down, the same walks falling; or sparse, the walks on onsets a dotted 8th apart; 3:3:2:2 (tuning: the owner's
+/// "often" and "sometimes"). Live: it swaps the Arp's pool and walks, read step by step, each as many entries as
+/// kArpLead.
+constexpr Variant kArpVariants[] = {
+    {.name = "rising", .oledName = "RISING", .weight = 3},
+    {.name = "pulse",
+     .oledName = "PULSE",
+     .weight = 3,
+     .apply =
+         [](ResolvedGenre& resolved) {
+	         resolved.parts[kArpPart].pool = kPulseArp;
+	         resolved.parts[kArpPart].arp.walks = kPulseWalks;
+         }},
+    {.name = "down",
+     .oledName = "DOWN",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].arp.walks = kDownWalks; }},
+    {.name = "sparse",
+     .oledName = "SPARSE",
+     .weight = 2,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].pool = kSparseArp; }},
+};
+
+constexpr VariantSet kMelodicSets[] = {
+    {.name = "arp", .oledName = "ARP", .variants = kArpVariants, .live = true},
+    kBuildSet,
+};
+
+/// The parent's drum lanes, but the kick holds only the beats.
+constexpr DrumLanes kMelodicDrumLanes = drumLanesWith([](DrumLanes& lanes) {
+	LaneSpec& kick = laneOf(lanes, Lane::Kick);
+	kick.pool = kFourOnTheFloor;
+	kick.band = {0, 0};
+});
 
 constexpr PartSpec kMelodicDrums = [] {
 	PartSpec drums = kTechnoDrums;
@@ -412,11 +725,12 @@ constexpr Genre kTechnoMelodic = [] {
 	genre.name = "techno-melodic";
 	genre.oledName = "MELODIC TECHNO";
 	genre.shortName = "MELODIC";
-	genre.version = 5; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 6; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 122;
 	genre.facts.tempoHighBpm = 128;
 	genre.facts.scales = kMelodicScales;
 	genre.parts = kMelodicParts;
+	genre.variantSets = kMelodicSets;
 	genre.harmony = {.graph = &kMelodicGraph, .extensionCeiling = 1};
 	genre.palette = &technoMelodicPalette;
 	// The breakdown is the Pad and the Arp alone, over the closed hat.
@@ -426,6 +740,7 @@ constexpr Genre kTechnoMelodic = [] {
 	softBreakDip(genre);
 	return genre;
 }();
+static_assert(kMelodicParts[kArpPart].role == Role::Lead && kMelodicParts[kArpPart].flavour == Flavour::Arp);
 static_assert(technoRosterValid(kTechnoMelodic),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(genreValid(kTechnoMelodic),
@@ -615,7 +930,7 @@ constexpr Genre kTechnoDub = [] {
 	genre.name = "techno-dub";
 	genre.oledName = "DUB TECHNO";
 	genre.shortName = "DUB";
-	genre.version = 5; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 6; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 115;
 	genre.facts.tempoHighBpm = 125;
 	genre.facts.scales = kDubScales;
@@ -777,6 +1092,9 @@ constexpr ChordGraph kDetroitGraph{
     .barsPerChord = 2,
 };
 
+/// The hat style, as Acid techno's, and the Build's shape.
+constexpr VariantSet kDetroitSets[] = {kDrumSet, kBuildSet};
+
 constexpr Scale kDetroitScales[] = {Scale::Minor, Scale::Dorian};
 
 constexpr Genre kTechnoDetroit = [] {
@@ -784,11 +1102,12 @@ constexpr Genre kTechnoDetroit = [] {
 	genre.name = "techno-detroit";
 	genre.oledName = "DETROIT TECHNO";
 	genre.shortName = "DETROIT";
-	genre.version = 5; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 6; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	genre.facts.tempoLowBpm = 125;
 	genre.facts.tempoHighBpm = 135;
 	genre.facts.scales = kDetroitScales;
 	genre.parts = kDetroitParts;
+	genre.variantSets = kDetroitSets;
 	// Every chord with a 7th, usually, and a second Extension as Complexity rises (spec §7.4).
 	genre.harmony = {.graph = &kDetroitGraph, .extensionFloor = 1, .extensionCeiling = 2};
 	genre.palette = &technoDetroitPalette;
@@ -798,6 +1117,7 @@ constexpr Genre kTechnoDetroit = [] {
 	softBreakDip(genre);
 	return genre;
 }();
+static_assert(kDetroitParts[kDrumsPart].role == Role::Drums);
 static_assert(technoRosterValid(kTechnoDetroit),
               "Drums first, the bass second (the parent's Rest fill drops part 1), FX last");
 static_assert(genreValid(kTechnoDetroit),

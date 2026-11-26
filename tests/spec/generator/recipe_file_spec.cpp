@@ -21,7 +21,9 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
 #include "generative/core/recipe_file.h"
+#include "generative/core/variants.h"
 #include "generative/perform/recipe_name.h"
+#include "no_sets_genre.h"
 
 #include "cppspec.hpp"
 
@@ -266,6 +268,16 @@ describe recipe_file("Recipe files", $ {
 			expect(parseRecipeFile(fileWith(acid + " scale=\"blues\""), *loaded) == RecipeFileRead::Unreadable).to_be_true();
 		});
 
+		it("gives a file that leaves out swing the middle of the genre's swing range", _ {
+			const Genre& house = genres::house;
+			auto loaded = std::make_unique<RecipeFile>();
+			expect(parseRecipeFile(fileWith("genre=\"house\" genreVersion=\"" + versionOf(house) + "\""), *loaded)
+			       == RecipeFileRead::Ok)
+			    .to_be_true();
+			expect(int32_t{loaded->recipe.swing}).to_equal((house.facts.swingLow + house.facts.swingHigh) / 2);
+			expect(int32_t{loaded->recipe.swing}).to_equal(12); // House's range is +10 to +14 since version 7 (#518)
+		});
+
 		it("fills what a file leaves out from the genre, clamps what's out of range and skips what it doesn't know", _ {
 			const Genre& acid = genres::technoAcid;
 			auto loaded = std::make_unique<RecipeFile>();
@@ -305,6 +317,80 @@ describe recipe_file("Recipe files", $ {
 			for (int32_t p = 1; p < partCount(acid); p++) {
 				expect(loaded->recipe.bias.any(p)).to_be_false();
 			}
+		});
+	});
+
+	context("variant sets (spec §16.1, §3.6)", _ {
+		it("gives back each set's pick and allowed variants, narrowed or not, by stable names", _ {
+			FakeCard card = factoryCardWithPack();
+			const Genre& dub = genres::dub;
+			for (uint8_t allowed = 1; allowed <= allVariants(dub.variantSets[0]); allowed++) {
+				for (uint8_t pick = 0; pick < dub.variantSets[0].variants.size(); pick++) {
+					auto saved = rolledFile(dub, 5, card);
+					saved->recipe.variants.pick[0] = pick;
+					saved->recipe.variants.allowed[0] = allowed;
+					auto loaded = std::make_unique<RecipeFile>();
+					const std::string text = written(*saved);
+					expect(parseRecipeFile(text, *loaded) == RecipeFileRead::Ok).to_be_true();
+					expect(loaded->recipe.variants == saved->recipe.variants).to_be_true();
+					// `allow` is written only for a narrowed set.
+					const bool narrowed = allowed != allVariants(dub.variantSets[0]);
+					expect(text.find("allow=") != std::string::npos).to_equal(narrowed);
+				}
+			}
+		});
+		it("writes a child per set by name: <variant set pick allow>", _ {
+			FakeCard card = factoryCardWithPack();
+			auto saved = rolledFile(genres::dub, 5, card);
+			saved->recipe.variants.pick[0] = 1;
+			saved->recipe.variants.allowed[0] = 0b10;
+			expect(written(*saved).find("<variant\n\t\tset=\"skank\"\n\t\tpick=\"plain\"\n\t\tallow=\"plain\" />")
+			       != std::string::npos).to_be_true();
+		});
+		it("skips an unknown set, drops an unknown name in allow, and leaves an unknown pick to be drawn", _ {
+			const std::string root = "genre=\"dub\" genreVersion=\"" + versionOf(genres::dub) + "\"";
+			auto loaded = std::make_unique<RecipeFile>();
+			expect(parseRecipeFile(fileWith(root, "<variant set=\"drums\" pick=\"rockers\" />\n"
+			                                      "<variant set=\"skank\" pick=\"jazz\" allow=\"jazz,plain\" />\n"),
+			                       *loaded) == RecipeFileRead::Ok).to_be_true();
+			expect(static_cast<int32_t>(loaded->recipe.variants.allowed[0])).to_equal(0b10);
+			expect(loaded->recipe.variants.pick[0] == kUnsetVariant).to_be_true();
+			drawUnsetVariants(loaded->recipe, 99);
+			expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(1); // the one allowed: plain
+		});
+		it("draws a pick outside the file's own allow list within that list", _ {
+			const std::string root = "genre=\"dub\" genreVersion=\"" + versionOf(genres::dub) + "\"";
+			for (uint32_t entropy = 0; entropy < 16; entropy++) {
+				auto loaded = std::make_unique<RecipeFile>();
+				expect(parseRecipeFile(fileWith(root, "<variant set=\"skank\" pick=\"sevenths\" allow=\"plain\" />\n"),
+				                       *loaded) == RecipeFileRead::Ok).to_be_true();
+				expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(0); // as the file says, for now
+				drawUnsetVariants(loaded->recipe, entropy);
+				expect(static_cast<int32_t>(loaded->recipe.variants.pick[0])).to_equal(1); // plain, the one allowed
+				expect(static_cast<int32_t>(loaded->recipe.variants.allowed[0])).to_equal(0b10);
+			}
+		});
+		it("draws a set the file leaves out within every variant, and keeps a pick it knows", _ {
+			const std::string root = "genre=\"dub\" genreVersion=\"" + versionOf(genres::dub) + "\"";
+			std::set<int32_t> drawn;
+			for (uint32_t entropy = 0; entropy < 64; entropy++) {
+				auto loaded = std::make_unique<RecipeFile>();
+				expect(parseRecipeFile(fileWith(root), *loaded) == RecipeFileRead::Ok).to_be_true();
+				expect(loaded->recipe.variants.pick[0] == kUnsetVariant).to_be_true();
+				expect(static_cast<int32_t>(loaded->recipe.variants.allowed[0])).to_equal(0b11);
+				drawUnsetVariants(loaded->recipe, entropy);
+				drawn.insert(loaded->recipe.variants.pick[0]);
+				auto kept = std::make_unique<RecipeFile>();
+				expect(parseRecipeFile(fileWith(root, "<variant set=\"skank\" pick=\"sevenths\" />\n"), *kept)
+				       == RecipeFileRead::Ok).to_be_true();
+				drawUnsetVariants(kept->recipe, entropy);
+				expect(static_cast<int32_t>(kept->recipe.variants.pick[0])).to_equal(0);
+			}
+			expect(drawn.size()).to_equal(size_t{2});
+		});
+		it("writes no variant child for a genre with no sets", _ {
+			FakeCard card = factoryCardWithPack();
+			expect(written(*rolledFile(genreWithNoSets(), 5, card)).find("<variant")).to_equal(std::string::npos);
 		});
 	});
 

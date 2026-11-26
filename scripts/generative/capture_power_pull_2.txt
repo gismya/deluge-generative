@@ -4,6 +4,7 @@
 # a song from the file and saves it to SONGS/ (GEN ACID TECHNO <seed> LIVE or a letter: delete it after), and the song
 # loads. Run with --events 'gen_card_log|gen_capture'.
 # writes: SONGS/GEN ACID TECHNO *
+# needs: a Deluge and someone to pull its power first (part 1, then the pull), so automatic hardware sessions skip it
 # runs-via: deluge_probe.py session (a human check: after capture_power_pull_1.txt and the power pull)
 # covers: src/deluge/generative/firmware/capture_files.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/capture_job.cpp

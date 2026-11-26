@@ -25,6 +25,7 @@
 
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
+#include "generative/core/variants.h"
 #include <cstdint>
 
 namespace deluge::generative {
@@ -33,7 +34,7 @@ namespace deluge::generative {
 struct RecipeOverrides {
 	/// A genre's stable name. nullptr, or a name no genre has, plays the fallback genre.
 	const char* genre = nullptr;
-	/// Fresh entropy the facts (tempo, key, scale) are rolled from.
+	/// Fresh entropy the facts (tempo, key, scale, swing) are rolled from.
 	uint32_t entropy = 0;
 	uint32_t seed = 1;
 	/// OLED points (0–50) per Macro, in Macro order. -1 keeps the genre's default.
@@ -44,18 +45,34 @@ struct RecipeOverrides {
 	int8_t keyRoot = -1;
 	/// A Scale value. -1 keeps the rolled scale.
 	int8_t scale = -1;
-	/// -49..49. kKeepSwing keeps the genre's swing.
+	/// -49..49. kKeepSwing keeps the rolled swing.
 	int8_t swing = kKeepSwing;
+	/// Per variant set of the genre, by index: a variant that set is fixed to (its pick, and its allowed variants that
+	/// one alone), or -1 to keep the drawn pick (spec §3.6). The goldens fix every set to 0 (golden_case.h).
+	int8_t variant[kMaxVariantSets] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 	static constexpr int8_t kKeepSwing = INT8_MIN;
 };
+
+static_assert(kMaxVariantSets == 8, "RecipeOverrides::variant's initializer has one -1 a set");
+
+/// Fixes each of `recipe`'s variant sets that `variant` names (0 or more) to that variant (fixVariant()). A value past
+/// the set's variants is skipped.
+inline void applyVariantOverrides(Recipe& recipe, const int8_t (&variant)[kMaxVariantSets]) {
+	const Genre& genre = *recipe.genre;
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		if (variant[s] >= 0 && static_cast<size_t>(variant[s]) < genre.variantSets[s].variants.size()) {
+			fixVariant(recipe.variants, {static_cast<int32_t>(s), variant[s]});
+		}
+	}
+}
 
 struct RolledRecipe {
 	Recipe recipe;
 	uint32_t seed = 0;
 };
 
-/// Each override's macro and fact over `recipe`; the genre, entropy and seed are the roll's.
+/// Each override's macro, fact and variant over `recipe`; the genre, entropy and seed are the roll's.
 inline void applyOverrides(Recipe& recipe, const RecipeOverrides& overrides) {
 	for (int32_t m = 0; m < kNumMacros; m++) {
 		if (overrides.macroPoints[m] >= 0) {
@@ -74,6 +91,7 @@ inline void applyOverrides(Recipe& recipe, const RecipeOverrides& overrides) {
 	if (overrides.swing != RecipeOverrides::kKeepSwing) {
 		recipe.swing = overrides.swing;
 	}
+	applyVariantOverrides(recipe, overrides.variant);
 }
 
 /// The genre's new Recipe rolled from `overrides.entropy`, with each override applied.

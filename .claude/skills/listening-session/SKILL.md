@@ -27,7 +27,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
    - **Harness rough render, stand-in synths and the real kit samples:** questions about the notes only, such as arrangement (what enters when, Break and Build shapes, rests, fills), rhythm, harmony, voicing, density and a figure's shape. Mark these cards "rough render (stand-in sounds)". Give each one delugemu clip of today at the same Recipe, so the owner hears what the stand-in stands for. A "can't tell" on such a card moves it to delugemu next round.
 
    How each kind of option is rendered:
-   - **Macro or Recipe options** (Density, Complexity, Motion, key, tempo): `gen_emu.py capture` flags, against a local `./dbt build release`, on a card image with `pack/` overlaid (`listen.py card`), so the pack sounds play. A new Recipe builds nothing: one test-port build serves every Recipe, which gen_emu sends over the test port. On a rough-render card, the same flags to `generator_render`.
+   - **Macro or Recipe options** (Density, Complexity, Motion, key, tempo): `gen_emu.py capture` flags, against a local `./dbt build release`, on a card image with `pack/` overlaid (`listen.py card`), so the pack sounds play. A new Recipe builds nothing: one test-port build serves every Recipe, which gen_emu sends over the test port. A `--variant` capture still takes the GENCAP2 route (a patched `GENERATIVE_CAPTURE` ELF) until #548; see `rendering.md`. On a rough-render card, the same flags to `generator_render`.
    - **Preset options** (which sound a part or lane plays): a palette override on the card (`listen.py card --palette`), one card per candidate set. No table change and no rebuild; see `rendering.md`.
    - **Table options:**
      1. Make one change in the genre's table.
@@ -51,6 +51,7 @@ Delegate the build to one agent, with this section as its brief plus the genre a
      - At most about 60 words of text per card, besides the clip labels (a whole-song card's timeline may need more: give it `max_words`). Line breaks in card text show on the page. Measurements, harness results, diffs and caveats go in `variants.md`, not on the card; link it once at the top of the page.
      - Clip labels name the option and what's soloed ("Proposed, Pad alone"), not file names.
    - **Answer controls on each card:** a pick per option, "keep as is", "can't tell", and a free-text note. Answers are kept in `localStorage`.
+   - **A timeline under each whole-song clip:** `"timeline": True` on the clip (`rendering.md` step 5): which parts play in each Section, each named with its sound, so the owner needn't name sounds from memory.
    - **An Export button:** it produces one Markdown block with a Copy button. The block opens with the line `Listening-session answers (<genre>, round <n>, <session folder>): handle them with the listening-session skill.` That line makes whoever reads the pasted block load this skill. The block then lists, per card: the ticket, the pick, the note and the clips compared. It also carries the "Later rounds" list.
 5. **Report.** The page's path, the questions and clips, the total size, the variants built, what couldn't be rendered and why, and the held questions. Leave the worktree clean.
 

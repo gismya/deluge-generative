@@ -39,6 +39,15 @@ otherwise.
   keyed on the loop's index and the bar in it (`Purpose::ChordLoop`), so every pass replays it chord for chord: the
   walk's other inputs agree because a loop always starts on home, but only while `abaAllowed` is true (House's and Dub's case): with it false, a 2-chord half loop (home, A) would exclude A on its second pass, since `previousChord_` carries over from the pass before. A genre turning both on must handle that first. It skips `Arc::ahead()` (no Drop cadence, no Section home bonus), and a Section start off the
   rhythm's grid draws no chord there, so the loop stays on the phrase grid. `LoopSpec::rootOnAnchors` (Dub's Bass) pins anchor steps to `(degree 0, octave 0)` in `rollLine()` using a step counter instead of `% pattern.length` (no `__aeabi_idivmod` on Cortex-A9); `mutateLine()` already skips anchors.
+- A loop return (`ChordGraph::returnChance`, House S1, #496) moves `chordLoop_` to an earlier index; `newestLoop_` keeps
+  the newest drawn, so the next new loop is `++newestLoop_`, not `chordLoop_ + 1`. In specs, a new loop can draw the
+  same chords as an earlier one (vamps), so a "returned" count by chord signature needs a returnChance-0 baseline.
+- A variant that swaps the Chord graph (House's `loops` set) must keep `barsPerChord`, whether it loops and
+  `halfLoopChance` if the set is live: each bar re-reads the half-loop draw for the loop playing. The patch-diff spec
+  (`sameChordLines()` in variant_sets_spec) checks it.
+- A graph variant's chords in a mode aren't its move list: the scale's colour moves (§7.4) add moves and the guard
+  closes some. Ambient's `still` (#533) was read as stuck on I in Lydian and Dorian; it plays I, II and vi in Lydian
+  (colour move I–II) and I and IV in Dorian, and Mixolydian's colour move adds ♭VII to its I, IV and vi. Count the chords per scale in the harness (`chordsPlayed()`).
 - The FX part's lanes have no pools: section rules place their notes. Specs that walk pools skip pool-less lanes.
 - Fills (§8.7) are worked out per step in `Generator::fillRules()`, right after `sectionRules()`, so they see the Gap
   and the roll; they set `Step::rest` and `Step::swap`. State is four bytes: the phrase's automatic fill (drawn on its
@@ -144,6 +153,12 @@ otherwise.
   line or the next onset at runtime, as Stab/Arp/Motif notes are: `section_lines_spec`, `gates_spec` and
   `invariants_spec` play Loop notes lasting one or two bars (`LongBassParts`) to reach late entry, the Section-line
   cut, gates holding notes back and a full table, and a cap leaves those paths with no note to test them.
+- A Loop tie (`LoopSpec::tieChance`, #337) is `Generator::loopTies()` plus `SoundingNotes::extend()` from
+  `step.tick - 1`, so only a note ending exactly on the onset ties (a long note always does, at its gate). A Loop note
+  sounds on through a mute to its note-off (spec §12.5), so without `PartState::loopMuted` a tie would carry an
+  unmuted Bass on for bars after a mute: the tie checks the mute it was struck under. A tie sets `loopOn` to its own
+  step, as Avoid expects. Its draw has its own `Purpose::LoopTie`: reusing another purpose's key collides with its
+  draws wherever the position words happen to match.
 - A Register is the pitch heard (ADR 0007): pitched parts load at whole-sound transpose 0 (spec §10.6), so a factory
   bass saved at −24 (002, 007, 012, 047, 050) plays where its Register says. Set Registers for the sound you want,
   never to make up for a preset's saved transpose.

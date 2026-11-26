@@ -26,14 +26,20 @@
 #include "generative/firmware/sound_controls.h"
 #include "generative/firmware/sound_swaps.h"
 #include "generative/perform/clock_follow.h"
+#include "generative/perform/regenerate_page.h"
+#include "generative/perform/riser_timing.h"
 #include "gui/l10n/l10n.h"
 #include "gui/ui/generative_popups.h"
 #include "hid/buttons.h"
 #include "hid/display/display.h"
 #include "io/midi/test_port.h"
+#include "model/clip/instrument_clip.h"
 #include "model/model_stack.h"
+#include "model/note/note_row.h"
 #include "model/song/song.h"
+#include "modulation/params/param_collection_summary.h"
 #include "playback/playback_handler.h"
+#include "processing/sound/sound_drum.h"
 #include "storage/flash_storage.h"
 #include <algorithm>
 
@@ -249,6 +255,15 @@ int32_t PerformAdapter::tick(int32_t swungTick) {
 			           landed % kStepsPerBar == 0 ? "yes" : "no");
 		}
 	}
+	// A Drop changed a variant set, or a live switch landed there, on the last decided step (spec §3.6): the Current
+	// Recipe still has the picks before it.
+	if (generator_->recipe().genre == currentRecipe.recipe.genre
+	    && !std::ranges::equal(generator_->variants().pick, currentRecipe.recipe.variants.pick)) {
+		char picks[perform::kPicksTextChars];
+		perform::picksText(*generator_->recipe().genre, generator_->variants(), picks);
+		TEST_EVENT("gen_variants_landed step=%ld drop=%d %s", static_cast<long>(generator_->nextStep() - 1),
+		           generator_->arc().dropStartsHere() ? 1 : 0, picks);
+	}
 #endif
 	steering_.recordLanded(*generator_);
 	if (driver_.jumps() != jumps) {
@@ -431,27 +446,64 @@ void PerformAdapter::songPositionPointer(int32_t songTick) {
 	}
 }
 
-void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
-	if (active() && !leaving() && song_ != nullptr && currentRecipe.recipe.genre != nullptr) {
-		// Stopped too: a Start keeps the Outputs, so the next piece's header must snapshot this one (spec §17.2).
-		const int32_t output = editedOutput(stack.paramManager, sink_.roster, *currentRecipe.recipe.genre, *song_);
-		if (output == kSongParams) {
-			edited_.song = true;
-		}
-		else if (output >= 0) {
-			static_assert(kMaxParts <= 8, "edited_.parts holds a bit a part");
-			edited_.parts |= static_cast<uint8_t>(1U << output);
-		}
+namespace {
+
+/// A player's edit `edit` (`value`, on `stack`'s param) of the Riser lane's row, made on the FX Kit's fallback Riser
+/// row too, which plays the lane's notes in some Builds (spec §9.5): at once, so a sounding fallback hears it.
+void mirrorRiserEdit(const ModelStackWithAutoParam& stack, int32_t value, const Command& edit, const Roster& roster,
+                     const Genre& genre, Song& song) {
+	const std::optional<LoggedParam> fallback = loggedParam(edit, roster, genre, song, true);
+	const PartOutput& part = roster.parts[edit.target];
+	Drum* drum = part.drums[perform::kRiserFallbackRow];
+	int32_t rowIndex = -1;
+	NoteRow* row = fallback && part.clip != nullptr ? part.clip->getNoteRowForDrum(drum, &rowIndex) : nullptr;
+	if (row == nullptr || drum->type != DrumType::SOUND) {
+		return;
 	}
-	if (!active() || leaving() || !driver_.running()) {
+	char memory[MODEL_STACK_MAX_SIZE];
+	ParamCollectionSummary* summary = &fallback->manager->summaries[fallback->collection];
+	ModelStackWithAutoParam* on =
+	    setupModelStackWithSong(memory, &song)
+	        ->addTimelineCounter(part.clip)
+	        ->addNoteRow(rowIndex, row)
+	        ->addOtherTwoThings(static_cast<SoundDrum*>(drum)->toModControllable(), fallback->manager)
+	        ->addParam(summary->paramCollection, summary, stack.paramId, fallback->param);
+	fallback->param->setCurrentValueWithNoReversionOrRecording(on, value);
+}
+
+} // namespace
+
+void PerformAdapter::playerEdited(const ModelStackWithAutoParam& stack, int32_t value) {
+	if (!active() || leaving() || song_ == nullptr || currentRecipe.recipe.genre == nullptr) {
+		return;
+	}
+	const Genre& genre = *currentRecipe.recipe.genre;
+	// Stopped too: a Start keeps the Outputs, so the next piece's header must snapshot this one (spec §17.2).
+	const int32_t output = editedOutput(stack.paramManager, sink_.roster, genre, *song_);
+	if (output == kSongParams) {
+		edited_.song = true;
+	}
+	else if (output >= 0) {
+		static_assert(kMaxParts <= 8, "edited_.parts holds a bit a part");
+		edited_.parts |= static_cast<uint8_t>(1U << output);
+	}
+	const std::optional<Command> edit = paramEdit(stack, value, sink_.roster, genre, *song_);
+	const bool riser = edit && edit->lane == Lane::Riser;
+	if (!driver_.running()) {
+		if (riser) {
+			mirrorRiserEdit(stack, value, *edit, sink_.roster, genre, *song_);
+		}
 		return; // stopped, the edit is on the Output: the next piece reads it as home (spec §11.7)
 	}
-	if (const auto edit = soundControls.playerEdited(stack, value)) {
-		// Acts at once; the core only logs it, at the next undecided step (spec §11.6). Continuous, so it coalesces
-		// per param and a full queue only loses the log entry.
-		steering_.queue().push({CommandKind::SetHome, edit->part, edit->home, edit->param, edit->lane});
+	if (const auto home = soundControls.playerEdited(stack, value)) {
+		// Acts at once (a Riser's fallback row with it, mirrorEdit()); the core only logs it, at the next undecided
+		// step (spec §11.6). Continuous, so it coalesces per param and a full queue only loses the log entry.
+		steering_.queue().push({CommandKind::SetHome, home->part, home->home, home->param, home->lane});
 	}
-	else if (const auto edit = paramEdit(stack, value, sink_.roster, *currentRecipe.recipe.genre, *song_)) {
+	else if (edit) {
+		if (riser) {
+			mirrorRiserEdit(stack, value, *edit, sink_.roster, genre, *song_);
+		}
 		// Any other param edit is logged the same way, for Capture's automation (spec §17.2). A full queue loses the
 		// entry while the edit is still heard: Capture's song then misses it.
 		steering_.queue().push(*edit);

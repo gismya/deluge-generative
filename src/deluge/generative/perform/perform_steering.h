@@ -28,6 +28,7 @@
 #include "generative/core/pitch.h"
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
+#include "generative/core/variants.h"
 #include "generative/perform/clip_page.h"
 #include "generative/perform/glide.h"
 #include "generative/perform/keyboard_page.h"
@@ -267,6 +268,27 @@ public:
 	/// player is told the shift is the lowest or highest the part takes.
 	[[nodiscard]] bool octaveAtEdge(int32_t part, int32_t direction) const;
 
+	// ---- Live variant switches (spec §3.6, §13.6) ----
+
+	/// VARIANTS ▸'s ticks: live set `set` allows `allowed` (a bit per variant) from the next Drop, where landMask()
+	/// keeps the variant playing if ticked or draws one within the ticks; the ticks the set allows now cancel the one
+	/// waiting. Stopped, they are the Recipe's at once (landMask() at Groove 0), and the next start plays them. Refused
+	/// while a transition is pending (spec §12.9). Nothing to do for a set that isn't live, one past the genre's, or
+	/// no tick or one past the set's variants.
+	[[gnu::noinline]] PressOutcome pressVariantMask(int32_t set, uint8_t allowed);
+	/// Sets with a live switch waiting for the Drop, in the playing core or still in the steering queue.
+	/// dropWaitingVariants() takes a place in the queue for each.
+	[[nodiscard]] int32_t waitingVariants() const;
+	/// A transition's confirm (spec §12.9): each switch waiting is dropped, as a press of the ticks the set allows now
+	/// drops it. The caller has checked that the queue has room for waitingVariants() presses.
+	void dropWaitingVariants();
+	/// Set `set`'s ticks as they go on: its newest switch still in the steering queue, else the one waiting in the core
+	/// for the Drop, else the variants it allows now. 0 past the roster genre's sets.
+	[[nodiscard, gnu::noinline]] uint8_t maskAhead(int32_t set) const;
+	/// The variant set `set` plays now: the playing piece's (a Drop may have moved it), or the Recipe's while stopped.
+	/// -1 past the roster genre's sets.
+	[[nodiscard]] int32_t variantPlaying(int32_t set) const;
+
 	// ---- Tempo and swing (spec §12.7, §13.7) ----
 
 	/// Sets the Recipe tempo (hundredths of a BPM), gliding to it at the Glide setting while playing, and logs it.
@@ -377,8 +399,9 @@ public:
 	[[nodiscard]] uint32_t keyPresses() const { return keyPresses_; }
 	/// `part`'s take presses, and BACK taps (which may cancel one), since power-on, from any control.
 	[[nodiscard]] uint32_t takePresses(int32_t part) const { return takePresses_[part]; }
-	/// Octave shift presses, and BACK taps (which may cancel one), from any control, modulo 256.
-	[[nodiscard]] uint32_t octavePresses() const { return octavePresses_; }
+	/// Presses of the menus' per-row lists, octave shifts and variant switches, and BACK taps (which may cancel one),
+	/// from any control, modulo 256.
+	[[nodiscard]] uint32_t listPresses() const { return listPresses_; }
 
 private:
 	[[nodiscard]] Adapter& adapter() { return static_cast<Adapter&>(*this); }
@@ -408,6 +431,18 @@ private:
 			const auto part = static_cast<uint8_t>(p);
 			if (piece->takeWaiting(p) >= 0 || queue_.holdsFor(CommandKind::SetTake, part)) {
 				visit(part, piece->take(p));
+			}
+		}
+	}
+	/// Calls `visit(set, allowed)` for each set with a live switch waiting, in the playing piece or in the queue, with
+	/// the variants it allows now: what waitingVariants() counts is what dropWaitingVariants() drops.
+	template <typename Visit>
+	void forEachWaitingVariant(Visit visit) const {
+		const Generator* piece = playing();
+		for (int32_t s = 0; piece != nullptr && s < kMaxVariantSets; s++) {
+			const auto set = static_cast<uint8_t>(s);
+			if (piece->maskWaiting(s) >= 0 || queue_.holdsFor(CommandKind::SetVariantMask, set)) {
+				visit(set, allowedIn(piece->recipe().genre->variantSets[s], piece->variants().allowed[s]));
 			}
 		}
 	}
@@ -452,7 +487,7 @@ private:
 	GlideLength glide_ = kDefaultGlide;
 	/// Wraps at 256: readers compare it frame to frame. A byte keeps the steering's size, which the firmware's start
 	/// step pins (PerformAdapter::incomingStarts()).
-	uint8_t octavePresses_ = 0;
+	uint8_t listPresses_ = 0;
 };
 
 // ---- Definitions ----
@@ -550,6 +585,11 @@ void PerformSteering<Adapter>::handOver(const PendingRecipe& pending) {
 	}
 	adapter().seed() = pending.seed;
 	adapter().takes() = pending.takes;
+	// An octave shift or a variant switch still queued names the outgoing roster's part or set: it goes with it, so
+	// the incoming instance never lands it on its own (spec §12.9).
+	queue_.removeIf([](const Command& command) {
+		return command.kind == CommandKind::SetOctave || command.kind == CommandKind::SetVariantMask;
+	});
 	newRecipe();
 }
 
@@ -581,6 +621,10 @@ void PerformSteering<Adapter>::recordLanded(const Generator& playing) {
 	for (int32_t p = 0; p < kMaxParts; p++) {
 		recordTake(p, playing.take(p));
 		adapter().recipe().octave[p] = static_cast<int8_t>(playing.octave(p));
+	}
+	// The variants playing now, as Drops and live switches moved them: SAVE stores them (spec §3.6).
+	if (playing.recipe().genre == adapter().recipe().genre) {
+		adapter().recipe().variants = playing.variants();
 	}
 }
 
@@ -709,9 +753,9 @@ void PerformSteering<Adapter>::beginAgainFrom(const PieceStart& began) {
 
 template <typename Adapter>
 PressOutcome PerformSteering<Adapter>::cancelNewest() {
-	// It may cancel a waiting key change, take or octave shift: menus showing one read it again.
+	// It may cancel a waiting key change, take, octave shift or variant switch: menus showing one read it again.
 	keyPresses_++;
-	octavePresses_++;
+	listPresses_++;
 	for (uint32_t& presses : takePresses_) {
 		presses++;
 	}
@@ -835,7 +879,7 @@ PressOutcome PerformSteering<Adapter>::pressOctave(uint8_t part, int32_t shift) 
 	if (leaving_ || !takesOctave(part) || !octavesOf(part).contains(shift)) {
 		return PressOutcome::NothingToDo;
 	}
-	octavePresses_++;
+	listPresses_++;
 	if (playing() != nullptr) {
 		return queued(queue_.push({CommandKind::SetOctave, part, shift}));
 	}
@@ -873,6 +917,70 @@ int32_t PerformSteering<Adapter>::octaveAhead(int32_t part) const {
 	}
 	const int32_t waiting = piece->octaveWaiting(part);
 	return waiting != kNoOctaveWaiting ? waiting : piece->octave(part);
+}
+
+template <typename Adapter>
+PressOutcome PerformSteering<Adapter>::pressVariantMask(int32_t set, uint8_t allowed) {
+	if (gated(PressKind::Variant)) {
+		return PressOutcome::ChangePending; // it would wait for a Drop the outgoing piece never plays
+	}
+	const Genre* genre = rosterGenre();
+	if (leaving_ || !entered_ || genre == nullptr || !switchable(*genre, set, allowed)) {
+		return PressOutcome::NothingToDo;
+	}
+	listPresses_++;
+	if (playing() != nullptr) {
+		return queued(queue_.push({CommandKind::SetVariantMask, static_cast<uint8_t>(set), allowed}));
+	}
+	// Stopped: no Drop to wait for. The ticks are the Recipe's, as a switch landing makes them (spec §3.6).
+	landMask(*genre, adapter().recipe().variants, set, allowed, adapter().seed(), 0);
+	return PressOutcome::Accepted;
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::waitingVariants() const {
+	int32_t count = 0;
+	forEachWaitingVariant([&count](uint8_t /*set*/, uint8_t /*allowed*/) { count++; });
+	return count;
+}
+
+template <typename Adapter>
+void PerformSteering<Adapter>::dropWaitingVariants() {
+	// Each press of the ticks allowed now drains after the switch it drops, at the same decision: the core cancels
+	// the one waiting (spec §13.6).
+	forEachWaitingVariant([this](uint8_t set, uint8_t allowed) {
+		listPresses_++;
+		queue_.push({CommandKind::SetVariantMask, set, allowed});
+	});
+}
+
+template <typename Adapter>
+uint8_t PerformSteering<Adapter>::maskAhead(int32_t set) const {
+	const Genre* genre = rosterGenre();
+	if (genre == nullptr || set < 0 || set >= static_cast<int32_t>(genre->variantSets.size())) {
+		return 0;
+	}
+	const Generator* piece = playing();
+	if (piece == nullptr) {
+		return allowedIn(genre->variantSets[set], adapter().recipe().variants.allowed[set]);
+	}
+	// A press the core hasn't drained yet goes on as pushed: a switch waits, and the ticks allowed now cancel it.
+	if (const Command* queued = queue_.newest(CommandKind::SetVariantMask, static_cast<uint8_t>(set))) {
+		return static_cast<uint8_t>(queued->value);
+	}
+	const int32_t waiting = piece->maskWaiting(set);
+	return waiting >= 0 ? static_cast<uint8_t>(waiting)
+	                    : allowedIn(genre->variantSets[set], piece->variants().allowed[set]);
+}
+
+template <typename Adapter>
+int32_t PerformSteering<Adapter>::variantPlaying(int32_t set) const {
+	const Genre* genre = rosterGenre();
+	if (genre == nullptr || set < 0 || set >= static_cast<int32_t>(genre->variantSets.size())) {
+		return -1;
+	}
+	const Generator* piece = playing();
+	return (piece != nullptr ? piece->variants() : adapter().recipe().variants).pick[set];
 }
 
 template <typename Adapter>

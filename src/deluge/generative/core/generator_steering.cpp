@@ -21,6 +21,7 @@
 #include "generative/core/generator.h"
 #include "generative/core/steering_log.h"
 #include <algorithm>
+#include <cassert>
 
 namespace deluge::generative {
 
@@ -47,7 +48,7 @@ constexpr bool validTake(const Command& command, const Genre& genre) {
 }
 
 /// Whether a SetOctave names a pitched part of the roster and a shift its octave range takes (spec §7.3).
-constexpr bool validOctave(const Command& command, const Genre& genre) {
+GEN_STEP_CODE bool validOctave(const Command& command, const Genre& genre) {
 	return command.target < partCount(genre) && hasRegister(genre.parts[command.target].role)
 	       && octaveRange(genre.parts[command.target]).contains(command.value);
 }
@@ -276,6 +277,16 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 		return false;
 	case CommandKind::SetStutter:
 		return command.value == 0 || command.value == 1; // the driver's stutter: logged, nothing to apply
+	case CommandKind::SetVariantMask: {
+		// It lands on a Drop's first step, where dropVariants() applies the genre copy again with it (spec §3.6).
+		if (!switchable(*recipe_.genre, command.target, static_cast<uint8_t>(command.value))) {
+			return false;
+		}
+		// dropVariants() keeps or draws the pick within it, keyed on the Drop.
+		recipe_.variants.allowed[command.target] = static_cast<uint8_t>(command.value);
+		switchedSets_ |= static_cast<uint8_t>(1U << command.target);
+		return true;
+	}
 	case CommandKind::SetPunch:
 		if (!punch_.set(command)) {
 			return false;
@@ -377,6 +388,17 @@ GEN_STEP_CODE bool Generator::wait(Command command) {
 		}
 		break;
 	}
+	case CommandKind::SetVariantMask:
+		if (!switchable(*recipe_.genre, command.target, static_cast<uint8_t>(command.value))) {
+			return true;
+		}
+		// The ticks the set allows now cancel the switch waiting, as the take that plays does (spec §13.6).
+		if (allowedIn(recipe_.genre->variantSets[command.target], recipe_.variants.allowed[command.target])
+		    == command.value) {
+			pending_.cancel(command);
+			return true;
+		}
+		break;
 	case CommandKind::SetSound:
 		if (command.target < partCount(*genre_) && command.value == kNoSound) {
 			pending_.cancel(command); // the driver frees the sound it preloaded
@@ -484,6 +506,12 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 		return static_cast<TransitionStyle>(command.target) == TransitionStyle::BuildIntoDrop
 		           ? arc_.stepsToStart(SectionKind::Build, command.value)
 		           : arc_.stepsToPhraseLine();
+	case CommandKind::SetVariantMask: {
+		// The next Drop as things stand (Arc::ahead(), from the last decided step), or kNever with none ahead: a held
+		// Groove, an Outro, Motion 0. dropVariants() lands it on the Drop itself, whenever that comes (spec §3.6).
+		const int32_t drop = arc_.ahead(recipe_.macros[Macro::Motion], waitingMove()).drop;
+		return drop == Arc::kNotAhead ? kNever : std::max<int32_t>(drop - 1, 0);
+	}
 	default:
 		// Key changes, takes and End land on the next phrase line, which every Arc Drop is (spec §7.6, §9.3, §6.6).
 		return arc_.stepsToPhraseLine();
@@ -493,7 +521,8 @@ GEN_STEP_CODE int32_t Generator::stepsToLine(const Command& command) const {
 void Generator::landPending(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	pending_.land([&](const Command& command) {
-		if (stepsToLine(command) != 0) {
+		// A live variant switch lands with the Drop's changes, once the Arc is on the Drop (dropVariants()).
+		if (command.kind == CommandKind::SetVariantMask || stepsToLine(command) != 0) {
 			return false;
 		}
 		if (apply(command)) {
@@ -512,7 +541,56 @@ void Generator::landPending(SteeringLog* log) {
 }
 
 int32_t Generator::landsAt(const Command& command) const {
-	return nextStep_ + stepsToLine(command);
+	const int32_t steps = stepsToLine(command);
+	return steps == kNever ? kNoLine : nextStep_ + steps;
+}
+
+GEN_STEP_CODE void Generator::dropVariants(SteeringLog* log) {
+	const Genre& genre = *recipe_.genre;
+	if (genre.variantSets.empty()) {
+		return;
+	}
+	const int32_t n = nextStep_;
+	pending_.land([&](const Command& command) {
+		if (command.kind != CommandKind::SetVariantMask) {
+			return false;
+		}
+		if (apply(command) && log != nullptr) {
+			log->append(n, command);
+		}
+		return true;
+	});
+	// A switch landed in replay came through apply() before this decision, as it did live on this step.
+	bool moved = false;
+	for (size_t s = 0; s < genre.variantSets.size() && s < kMaxVariantSets; s++) {
+		uint8_t& pick = recipe_.variants.pick[s];
+		if ((switchedSets_ >> s) & 1U) {
+			// The player's ticks are this Drop's change: the pick stays if ticked, else is drawn within them.
+			const uint8_t before = pick;
+			landMask(genre, recipe_.variants, static_cast<int32_t>(s), recipe_.variants.allowed[s], seed_,
+			         arc_.occurrence());
+			moved = moved || pick != before;
+			continue;
+		}
+		const uint8_t changed = dropChange(genre.variantSets[s], recipe_.variants.allowed[s], pick, seed_,
+		                                   arc_.occurrence(), static_cast<int32_t>(s));
+		moved = moved || changed != pick;
+		pick = changed;
+	}
+	switchedSets_ = 0;
+	if (moved) {
+		const DropOutEntry* dropOuts = genre_->dropOuts.data();
+		genre_ = &resolveGenre(genre, recipe_.variants, resolved_);
+		// The last drop-out's entry indexes the table it was drawn from, and a set may swap the table (Dub's MIX). A
+		// Section line ends any drop-out and drops one waiting, so here it is over: forget it, as it never started.
+		if (genre_->dropOuts.data() != dropOuts) {
+#ifdef GENERATOR_TEST_SEAMS
+			// A Drop follows a Build, so even a drop-out the Build's line ended has finished its Throw's fall.
+			assert(dropOut_.entry < 0 || n >= dropOut_.to() + kThrowDecaySteps);
+#endif
+			dropOut_.entry = -1;
+		}
+	}
 }
 
 GEN_STEP_CODE bool Generator::moveAt(const Command& command, Arc::Move& out) const {
@@ -635,10 +713,11 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 	const Genre& genre = *genre_;
 	const int32_t phraseSteps = genre.phraseSteps();
 	const int32_t parts = partCount(genre);
-	// The plan reads gates, keeps, drop-outs, the roll and mutes. The cut and the Gap never cover a whole phrase or a
-	// whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover a whole phrase (or the
-	// Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8, §13.5). The dim counts
-	// all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the Build roll.
+	// The plan reads gates, keeps, drop-outs, the roll, yields and mutes. The cut (ending or leading) and the Gap never
+	// cover a whole phrase or a whole Build (cutAndGapUnderBuild()), so it leaves them out, while a drop-out can cover
+	// a whole phrase (or the Groove half of a phrase a short Build finishes) and shows on the SONG page (spec §8.8,
+	// §13.5). The dim counts all three; the cut never stops the roll lane (rollUncut()), and a drop-out never meets the
+	// Build roll.
 	const auto lets = [&](int32_t p, const Keeps& keeps, const PartsAndLanes& dropOut, RollStage roll) {
 		return mayPlay(genre.parts[p], gates_[p], genre.arc.roll.lane, roll,
 		               [&](Lane lane) { return keeps.lets(p, lane) && !dropOut.has(p, lane); });
@@ -683,9 +762,16 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 		const PartsAndLanes dropOut =
 		    dropOut_.step(genre, seed_, arc_, step, centre_[Macro::Motion], [&] { return waitingMove(step); });
 		const RollStage roll = rollStageOn(genre.arc, arc_, centre_[Macro::Complexity]);
+		uint8_t plays = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			plays |= lets(p, keeps, dropOut, roll) ? partBit(p) : 0;
+		}
+		// A part resting for the one it yields to doesn't sound (Generator::updateSilent(), spec §5.6).
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
-			sounds |= lets(p, keeps, dropOut, roll) && mutes_.audible(p) ? partBit(p) : 0;
+			const YieldSpec& yield = genre.parts[p].yield;
+			const bool rests = yieldOn(yield, arc_, plays) == YieldMode::Rest;
+			sounds |= (plays & partBit(p)) != 0 && !rests && mutes_.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc_, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as

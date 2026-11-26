@@ -75,6 +75,7 @@ public:
 	void forget() {
 		setCount_ = 0;
 		boundCount_ = 0;
+		mirror_ = Mirror{};
 		forgetOutgoing();
 	}
 	/// A transition's start step, before begin() binds the new roster (spec §12.9): keeps the Space params of the
@@ -89,6 +90,7 @@ public:
 	void forgetOutgoing() {
 		outgoingSetCount_ = 0;
 		outgoingBoundCount_ = 0;
+		outgoingMirror_ = Mirror{};
 	}
 
 	/// A param as the steering log keys it on its Output (SetHome's and SetParam's `length`, spec §17.2): bits 13–14
@@ -203,6 +205,11 @@ private:
 	void bindThrowDelay(Set& set, const Genre& genre);
 	/// Binds every set of `part` after the ones bound already, with homes read from its Output now.
 	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
+	/// writeNode() on one set.
+	bool writeNodeOn(Set& set, SoundControl control, bool throwDelay, int32_t tick, int32_t offset, bool interpolated);
+	/// A player edit of `bound` on `edited`, to `value`, copied to the fallback Riser row when it mirrors `edited`
+	/// (spec §9.5).
+	void mirrorEdit(const Set& edited, const Bound& bound, int32_t value);
 	/// Sets up `part`'s set for its lane `l` (an FX part's lanes each have one). False if it has nothing to move.
 	static bool makeSet(const Roster& roster, const Genre& genre, int32_t part, int32_t l, Set& set);
 	/// Hands each target `control` moves on `set`'s preset to `moved(range)`, with the range the preset's palette entry
@@ -249,6 +256,20 @@ private:
 	void reportRanges(const Set& set) const;
 #endif
 
+	/// The FX Kit's fallback Riser row (spec §9.5): every write to its part's Riser lane set moves this row too, by the
+	/// same params (mirrored()). part -1: none.
+	struct Mirror {
+		int8_t part = -1;
+		int32_t row = -1; ///< The row's NoteRow index in its clip.
+		NoteRow* noteRow = nullptr;
+		Sound* sound = nullptr;
+		ParamManager* paramManager = nullptr;
+	};
+	/// `set` on `mirror`'s row, when `mirror` mirrors it (its part's Riser lane set).
+	static std::optional<Set> mirrored(const Set& set, const Mirror& mirror);
+	/// Finds `part`'s fallback Riser row in `roster` for mirror_, if it has one.
+	void bindMirror(const Roster& roster, int32_t part);
+
 	/// The set for `part`'s events on `lane`, or nullptr if it moves nothing.
 	Set* setOf(uint8_t part, Lane lane);
 	/// Compose: hands each param writeNode() writes for (`set`, `control`, `throwDelay`) to `found(bound, param, slot)`
@@ -259,9 +280,10 @@ private:
 	/// Throw's lift on top (perform::throwDelayValue(), at the set's throwDelay).
 	static int32_t valueOf(const Set& set, const Bound& bound, int32_t offset);
 	/// apply() on `count` sets and the params they index in `params`.
-	void applyIn(Set* sets, int32_t count, const Bound* params, const Event& event, int32_t rampTicks);
-	/// restoreHomes() on `sets`, whose params are in `params`.
-	static void restoreIn(const Set* sets, int32_t count, const Bound* params);
+	void applyIn(Set* sets, int32_t count, const Bound* params, const Mirror& mirror, const Event& event,
+	             int32_t rampTicks);
+	/// restoreHomes() on `sets`, whose params are in `params`, and `mirror`'s row.
+	static void restoreIn(const Set* sets, int32_t count, const Bound* params, const Mirror& mirror);
 
 	Set sets_[kMaxControlSets];
 	int32_t setCount_ = 0;
@@ -274,6 +296,8 @@ private:
 	int32_t outgoingSetCount_ = 0;
 	Bound outgoingBound_[kMaxControlSets * kMaxSpaceParams];
 	int32_t outgoingBoundCount_ = 0;
+	Mirror mirror_;
+	Mirror outgoingMirror_; ///< The outgoing roster's, with its sets.
 	/// setHome() is writing the param: the player edit it makes keeps the home it set.
 	bool settingHome_ = false;
 #if ENABLE_SYSEX_TEST

@@ -309,7 +309,8 @@ private:
 
 	StepwisePiece<TransitionSink>& piece_;
 	HarnessSoundSwaps& sounds_;
-	std::unique_ptr<Generator> other_ = std::make_unique<Generator>(); ///< The second block (spec §2.1).
+	std::unique_ptr<harness::Instance> other_ =
+	    std::make_unique<harness::Instance>(); ///< The second block (spec §2.1).
 	Generator* current_;
 };
 

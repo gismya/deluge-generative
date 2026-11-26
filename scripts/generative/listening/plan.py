@@ -1,8 +1,9 @@
 """Which runner captures what, in which order, and what it costs.
 
 Each runner has its own worktree and build dir. Applying or reverting a variant changes the source, so the runner's
-next capture relinks the firmware (about 55 s under LTO). A Recipe change builds nothing: gen_emu patches the Recipe
-into a copy of the built ELF (#401); nor do mutes and length. So a variant's Captures go to one runner, and the
+next capture relinks the firmware (about 55 s under LTO). A Recipe change builds nothing: gen_emu sends the Recipe
+over the test port (#523), or for a --variant capture patches it into a copy of a GENERATIVE_CAPTURE ELF built in
+<build dir>-variants (#401); nor do mutes and length. So a variant's Captures go to one runner, and the
 runner applies the variant once for them. They still run in Recipe order, so the plan reads in that order.
 
 A variant costing more than a runner's share of the work (the base, as a rule) is split into chunks, `base#1`,

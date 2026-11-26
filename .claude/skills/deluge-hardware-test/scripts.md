@@ -8,7 +8,11 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   script left it (Perform, a menu, session view, playing) to a stopped instrument clip, so scripts run in any order on
   one load. Last, outside Perform, it sends `reset recipe`: the Current Recipe goes back to none, as after boot, so
   `perform_open.txt` lands on ACID and entry rolls a fresh Acid techno Recipe, whatever genre the last script left
-  playing. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
+  playing. Then `reset settings`: GLIDE and BROWSER PREVIEW (Perform settings kept until power-off) at their defaults,
+  and stock's sample browser's last file cleared, so a file browser opens in `SAMPLES` (#500: a lane preview left it
+  in a kick's folder, and BROWSER PREVIEW left OFF stopped the next script's previews). Anything else a script
+  changes that lasts until power-off outlives `start_state`: put it back at the script's end, or add it to
+  `resetSettings()` in `test_port.cpp`. `--events` counts a script's events from after its `start_state`, so what `start_state` itself causes,
   such as leaving Perform, prints for no script: a script that measures a leave leaves Perform itself (as
   `perform_mem_cycle.txt` does).
 - `hold NAME` and `release NAME` set a firmware test hook on or off. The names, and what each does, are the rows of
@@ -26,11 +30,11 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   is untouched" when the value isn't known ahead (`perform_runner.txt`).
 - `reset recipe` (queued like a press) sends `gen_recipe_reset done`, or `gen_recipe_reset refused why=perform` (in
   Perform: nothing changes) or `why=busy` (a runner job hasn't ended; `start_state` retries that for 10 s). A refusal
-  or no event fails `start_state`.
+  or no event fails `start_state`. `reset settings` sends `gen_settings_reset done`, or `refused why=perform`.
 - Bisecting with old builds: a build older than `release all` rejects it, and `start_state` then releases the holds
   of that time by name. For each one the build doesn't know either it prints `WARNING ...: start_state: the build
   doesn't know release entry` and goes on, so today's scripts still run there. A build older than `reset recipe`
-  gets one such warning for it too. A build older than `pick genre` rejects it, which fails every Perform script's
+  or `reset settings` gets one such warning for each. A build older than `pick genre` rejects it, which fails every Perform script's
   entry: bisect those with a copy of the scripts from that build's commit. Any other rejected line still fails the
   script.
 - A timeout needs the keyword: `expect event gen_left within=15`. A bare trailing number is part of the text to match.
@@ -56,6 +60,9 @@ Script syntax: the `run_script()` docstring in `scripts/generative/deluge_probe.
   `# writes: GLOB` lines, one glob each, from the card's root, matched without regard to case
   (`# writes: SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*`, `# writes: RECIPES/ACID TECHNO *`). A session fails on a new file
   there that no script in it declares, and prints every new file's path so the run's files can be deleted after.
+  When a script ends, the session deletes the new files its own `# writes:` lines declare (`session: deleted
+  /PATH`), so the next script can save under the same name (#500: `perform_capture_leave.txt`'s Capture song gave
+  `perform_lane_capture.txt` `... LIVE D`); `--keep-writes` keeps them.
   `test_deluge_probe.py` fails on a script with a save action and no `# writes:` line.
 - Scripts that send MIDI clock or transport (`clock`, `midi fa`) depend on the device's clock-in settings:
   [external-clock.md](external-clock.md).

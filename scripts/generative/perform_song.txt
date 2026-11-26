@@ -20,9 +20,66 @@
 # covers: src/deluge/gui/views/perform_view_clip.cpp
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/core/types.h
 # covers: src/deluge/generative/perform/queue_text.* src/deluge/generative/perform/text.*
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 start_state
 include perform_open.txt
 include perform_confirm.txt
+
+# ---- Stopped, REGENERATE with BUILD on ROLL alone (#531): the Arc below needs Builds of a phrase or more, which a
+# hard Build (4 bars) isn't. BUILD isn't live, so only the Regenerate page narrows it: VARIANTS is one up from GO,
+# BUILD the third set; its multi-select from the top is ROLL, LONG, NO ROLL, HARD ----
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_regen_page open title=Regenerate style=0 variants=1
+encoder 3 -1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=3
+encoder 3 -5
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=13
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=9
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants set=build allowed=1 shows=ROLL
+# BACK to VARIANTS, BACK to the page, down to GO
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+encoder 3 5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event gen_transition_preload done error=0 within=20
+expect event gen_transition start stopped within=15
+expect event gen_transition phase=idle within=40
 
 # ---- Stopped: part focus works, the map is dark; status line shows the held part's name ----
 pad 3 6 down

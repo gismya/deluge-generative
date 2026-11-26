@@ -9,6 +9,7 @@
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/generative/core/genres/ src/deluge/generative/firmware/output_sink.cpp
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -22,41 +23,46 @@ button SHIFT up
 expect playing=true
 sleep 8
 
-# BUILD INTO A DROP
+# DROP
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition start style=0 within=60
 sleep 16
 
-# FADE THROUGH
+# FADE
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition start style=1 within=60
 sleep 16
 
-# HARD CUT AT PHRASE
+# CUT
 include perform_transition_menu.txt
 encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

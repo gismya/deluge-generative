@@ -64,11 +64,12 @@ enum class PressKind : uint8_t {
 	EndCancel,
 	Sound,   ///< NEW SOUND, or back to the previous sound
 	Restart, ///< X+PLAY, or RESTART ▸ AS IT IS (spec §13.2)
+	Variant, ///< a live variant switch, VARIANTS ▸ (spec §13.6)
 };
 
-/// While a transition is pending, tempo, swing and swing interval, key edits, End, take and sound actions and a restart
-/// are refused; macros, force, hold, mute, solo, freeze and BACK work as usual (spec §12.9). A tap that cancels End is
-/// not refused: it only takes back an End armed before the confirm.
+/// While a transition is pending, tempo, swing and swing interval, key edits, End, take, sound and variant actions and
+/// a restart are refused; macros, force, hold, mute, solo, freeze and BACK work as usual (spec §12.9). A tap that
+/// cancels End is not refused: it only takes back an End armed before the confirm.
 [[nodiscard]] constexpr bool refusedWhilePending(PressKind kind) {
 	switch (kind) {
 	case PressKind::Take:
@@ -79,6 +80,7 @@ enum class PressKind : uint8_t {
 	case PressKind::EndArm:
 	case PressKind::Sound:
 	case PressKind::Restart:
+	case PressKind::Variant:
 		return true;
 	case PressKind::Mute:
 	case PressKind::Solo:

@@ -43,6 +43,9 @@ otherwise.
   `./dbt exec`, and the build is multi-config: without `-C Debug` every test shows "Not Run". `-n` prints the binary it
   built; run that one (`<binary> <name>_spec --verbose`). `check_all.py` builds only `build/tests-sanitize`, so after a
   plain `-n` its binary there is stale (`--sanitize -n` rebuilds it): the "`--no-run` didn't rebuild" of #436.
+  The other way round too: `--sanitize` builds only `build/tests-sanitize`, so `build/tests/.../generator_render` (what
+  renders and `gen_emu.py` read) keeps the last plain build's tables until `./dbt test --generator -n` (#518 R1
+  rendered a variant from before its patch).
 - Harness specs: one `describe` per `*_spec.cpp`, named after the file stem, and the file ends with
   `CPPSPEC_SPEC(<the same name>)`: a different name fails the link with an undefined `<name>_spec`. Put
   `// clang-format off` above the `describe`, as every spec does: clang-format mangles CppSpec's nested lambdas, and
@@ -81,17 +84,21 @@ otherwise.
   header with a newer mtime, so the next incremental build skips it. A layout change (a field added to `ControlSet`)
   then shows up as a `__stack_chk_fail` abort or a segfault before a spec prints anything. `touch` the edited headers
   and build again.
-- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre, written and checked by
-  `golden_spec` (`golden.h`). Each is the default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per line, under a
-  header with the genre's version and its stream fingerprint (60 pieces): the per-subgenre fingerprint specs live there.
-  A retune that's meant follows **A retune** in spec §21.2. The command refuses (exit 1) a golden that changed without a
-  bump against the merge base with the PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI
-  checks it too), so one bump covers a branch's retunes. It runs whenever the update wrote a golden, even if a spec
-  failed. A golden the base doesn't have counts from the commit that added it, so a golden a branch adds is still
-  checked against its first version. CI's depth-2 checkout can't find that commit (its shallow oldest commit looks as if
-  it added every file), so there such a golden is new and goes unchecked. A golden without a `format` line is format 1.
-  A change to the dump itself, its seed, length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no
-  version bump.
+- Goldens (spec §21.2): `tests/spec/generator/goldens/<genre>.txt`, one per Techno subgenre and per genre signed off on
+  #133 (`goldenGenres()` in `golden.h` names them: Dub, Ambient and Psytrance so far), written and checked by `golden_spec` (`golden.h`).
+  Signing an M2 genre off: add it to `goldenGenres()` and a `kPinned` row (`steering_fingerprint_spec`, with the pieces
+  its held fill holds a Rest and a Swap in: Dub's held entry is a Swap, Ambient has no fills so `{0, 0}`, Psytrance's is a Rest so `{kPieces, 0}`), bump its version, then update. The golden
+  and both fingerprints pin every variant set to variant 0, so a weight change alone moves neither. It does move the
+  sets a spec's `newRecipe(genre, 0)` draws (#540's weights drew Psytrance's `break=lead` there). Each is the
+  default Recipe at seed 1, 16 bars from SHIFT+PLAY, one event per line, under a header with the genre's version and its
+  stream fingerprint (60 pieces): the per-subgenre fingerprint specs live there. A retune that's meant follows **A
+  retune** in spec §21.2. The command refuses (exit 1) a golden that changed without a bump against the merge base with
+  the PR's base (`scripts/generative/goldens.py`, the same base as `check_all.py`; CI checks it too), so one bump covers
+  a branch's retunes. It runs whenever the update wrote a golden, even if a spec failed. A golden the base doesn't have
+  counts from the commit that added it, so a golden a branch adds is still checked against its first version. CI's
+  depth-2 checkout can't find that commit (its shallow oldest commit looks as if it added every file), so there such a
+  golden is new and goes unchecked. A golden without a `format` line is format 1. A change to the dump itself, its seed,
+  length or fingerprint size bumps `kFormat` in `golden.h` instead, and needs no version bump.
   - `golden_spec` pins no subgenre's table: its format specs use a made-up genre and Recipe, and its changed-stream
     spec computes what it expects, so a retune passes after the update alone (`--update-goldens` runs only
     `golden_spec`). The folder check runs after the goldens' own specs, so an update that adds a subgenre passes the
@@ -124,3 +131,7 @@ otherwise.
   the ring fills (a stall) and a kept piece's header is never taken (the next piece doesn't open). Read pieces with
   `harness::image(log, i)` (whole, the playing one too) or `store.stored(i)` (the file alone, through `readImage()`,
   as Capture reads it). A `LogRecord`'s path points into its image: keep the `PieceImage` alive while reading it.
+- `regenerate_page_spec` reads the stock fonts' metrics: `src/deluge/gui/fonts/fonts.c` (plain C data) is linked into
+  `generator_specs`. The menu rows' font is monospaced (6 px, `kTextSpacingX`); titles use the bold 9 px Metric font
+  (`Canvas::drawScreenTitle()`, height 10), proportional, so a title's fit is a sum of glyph widths plus 2 px a gap
+  (5 px after a space, which has no glyph). Kerning only narrows, so the spec leaves it out.

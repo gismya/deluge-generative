@@ -62,14 +62,18 @@ GEN_STEP_CODE LineStep drawLineStep(std::span<const LineWeight> values, const Li
 	return out;
 }
 
-/// One step of `spec`'s line, rolled from the live Complexity (spec §5.2, §8.1): a Motif slot stores a chord position;
-/// a Loop step stores a scale step and adds its slide.
-GEN_STEP_CODE LineStep rollLineStep(const PartSpec& spec, DrawKey key, int32_t complexity) {
+/// One step of `spec`'s line, step `lineStep` of its pattern, rolled from the live Complexity (spec §5.2, §8.1): a
+/// Motif slot stores a chord position; a Loop step stores a scale step and adds its slide. A Loop step off its jump
+/// mask keeps the octave it drew at 0, after the draws, so the mask moves no other draw.
+GEN_STEP_CODE LineStep rollLineStep(const PartSpec& spec, DrawKey key, int32_t complexity, int32_t lineStep) {
 	if (spec.flavour == Flavour::Motif) {
 		return drawLineStep(spec.motif.positions, spec.motif.draws, key, complexity);
 	}
 	LineStep out = drawLineStep(spec.loop.degrees, spec.loop.draws, key, complexity);
 	out.slide = drawChance(withField(key, kSlide), spec.loop.slide.at(complexity));
+	if (spec.loop.jumpSteps != 0 && (spec.loop.jumpSteps & (1U << (lineStep % kStepsPerBar))) == 0) {
+		out.octave = 0;
+	}
 	return out;
 }
 
@@ -87,7 +91,7 @@ GEN_STEP_CODE void Generator::rollLine(int32_t partIndex, int32_t complexity) {
 		part.line[i] = rollLineStep(spec,
 		                            lineKey(seed_, static_cast<uint8_t>(partIndex), takes_.take[partIndex],
 		                                    Purpose::LineRoll, part.lanes[0], 0, i, 0),
-		                            complexity);
+		                            complexity, i);
 		if (pattern != nullptr) {
 			if (pattern->importance[patternStep] == kAnchor) {
 				part.line[i].degree = 0;
@@ -121,7 +125,7 @@ GEN_STEP_CODE void Generator::mutateLine(int32_t partIndex, int32_t motion, int3
 		// Drawn the way a fresh pick rolls it. A Motif slot re-rolls its chord position and octave and keeps its
 		// accent (spec §5.2).
 		const bool accent = part.line[i].accent;
-		part.line[i] = rollLineStep(spec, key, complexity);
+		part.line[i] = rollLineStep(spec, key, complexity, i);
 		if (motif) {
 			part.line[i].accent = accent;
 		}
@@ -315,9 +319,31 @@ GEN_STEP_CODE void Generator::decideLoop(int32_t partIndex, const Step& step) {
 	// A slid note runs into the next step, so a LEGATO voice glides to it; a note after a gap starts fresh (§8.6).
 	VelocityLevel level = pitch.accent ? VelocityLevel::Accent : pattern.level[patternStep];
 	int32_t length = pitch.slide ? kTicksPerStep + spec.loop.slideOverlapTicks : spec.loop.gateTicks;
+	const uint8_t notePitch = resolvePitch(partIndex, pitch.steps);
+	const bool muted = !mutes_.audible(partIndex);
+	if (loopTies(partIndex, spec.loop, pitch.slide, level, muted, step)
+	    && sounding_.extend(partIndex, Lane::None, notePitch, step.tick - 1, step.tick + length)) {
+		part.loopOn = step.tick; // its last segment: Avoid measures the plain gate from here (spec §5.5)
+		return;
+	}
 	part.loopOn = express(partIndex, spec.expression, state, patternStep,
-	                      {Lane::None, resolvePitch(partIndex, pitch.steps), level, length, part.slid}, step);
+	                      {Lane::None, notePitch, level, length, part.slid}, step);
 	part.slid = pitch.slide;
+	part.loopMuted = muted;
+}
+
+GEN_STEP_CODE bool Generator::loopTies(int32_t partIndex, const LoopSpec& loop, bool slide, VelocityLevel level,
+                                       bool muted, const Step& step) const {
+	// Only an unaccented plain note after a plain one ties, and only under the mute its note was struck with, so a
+	// mute or unmute is heard at the next onset. An accent, the line's or the pattern's, is struck. A rest, a Section
+	// line or another cut ended the sounding note: extend() finds none.
+	if (loop.tieChance == 0 || slide || level == VelocityLevel::Accent || parts_[partIndex].slid
+	    || parts_[partIndex].loopMuted != muted) {
+		return false;
+	}
+	DrawKey key = partKey(seed_, static_cast<uint8_t>(partIndex), Lane::None, takes_.take[partIndex], Purpose::LoopTie);
+	key.position[0] = static_cast<uint32_t>(heldStep(partIndex, step.index)); // freeze replays its phrase
+	return drawChance(key, loop.tieChance);
 }
 
 // ---- Sustain (spec §5.2, §8.1) ----
@@ -488,6 +514,10 @@ GEN_STEP_CODE void Generator::decideArp(int32_t partIndex, const Step& step) {
 		index = index < notes ? index : turn - index;
 		break;
 	}
+	case ArpOrder::Pulse:
+		// The root, then the root an octave up (its walk's first note on the second octave).
+		index = (position & 1) != 0 ? current.size : 0;
+		break;
 	case ArpOrder::Random: {
 		// One draw per onset, keyed on the pick and the step like Density's jitter, so a pass loops while the pick
 		// holds, a take re-rolls it and freeze holds it.

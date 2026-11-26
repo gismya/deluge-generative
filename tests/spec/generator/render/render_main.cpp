@@ -2,6 +2,8 @@
 
 #include "render/command.h"
 
+#include "generative/perform/riser_timing.h"
+
 #include <cstdio>
 
 int main(int argc, char** argv) {
@@ -20,6 +22,11 @@ int main(int argc, char** argv) {
 	}
 	if (parsed.listRisers) {
 		std::fputs(harness::render::riserLanes().c_str(), stdout);
+		return 0;
+	}
+	if (parsed.riserFallbackFor >= 0) {
+		const auto* fallback = deluge::generative::perform::fallbackFor(static_cast<int32_t>(parsed.riserFallbackFor));
+		std::printf("%s\n", fallback != nullptr ? fallback->path : "-");
 		return 0;
 	}
 	if (parsed.listSounds) {

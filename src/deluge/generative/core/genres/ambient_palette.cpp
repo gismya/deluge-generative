@@ -116,6 +116,8 @@ constexpr LaneSounds kLanes[] = {
     {.lane = Lane::Fall, .folders = kFallFolders, .tags = kFallTags, .synths = kFallSynths},
 };
 
+static_assert(levelsValid(kParts, kRoles), "a palette level is 1 to kFullLevel");
+
 } // namespace
 
 /// Its Bass, Pad, Drone and bells over soft drum lanes and the Riser and Fall.

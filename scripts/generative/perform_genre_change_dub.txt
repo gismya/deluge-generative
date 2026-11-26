@@ -1,7 +1,7 @@
 # Dub's genre changes (#131, spec §9.7, §21.3) over the sysex test port, in one boot: Psytrance into Dub and back out
 # in all three styles, for the long tempo glide (Psytrance 138-146 BPM, Dub 70-80). Acid techno (the boot genre) cuts
-# to Psytrance first. ROOTS DUB is a GENRE row of its own (no parent), so picking it opens the confirm at once, on
-# BUILD INTO A DROP (its transition entry). The first change glides Psytrance's own Build (16 or 32 bars) down to
+# to Psytrance first. ROOTS DUB is a GENRE row of its own (no parent), so picking it opens the Regenerate page at once, on
+# DROP (its transition entry). The first change glides Psytrance's own Build (16 or 32 bars) down to
 # Dub's tempo onto Dub's Drop, which sounds; a forced Break in Dub keeps the kick, Rim and Bass sounding; the last
 # change out of Dub plays Dub's 1-bar Build, gliding about 75 -> 142 BPM in about 2.2 s (spec §9.7: a deliberate slam),
 # into Psytrance's Drop. Every start checks the glide arrived where the new roster starts: tempo_off (the song's
@@ -26,6 +26,7 @@
 # covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/gui/views/perform_view.cpp
 # covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/genres/psytrance_palette.cpp
 # covers: src/deluge/generative/core/types.h src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 hold entropy
 include perform_open.txt
@@ -36,7 +37,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: two detents from BUILD INTO A DROP, Acid's 4 parts to 6 ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: two detents from DROP, Acid's 4 parts to 6 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -53,8 +54,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -65,7 +68,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=4$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- ROOTS DUB -> BUILD INTO A DROP, the highlight: Psytrance's Build glides down to Dub's tempo onto its Drop ----
+# ---- ROOTS DUB -> DROP, the highlight: Psytrance's Build glides down to Dub's tempo onto its Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -76,7 +79,8 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -102,7 +106,7 @@ expect event gen_section BREAK within=90
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=40
 expect event gen_h1 steps= within=20
 
-# ---- PSYTRANCE ▸ CLASSIC -> HARD CUT AT PHRASE: Dub's 5 parts to 6 ----
+# ---- PSYTRANCE ▸ CLASSIC -> CUT: Dub's 5 parts to 6 ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -119,8 +123,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -131,7 +137,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- ROOTS DUB -> FADE THROUGH: one detent from BUILD INTO A DROP; Psytrance's 1-phrase Outro, Dub's Intro ----
+# ---- ROOTS DUB -> FADE: one detent from DROP; Psytrance's 1-phrase Outro, Dub's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -142,8 +148,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -155,7 +163,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=6$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- PSYTRANCE ▸ CLASSIC -> FADE THROUGH: Dub's 1-phrase Outro, Psytrance's Intro ----
+# ---- PSYTRANCE ▸ CLASSIC -> FADE: Dub's 1-phrase Outro, Psytrance's Intro ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -172,8 +180,10 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 1
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -185,7 +195,7 @@ expect event /^gen_outputs_freed outputs=\d+ total=5$/ within=40
 expect event gen_transition phase=idle within=10
 expect playing=true
 
-# ---- ROOTS DUB -> HARD CUT AT PHRASE ----
+# ---- ROOTS DUB -> CUT ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -196,8 +206,10 @@ expect event gen_genre_pick dub row=ROOTS DUB
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -210,7 +222,7 @@ expect playing=true
 hardware_only expect event /^gen_h16 culls=\d+ culled=\S+ voices=[1-9]/ within=20
 expect event gen_h1 steps= within=20
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP: Dub's 1-bar Build glides about 75 -> 142 BPM in about 2.2 s into Psytrance's Drop ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP: Dub's 1-bar Build glides about 75 -> 142 BPM in about 2.2 s into Psytrance's Drop ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -227,7 +239,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

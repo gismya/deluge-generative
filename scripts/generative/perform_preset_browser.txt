@@ -35,6 +35,7 @@
 # covers: src/deluge/generative/perform/text.* src/deluge/generative/perform/transition_lifecycle.h
 # covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
 # covers: src/deluge/generative/core/lane_names.h
+# covers: src/deluge/gui/menu_item/generative/regenerate_page.* src/deluge/generative/perform/regenerate_page.*
 start_state
 include perform_open.txt
 include perform_confirm.txt
@@ -447,7 +448,8 @@ encoder 3 1
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -505,7 +507,7 @@ button PLAY up
 expect playing=true
 expect event gen_section INTRO 0
 
-# ---- A genre change replaces the chosen pick: TECHNO ▸ MELODIC, HARD CUT AT PHRASE. Melodic's BASS (part 1) rolls
+# ---- A genre change replaces the chosen pick: TECHNO ▸ MELODIC, CUT. Melodic's BASS (part 1) rolls
 # from its own palette ----
 include perform_transition_menu.txt
 button SELECT_ENC down
@@ -523,8 +525,10 @@ expect event gen_genre_pick techno-melodic row=MELODIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

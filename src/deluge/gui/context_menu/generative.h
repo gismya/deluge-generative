@@ -20,22 +20,15 @@
 //   DISCARD SONG?, asked every time before Generative mode replaces the song: OK;
 //   REGENERATE? (the Compose screen's), from its REGENERATE: OK;
 //   the leave menu, opened by holding BACK in Perform: Capture's keep options (KEEP: 2 MARKED, LEAVE, KEEP:) or
-//   LEAVE PERFORM? when no piece was played;
-//   REGENERATE?, from the Perform menu's REGENERATE or GENRE, and a LOAD while playing: BUILD INTO A DROP, FADE
-//   THROUGH, HARD CUT AT PHRASE.
+//   LEAVE PERFORM? when no piece was played.
+// The Perform menu's REGENERATE, GENRE and a LOAD while playing open the Regenerate page, a stock submenu
+// (gui/menu_item/generative/regenerate_page.h).
 
 #pragma once
 
-#include "generative/core/recipe_file.h"
 #include "generative/firmware/entry_source.h"
 #include "generative/perform/capture.h"
-#include "generative/perform/genre_menu.h"
-#include "generative/perform/recipe_name.h"
 #include "gui/context_menu/context_menu.h"
-
-namespace deluge::generative {
-struct Genre;
-}
 
 namespace deluge::gui::context_menu {
 
@@ -102,43 +95,9 @@ private:
 	char const* options_[generative::perform::LeaveMenu::kMaxOptions] = {};
 };
 
-/// The transition confirm (spec §9.7, §13.6): how a genre change, Regenerate or LOAD plays. It starts on the incoming
-/// genre's transition entry, and its choice starts the transition's preload.
-class TransitionConfirm final : public GenerativeContextMenu {
-public:
-	TransitionConfirm() = default;
-	/// The genre to change to: the one playing for a Regenerate. Set before setupAndCheckAvailability().
-	void setGenre(const generative::Genre* genre) {
-		genre_ = genre;
-		file_ = nullptr;
-		name_ = nullptr;
-	}
-	/// A LOAD of `file`, named `name` (spec §16.5): titled with the name, asked. Both must outlive the menu.
-	void setLoad(const generative::RecipeFile* file, const generative::perform::RecipeName* name) {
-		genre_ = file->recipe.genre;
-		file_ = file;
-		name_ = name;
-	}
-	bool canSeeViewUnderneath() override { return true; }
-	char const* getTitle() override;
-	std::span<char const*> getOptions() override;
-	bool setupAndCheckAvailability() override;
-	bool acceptCurrentOption() override;
-
-private:
-	[[nodiscard]] bool regenerates() const;
-	const generative::Genre* genre_ = nullptr;
-	const generative::RecipeFile* file_ = nullptr; ///< A LOAD's file, or nullptr
-	const generative::perform::RecipeName* name_ = nullptr;
-	/// `<OLED NAME>?` or a LOAD's `<NAME>?`: the longest Recipe name (longer than any genre's, which genre_data_spec
-	/// checks), the `?` and the NUL.
-	char title_[deluge::generative::perform::kMaxRecipeNameChars + 2] = {};
-};
-
 extern Generative generativeMenu;
 extern DiscardSong discardSong;
 extern LeavePerform leavePerform;
 extern RegenerateRecipe regenerateRecipe;
-extern TransitionConfirm transitionConfirm;
 
 } // namespace deluge::gui::context_menu

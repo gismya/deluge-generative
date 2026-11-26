@@ -3,6 +3,8 @@
 # flush of the card log (spec §17.2), then leaves the piece PLAYING. When the session ends: PULL THE DELUGE'S POWER
 # now, without stopping or leaving, then power it on again. Part 2 (capture_power_pull_2.txt) runs after the reboot.
 # Run with --events 'gen_card_log|gen_log_piece|gen_mark'.
+# needs: a Deluge and someone to pull its power after it, so automatic hardware sessions skip it (it leaves a
+# marked piece playing, which the next script's entry would adopt)
 # runs-via: deluge_probe.py session (a human check: the owner pulls the power after it)
 # covers: src/deluge/generative/firmware/capture_files.*
 # covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/output_sink.cpp

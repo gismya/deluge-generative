@@ -47,6 +47,16 @@ class GeneratorSize(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("over H18", lines[-1])
 
+    def test_checks_the_genre_copy_against_spec_20(self):
+        text = "A genre's copy is 1,412 B on ARM"
+        self.assertEqual(generator_size.resolved_figure(text), 1412)
+        self.assertIsNone(generator_size.resolved_figure("nothing"))
+        self.assertTrue(generator_size.resolved_verdict(1412, 1412)[0])
+        ok, lines = generator_size.resolved_verdict(1416, 1412)
+        self.assertFalse(ok)
+        self.assertIn("A genre's copy is N B", lines[-1])
+        self.assertFalse(generator_size.resolved_verdict(1412, None)[0])
+
     def test_the_repo_states_a_figure_and_a_limit(self):
         self.assertGreater(
             generator_size.spec_figure(generator_size.read(generator_size.SPEC)), 0

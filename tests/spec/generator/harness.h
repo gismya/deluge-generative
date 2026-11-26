@@ -14,8 +14,11 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/core/steering_log.h"
+#include "generative/core/variants.h"
 #include "generative/perform/perform_driver.h"
 #include "generative/perform/perform_steering.h"
+#include "generative/perform/riser_timing.h"
+#include "instance.h"
 #include "log_store.h"
 
 #include <algorithm>
@@ -47,13 +50,22 @@ constexpr int64_t songTicksFor(int32_t ticks, int32_t magnitude) {
 /// Keeps every event the driver plays, in play order.
 struct RecordingSink final : perform::NoteSink {
 	std::vector<Event> events;
-	int32_t riserMicros = 0; ///< The Riser lane's sample length; 0 for a synth Riser.
+	int32_t riserMicros = 0;         ///< The Riser lane's sample length; 0 for a synth Riser.
+	int32_t riserFallbackMicros = 0; ///< The fallback Riser's length beside it; 0 for none (spec §9.5).
 	/// Where each restart's new piece begins in `events` (spec §13.2): its first event's index.
 	std::vector<size_t> restartedAt;
 	/// Starts a restart's piece, as the adapter does: a StepwisePiece sets it to its Current Recipe's.
 	std::function<void(Generator&)> restarts;
 	void play(const Event& event) override { events.push_back(event); }
-	int32_t sampleMicros(const Event& noteOn) override { return noteOn.lane == Lane::Riser ? riserMicros : 0; }
+	int32_t sampleMicros(const Event& noteOn) override {
+		if (noteOn.lane != Lane::Riser) {
+			return 0;
+		}
+		return noteOn.pitch == perform::kRiserFallbackPitch ? riserFallbackMicros : riserMicros;
+	}
+	int32_t fallbackMicros(const Event& noteOn) override {
+		return noteOn.lane == Lane::Riser ? riserFallbackMicros : 0;
+	}
 	void restartPiece(Generator& generator) override {
 		restartedAt.push_back(events.size());
 		if (restarts) {
@@ -321,6 +333,8 @@ struct Run {
 	bool skipIntro = false;
 	/// The Riser lane's sample length, in microseconds; 0 for a synth Riser (spec §9.5).
 	int32_t riserMicros = 0;
+	/// The fallback Riser's length beside it; 0 for none (spec §9.5).
+	int32_t riserFallbackMicros = 0;
 };
 
 struct Result {
@@ -331,17 +345,18 @@ struct Result {
 	/// The piece ended by itself, at the end of its Outro (spec §13.2), at this driver clock.
 	bool ended = false;
 	int32_t endedAt = 0;
-	std::unique_ptr<Generator> generator; ///< Left as it ended, for queries.
+	std::unique_ptr<Instance> generator; ///< Left as it ended, for queries.
 };
 
 /// Plays `run` through the Perform driver for `bars` bars of song time, then stops (flushes) the driver.
 inline Result play(const Run& run, int32_t bars) {
 	Result result;
-	result.generator = std::make_unique<Generator>();
+	result.generator = std::make_unique<Instance>();
 	Generator& generator = *result.generator;
 	SteeringQueue queue;
 	RecordingSink sink;
 	sink.riserMicros = run.riserMicros;
+	sink.riserFallbackMicros = run.riserFallbackMicros;
 	perform::PerformDriver driver;
 
 	generator.start(run.recipe, run.seed, run.takes, run.skipIntro);
@@ -378,9 +393,18 @@ inline Result play(const Run& run, int32_t bars) {
 	return result;
 }
 
-/// The Acid techno default Recipe with its first palette entries and fixed facts, so a spec's expectations hold.
+/// `recipe` with each of its genre's variant sets fixed to its first variant, the genre as written (spec §3.6).
+inline Recipe writtenVariants(Recipe recipe) {
+	for (size_t s = 0; s < recipe.genre->variantSets.size(); s++) {
+		fixVariant(recipe.variants, {.set = static_cast<int32_t>(s), .variant = 0});
+	}
+	return recipe;
+}
+
+/// The Acid techno default Recipe with its first palette entries, fixed facts and the genre as written (each variant
+/// set on its first variant), so a spec's expectations hold.
 inline Recipe acidRecipe() {
-	Recipe recipe = newRecipe(genres::technoAcid, 0);
+	Recipe recipe = writtenVariants(newRecipe(genres::technoAcid, 0));
 	recipe.keyRoot = 9; // A
 	recipe.scale = Scale::Minor;
 	return recipe;
@@ -470,7 +494,7 @@ struct Start {
 /// that needs more at the start (a tempo, a decision timer, a second instance) derives from StepwisePiece and adds it.
 template <typename Sink = RecordingSink>
 struct StepwisePiece {
-	Generator generator;
+	Instance generator;
 	Sink sink;
 	perform::PerformDriver driver;
 	Recipe currentRecipe;

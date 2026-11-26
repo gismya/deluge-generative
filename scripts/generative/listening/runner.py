@@ -4,7 +4,7 @@ folder. gen_emu.py stays the only thing that boots delugemu.
 <scratch>/
   card_<card>.img       the card images the jobs name
   wt/r<N>/              runner N's worktree (a detached worktree of the repo's HEAD, made on first use)
-  build/r<N>/           its capture build dir
+  build/r<N>/           its capture build dir (build/r<N>-variants/ for --variant captures: gen_emu.py capture)
   out/r<N>/             its captures in progress
   raw/<name>.wav        finished captures; a merged capture is hard-linked under each job name it serves
   raw/<name>.log        gen_emu's log of each attempt

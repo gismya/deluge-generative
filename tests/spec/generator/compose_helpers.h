@@ -28,6 +28,7 @@ struct RecordingWriter final : SongWriter {
 	int32_t calls = 0;
 	int32_t endCall = -1;
 	int32_t riserMicros = 0;
+	int32_t riserFallbackMicros = 0; ///< The fallback Riser's length; 0 for none (spec §9.5).
 	void begin(const Recipe& r) override {
 		recipe = &r;
 		calls++;
@@ -50,7 +51,10 @@ struct RecordingWriter final : SongWriter {
 		soundingParts = sounding;
 		endCall = calls++;
 	}
-	int32_t sampleMicros(const Event& /*noteOn*/) override { return riserMicros; }
+	int32_t sampleMicros(const Event& noteOn) override {
+		return noteOn.pitch == perform::kRiserFallbackPitch ? riserFallbackMicros : riserMicros;
+	}
+	int32_t fallbackMicros(const Event& /*noteOn*/) override { return riserFallbackMicros; }
 
 	// Capture's calls.
 	struct Pick {

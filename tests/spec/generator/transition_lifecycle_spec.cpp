@@ -174,6 +174,35 @@ describe transition_lifecycle("Transition lifecycle", $ {
 			expect(t.out->takeWaiting(0)).to_be_less_than(0);
 		});
 
+		it("drops a variant switch waiting at the confirm, and one still in the steering queue (spec §12.9)", _ {
+			TransitionPiece t(&genres::dub);
+			t.decideBefore(3);
+			const auto drums = static_cast<uint8_t>(t.out->variants().allowed[1] == 0b010 ? 0b001 : 0b010);
+			const auto skank = static_cast<uint8_t>(t.out->variants().allowed[0] == 0b11 ? 0b01 : 0b11);
+			expect(t.steering.pressVariantMask(1, drums) == perform::PressOutcome::Accepted).to_be_true();
+			t.decideOne();
+			expect(t.out->maskWaiting(1)).to_equal(drums);
+			expect(t.steering.pressVariantMask(0, skank) == perform::PressOutcome::Accepted).to_be_true(); // queued
+			expect(t.steering.waitingVariants()).to_equal(2);
+			expect(t.lifecycle.request(TransitionStyle::BuildIntoDrop) == Request::Started).to_be_true();
+			// Pending, a switch is refused: it would wait for a Drop the outgoing piece never plays.
+			expect(t.steering.pressVariantMask(1, drums) == perform::PressOutcome::ChangePending).to_be_true();
+			drainQueue(t);
+			expect(t.out->maskWaiting(0)).to_equal(-1);
+			expect(t.out->maskWaiting(1)).to_equal(-1);
+		});
+
+		it("drops a queued octave shift or variant switch at the handover: they name the outgoing roster's part or set", _ {
+			TransitionPiece t(&genres::dub);
+			t.decideBefore(3);
+			t.push({CommandKind::SetOctave, 1, 1});
+			t.push({CommandKind::SetVariantMask, 1, 0b100});
+			t.push({CommandKind::SetMute, 0, kPress});
+			t.steering.handOver(t.lifecycle.pendingRecipe);
+			expect(t.queue.size()).to_equal(1);
+			expect(t.queue.holdsFor(CommandKind::SetMute, 0)).to_be_true(); // lands on the new roster (spec §12.9)
+		});
+
 		it("is refused with QUEUE FULL, dropping nothing, when the queue has no room for the take it drops", _ {
 			TransitionPiece t;
 			t.decideBefore(3);

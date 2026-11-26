@@ -1,6 +1,6 @@
 # #448's on/off comparison (include only): about 5.5 minutes of Perform with busy steering and two genre changes into
-# the heaviest genres, as the card-write spike's load (#447): Acid techno (1 min), BUILD INTO A DROP into Psytrance
-# (2.5 min), HARD CUT AT PHRASE into Detroit (1 min), each piece marked at its start, then stop. The wrappers set the
+# the heaviest genres, as the card-write spike's load (#447): Acid techno (1 min), DROP into Psytrance
+# (2.5 min), CUT into Detroit (1 min), each piece marked at its start, then stop. The wrappers set the
 # card log on (capture_card_on.txt) or off (capture_card_off.txt, hold card_log_off). Figures: --events 'gen_h1 |gen_h16|
 # gen_stream|gen_gaps|gen_card_log_ops|gen_card_log |gen_transition start|gen_log_piece|input_lag'.
 include perform_open.txt
@@ -21,7 +21,7 @@ report input
 include capture_h13_minute.txt
 expect playing=true within=100
 
-# ---- PSYTRANCE ▸ CLASSIC -> BUILD INTO A DROP ----
+# ---- PSYTRANCE ▸ CLASSIC -> DROP ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -38,7 +38,8 @@ expect event gen_genre_pick psytrance-classic row=CLASSIC from=CLASSIC
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
@@ -56,7 +57,7 @@ include capture_h13_minute.txt
 wait 30000
 expect playing=true within=200
 
-# ---- TECHNO > DETROIT -> HARD CUT AT PHRASE ----
+# ---- TECHNO > DETROIT -> CUT ----
 include perform_transition_menu.txt
 button SELECT_ENC down
 wait 50
@@ -73,8 +74,10 @@ expect event /^gen_genre_pick techno-detroit row=DETROIT/
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect ui=context_menu
+expect ui=sound_editor
+include perform_regen_transition.txt
 encoder 3 2
+include perform_regen_go.txt
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up

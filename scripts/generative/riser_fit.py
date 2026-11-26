@@ -1,16 +1,19 @@
-"""Spec §10.5's Riser fit: every pack Riser a genre's Riser lane can pick is no longer than its shortest Build.
+"""Spec §10.5's Riser fit: every pack Riser a genre's Riser lane can pick fits its shortest Build, or its fallback does.
 
     python3 scripts/generative/riser_fit.py [--pack DIR] [--render BIN]
 
-A sample Riser longer than the Build would start on the Build's first step and overshoot the Drop, and starting
-partway into the file isn't built, so each genre's Riser lane lists only Risers that fit its shortest Build at the
-top of its tempo range. `generator_render --list-risers` prints each built-in genre's lane from the genre tables:
-the shortest Build in ms, the lane's folders and its tags. This reads the WAVs in those folders under pack/ that the
-tags reach (any file when the lane has none; a tag matches anywhere in the name, ignoring case, and one holding a
-'/' names one file, ignoring case too, as the firmware's do; each file counts once) and fails on one longer than the
-Build, on an AIFF (it can't measure one), and on a lane that reaches no pack Riser at all. Riser lanes list only
-pack Risers (spec §10.5), so the factory card isn't read. check_all.py runs it after the harness build. Exit 0 when
-every Riser fits, 1 otherwise, 2 when it can't run.
+A sample Riser longer than the Build would overshoot the Drop, and starting partway into the file isn't built, so the
+firmware plays a fallback in such a Build: the longest pack short Riser shorter than the drawn one, if that fits, else
+no Riser (spec §9.5); `generator_render --riser-fallback MICROS` names the one it picks. `--list-risers` prints the
+fallbacks (path and length, longest first) and each
+built-in genre's lane: the shortest Build in ms at the top of its tempo range (over the genre as written and each of
+its variants), the lane's folders and its tags. This reads the WAVs in those folders under pack/ that the tags reach
+(any file when the lane has none; a tag matches anywhere in the name, ignoring case, and one holding a '/' names one
+file, ignoring case too, as the firmware's do; each file counts once) and fails on one longer than the Build whose
+fallback doesn't fit it either, on a fallback missing from pack/ or not as long as listed (the firmware picks by the
+listed length), on an AIFF (it can't measure one), and on a lane that reaches no pack Riser at all. Riser lanes list
+only pack Risers (spec §10.5), so the factory card isn't read. check_all.py runs it after the harness build. Exit 0
+when every Riser fits, 1 otherwise, 2 when it can't run.
 """
 
 import argparse
@@ -39,13 +42,24 @@ class CantCheck(Exception):
     """A listing or file the check can't read: exit 2, not a finding."""
 
 
+class Fallback(NamedTuple):
+    """A pack Riser the firmware falls back to (spec §9.5), and the length it takes it to be."""
+
+    path: str
+    ms: int
+
+
 def parse_listing(text):
-    """[Lane] from --list-risers' lines."""
+    """([Lane], [Fallback] longest first) from --list-risers' lines."""
     lanes = []
+    fallbacks = []
     for line in text.splitlines():
         if not line:
             continue
         fields = line.split("\t")
+        if fields[0] == "fallback" and len(fields) == 3:
+            fallbacks.append(Fallback(fields[1], int(fields[2])))
+            continue
         if len(fields) != 4:
             raise CantCheck(f"bad --list-risers line: {line!r}")
         genre, ms, folders, tags = fields
@@ -57,7 +71,7 @@ def parse_listing(text):
                 [t for t in tags.split("|") if t],
             )
         )
-    return lanes
+    return lanes, fallbacks
 
 
 def seconds(path):
@@ -114,12 +128,30 @@ def candidates(pack, folders, tags):
     return out
 
 
-def check(listing, pack, length=seconds):
-    """(ok, report lines, Risers checked) for a --list-risers listing against pack/."""
+def check(listing, pack, length=seconds, fallback_for=lambda took: None):
+    """(ok, report lines, Risers checked) for a --list-risers listing against pack/. `fallback_for(took)`: the card
+    path of the fallback the firmware loads beside a Riser `took` seconds long, or None (generator_render
+    --riser-fallback, so the rule isn't copied here)."""
     ok = True
     lines = []
     count = 0
-    for genre, ms, folders, tags in parse_listing(listing):
+    lanes, fallbacks = parse_listing(listing)
+    measured = {}
+    for f in fallbacks:
+        found = find_ignoring_case(pack, f.path)
+        if found is None:
+            ok = False
+            lines.append(f"FALLBACK {f.path}: not in the pack")
+            continue
+        took = length(os.path.join(pack, found))
+        measured[f.path] = took
+        # The firmware picks a fallback by its listed length: it must be the file's.
+        if abs(took * 1000 - f.ms) > 50:
+            ok = False
+            lines.append(
+                f"FALLBACK {f.path}: is {took:.2f} s, listed as {f.ms / 1000:.2f} s"
+            )
+    for genre, ms, folders, tags in lanes:
         picks = candidates(pack, folders, tags)
         if not picks:
             ok = False
@@ -134,11 +166,16 @@ def check(listing, pack, length=seconds):
                 )
                 continue
             took = length(path)
-            if took * 1000 > ms:
-                ok = False
-                lines.append(
-                    f"LONG {genre}: {card_path} is {took:.2f} s, its shortest Build {ms / 1000:.2f} s"
-                )
+            if took * 1000 <= ms:
+                continue
+            # Longer than the shortest Build: the firmware plays its fallback there, which must fit (spec §9.5).
+            fallback = fallback_for(took)
+            if fallback in measured and measured[fallback] * 1000 <= ms:
+                continue
+            ok = False
+            lines.append(
+                f"LONG {genre}: {card_path} is {took:.2f} s, its shortest Build {ms / 1000:.2f} s, and no fallback fits"
+            )
     return ok, lines, count
 
 
@@ -169,15 +206,32 @@ def main(argv=None):
             file=sys.stderr,
         )
         return 2
+
+    def fallback_for(took):
+        """The firmware's own choice of fallback beside a Riser `took` seconds long (perform::fallbackFor())."""
+        asked = subprocess.run(
+            [render, "--riser-fallback", str(int(took * 1_000_000))],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if asked.returncode != 0:
+            raise CantCheck(
+                f"{render} --riser-fallback exited {asked.returncode}: {asked.stderr.strip()}"
+            )
+        path = asked.stdout.strip()
+        return None if path in ("", "-") else path
+
     try:
-        ok, lines, count = check(listed.stdout, args.pack)
+        ok, lines, count = check(listed.stdout, args.pack, fallback_for=fallback_for)
     except CantCheck as error:
         print(f"riser_fit: {error}", file=sys.stderr)
         return 2
     for line in lines:
         print(line)
     print(
-        f"{count} pack Risers, {'every one fits' if ok else 'not every one fits'} its genre's shortest Build"
+        f"{count} pack Risers, {'every one fits' if ok else 'not every one fits'} its genre's shortest Build or has a "
+        "fallback that does"
     )
     return 0 if ok else 1
 

@@ -452,8 +452,8 @@ describe melodic_techno("Melodic techno", $ {
 		});
 
 		it("shares Techno's drum and FX lanes", _ {
-			expect(melodic.palette->lanes.data() == genres::technoAcid.palette->lanes.data()).to_be_true();
-			expect(melodic.palette->lanes.size()).to_equal(genres::technoAcid.palette->lanes.size());
+			expect(melodic.palette->lanes.data() == genres::technoAcid.parent->palette->lanes.data()).to_be_true();
+			expect(melodic.palette->lanes.size()).to_equal(genres::technoAcid.parent->palette->lanes.size());
 		});
 	});
 });

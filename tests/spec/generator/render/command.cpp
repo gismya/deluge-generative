@@ -8,6 +8,8 @@
 #include "generative/core/genre.h"
 #include "generative/core/palette.h"
 #include "generative/core/sound_settings.h"
+#include "generative/core/variants.h"
+#include "generative/perform/riser_timing.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -15,8 +17,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace harness::render {
 
@@ -27,7 +31,7 @@ const char* const kUsage =
     "                        [--energy P] [--density P] [--complexity P] [--motion P]\n"
     "                        [--key C..B] [--scale NAME] [--tempo BPM] [--swing -49..49]\n"
     "                        [--pack DIR] [--card DIR] [--end-after-drop [N] | --end-at-bar BAR] [--midi-only]\n"
-    "                        [--mute PART]...\n"
+    "                        [--mute PART]... [--variant SET=NAME]...\n"
     "       generator_render --list-sounds [--genre NAME] [--entropy N] [Recipe flags] [--pack DIR] [--card DIR]\n"
     "       generator_render --list-palettes\n"
     "       generator_render --list-risers\n"
@@ -46,7 +50,10 @@ const char* const kUsage =
     "capture --mute; "
     "repeatable)\n"
     "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"
-    "MIDI file and piano roll keep every part. --midi-only writes only PREFIX.mid. The MIDI file's last track, "
+    "MIDI file and piano roll keep every part. --variant SET=NAME (repeatable) fixes one of the genre's variant sets "
+    "to\n"
+    "that variant by their stable names (skank=plain, spec 3.6); a set not given keeps what --entropy draws.\n"
+    "--midi-only writes only PREFIX.mid. The MIDI file's last track, "
     "THEORY,\n"
     "holds the Recipe, the parts' rules, and the key, chords and macros as they change, for\n"
     "scripts/generative/theory_review.py.\n"
@@ -56,8 +63,11 @@ const char* const kUsage =
     "file order can differ from the render's, so a capture can pick another file from the same entropy.\n"
     "--list-palettes prints each built-in genre's pitched parts' palette presets, one \"genre<TAB>PART<TAB>path\" a\n"
     "line, for scripts/generative/osc_octaves.py.\n"
-    "--list-risers prints each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its\n"
-    "shortest Build in ms at the top of its tempo range, and the lane's folders and tags, each |-separated, for\n"
+    "--list-risers prints the pack's fallback Risers, one \"fallback<TAB>path<TAB>ms\" a line, longest first, then\n"
+    "each built-in genre's Riser lane, one \"genre<TAB>ms<TAB>folders<TAB>tags\" a line: its shortest Build in ms at\n"
+    "the top of its tempo range, its variants' Builds counted, and the lane's folders and tags, each |-separated, for\n"
+    "scripts/generative/riser_fit.py.\n"
+    "--riser-fallback MICROS prints the fallback Riser the firmware loads beside a sample MICROS long, or -, for\n"
     "scripts/generative/riser_fit.py.\n";
 
 namespace {
@@ -153,6 +163,10 @@ std::string pitchedPalettePresets() {
 
 std::string riserLanes() {
 	std::string out;
+	// The fallbacks a Riser lane loads beside a longer drawn sample (spec §9.5), for the check to measure.
+	for (const perform::PackRiser& riser : perform::kPackRisers) {
+		out += std::string("fallback\t") + riser.path + "\t" + std::to_string(riser.ms) + "\n";
+	}
 	for (const Genre* genre : allGenres()) {
 		const bool hasRiser = std::ranges::any_of(genre->parts, [](const PartSpec& part) {
 			return std::ranges::any_of(part.lanes, [](const LaneSpec& lane) { return lane.lane == Lane::Riser; });
@@ -162,10 +176,29 @@ std::string riserLanes() {
 		}
 		// The shortest Build a Riser has to fit: the raw minimum of its lengths (a phrase when it lists none, as
 		// Arc::buildSteps() plays), not shortestBuildBars(), which caps it at the phrase: Ambient's only Build is 16
-		// bars over an 8-bar phrase.
-		const std::span<const WeightedBars> builds = genre->arc.buildBars;
-		const int32_t buildBars =
-		    builds.empty() ? genre->phraseBars : std::ranges::min(builds, {}, &WeightedBars::bars).bars;
+		// bars over an 8-bar phrase. Over the genre as written and each of its variants, since a set may patch the
+		// Build (Techno's hard Build, 4 bars, #531). A variant whose Builds play no Riser (House's filter) doesn't
+		// count.
+		auto shortestIn = [](const Genre& g) {
+			const std::span<const WeightedBars> builds = g.arc.buildBars;
+			if (!g.arc.buildRiser) {
+				return INT32_MAX;
+			}
+			return builds.empty() ? static_cast<int32_t>(g.phraseBars)
+			                      : static_cast<int32_t>(std::ranges::min(builds, {}, &WeightedBars::bars).bars);
+		};
+		int32_t buildBars = shortestIn(*genre);
+		auto copy = std::make_unique<ResolvedGenre>();
+		for (size_t s = 0; s < genre->variantSets.size(); s++) {
+			for (size_t v = 0; v < genre->variantSets[s].variants.size(); v++) {
+				VariantPicks picks;
+				picks.pick[s] = static_cast<uint8_t>(v);
+				buildBars = std::min(buildBars, shortestIn(resolveGenre(*genre, picks, copy.get())));
+			}
+		}
+		if (buildBars == INT32_MAX) {
+			continue; // no Build of it plays a Riser
+		}
 		const int64_t ms = int64_t{buildBars} * (kStepsPerBar / kStepsPerBeat) * 60000 / genre->facts.tempoHighBpm;
 		const LaneSounds* sounds = genre->palette->laneSounds(Lane::Riser);
 		const LaneSounds none{.lane = Lane::Riser};
@@ -188,6 +221,7 @@ Parsed parseArgs(int argc, const char* const* argv) {
 	Request& r = parsed.request;
 	std::string pack = GENERATOR_RENDER_REPO_ROOT "/pack";
 	std::string card = defaultCard();
+	std::vector<std::string> variants;
 	auto fail = [&](std::string why) {
 		parsed.error = std::move(why);
 		return parsed;
@@ -233,13 +267,22 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			parsed.listRisers = true;
 			return parsed;
 		}
+		if (flag == "--riser-fallback") {
+			char* end = nullptr;
+			const long long micros = argc == 3 ? std::strtoll(argv[2], &end, 10) : -1;
+			if (argc != 3 || end == argv[2] || *end != 0 || micros < 0 || micros > INT32_MAX) {
+				return fail("--riser-fallback takes one length in microseconds");
+			}
+			parsed.riserFallbackFor = micros;
+			return parsed;
+		}
 		int32_t macro = -1;
 		for (int32_t m = 0; m < kNumMacros; m++) {
 			macro = flag.starts_with("--") && flag.substr(2) == kMacroNames[m] ? m : macro;
 		}
-		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy",   "--bars", "--key",
-		                                              "--scale", "--tempo", "--swing",     "--pack", "--card",
-		                                              "--out",   "--mute",  "--end-at-bar"};
+		static constexpr std::string_view kFlags[] = {"--genre", "--seed",  "--entropy",    "--bars",   "--key",
+		                                              "--scale", "--tempo", "--swing",      "--pack",   "--card",
+		                                              "--out",   "--mute",  "--end-at-bar", "--variant"};
 		if (macro < 0 && std::find(std::begin(kFlags), std::end(kFlags), flag) == std::end(kFlags)) {
 			return fail("unknown argument: " + std::string(flag));
 		}
@@ -314,6 +357,9 @@ Parsed parseArgs(int argc, const char* const* argv) {
 			}
 			r.mutedParts |= 1U << (n - 1);
 		}
+		else if (flag == "--variant") {
+			variants.emplace_back(value); // named against the genre once every flag is read
+		}
 		else if (flag == "--pack") {
 			pack = value;
 		}
@@ -329,6 +375,20 @@ Parsed parseArgs(int argc, const char* const* argv) {
 		return fail("--end-after-drop and --end-at-bar: give one");
 	}
 	const Genre* genre = r.overrides.genre != nullptr ? findGenre(r.overrides.genre) : allGenres()[0];
+	for (const std::string& variant : variants) {
+		const std::optional<VariantFix> fix = parseVariantFix(*genre, variant);
+		if (!fix) {
+			std::string have;
+			for (const VariantSet& set : genre->variantSets) {
+				for (const Variant& v : set.variants) {
+					have += std::string(have.empty() ? "" : ", ") + set.name + "=" + v.name;
+				}
+			}
+			return fail("unknown variant for " + std::string(genre->name) + ": " + variant + " (have "
+			            + (have.empty() ? std::string("none") : have) + ")");
+		}
+		r.overrides.variant[fix->set] = static_cast<int8_t>(fix->variant);
+	}
 	const auto parts = static_cast<int32_t>(genre->parts.size());
 	if ((r.mutedParts >> parts) != 0) {
 		return fail(std::string(genre->name) + " has " + std::to_string(parts) + " parts: --mute takes 1 to "

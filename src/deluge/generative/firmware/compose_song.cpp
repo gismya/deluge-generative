@@ -20,6 +20,7 @@
 #include "generative/firmware/log_header.h"
 #include "generative/firmware/settings_tracker.h"
 #include "generative/firmware/sound_controls.h"
+#include "generative/perform/riser_timing.h"
 #include "generative/runner/runner.h"
 #include "io/midi/test_port.h"
 #include "memory/general_memory_allocator.h"
@@ -209,7 +210,7 @@ void ComposeSong::note(const compose::Note& note) {
 	InstrumentClip* clip = segment->clip;
 	NoteRow* row = nullptr;
 	if (note.lane != Lane::None) {
-		Drum* drum = segment->drums[laneRow(note.lane)];
+		Drum* drum = segment->drums[perform::kitRowOf(note.lane, note.pitch)];
 		row = drum != nullptr ? clip->getNoteRowForDrum(drum) : nullptr;
 		if (row == nullptr) {
 			return; // a lane with nothing loaded plays nothing, as in Perform
@@ -258,7 +259,13 @@ void ComposeSong::base(const compose::Automated& automated, int8_t value) {
 
 int32_t ComposeSong::sampleMicros(const Event& noteOn) {
 	const PartOutput& part = roster_->parts[noteOn.part];
-	return noteOn.lane == Lane::None ? 0 : sampleRowMicros(part.drums[laneRow(noteOn.lane)]);
+	return noteOn.lane == Lane::None ? 0 : sampleRowMicros(part.drums[perform::kitRowOf(noteOn.lane, noteOn.pitch)]);
+}
+
+int32_t ComposeSong::fallbackMicros(const Event& noteOn) {
+	Event onFallback = noteOn;
+	onFallback.pitch = perform::kRiserFallbackPitch; // kitRowOf() reads the fallback's row for a Riser
+	return noteOn.lane == Lane::Riser ? sampleMicros(onFallback) : 0;
 }
 
 bool ComposeSong::finishClip(Segment& segment, int32_t position, int32_t length, bool synth) {
@@ -481,9 +488,12 @@ void ComposeSong::paramEdit(const Command& edit, int32_t tick) {
 	if (!found) {
 		return;
 	}
-	AutoParam& param = *found->param;
 	const int32_t start = startOf(edit.target);
 	bool written = true;
+	// The edit's row, then for the Riser lane the fallback Riser's row, which plays its notes in some Builds (spec
+	// §9.5).
+	const std::optional<LoggedParam> fallback = loggedParam(edit, *roster_, *genre_, *song_, true);
+	const LoggedParam* const rows[] = {&*found, fallback ? &*fallback : nullptr};
 	if (edit.kind == CommandKind::SetHome) {
 		// A sound control's home (spec §11.6): the control's nodes from here are at the new home (the driver ended and
 		// resumed the part's lanes around this call). A param no lane automates holds each home in turn.
@@ -491,16 +501,23 @@ void ComposeSong::paramEdit(const Command& edit, int32_t tick) {
 		if (!old) {
 			return;
 		}
-		if (!param.isAutomated()) {
-			written = writeEdit(param, *found->manager, found->collection, found->slot, start, tick, *old, edit.value);
+		for (const LoggedParam* at : rows) {
+			if (at != nullptr && written && !at->param->isAutomated()) {
+				written = writeEdit(*at->param, *at->manager, at->collection, at->slot, start, tick, *old, edit.value);
+			}
 		}
 	}
 	else {
 		// A param no control moves: automation on the song or the part's clip (spec §17.6). Its value now goes with it
 		// into a clip cut after.
-		written = writeEdit(param, *found->manager, found->collection, found->slot, start, tick,
-		                    param.getCurrentValue(), edit.value);
-		param.setCurrentValueBasicForSetup(edit.value);
+		for (const LoggedParam* at : rows) {
+			if (at != nullptr && written) {
+				AutoParam& param = *at->param;
+				written = writeEdit(param, *at->manager, at->collection, at->slot, start, tick, param.getCurrentValue(),
+				                    edit.value);
+				param.setCurrentValueBasicForSetup(edit.value);
+			}
+		}
 		editedSounds_ = editedSounds_ || edit.target != kSongParams;
 	}
 	if (!written) {
@@ -678,9 +695,11 @@ void ComposeSong::restoreEdits(const Roster& roster, Song& song, bool includeSon
 		if (!includeSong && edits_[i].target == kSongParams) {
 			continue;
 		}
-		if (const std::optional<LoggedParam> found = loggedParam(edits_[i], roster, *genre_, song)) {
-			// A SetParam's value, or a SetHome's home: prepare()'s binding reads it as the home.
-			found->param->setCurrentValueBasicForSetup(edits_[i].value);
+		for (const bool fallback : {false, true}) { // a Riser edit's fallback row too (spec §9.5)
+			if (const std::optional<LoggedParam> found = loggedParam(edits_[i], roster, *genre_, song, fallback)) {
+				// A SetParam's value, or a SetHome's home: prepare()'s binding reads it as the home.
+				found->param->setCurrentValueBasicForSetup(edits_[i].value);
+			}
 		}
 	}
 }

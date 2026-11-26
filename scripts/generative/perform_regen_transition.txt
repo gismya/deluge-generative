@@ -1,0 +1,10 @@
+# Shared by the scripts that change genre or regenerate with a style other than the incoming genre's entry
+# (include perform_regen_transition.txt): on the Regenerate page (spec §13.6), which opens on GO, up to TRANSITION
+# (the top row: the menu doesn't wrap) and into its list, on the style the page opened on. The script then turns to
+# its style and includes perform_regen_go.txt.
+expect event gen_regen_page open
+encoder 3 -5
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100

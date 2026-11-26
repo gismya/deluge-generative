@@ -107,6 +107,10 @@ otherwise.
   (harmonic rhythm, retrigger, Sweep, Build length) share `fitsPhrase()` (`core/genre.h`). Other data checks are in
   `tests/spec/generator/genre_data_spec.cpp`, which only runs in the harness. `subgenreOf()` is `consteval` and
   rejects a subgenre as a parent at compile time.
+- `newRecipe()` (`core/recipe.cpp`) rolls its facts from one `EntropyStream` in a fixed order: tempo, root, scale,
+  swing (#498), then the variant sets (#493). A new fact appends its draw after these, and draws it before the key's
+  early `return` (no lean), or a lean shifts it. `new_recipe_spec` pins the order. Swing is `Facts::swingLow/High`;
+  a Recipe file without swing takes `Facts::swingMiddle()`.
 - Shared helpers for draws and card names, so a new genre's palette or roll code doesn't grow a fifth copy:
   `EntropyStream` (fresh-entropy rolls: a Recipe's facts, sound picks), `scaleBelow()` and `rollWeighted()` (keyed and
   fresh weighted rolls) in `core/draw.h`; `equalsIgnoringCase()`, `lowerChar()` and `isExactPathTag()` in
@@ -215,13 +219,22 @@ otherwise.
   is rolled as a one-tag copy of the lane (`rollKitTag()`), so it matches the lane's folders whatever its list says:
   a machine whose tag also names a closed hat (the Psy set's `CLHAT-`) must never reach the Open hat, which is why
   the hat pair carries only a Closed hat swap. `drum_kits_spec` checks one machine per piece in every genre; a lane
-  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`.
+  rule over rolled picks (3 files, the pack's clap) counts the lane's list with `lanePicks(..., {}, false)`. A swap
+  by exact path in a folder no lane reads (Dub's pack snare in `SAMPLES/DRUMS/Snare/Dub`) reaches no other lane, and
+  where the file is missing the lane rolls its machine's tag, not the lane list. A preset's own level is
+  `PaletteEntry::volume` (on top of `PartSpec::volume`, `partSoundSettings(part, load.volume)`).
 - An FX lane whose roll finds no sample rolls one of its `synths` by weight from the lane's own draws
   (`rollLaneOrPreset()`, `palette.cpp`), and that preset path is its pick: the Siren's pick is `GEN Siren` and the
   Impact's one of its presets (#472). A lane listing both folders and presets still rolls a file whenever one
   matches, so its presets stay fallbacks. Give an Impact-style lane no folders and no tags, or a factory file that
   matches would win. Its default folder `SAMPLES/FX/<lane>` is empty in the pack, and lists of a lane's picks
   (`lanePicks`) now hold the preset paths.
+- A lane's pick (its path) is not in the event stream: the goldens, `kPinned` and `generator_render`'s dump and MIDI
+  don't see a palette change that only swaps what a lane plays (#472 round 3: House's Impact from files to a preset,
+  Acid's own boom). It needs no version bump. A subgenre that wants one lane's sound of its own copies Techno's
+  `kLanes` and swaps that entry (`kDubLanes`, `kAcidLanes` in `techno_palette.cpp`).
+- A pack preset's delay feedback stays under 25 (`test_make_pack.py`): an FX row's saved feedback is what plays (a
+  kit row's Space is reverb only), and from 25 the echo never dies in Perform (spec §11.4).
 - The Fall and the Impact span their Section's start (the Break, the Drop's phrase), so they never enter late
   (`entersLate()`, `core/types.h`, used where `updateGates()` and `express()` hold notes back). A new FX lane with a
   long note should join it.
@@ -256,3 +269,54 @@ otherwise.
   never busier where the source anchors. House's #368 Bass line makes the second half busier, where the Lead anchors;
   its specs allow the anchor steps. A gated source (House's Lead at 30) plays little at the default Density: run
   interplay specs above the gate.
+- Variant sets (§3.6, #493): `Generator::begin()` sets `genre_` to `resolveGenre()` (`core/variants.h`): the constant
+  table when no picked variant patches it, else the instance's `ResolvedGenre`, which its owner holds beside it and
+  hands over once with `useResolvedGenre()` (Perform's `allocateBlocks()`, `ComposeWork`, `CaptureWork`,
+  `harness::Instance` in `tests/spec/generator/instance.h`). Trap: a bare `Generator` has nowhere to copy and plays
+  every genre as written, whatever its picks, so a spec or owner that plays a genre with sets on a patched variant
+  uses an `Instance` (harness `play()`, `StepwisePiece`, `walk()`, `TransitionPiece` and the render do). Code that
+  needs the patched data reads `genre_`, never `recipe_.genre` (the constant table, kept for identity and files).
+  A patch writes `ResolvedGenre::genre` (a scalar, or a span or pointer to another constexpr table) or
+  `ResolvedGenre::parts[p]`; `genre.parts` points at the copy's parts.
+- Trap: two sets that patch the same field compose in set order: `resolveGenre()` applies each set's pick in turn, so a
+  later set's patch sees the earlier one's. House's `chords=vamp` reads the graph pointer the `loops` set left and
+  swaps in the vamp with that loop chance (`vampOf()`); written as a plain pointer swap it would undo `loops`. Keep
+  such a set after the one it reads, and append it (the draw order is the set order).
+- Trap: a pattern step's Density jitter is fixed per pick (`plays()` keys it on the pick), and ±60 by default, so an
+  importance-5 step plays at Density 25 in about one pick in eleven, for the whole pick. To tier a lane by Density
+  (House's open hat: one a bar at home, every & from 30), check the band, `importance × 100 ± densityJitter`,
+  against `densityCurve.threshold()` at both ends; House sets its jitter to 45 for that.
+- `ArcSpec::buildCutLeads` turns the Build cut round (the set stops until the last `buildCutBars` bars and enters
+  there); `buildRiser` false keeps the Riser out of every Build (`Keeps::riser`, read in `Keeps::lets()`). The Arc
+  plan still counts a leading-cut part as playing for the whole Build, as it ignores the cut.
+- Trap: `PerformAdapter`'s members before `steering_` are baked into the step's code (offset 20): #493's
+  `resolved_[2]` first went beside `blocks_` and moved `steering_` to 28. New adapter members go after `sink_`.
+- **Variant changes at a Drop (#495).** `Generator::dropVariants()` runs in `decideLanded()` right after
+  `arc_.enterStep()` on a Drop's first step (`dropStartsHere()`, not step 0: a transition's roster opening on a Drop
+  keeps its picks), before `walkChord()` and the pattern picks read the genre. A live `SetVariantMask` waits in the
+  pending list but `landPending()` never lands it (it runs before the Arc enters the step, so it can't know the step
+  is a Drop): `dropVariants()` lands it, logging it there, which is why `decideLanded()` takes the log. In replay the
+  record's `apply()` runs before `decideLanded()`; `switchedSets_` carries "this set was switched" to the Drop's draws
+  either way. `stepsToLine()` for a `SetVariantMask` is only QUEUE's countdown (`Arc::ahead().drop`), `kNever` with no
+  Drop ahead, which `landsAt()` passes on as `Generator::kNoLine`. Re-resolving writes the copy in place, so a
+  patched pool must keep its entry count and lengths: a frozen part's `PatternState::entry` indexes the new pool.
+- Trap: `DropOutState::entry` outlives its drop-out (the Throw reads `genre_->dropOuts[entry]` on every step), so a
+  live set that swaps the drop-out table (Dub's MIX, #532) could index a shorter table with the old entry.
+  `dropVariants()` forgets the entry when the table changed: at a Drop the last drop-out and its Throw's fall are over
+  (asserted in the harness, as is the index in `updateControls()`).
+- Trap: once a genre has variant sets, a spec's `newRecipe()` or `movingRecipe()` draws them, so a spec of the
+  table as written fixes each set to its first variant (`withVariants()`; Psytrance's `asWritten()`, House's
+  `build=full`). Psytrance's rest and Lead specs failed in odd ways (a Lead in the Intro, an Arp resting under the
+  Lead) until pinned (#497). The same holds for a spec that fixes one set and measures it: pin the sets that change
+  what it measures too. House's S1 loop-move shares fixed only `loops` and fell under their bounds once a reweight
+  made `vamp` the chords set's likelier draw, since a two-chord vamp often redraws the loop it left (#536).
+- Trap: every built-in genre has variant sets since Techno's (#531), Acid techno, the default, among them. The
+  harness's `acidRecipe()` (and so `Start`, `playSteered()`) pins each set to its first variant (`writtenVariants()`);
+  a spec that edits a genre's Build or pools on a copy clears its `variantSets`, or a set's patch undoes the edit
+  (`compose_driver_spec`'s `shortBuildsOnly()`). A spec of a genre with no sets uses `genreWithNoSets()`
+  (`no_sets_genre.h`). The patch-diff rule compares a live set's variants pairwise and lets an empty pool match any
+  (Techno's `tribal` gives the Tom lane a groove pool): a lane with no pool never reads its pick's entry.
+- Trap: events due on one tick may leave the event buffer in another order when a lane's notes around them change
+  (Techno's running hats under a roll punch-in): a spec comparing "everything else" across two runs sorts each tick.
+- Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
+  the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).

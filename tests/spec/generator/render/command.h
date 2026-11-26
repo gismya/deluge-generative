@@ -41,6 +41,9 @@ struct Parsed {
 	bool listPalettes = false;
 	/// --list-risers: print riserLanes() instead of rendering.
 	bool listRisers = false;
+	/// --riser-fallback MICROS: print the fallback Riser the firmware loads beside a sample that long, or -, instead
+	/// of rendering (perform::fallbackFor(), spec §9.5). -1 when not asked.
+	int64_t riserFallbackFor = -1;
 	/// --list-sounds: print the Recipe's soundPicks() instead of rendering.
 	bool listSounds = false;
 };

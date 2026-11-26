@@ -340,6 +340,15 @@ struct LoopSpec {
 	uint16_t gateTicks = 16;
 	/// How far a slid note runs into the next step, so a LEGATO voice glides.
 	uint8_t slideOverlapTicks = 6;
+	/// Bit i: an octave jump may land on step i of each bar's 16 (line step modulo 16: a line's step is its pattern's
+	/// step, line[patternStep]); a step off the mask
+	/// keeps its drawn octave at 0, so the line's high and low notes mark a grouping (spec §5.2; Psytrance's 3-3-2).
+	/// 0: any step (every genre before #497).
+	uint16_t jumpSteps = 0;
+	/// Per-mille chance a plain note on the pitch the part still sounds ties into it: no new strike, and the sounding
+	/// note lasts to the new one's end (spec §5.2, §8.6). A rest, a Section line, a slide, an accent or a mute change
+	/// ends a tie.
+	uint16_t tieChance = 0;
 };
 
 /// How a Sustain part holds its voicing (spec §5.2, §8.1).
@@ -389,6 +398,7 @@ enum class ArpOrder : uint8_t {
 	Down,   ///< highest to lowest
 	UpDown, ///< up, then down, the top and bottom notes played once each turn
 	Random, ///< a keyed draw from the walk's notes on each onset
+	Pulse,  ///< the chord's root and its octave in turn, whatever the chord's other notes; needs a 2-octave walk
 };
 
 /// The most octaves an Arp walk climbs (spec §8.1).
@@ -484,6 +494,19 @@ struct GestureSpec {
 	[[nodiscard]] constexpr bool on(GestureMoment moment) const { return (off & momentBit(moment)) == 0; }
 };
 
+/// How a part makes room for another while that one plays (spec §5.6, #497): it rests, or keeps only its 8ths.
+enum class YieldMode : uint8_t { None, Rest, Eighths };
+
+/// A part yielding to another (spec §5.6, #497; Psytrance's Arp under its Lead). It holds on each step where `part`
+/// sounds by the Arc's rules (its gate open, kept by the Section, no drop-out; mutes never count), never in a Build:
+/// `inDrops` in a Groove that started on a Drop, `outside` everywhere else. A patterned pitched part only, yielding
+/// to another part (yieldValid()). part -1: it never yields (every genre before #497).
+struct YieldSpec {
+	int8_t part = -1;
+	YieldMode inDrops = YieldMode::None;
+	YieldMode outside = YieldMode::None;
+};
+
 /// A part's drift (spec §11.5).
 struct DriftSpec {
 	/// Depth at a given Motion, per-mille ×0..×2 of the Generator-wide depth.
@@ -525,6 +548,8 @@ struct PartSpec {
 	/// The post-FX volume knob at load, as a percent of the preset's knob position (spec §10.6, tuning): a synth
 	/// part's, or each row's of a Kit part (Drums, FX). 100 keeps the preset's; never above it (1–100).
 	uint8_t volume = 100;
+	/// Whom the part makes room for, and how (spec §5.6). Off by default.
+	YieldSpec yield;
 	/// The part's own delay setup (spec §10.6): a synth part's sound's, or on a Kit part (Drums, FX) the kit's, at kit
 	/// level. Each lane's row has its own on its LaneSpec. Only Drums has a kit-wide control set, so an FX kit's setup
 	/// is written on load and never thrown: FX lanes throw their own rows (spec §11.4).
@@ -665,6 +690,7 @@ struct BuildRoll {
 struct Keeps {
 	const PartsAndLanes* parts = nullptr; ///< The Break or Build keeps, or nullptr: everything plays.
 	Lane rollLane = Lane::None;           ///< In a Build, the roll lane, which always plays; otherwise None.
+	bool riser = true;                    ///< Whether the Riser lane plays: false only in a Build without one.
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) play. FX lanes are the section rules' own.
 	[[nodiscard]] bool lets(int32_t part, Lane lane) const;
@@ -702,11 +728,16 @@ struct ArcSpec {
 	};
 	/// Parts and lanes still playing in a Break (spec §9.5). FX lanes are section rules' own and always play.
 	PartsAndLanes breakKeeps = kEverything;
-	/// The same for every Build. The roll lane and the Riser always play.
+	/// The same for every Build. The roll lane always plays, and the Riser unless buildRiser is false.
 	PartsAndLanes buildKeeps = kSameAsBreakKeeps;
 	/// Parts and lanes that stop for the Build's last buildCutBars bars (0: no cut).
 	PartsAndLanes buildCut = {.lanes = laneBit(Lane::Kick)};
 	uint8_t buildCutBars = 0;
+	/// The cut the other way round: buildCut holds from the Build's start until its last buildCutBars bars, so what it
+	/// holds enters there and leads into the Drop (House's filter Build brings the Bass in a bar early).
+	bool buildCutLeads = false;
+	/// Whether the Build's Riser plays (spec §9.5): false for a Build that rises by its filters alone.
+	bool buildRiser = true;
 	GapLength gap = GapLength::None;
 	BuildRoll roll;
 	/// The lane a Phrase accent hits (spec §9.5), or None: always on a Drop, and on other Groove phrase starts with
@@ -723,7 +754,7 @@ struct ArcSpec {
 			return {&breakKeeps};
 		}
 		if (kind == SectionKind::Build) {
-			return {buildKeeps == kSameAsBreakKeeps ? &breakKeeps : &buildKeeps, roll.lane};
+			return {buildKeeps == kSameAsBreakKeeps ? &breakKeeps : &buildKeeps, roll.lane, buildRiser};
 		}
 		return {};
 	}
@@ -862,8 +893,49 @@ struct Facts {
 	int16_t tempoLowBpm = 120; ///< Rolls come from here; not a clamp.
 	int16_t tempoHighBpm = 130;
 	std::span<const Scale> scales;
-	int8_t swing = 0;
+	/// The song swing amount a new Recipe rolls from, swingLow..swingHigh inclusive, in -kMaxSwing..kMaxSwing (spec
+	/// §3.2, ADR 0008). Like tempo, a range rolled from fresh entropy; straight (0..0) by default.
+	int8_t swingLow = 0;
+	int8_t swingHigh = 0;
+	/// What a Recipe file that leaves out swing plays (spec §16.2): the range's middle.
+	[[nodiscard]] constexpr int8_t swingMiddle() const { return static_cast<int8_t>((swingLow + swingHigh) / 2); }
 };
+
+// ---- Variant sets (slot 11, spec §3.6, §4.2, ADR 0008) ----
+
+struct ResolvedGenre;
+
+/// When a playing variant set may change its variant on its own (spec §3.6). Only Never is built: Drop is #495's.
+enum class ChangeAt : uint8_t { Never, Drop };
+
+/// One way a variant set's rule can go: a patch to a copy of the genre (core/variants.h).
+struct Variant {
+	const char* name = "";     ///< Stable, lowercase, for Recipe files: "plain". Never reused within its set.
+	const char* oledName = ""; ///< At most kMaxVariantOledName characters: "PLAIN".
+	uint16_t weight = 1;       ///< Its share of a draw, against its set's other variants. More than 0.
+	/// Writes the variant's fields into a copy of the genre. nullptr: the genre as written.
+	void (*apply)(ResolvedGenre&) = nullptr;
+};
+
+/// A rule a piece draws one variant of, as it rolls key and tempo (spec §3.6): Dub's 7th or plain skank.
+struct VariantSet {
+	const char* name = "";             ///< Stable, for Recipe files: "skank". Never reused within its genre.
+	const char* oledName = "";         ///< At most kMaxVariantSetOledName characters: "SKANK".
+	std::span<const Variant> variants; ///< 2 to kMaxVariants. The first is the genre as it played before the set.
+	/// Perform's VARIANTS menu may switch it, at the next Drop (spec §13.6). Its patches keep to what a Drop reads
+	/// afresh (spec §3.6).
+	bool live = false;
+	/// Drop: it may change at each Drop, by a keyed draw (spec §3.6), within its allowed variants. Its patches keep to
+	/// what a Drop reads afresh, as a live set's do.
+	ChangeAt changeAt = ChangeAt::Never;
+	int16_t changeChance = 0; ///< Per mille at each Drop, 1 to 1000, for ChangeAt::Drop; 0 for Never.
+};
+
+/// The OLED names fit a menu row (ADR 0008): a set's name, and a variant's, in characters.
+constexpr int32_t kMaxVariantSetOledName = 8;
+constexpr int32_t kMaxVariantOledName = 9;
+/// A variant's stable name, in characters: a Recipe file's `allow` list holds every variant's (recipe_file.cpp).
+constexpr int32_t kMaxVariantNameChars = 23;
 
 struct Genre {
 	// Slot 1: identity (spec §4.4)
@@ -925,6 +997,8 @@ struct Genre {
 	const Palette* palette = nullptr;
 	// Slot 9: section rules
 	ArcSpec arc;
+	// Slot 11: variant sets (spec §3.6), at most kMaxVariantSets. None: every piece plays the table as written.
+	std::span<const VariantSet> variantSets;
 
 	[[nodiscard]] constexpr int32_t phraseSteps() const { return phraseBars * kStepsPerBar; }
 };
@@ -955,7 +1029,8 @@ constexpr bool harmonyValid(const Genre& genre) {
 	// A loop half a phrase long holds 2 whole chords or more, and every chance is per-mille.
 	if (graph->loopChance >= 0
 	    && (graph->loopChance > 1000 || graph->halfLoopChance < 0 || graph->halfLoopChance > 1000
-	        || graph->barsPerChord == 0 || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
+	        || graph->returnChance < 0 || graph->returnChance > 1000 || graph->barsPerChord == 0
+	        || genre.phraseBars % (4 * graph->barsPerChord) != 0)) {
 		return false;
 	}
 	if (static_cast<int32_t>(graph->moves.size()) > kMaxChordMoves) {
@@ -1370,7 +1445,8 @@ constexpr bool onsetNotesKeepBound(const PartSpec& part, int32_t gate) {
 /// A Loop part's plain note lasts its gate: a step at most, or longer when every note ends before the pattern's next
 /// onset (detail::longLoopNotesFit(), #221: a sub bass's long notes). A slid note lasts a step plus the slide overlap
 /// from its latest start (detail::latestStart(), the clamp counted on every beat's 1), and the onset two 16ths on
-/// starts at its earliest (detail::earliestStart()) (spec §8.5, §8.6).
+/// starts at its earliest (detail::earliestStart()) (spec §8.5, §8.6). A part that ties (LoopSpec::tieChance, a
+/// per-mille) plays no Ornaments.
 constexpr bool loopNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Loop) {
@@ -1380,6 +1456,12 @@ constexpr bool loopNotesValid(const Genre& genre) {
 			continue;
 		}
 		if (part.loop.gateTicks > kTicksPerStep && !detail::longLoopNotesFit(part)) {
+			return false;
+		}
+		// A tie strikes nothing, so it can't carry an Ornament (spec §8.6).
+		const Ornaments& ornaments = part.expression.ornaments;
+		if (part.loop.tieChance > 1000
+		    || (part.loop.tieChance != 0 && (detail::mayRatchet(ornaments) || ornaments.flam > 0))) {
 			return false;
 		}
 		if (part.loop.slide.atZero == 0 && part.loop.slide.atFull == 0) {
@@ -1397,8 +1479,9 @@ constexpr bool loopNotesValid(const Genre& genre) {
 }
 
 /// Whether every Arp part has something to walk and keeps the note bound (spec §5.2, §7.3, §8.1): a pool, a walk of 1
-/// to kMaxArpOctaves octaves for each entry, a gate of at least a tick, a Register that holds its widest walk
-/// (arpRange()), and the bound over each pattern's own onset gaps (detail::onsetNotesKeepBound()).
+/// to kMaxArpOctaves octaves for each entry (2 for a Pulse, which plays the root's octave), a gate of at least a tick,
+/// a Register that holds its widest walk (arpRange()), and the bound over each pattern's own onset gaps
+/// (detail::onsetNotesKeepBound()).
 constexpr bool arpNotesValid(const Genre& genre) {
 	for (const PartSpec& part : genre.parts) {
 		if (part.flavour != Flavour::Arp) {
@@ -1409,7 +1492,8 @@ constexpr bool arpNotesValid(const Genre& genre) {
 		}
 		int32_t octaves = 0;
 		for (const ArpWalk& walk : part.arp.walks) {
-			if (walk.octaves < 1 || walk.octaves > kMaxArpOctaves) {
+			if (walk.octaves < 1 || walk.octaves > kMaxArpOctaves
+			    || (walk.order == ArpOrder::Pulse && walk.octaves != 2)) {
 				return false;
 			}
 			octaves = std::max<int32_t>(octaves, walk.octaves);
@@ -1446,6 +1530,28 @@ constexpr bool stabNotesValid(const Genre& genre) {
 		if (part.flavour == Flavour::Stab
 		    && (part.pool.empty() || part.stab.gateTicks == 0
 		        || !detail::onsetNotesKeepBound(part, part.stab.gateTicks))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Whether every part that yields (spec §5.6, #497) is a patterned pitched part yielding to another of the genre's
+/// parts, which isn't itself yielding: the Generator works out the yields in one pass, after every part's own silence.
+/// A part that never yields names no part and sets no mode; a mode of None everywhere is never set.
+constexpr bool yieldValid(const Genre& genre) {
+	const auto parts = static_cast<int32_t>(genre.parts.size());
+	for (const PartSpec& part : genre.parts) {
+		const YieldSpec& yield = part.yield;
+		const bool modes = yield.inDrops != YieldMode::None || yield.outside != YieldMode::None;
+		if (yield.part < 0) {
+			if (modes) {
+				return false;
+			}
+			continue;
+		}
+		if (!modes || yield.part >= parts || &genre.parts[yield.part] == &part || !part.lanes.empty()
+		    || part.pool.empty() || genre.parts[yield.part].yield.part >= 0) {
 			return false;
 		}
 	}
@@ -1502,10 +1608,27 @@ constexpr int32_t shortestBuildBars(const Genre& genre) {
 
 /// Whether the Build cut and the Gap are each shorter than the genre's shortest Build and its phrase (spec §9.1, §9.5,
 /// §13.5): the Arc plan counts a Build's keeps as sounding and leaves the cut and the Gap out, so one that covered a
-/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing.
+/// whole Build (Dub's is a bar) or a whole phrase would plan a part as playing where it plays nothing. A leading cut
+/// (`buildCutLeads`) covers each Build but its last `buildCutBars` bars: it leaves at least one bar, and its span stays
+/// under the phrase in every Build length.
 constexpr bool cutAndGapUnderBuild(const Genre& genre) {
+	const ArcSpec& arc = genre.arc;
 	const int32_t shortest = shortestBuildBars(genre);
-	return genre.arc.buildCutBars < shortest && gapSteps(genre.arc.gap) < shortest * kStepsPerBar;
+	if (gapSteps(arc.gap) >= shortest * kStepsPerBar) {
+		return false;
+	}
+	if (!arc.buildCutLeads) {
+		return arc.buildCutBars < shortest;
+	}
+	if (arc.buildCutBars < 1) {
+		return false;
+	}
+	for (const WeightedBars& build : arc.buildBars) {
+		if (build.bars - arc.buildCutBars >= genre.phraseBars) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /// Whether every Siren lane holds its note 1 bar up to a phrase, on an FX part, and no other lane sets a held length

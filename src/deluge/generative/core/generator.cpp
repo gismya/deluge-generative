@@ -38,14 +38,15 @@ void Generator::start(const Recipe& recipe, uint32_t seed, const Takes& takes, b
 
 void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop) {
 	recipe_ = recipe;
+	// The genre with the Recipe's variants (spec §3.6): a copy only when a pick patches it.
+	genre_ = &resolveGenre(*recipe.genre, recipe.variants, resolved_);
 	// A shift the part's octave range doesn't take (a Recipe from elsewhere) plays at the nearest it does (spec §7.3).
 	for (int32_t p = 0; p < kMaxParts; p++) {
-		recipe_.octave[p] = static_cast<int8_t>(
-		    p < partCount(*recipe.genre) ? octaveRange(recipe.genre->parts[p]).clamp(recipe_.octave[p]) : 0);
+		recipe_.octave[p] =
+		    static_cast<int8_t>(p < partCount(*genre_) ? octaveRange(genre_->parts[p]).clamp(recipe_.octave[p]) : 0);
 	}
 	seed_ = seed;
 	takes_ = takes;
-	genre_ = recipe.genre;
 	nextStep_ = 0;
 	stopAt_ = kNever;
 	restartLanded_ = false;
@@ -55,7 +56,10 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	waitingMoves_[0] = waitingMoves_[1] = Command{CommandKind::CancelNewest};
 	mutes_ = {}; // mutes and solos are performance state: lost on stop (spec §13.1)
 	frozen_ = 0;
+	switchedSets_ = 0;
 	silent_ = 0;
+	yieldRest_ = 0;
+	yieldEighths_ = 0;
 	std::fill(std::begin(landedSound_), std::end(landedSound_), static_cast<uint8_t>(kNoSound));
 	autoFill_ = -1;
 	heldFill_ = -1; // the driver sends FILL again if it is still held
@@ -88,6 +92,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	previousChord_ = -1;
 	chordCount_ = 0;
 	chordLoop_ = 0;
+	newestLoop_ = 0;
 	// Home, at the Extension level this Recipe's Complexity gives, so chord() reads a voiced chord before step 0. Step
 	// 0's bar line voices it again, from the macros then: a transition's carryOver() replaces them after begin().
 	voiceChordAt(kHomeChord);
@@ -217,7 +222,7 @@ GEN_STEP_CODE int32_t Generator::walkLoop(const ChordGraph& graph, int32_t step,
 	if (stepsToChordLine() != 0 && step != 0 && !drop) {
 		return current; // a Section start off the grid keeps the loop's chord
 	}
-	enum Field : uint32_t { kWhether, kLength, kChord };
+	enum Field : uint32_t { kWhether, kLength, kChord, kReturn, kWhich };
 	auto loopKey = [&](uint32_t position, uint32_t bar, Field field) {
 		DrawKey key = partKey(seed_, kArcPart, Lane::None, 0, Purpose::ChordLoop);
 		key.position[0] = position;
@@ -225,9 +230,16 @@ GEN_STEP_CODE int32_t Generator::walkLoop(const ChordGraph& graph, int32_t step,
 		key.position[2] = field;
 		return key;
 	};
-	// A Drop moves to a new loop now and then.
+	// A Drop moves to another loop now and then: a new one, or by returnChance an earlier one other than the one
+	// playing, which re-keys its index, so it plays its chords again.
 	if (drop && drawChance(loopKey(arc_.occurrence(), 0, kWhether), graph.loopChance)) {
-		chordLoop_++;
+		if (newestLoop_ > 0 && drawChance(loopKey(arc_.occurrence(), 0, kReturn), graph.returnChance)) {
+			const int32_t earlier = drawBelow(loopKey(arc_.occurrence(), 0, kWhich), newestLoop_);
+			chordLoop_ = static_cast<uint8_t>(earlier >= chordLoop_ ? earlier + 1 : earlier);
+		}
+		else {
+			chordLoop_ = ++newestLoop_;
+		}
 	}
 	const int32_t phraseBars = genre_->phraseBars;
 	const bool halfLoop = drawChance(loopKey(chordLoop_, 0, kLength), graph.halfLoopChance);
@@ -286,7 +298,7 @@ GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog*
 	logWaitingMoves(log);
 	landPending(log);
 	noteWaitingMoves();
-	decideLanded();
+	decideLanded(log);
 }
 
 namespace {
@@ -353,7 +365,7 @@ GEN_STEP_CODE void Generator::beginDecision() {
 	cutParts_ = 0; // set again by a SetSound or SetKey landing on this step
 }
 
-GEN_STEP_CODE void Generator::decideLanded() {
+GEN_STEP_CODE void Generator::decideLanded(SteeringLog* log) {
 	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
 		endAtStop(); // a cut landed: its line is the start step
@@ -365,6 +377,11 @@ GEN_STEP_CODE void Generator::decideLanded() {
 	step.tick = stepTick(n);
 	if (arc_.enterStep(*genre_, seed_, n, recipe_.macros)) {
 		push(Event::sectionStart(step.tick, arc_.section(), arc_.occurrence()));
+	}
+	// Before anything reads the genre on this step: the chord walk's loop draw and voicing, the picks. A transition's
+	// new roster opening on a Drop plays the picks it was drawn with.
+	if (arc_.dropStartsHere() && n > 0) {
+		dropVariants(log);
 	}
 	if (n == 0) {
 		push(Event::keyScale(step.tick, recipe_.keyRoot, recipe_.scale));
