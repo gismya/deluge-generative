@@ -25,6 +25,7 @@
 #include "generative/core/genre.h"
 #include "generative/core/recipe.h"
 #include "generative/core/variants.h"
+#include <algorithm>
 #include <cstdint>
 
 namespace deluge::generative {
@@ -49,6 +50,8 @@ struct RecipeOverrides {
 	/// Per variant set of the genre, by index: a variant that set is fixed to (its pick, and its allowed variants that
 	/// one alone), or -1 to keep the drawn pick (spec §3.6). The goldens fix every set to 0 (golden_case.h).
 	int8_t variant[kMaxVariantSets] = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+	void clearVariants() { std::ranges::fill(variant, int8_t{-1}); }
 
 	static constexpr int8_t kKeepSwing = INT8_MIN;
 };
@@ -114,6 +117,11 @@ struct NextRecipe {
 	/// An empty pick is rolled from the palette as usual.
 	SoundPicks sounds;
 
+	/// Drops any resolved variant picks (e.g. when `overrides.genre` changes to another genre).
+	void forgetVariants() {
+		overrides.clearVariants();
+		variantGenre = nullptr;
+	}
 	/// As constructed, without a SoundPicks temporary (several KB) on the stack.
 	void clear() {
 		overrides = RecipeOverrides{};

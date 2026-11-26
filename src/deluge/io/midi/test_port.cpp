@@ -192,6 +192,7 @@ const deluge::generative::Genre* nextRecipeGenre() {
 		return findGenre(nextRecipeValue.overrides.genre);
 	}
 	const auto& current = firmware::currentRecipe;
+	// findGenre() maps a test copy (hold delay_setups) back to its canonical entry in allGenres().
 	return current.exists && current.recipe.genre != nullptr ? findGenre(current.recipe.genre->name) : nullptr;
 }
 
@@ -1186,8 +1187,7 @@ void setNextRecipe(uint8_t field, int32_t value) {
 	case kNextGenre: {
 		const Genre* genre = allGenres()[value];
 		if (next.variantGenre != genre) {
-			std::ranges::fill(overrides.variant, int8_t{-1});
-			next.variantGenre = nullptr;
+			next.forgetVariants();
 		}
 		overrides.genre = genre->name;
 		break;

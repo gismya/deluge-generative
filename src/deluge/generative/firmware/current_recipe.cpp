@@ -30,7 +30,6 @@
 #include "processing/engines/audio_engine.h"
 #include "storage/storage_manager.h"
 #include "util/functions.h"
-#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <string_view>
@@ -82,7 +81,7 @@ bool applyNextRecipe(Recipe& recipe, SoundPicks& sounds) {
 	}
 	RecipeOverrides overrides = next->overrides;
 	if (next->variantGenre != nullptr && next->variantGenre != recipe.genre) {
-		std::ranges::fill(overrides.variant, int8_t{-1});
+		overrides.clearVariants();
 	}
 	applyOverrides(recipe, overrides);
 	next->applySounds(sounds);

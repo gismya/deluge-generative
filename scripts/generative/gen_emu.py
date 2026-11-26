@@ -1764,7 +1764,7 @@ def capture_one(args, elf, mutes, harness=None, end=None):
 
 def capture(args):
     check_capture_args(args)
-    # an unknown genre, key or scale stops before the build
+    # an unknown genre, key or scale stops before the build; --variant names are checked by the harness render or the test port
     recipe_lines(args)
     warn_pin(args)
     check = not args.no_check

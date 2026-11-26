@@ -351,13 +351,14 @@ class CaptureVariants(unittest.TestCase):
 
 
 class BuildCapture(unittest.TestCase):
-    def build(self, cache=None, variant=False):
+    def build(self, cache=None, with_variant_flag=False):
+        """With with_variant_flag=True, pins that --variant builds in the same --build-dir (no -variants dir)."""
         tmp = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "b")
         os.makedirs(tmp)
         if cache is not None:
             touch(os.path.join(tmp, "CMakeCache.txt"), cache.encode())
         argv = ["capture", "--build-dir", tmp] + (
-            ["--variant", "a=b"] if variant else []
+            ["--variant", "a=b"] if with_variant_flag else []
         )
         args = gen_emu.parser().parse_args(argv)
         with mock.patch.object(gen_emu, "dbt") as dbt:
@@ -368,19 +369,20 @@ class BuildCapture(unittest.TestCase):
         ].args[0]
 
     def test_a_new_build_dir_is_configured_as_a_test_port_build(self):
-        for variant in (False, True):
-            with self.subTest(variant=variant):
-                calls, first = self.build(variant=variant)
+        for with_variant_flag in (False, True):
+            with self.subTest(with_variant_flag=with_variant_flag):
+                calls, first = self.build(with_variant_flag=with_variant_flag)
                 self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
                 self.assertIn("-DENABLE_SYSEX_TEST:BOOL=ON", first)
                 self.assertIn("-UGENERATIVE_CAPTURE", first)
                 self.assertNotIn("-variants", first)
 
     def test_a_test_port_build_dir_only_builds(self):
-        for variant in (False, True):
-            with self.subTest(variant=variant):
+        for with_variant_flag in (False, True):
+            with self.subTest(with_variant_flag=with_variant_flag):
                 calls, _ = self.build(
-                    "FOO:BOOL=OFF\nENABLE_SYSEX_TEST:BOOL=ON\n", variant=variant
+                    "FOO:BOOL=OFF\nENABLE_SYSEX_TEST:BOOL=ON\n",
+                    with_variant_flag=with_variant_flag,
                 )
                 self.assertEqual(calls, [["cmake", "--build"]])
 

@@ -2,11 +2,13 @@
 # (and narrows its allowed variants to that one alone) for the next roll only. Enters Perform on ROOTS DUB with skank
 # fixed to plain and drums fixed to rockers: VARIANTS ▸ shows PLAIN, ROCKERS and the unmentioned sets on Random. Then a
 # Regenerate rolls fresh (every set back on all allowed, no gen_next_recipe taken), a second Regenerate takes a new
-# "next recipe variant" without repeating the genre (using the Current Recipe's), and "next recipe clear" forgets
-# variant picks too.
+# "next recipe variant" without repeating the genre (and repeating the same genre keeps the pick), "next recipe clear"
+# forgets variant picks too, switching "next recipe genre" to another genre (house) clears stale picks from the old
+# genre (Dub's set 0 skank=plain doesn't leak onto House's set 0 LOOPS), and "reset recipe" clears armed picks too.
 # covers: src/deluge/io/midi/test_port.* src/deluge/generative/core/recipe_overrides.h
 # covers: src/deluge/generative/core/variants.* src/deluge/generative/core/genres/dub.cpp
-# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/core/genres/house.cpp src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/firmware/current_recipe.*
 # covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/firmware/entry_leave.cpp
 # covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/perform/regenerate_page.*
 # covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/menu_item/generative/regenerate_page.*
@@ -59,11 +61,12 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0
 expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
-expect no_event gen_next_recipe since=mark within=2
 expect event gen_transition phase=idle within=30
+expect no_event gen_next_recipe since=mark within=1
 
-# ---- Regenerate with "next recipe variant" (no genre line: resolves against Current Recipe's Dub) ----
+# ---- Regenerate with "next recipe variant" (no genre line, and re-sending the same genre keeps the pick) ----
 next recipe variant skank plain
+next recipe genre dub
 mark now
 include perform_transition_menu.txt
 encoder 3 1
@@ -97,7 +100,50 @@ wait 50
 button SELECT_ENC up
 expect event gen_confirm regenerate style=0 result=0
 expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
-expect no_event gen_next_recipe since=mark within=2
 expect event gen_transition phase=idle within=30
+expect no_event gen_next_recipe since=mark within=1
 
+include perform_leave.txt
+
+# ---- Changing "next recipe genre" to another genre clears stale picks (Dub's set 0 skank=plain doesn't leak to House's LOOPS) ----
+start_state
+next recipe genre dub
+next recipe variant skank plain
+next recipe genre house
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_next_recipe taken since=mark
+expect event gen_perform_entered house since=mark
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=4
+expect event gen_variants_row LOOPS Random
+expect event gen_variants_row BUILD Random
+expect event gen_variants_row BASS Random
+expect event gen_variants_row CHORDS Random
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+include perform_leave.txt
+
+# ---- "reset recipe" clears armed variant picks too ----
+start_state
+next recipe genre dub
+next recipe variant skank plain
+reset recipe
+expect event gen_recipe_reset done
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_perform_entered techno-acid since=mark
+expect no_event gen_next_recipe since=mark within=1
 include perform_leave.txt
