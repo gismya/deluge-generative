@@ -680,7 +680,10 @@ void ArcPlanner::begin(const Generator& piece) {
 void ArcPlanner::addStep(int32_t phrase, const Arc& at, uint8_t sounds, int32_t energy) {
 	ArcPhrase& entry = plan_.phrase[phrase];
 	entry.kind = at.section();
-	entry.kindFrom = static_cast<int16_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
+	entry.kindFrom = static_cast<uint8_t>(std::max<int32_t>(at.stepInPhrase() - at.stepInSection(), 0));
+	if (steps_[phrase] == 0) {
+		entry.startKind = at.section();
+	}
 	entry.drop = entry.drop || (at.stepInPhrase() == 0 && at.dropStartsHere());
 	entry.sounds |= sounds;
 	entry.muted = mutes_.muted;

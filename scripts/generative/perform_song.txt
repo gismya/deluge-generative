@@ -7,7 +7,8 @@
 #
 # gen_arcmap s=<16 columns> q=<16 columns>: the Section row (I G B U O, D for a Drop, . for nothing; column 4 is now)
 # and where a queued action blinks (x). gen_arcrow <part> <16 columns>: . off, h heard, n now, p planned, m muted,
-# f focused. gen_arcpage: the ARC page's eight boxes (tag, * on a Drop, -- after a stop) | the next change.
+# f focused. gen_arcpage: the ARC page's eight boxes (tag, * on a Drop, -- after a stop; BR>BU for a split box, which
+# perform_arc_split.txt checks) | the next change.
 # gen_arcplan us= slices=: the slowest frame's slice of the plan, and the frames it took (#454).
 # gen_pad_redraws phrase= main=: main-pad redraws in a phrase.
 # covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h

@@ -35,6 +35,7 @@ PhraseHistory::Slot& PhraseHistory::slot(int32_t phrase) {
 		slot = Slot{};
 		slot.phrase = phrase;
 		slot.heard.kind = playing_;
+		slot.heard.startKind = playing_;
 	}
 	return slot;
 }
@@ -83,6 +84,9 @@ void PhraseHistory::played(const Event& event) {
 		// A Groove that a Build lands on is a Drop (spec §9.1). It starts on a phrase line.
 		at.heard.drop = at.heard.drop || (event.section == SectionKind::Groove && playing_ == SectionKind::Build);
 		at.heard.kind = event.section;
+		if ((event.tick / kTicksPerStep) % phraseSteps_ == 0) {
+			at.heard.startKind = event.section; // on the line; a short Build starts partway in
+		}
 		playing_ = event.section;
 		break;
 	}

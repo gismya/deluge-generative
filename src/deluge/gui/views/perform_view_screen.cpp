@@ -314,18 +314,28 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 
 	if (screen_.arc) {
 		// ARC: now and the next 7 phrases as boxes, now inverted, queued ones blinking, a bar for a Drop; then the
-		// Arc's next change (spec §13.5).
+		// Arc's next change (spec §13.5). A box is tall enough for two tags: a split one (a Section starts partway
+		// into its phrase) has the Section the phrase starts with on top, a line, and the one it ends with below.
 		constexpr int32_t kBoxWidth = OLED_MAIN_WIDTH_PIXELS / deluge::generative::perform::ArcPage::kBoxes;
-		constexpr int32_t kBoxHeight = 11;
+		constexpr int32_t kBoxHeight = 19;
+		constexpr int32_t kHalf = kBoxHeight / 2; // the split box's line
 		for (int32_t i = 0; i < deluge::generative::perform::ArcPage::kBoxes; i++) {
 			const auto& box = screen_.arcPage.box[i];
 			const int32_t x = i * kBoxWidth;
 			if (box.ended) {
 				continue;
 			}
-			// The tag's two glyphs take x+1 to x+11; the Drop bar sits clear of them, inside the box's right edge.
+			// The tag's two glyphs take x+1 to x+11; the Drop bar sits clear of them, inside the box's right edge. The
+			// 9 px height draws the 7 px glyphs a pixel down: rows 1-7 and 11-17 of a split box, 6-12 of a whole one.
 			canvas.drawRectangle(x, kBodyY, x + kBoxWidth - 2, kBodyY + kBoxHeight - 1);
-			canvas.drawString(box.tag, x + 1, kBodyY + 2, kTextSpacingX, kTextSpacingY);
+			if (box.startTag[0] != '\0') {
+				canvas.drawString(box.startTag, x + 1, kBodyY, kTextSpacingX, kTextSpacingY);
+				canvas.drawHorizontalLine(kBodyY + kHalf, x + 1, x + kBoxWidth - 5);
+				canvas.drawString(box.tag, x + 1, kBodyY + kHalf + 1, kTextSpacingX, kTextSpacingY);
+			}
+			else {
+				canvas.drawString(box.tag, x + 1, kBodyY + 5, kTextSpacingX, kTextSpacingY);
+			}
 			if (box.drop) {
 				canvas.drawVerticalLine(x + kBoxWidth - 3, kBodyY + 1, kBodyY + kBoxHeight - 2);
 			}
@@ -333,7 +343,9 @@ void PerformView::renderOLED(deluge::hid::display::oled_canvas::Canvas& canvas) 
 				canvas.invertArea(x, kBoxWidth - 1, kBodyY, kBodyY + kBoxHeight - 1);
 			}
 		}
-		canvas.drawString(screen_.arcPage.next, 0, kBodyY + kBoxHeight + 4, kTextSpacingX, kTextSpacingY);
+		// The 7 px glyphs in rows 39-45 of the 48.
+		canvas.drawString(screen_.arcPage.next, 0, kBodyY + kBoxHeight + 2, kTextSpacingX, kTextSpacingY);
+		static_assert(kBodyY + kBoxHeight + 2 + 1 + kTextSizeYUpdated <= OLED_MAIN_HEIGHT_PIXELS);
 		return;
 	}
 	if (screen_.part) {

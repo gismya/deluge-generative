@@ -682,6 +682,15 @@ describe genre_data("Every built-in genre", $ {
 		expect(buildBarsValid(Genre{.name = "builds", .phraseBars = 8, .arc = {.buildBars = fitting}})).to_be_true();
 	});
 
+	it("has phrases of at most 16 bars, so the Arc plan counts a step in one in a byte (phraseFitsPlan())", _ {
+		for (const Genre* genre : allGenres()) {
+			expect(phraseFitsPlan(*genre)).to_be_true();
+		}
+		expect(phraseFitsPlan(Genre{.name = "long", .phraseBars = 16})).to_be_true();
+		expect(phraseFitsPlan(Genre{.name = "long", .phraseBars = 32})).to_be_false();
+		expect(phraseFitsPlan(Genre{.name = "none", .phraseBars = 0})).to_be_false();
+	});
+
 	it("ends a Build with a cut and a Gap each shorter than its shortest Build and its phrase (spec §9.1, §9.5)", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(cutAndGapUnderBuild(*genre)).to_be_true();

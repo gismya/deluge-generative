@@ -382,7 +382,10 @@ describe arc_map("Arc map", $ {
 		expect(static_cast<int32_t>(piece.state.plan().at(1)->kindFrom)).to_equal(0);
 		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Build), 0});
 		ArcPage page = piece.page();
+		// Phrase 2's box is split: the Groove it starts with, the Build that ends it.
+		expect(std::string{page.box[1].startTag}).to_equal(std::string{"GR"});
 		expect(std::string{page.box[1].tag}).to_equal(std::string{"BU"});
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{});
 		// The Build starts on step 320, 4 bars into phrase 2, and ends on phrase 3's line.
 		expect(static_cast<int32_t>(piece.state.plan().at(2)->kindFrom)).to_equal(4 * kStepsPerBar);
 		// Heard, now is a few ticks before step 208: 7 bars and those ticks to the Build, rounded up. Phrase 2's line
@@ -392,12 +395,55 @@ describe arc_map("Arc map", $ {
 		// not the Drop on phrase 3's line ("NEXT DROP 8 BARS").
 		piece.decideBefore(2 * kPhraseSteps + 16);
 		page = piece.page();
-		expect(std::string{page.box[0].tag}).to_equal(std::string{"GR"}); // what is heard so far
+		// Now's box: the Groove heard so far, then the Build planned.
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{"GR"});
+		expect(std::string{page.box[0].tag}).to_equal(std::string{"BU"});
 		expect(std::string{page.next}).to_equal(std::string{"NEXT BUILD 4 BARS"});
 		// Once the Build plays, the Drop.
 		piece.decideBefore(5 * kPhraseSteps / 2 + 8);
 		page = piece.page();
 		expect(std::string{page.next}).to_equal(std::string{"NEXT DROP 4 BARS"});
+	});
+
+	it("ARC page: splits the box of a 1-phrase Break a short Build ends, and names the Break, then the Build (#545)", _ {
+		// A made-up Techno whose Breaks last a phrase and whose Builds last 4 bars: the Build takes the second half of
+		// the Break's phrase.
+		static constexpr WeightedBars kFourBars[] = {{4, 1}};
+		auto edited = technoEdited([](PartSpec&) {});
+		edited->genre.arc.buildBars = kFourBars;
+		edited->genre.arc.breakPhrases = {1, 1};
+		Recipe recipe = acidRecipe();
+		recipe.genre = &edited->genre;
+		Piece piece(recipe);
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		ArcPage page = piece.page();
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{});
+		expect(std::string{page.box[1].startTag}).to_equal(std::string{"BR"});
+		expect(std::string{page.box[1].tag}).to_equal(std::string{"BU"});
+		expect(page.box[1].blink).to_be_true(); // the force lands on its line
+		expect(page.box[2].drop).to_be_true();
+		expect(std::string{page.box[2].startTag}).to_equal(std::string{});
+		// The Break lands on step 256, 88 steps (5.5 bars) after step 168, not the Build 4 bars later.
+		expect(std::string{page.next}).to_equal(std::string{"NEXT BREAK 6 BARS"});
+		// In the Break: the Build 4 bars into its phrase.
+		piece.decideBefore(2 * kPhraseSteps + 16);
+		page = piece.page();
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{"BR"});
+		expect(std::string{page.box[0].tag}).to_equal(std::string{"BU"});
+		expect(std::string{page.next}).to_equal(std::string{"NEXT BUILD 4 BARS"});
+		// In the Build: heard, the box stays split; the Drop is next.
+		piece.decideBefore(5 * kPhraseSteps / 2 + 8);
+		page = piece.page();
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{"BR"});
+		expect(std::string{page.box[0].tag}).to_equal(std::string{"BU"});
+		expect(std::string{page.next}).to_equal(std::string{"NEXT DROP 4 BARS"});
+		// After the Drop: a Groove from its line, whole.
+		piece.decideBefore(3 * kPhraseSteps + 8);
+		page = piece.page();
+		expect(std::string{page.box[0].startTag}).to_equal(std::string{});
+		expect(std::string{page.box[0].tag}).to_equal(std::string{"GR"});
+		expect(page.box[0].drop).to_be_true();
 	});
 
 	it("ARC page: marks a Drop, and says STOP for the line where the Outro ends", _ {
