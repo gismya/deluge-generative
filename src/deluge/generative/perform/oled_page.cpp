@@ -210,7 +210,13 @@ void composeOled(const OledInput& in, SectionCount& count, OledScreen& out) {
 void describeArcPage(const ArcPage& page, char (&out)[kArcPageTextChars + 1]) {
 	char* at = out;
 	for (const ArcBox& box : page.box) {
-		// A box with nothing known (past the plan, not ended) has an empty tag: '.' keeps the text whole.
+		// A box with nothing known (past the plan, not ended) has an empty tag: '.' keeps the text whole. A split box
+		// gives the Section it starts with first: "BR>BU".
+		if (box.startTag[0] != '\0') {
+			*at++ = box.startTag[0];
+			*at++ = box.startTag[1];
+			*at++ = '>';
+		}
 		*at++ = box.ended ? '-' : box.tag[0] != '\0' ? box.tag[0] : '.';
 		*at++ = box.ended ? '-' : box.tag[1] != '\0' ? box.tag[1] : '.';
 		*at++ = box.drop ? '*' : ' ';
