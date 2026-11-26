@@ -69,7 +69,7 @@ class Run:
             raise _jobs.JobError(
                 "the Recipe check needs generator_render: " + _jobs.gen_emu.NO_RENDER
             )
-        self.tempos = _recipe.check(self.jobs, render)
+        self.tempos = _recipe.check(self.jobs, render, self.scratch)
         missing = sorted(
             {
                 j.variant
