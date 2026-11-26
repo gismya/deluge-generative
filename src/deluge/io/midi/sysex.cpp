@@ -22,7 +22,6 @@
 #include "io/debug/print.h"
 #include "io/midi/midi_device.h"
 #include "io/midi/midi_engine.h"
-#include "io/midi/sysex_load_progress.h"
 #include "storage/flash_storage.h"
 #include "util/chainload.h"
 
@@ -181,7 +180,7 @@ void Debug::loadPacketReceived(uint8_t* data, int32_t len) {
 	unpack_7bit_to_8bit(load_buf + pos, size, data + 9, packed_size);
 
 	// Pad LED Progress Bar Step
-	uint32_t pad = deluge::io::midi::loadProgressPad(pos, load_bufsize);
+	uint32_t pad = std::min<uint32_t>((18 * 8 * pos) / (load_bufsize - 0xffff), 18 * 8 - 1);
 	uint8_t col = pad % 18;
 	uint8_t row = pad / 18;
 	PadLEDs::image[row][col] = RGB((255 / 7) * row, 0, 255 - (255 / 7) * row);
