@@ -743,12 +743,12 @@ PLACE_SDRAM_BSS FromMenu fromMenu{l10n::String::STRING_FOR_FROM, "screen", nullp
 PLACE_SDRAM_BSS RegenerateRow regenerateRow{l10n::String::STRING_FOR_REGENERATE};
 
 PLACE_SDRAM_BSS NewSeedRow newSeedRow{l10n::String::STRING_FOR_NEW_SEED};
-static_assert(gen::kMaxParts == 6, "one TakeRow and one pair of SOUNDS rows per part slot below");
-PLACE_SDRAM_BSS TakeRow takeRows[gen::kMaxParts] = {TakeRow{0}, TakeRow{1}, TakeRow{2},
-                                                    TakeRow{3}, TakeRow{4}, TakeRow{5}};
+static_assert(gen::kMaxParts == 7, "one TakeRow and one pair of SOUNDS rows per part slot below");
+PLACE_SDRAM_BSS TakeRow takeRows[gen::kMaxParts] = {TakeRow{0}, TakeRow{1}, TakeRow{2}, TakeRow{3},
+                                                    TakeRow{4}, TakeRow{5}, TakeRow{6}};
 PLACE_SDRAM_BSS SeedTakesMenu seedTakesMenu{
     l10n::String::STRING_FOR_SEED_AND_TAKES,
-    {&newSeedRow, &takeRows[0], &takeRows[1], &takeRows[2], &takeRows[3], &takeRows[4], &takeRows[5]},
+    {&newSeedRow, &takeRows[0], &takeRows[1], &takeRows[2], &takeRows[3], &takeRows[4], &takeRows[5], &takeRows[6]},
 };
 
 PLACE_SDRAM_BSS TempoRow tempoRow{l10n::String::STRING_FOR_TEMPO};
@@ -764,15 +764,16 @@ MenuItem* laneList[gen::kMaxLanesPerPart] = {&laneRows[0], &laneRows[1], &laneRo
                                              &laneRows[4], &laneRows[5], &laneRows[6], &laneRows[7],
                                              &laneRows[8], &laneRows[9], &laneRows[10]};
 PLACE_SDRAM_BSS SynthSoundRow synthRows[gen::kMaxParts] = {SynthSoundRow{0}, SynthSoundRow{1}, SynthSoundRow{2},
-                                                           SynthSoundRow{3}, SynthSoundRow{4}, SynthSoundRow{5}};
+                                                           SynthSoundRow{3}, SynthSoundRow{4}, SynthSoundRow{5},
+                                                           SynthSoundRow{6}};
 PLACE_SDRAM_BSS KitSoundsMenu kitMenus[gen::kMaxParts] = {
-    KitSoundsMenu{0, laneList}, KitSoundsMenu{1, laneList}, KitSoundsMenu{2, laneList},
-    KitSoundsMenu{3, laneList}, KitSoundsMenu{4, laneList}, KitSoundsMenu{5, laneList},
+    KitSoundsMenu{0, laneList}, KitSoundsMenu{1, laneList}, KitSoundsMenu{2, laneList}, KitSoundsMenu{3, laneList},
+    KitSoundsMenu{4, laneList}, KitSoundsMenu{5, laneList}, KitSoundsMenu{6, laneList},
 };
 PLACE_SDRAM_BSS SoundsMenu soundsMenu{
     l10n::String::STRING_FOR_SOUNDS,
     {&synthRows[0], &kitMenus[0], &synthRows[1], &kitMenus[1], &synthRows[2], &kitMenus[2], &synthRows[3], &kitMenus[3],
-     &synthRows[4], &kitMenus[4], &synthRows[5], &kitMenus[5]},
+     &synthRows[4], &kitMenus[4], &synthRows[5], &kitMenus[5], &synthRows[6], &kitMenus[6]},
 };
 
 PLACE_SDRAM_BSS LengthRow lengthRow{l10n::String::STRING_FOR_LENGTH};

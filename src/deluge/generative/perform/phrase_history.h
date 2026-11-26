@@ -77,7 +77,8 @@ private:
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
-	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
+	static_assert(kMaxParts == 7, "one INT32_MIN per part slot below");
+	int32_t lastNote_[kMaxParts] = {INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN, INT32_MIN};
 	/// Bit k of part p: a note of key k that was sent rings.
 	uint32_t ringing_[kMaxParts][kKeyWords] = {};
 	/// Bit p: part p has a note ringing.

@@ -579,7 +579,7 @@ void CardLog::clean(bool keepMarked) {
 			UINT read = 0;
 			if (f_open(&file, path, FA_READ) == FR_OK) {
 				keep = f_read(&file, &piece, sizeof piece, &read) == FR_OK && read == sizeof piece
-				       && piece.magic == PieceInfo::kMagic && piece.marked;
+				       && piece.magic == PieceInfo::kMagic && piece.format == PieceInfo::kFormat && piece.marked;
 				f_close(&file);
 			}
 		}

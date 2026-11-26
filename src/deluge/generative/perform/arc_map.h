@@ -166,9 +166,10 @@ struct ArcMap {
 	static constexpr int32_t kRows = 8;
 	/// Column 4 is now (spec §13.5).
 	static constexpr int32_t kNowColumn = 3;
+	/// Row 7 (0-indexed 6): effective Energy when the roster has 6 parts or fewer, and the 7th part when it has 7.
 	static constexpr int32_t kEnergyRow = 6;
 	static constexpr int32_t kSectionRow = 7;
-	/// Rows from the top as the spec counts them, 0 = row 1: rows 1–6 the parts, 7 Energy, 8 the Sections.
+	/// Rows from the top as the spec counts them, 0 = row 1: rows 1–6 the parts, 7 Energy or the 7th part, 8 Sections.
 	ArcMapCell cell[kRows][kColumns];
 };
 
@@ -178,8 +179,8 @@ void composeArcMap(const ArcMapInput& in, const ArcMapState& state, ArcMap& out)
 /// nothing), then where queued actions blink (x). "s=.GGGBBUG........ q=....x..........."
 constexpr int32_t kArcMapTextChars = 2 * ArcMap::kColumns + 5;
 void describeArcMapSections(const ArcMap& map, char (&out)[kArcMapTextChars + 1]);
-/// The test port's gen_arcrow text for the part on `row`, one character per column: . off, h heard, n now, p
-/// planned, m muted, f focused.
+/// The test port's gen_arcrow text for `row`, one character per column: . off, h heard, n now, p planned, m muted,
+/// f focused, e energy.
 void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kColumns + 1]);
 
 /// One phrase box on the ARC page.

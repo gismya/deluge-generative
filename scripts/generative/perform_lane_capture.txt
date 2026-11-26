@@ -13,7 +13,7 @@
 # (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped, the current clip
 # a synth or kit clip.
 #
-# gen_log_sound part= slot= <path>: SteeringLog::appendSoundPath() recorded the pick (slot 6 = Lane::Kick).
+# gen_log_sound part= slot= <path>: SteeringLog::appendSoundPath() recorded the pick (slot 7 = Lane::Kick).
 # gen_capture_track part= name=: ComposeSong::newTrack() started a new track with its unique Output name.
 # writes: SONGS/GEN ACID TECHNO 3E9D8DZ LIVE*
 # covers: src/deluge/gui/ui/browser/perform_sound_browser.* src/deluge/gui/menu_item/generative/perform_lanes.*
@@ -58,7 +58,7 @@ button PLAY up
 expect playing=true
 expect event /^gen_log_piece pieces=1 / within=10
 
-# ---- Playing lane swap on DRUMS KICK: logged with slot 6 and chosen path, swaps at the phrase line ----
+# ---- Playing lane swap on DRUMS KICK: logged with slot 7 and chosen path, swaps at the phrase line ----
 button KIT down
 wait 50
 button KIT up
@@ -76,7 +76,7 @@ wait 50
 button SELECT_ENC up
 expect event /gen_browser chose part=0 path=(?P=chosen) lane=kick$/ within=5
 expect event gen_sound_preload done part=0 source=chosen within=30
-expect event /gen_log_sound part=0 slot=6 (?P=chosen)$/ within=40 since=mark
+expect event /gen_log_sound part=0 slot=7 (?P=chosen)$/ within=40 since=mark
 expect event gen_sound_swap part=0 line=1 within=40
 wait 2000
 

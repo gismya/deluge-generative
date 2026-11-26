@@ -4,7 +4,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 ### 5.1 Parts and roles
 
-- A genre's roster lists 4–6 **parts**. The roster belongs to the genre, and the Recipe holds no part list. The hard limit is 6 parts, which the fixed state block and the six MUTE pads both assume.
+- A genre's roster lists 4–7 **parts**. The roster belongs to the genre, and the Recipe holds no part list. The hard limit is 7 parts, which the fixed state block and the seven MUTE pads both assume.
 - Each part has exactly one **role** from a fixed Generator-wide set: **Drums, Bass, Chords, Pad, Lead, FX**. The role decides how notes are made, which interplay rules can target the part, how the Arc treats it and which palette section it draws from.
 - Roles may repeat, such as an acid Lead and an arp Lead. A genre has at most one Drums part.
 - In Compose, the player deletes unwanted parts afterwards in the normal views.

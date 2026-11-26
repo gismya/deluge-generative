@@ -307,7 +307,7 @@ class PendingList {
 public:
 	/// A key change, a force or End, a transition, a restart, every part's take, mute, solo, sound and octave shift,
 	/// and every variant set's switch.
-	static constexpr int32_t kCapacity = 42;
+	static constexpr int32_t kCapacity = 47;
 
 	/// Queues a command, replacing the one in its slot. Either way it is the newest. @return false if the list is
 	/// full, and nothing changed.

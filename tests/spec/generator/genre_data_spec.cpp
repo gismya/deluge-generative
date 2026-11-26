@@ -261,19 +261,19 @@ describe genre_data("Every built-in genre", $ {
 		const PartSpec pads[] = {{.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad},
 		                         {.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad}};
 		expect(rosterFits(Genre{.name = "pads", .parts = pads})).to_be_false();
-		const PartSpec largest[] = {{.role = Role::Drums}, {.role = Role::Bass},
-		                            {.role = Role::Pad},   {.role = Role::Chords},
-		                            {.role = Role::Lead},  {.role = Role::FX}};
+		const PartSpec largest[] = {{.role = Role::Drums}, {.role = Role::Bass},  {.role = Role::Pad},
+		                            {.role = Role::Chords}, {.role = Role::Lead}, {.role = Role::Lead},
+		                            {.role = Role::FX}};
 		expect(rosterFits(Genre{.name = "largest", .parts = largest})).to_be_true();
 	});
 
 	it("rejects a roster past kMaxParts, whose parts past it would never play (rosterFits())", _ {
-		const PartSpec six[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
-		                        {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
-		expect(rosterFits(Genre{.name = "six", .parts = six})).to_be_true();
 		const PartSpec seven[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
 		                          {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
-		expect(rosterFits(Genre{.name = "seven", .parts = seven})).to_be_false();
+		expect(rosterFits(Genre{.name = "seven", .parts = seven})).to_be_true();
+		const PartSpec eight[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
+		                          {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
+		expect(rosterFits(Genre{.name = "eight", .parts = eight})).to_be_false();
 	});
 
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {

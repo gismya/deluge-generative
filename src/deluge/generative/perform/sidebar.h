@@ -15,7 +15,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-// The sidebar (spec §13.5) as portable cells: MUTE/LAUNCH rows 1–6 mute or solo the parts, AUDITION/SECTION rows 1–3
+// The sidebar (spec §13.5) as portable cells: MUTE/LAUNCH rows 1–7 mute or solo the parts, AUDITION/SECTION rows 1–3
 // force Groove, Break or Build, row 5 holds the Arc and row 8 is End. The Perform view turns the cells into colours
 // and applies the blink phase; this decides what each pad shows, and the test port's gen_sidebar text is made from
 // the same cells.
@@ -78,7 +78,7 @@ struct Sidebar {
 
 void composeSidebar(const SidebarInput& in, Sidebar& out);
 
-/// The test port's gen_sidebar text, the longest being 39 characters.
+/// The test port's gen_sidebar text, the longest being 41 characters.
 constexpr int32_t kSidebarTextChars = 47;
 /// The sidebar as text: a letter per part (a active, m muted, s solo, d dim), followed by * while a press waits; the
 /// forced Section (G, B, U or -); the hold; End (q while queued, then + while lit: its pad held, or the Outro

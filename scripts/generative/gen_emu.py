@@ -44,7 +44,7 @@ capture  the tuning loop's main step: builds the test-port firmware in build-cap
          Deterministic: the same arguments give the same WAV. The Recipe isn't in the build, so a new Recipe
          rebuilds nothing; a source change rebuilds and relinks. --out is a folder (the WAV is named after the
          arguments, never overwriting one) or a .wav path.
-         --mute PART (sidebar rows 1-6, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
+         --mute PART (sidebar rows 1-7, repeatable) mutes a part from the first step: SHIFT+its mute pad right after
          PLAY, so the piece plays as without the mute and only that part is silent (no genre data patched).
          --end-after-drop [N] (default 1; put WAV paths before it, or give N, or it reads the WAV as N) or
          --end-at-bar BAR presses End: it holds the End pad (AUDITION/SECTION
@@ -1414,11 +1414,11 @@ def check_part_focus(emu, check):
 
 
 SIDEBAR_MUTE_X = 16  # MUTE/LAUNCH; part 1 is the top row, firmware y 7 (spec §13.5)
-MUTE_ROWS = 6
+MUTE_ROWS = 7
 
 
 def mute_parts(emu, parts):
-    """Mutes each sidebar part (1-6) with SHIFT held, so each lands on the next undecided step (spec §13.4)."""
+    """Mutes each sidebar part (1-7) with SHIFT held, so each lands on the next undecided step (spec §13.4)."""
     if not parts:
         return
     emu.button("SHIFT", True)
@@ -2037,7 +2037,7 @@ def add_recipe_args(p):
         action="append",
         choices=range(1, MUTE_ROWS + 1),
         metavar="PART",
-        help="mute this part (sidebar row, 1-6) from the first step; repeatable",
+        help="mute this part (sidebar row, 1-7) from the first step; repeatable",
     )
     p.add_argument(
         "--end-after-drop",
