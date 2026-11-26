@@ -44,9 +44,10 @@ public:
 	void begin(int32_t phraseSteps, SectionKind playing = SectionKind::Intro);
 	/// An event the driver sent (muted note-ons never are), in tick order but for a sample Riser's note-on: held back
 	/// (spec §9.5), it can come a few ticks behind events already played, and still counts from its own tick. A
-	/// Section event sets its phrase's Section, a note-on marks its part as sounded there, and a part sounds in every
-	/// phrase its note rings into, up to the note's note-off. A note-off ends only a note-on of the same key that was
-	/// sent, so a muted note's note-off ends nothing.
+	/// Section event sets its phrase's Section (and, on the phrase's line, the one it starts with: a phrase starts with
+	/// the Section heard last before it otherwise), a note-on marks its part as sounded there, and a part sounds in
+	/// every phrase its note rings into, up to the note's note-off. A note-off ends only a note-on of the same key that
+	/// was sent, so a muted note's note-off ends nothing.
 	void played(const Event& event);
 	/// A step was decided, with Energy playing `energy` against the Recipe centre (macro units). Every event before
 	/// the step's decision tick has been played, so a note still ringing there sounds in the phrases up to it.
@@ -57,6 +58,10 @@ public:
 	bool at(int32_t phrase, ArcPhrase& out) const;
 	/// The Section heard last.
 	[[nodiscard]] SectionKind playing() const { return playing_; }
+	/// Whether a Section event has played since begin(). Before it, in the lookahead before tick 0, step 0 is decided
+	/// and its phrase's slot open, but what it holds of the Section is the one before the start (a transition's
+	/// outgoing one): the ARC page reads the plan there instead.
+	[[nodiscard]] bool sectionHeard() const { return sectionHeard_; }
 	/// The tick of part `part`'s last note-on sent, or INT32_MIN.
 	[[nodiscard]] int32_t lastNote(int32_t part) const { return lastNote_[part]; }
 
@@ -83,6 +88,7 @@ private:
 	int32_t phraseSteps_ = 8 * kStepsPerBar;
 	/// The Section last heard, which a phrase without a Section event plays on in.
 	SectionKind playing_ = SectionKind::Intro;
+	bool sectionHeard_ = false;
 	int32_t lastNote_[kMaxParts] = {};
 	/// Bit k of part p: a note of key k that was sent rings.
 	uint32_t ringing_[kMaxParts][kKeyWords] = {};

@@ -343,6 +343,7 @@ def protocol_checks(port, check):
         "frobnicate 1 2",
         "next recipe tempo 5",  # below kMinTempo
         "next recipe genre nosuch",
+        "next recipe variant build full",  # no genre set yet
         "next recipe part 7 SYNTHS/A.XML",  # past the last part
         "next recipe lane 0 " + "A" * 128,  # longer than a sound pick holds
     ):
@@ -351,6 +352,21 @@ def protocol_checks(port, check):
             check(f"{line!r} is a parse error", False)
         except RuntimeError as exc:
             check(f"{line!r} is a parse error", "parse error" in str(exc))
+    # With a genre set, an unknown variant set, an unknown variant name or another genre's set is refused too.
+    port.inject("next recipe genre dub")
+    for line in (
+        "next recipe variant nosuch plain",
+        "next recipe variant skank nosuch",
+        "next recipe variant build full",  # House's set, not Dub's
+        "next recipe variant skank",  # missing variant name
+    ):
+        try:
+            port.inject(line)
+            check(f"{line!r} is a parse error", False)
+        except RuntimeError as exc:
+            check(f"{line!r} is a parse error", "parse error" in str(exc))
+    port.inject("next recipe clear")
+    port.wait_idle()
     # The first wait leaves the queue once the buttons task starts it and holds back the rest, so the queue fills: 63
     # entries fit (one slot stays free), plus the first wait if it has started by then. The rest are refused.
     statuses = []

@@ -45,10 +45,15 @@ struct ArcPhrase {
 	int16_t energy = 0;
 	/// Planned only: the step in the phrase where `kind`'s Section starts, or 0 if it started in an earlier phrase. A
 	/// Build shorter than a phrase starts partway into the phrase before its Drop; every other Section starts on a
-	/// line.
-	int16_t kindFrom = 0;
+	/// line. A phrase is at most 16 bars (phraseFitsPlan()), so steps 0..255.
+	uint8_t kindFrom = 0;
+	/// The Section playing the phrase's first step: `kind` unless another starts partway in (a Break or a Groove
+	/// that a short Build ends). Planned: the plan's first phrase has it from the last decided step on.
+	SectionKind startKind = SectionKind::Intro;
 	constexpr bool operator==(const ArcPhrase&) const = default;
 };
+// The SONG page keeps two plans and the history ring 16 of these each: startKind fits in what was padding.
+static_assert(sizeof(ArcPhrase) == 10);
 
 /// The Arc plan (spec §2.8): the phrases from the one the last decided step is in, as the Arc will play them with the
 /// pending list landed and the Recipe as it is now.

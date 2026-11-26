@@ -68,13 +68,14 @@ std::string unlikeHeard(Piece& piece, const ArcPlan& plan, int32_t from, int32_t
 		if (planned == nullptr || !piece.driver.history().at(phrase, heard)) {
 			return "phrase " + std::to_string(phrase) + " not planned or not heard";
 		}
-		if (planned->kind != heard.kind || planned->drop != heard.drop || planned->energy != heard.energy
-		    || (planned->sounds & parts) != (heard.sounds & parts)) {
-			return "phrase " + std::to_string(phrase) + ": planned kind " + std::to_string(int(planned->kind))
-			       + " drop " + std::to_string(planned->drop) + " energy " + std::to_string(planned->energy)
-			       + " sounds " + std::to_string(planned->sounds & parts) + ", heard kind "
-			       + std::to_string(int(heard.kind)) + " drop " + std::to_string(heard.drop) + " energy "
-			       + std::to_string(heard.energy) + " sounds " + std::to_string(heard.sounds & parts);
+		if (planned->kind != heard.kind || planned->startKind != heard.startKind || planned->drop != heard.drop
+		    || planned->energy != heard.energy || (planned->sounds & parts) != (heard.sounds & parts)) {
+			return "phrase " + std::to_string(phrase) + ": planned kind " + std::to_string(int(planned->startKind))
+			       + ">" + std::to_string(int(planned->kind)) + " drop " + std::to_string(planned->drop) + " energy "
+			       + std::to_string(planned->energy) + " sounds " + std::to_string(planned->sounds & parts)
+			       + ", heard kind " + std::to_string(int(heard.startKind)) + ">" + std::to_string(int(heard.kind))
+			       + " drop " + std::to_string(heard.drop) + " energy " + std::to_string(heard.energy) + " sounds "
+			       + std::to_string(heard.sounds & parts);
 		}
 	}
 	return "";
@@ -159,6 +160,27 @@ describe arc_plan("Arc plan", $ {
 		expect(plan.at(2)->kind).to_equal(SectionKind::Break);
 		expect(plan.at(2)->sounds & 0b010).to_equal(0); // the Break keeps no ACID
 		expect(heardAsPlanned(piece, plan, 2, 1 + ArcPlan::kMaxPhrases)).to_be_true();
+	});
+
+	it("keeps the Section a phrase starts with when a short Build starts partway in, planned and heard (#545)", _ {
+		// A made-up Techno whose Breaks last a phrase and whose Builds last 4 bars: the Build takes the Break's
+		// phrase's second half.
+		static constexpr WeightedBars kFourBars[] = {{4, 1}};
+		auto edited = technoEdited([](PartSpec&) {});
+		edited->genre.arc.buildBars = kFourBars;
+		edited->genre.arc.breakPhrases = {1, 1};
+		Piece piece(true, 3, macroPoints(25), &edited->genre);
+		piece.decideBefore(kPhraseSteps + 40);
+		piece.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		const ArcPlan plan = piece.plan();
+		expect(plan.at(1)->startKind).to_equal(SectionKind::Groove);
+		expect(plan.at(1)->kind).to_equal(SectionKind::Groove);
+		expect(plan.at(2)->startKind).to_equal(SectionKind::Break);
+		expect(plan.at(2)->kind).to_equal(SectionKind::Build);
+		expect(static_cast<int32_t>(plan.at(2)->kindFrom)).to_equal(4 * kStepsPerBar);
+		expect(plan.at(3)->startKind).to_equal(SectionKind::Groove);
+		expect(plan.at(3)->drop).to_be_true();
+		expect(unlikeHeard(piece, plan, 2, 4)).to_equal(std::string{});
 	});
 
 	it("shows a queued End as the Outro, and nothing after the line where it ends", _ {

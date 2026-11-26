@@ -190,6 +190,25 @@ class RecipeCheck(unittest.TestCase):
             ["variant skank: asked plain, the harness plays sevenths"],
         )
 
+    def test_a_variants_job_checks_with_its_own_harness_where_prove_kept_one(self):
+        # A set only the variant's diff adds is unknown to the base harness (variants-2's drums=deep).
+        with tempfile.TemporaryDirectory() as scratch:
+            os.makedirs(os.path.join(scratch, "bin"))
+            own = os.path.join(scratch, "bin", "sets")
+            open(own, "w").close()
+            (j,) = jobs.parse_jobs("e1 | sets | pack | 8 | --seed 1\n", genre="house")
+            self.assertEqual(recipe.render_for(j, "base_render", scratch), own)
+            self.assertEqual(
+                recipe.render_for(self.job("--seed 1"), "base_render", scratch),
+                "base_render",
+            )
+            (other,) = jobs.parse_jobs(
+                "e1 | other | pack | 8 | --seed 1\n", genre="house"
+            )
+            self.assertEqual(
+                recipe.render_for(other, "base_render", scratch), "base_render"
+            )
+
     def test_what_the_job_leaves_to_the_roll_is_not_checked(self):
         self.assertEqual(
             recipe.mismatches(
@@ -1148,7 +1167,7 @@ class TwoGenreSession(unittest.TestCase):
         open(os.path.join(self.tmp, "card_pack.img"), "w").close()
         self.checked = []
 
-        def check(job_list, render):
+        def check(job_list, render, scratch=None):
             self.checked += [(j.name, j.recipe.genre) for j in job_list]
             return {j.name: 120.0 for j in job_list}
 

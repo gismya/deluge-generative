@@ -107,7 +107,9 @@ bool known(const Frame& frame, int32_t phrase, int32_t now, ArcPhrase& out) {
 	if (phrase < 0) {
 		return false;
 	}
-	if (phrase <= now && frame.history->at(phrase, out)) {
+	// Before the first Section event plays (the lookahead before tick 0), the history's slot for phrase 0 holds the
+	// Section from before the start: the plan knows the phrase.
+	if (phrase <= now && frame.history->sectionHeard() && frame.history->at(phrase, out)) {
 		return true;
 	}
 	if (phrase < now) {
@@ -320,7 +322,9 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 		return;
 	}
 	const int32_t now = nowPhrase(frame);
-	SectionKind playing = SectionKind::Intro;
+	const ArcPhrase* nowPlanned = frame.plan->at(now);
+	const bool nowIsPlanned = nowPlanned != nullptr && !nowPlanned->ended && !nowPlanned->next;
+	SectionKind playing = SectionKind::Intro; // the Section now's phrase ends with
 	for (int32_t i = 0; i < ArcPage::kBoxes; i++) {
 		ArcBox& box = out.box[i];
 		ArcPhrase info;
@@ -329,19 +333,27 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 			box.ended = frame.plan->at(now + i) != nullptr;
 			continue;
 		}
-		const char* name = sectionName(info.kind);
+		// Now's phrase: what it started with as heard, and what it ends with as planned, so a short Build still to
+		// come splits it.
+		const SectionKind ends = i == 0 && nowIsPlanned ? nowPlanned->kind : info.kind;
+		const char* name = sectionName(ends);
 		box.tag[0] = name[0];
 		box.tag[1] = name[1];
+		if (info.startKind != ends) {
+			const char* start = sectionName(info.startKind);
+			box.startTag[0] = start[0];
+			box.startTag[1] = start[1];
+		}
 		box.drop = info.drop;
 		box.blink = anyLandsIn(frame, now + i);
-		playing = i == 0 ? info.kind : playing;
+		playing = i == 0 ? ends : playing;
 	}
 
-	// The Arc's next change: a Section of another kind, a Drop, or the line where the piece stops. A Build shorter than
-	// a phrase starts partway into now's phrase: until it is heard, it is next.
-	const ArcPhrase* nowPlanned = frame.plan->at(now);
-	if (nowPlanned != nullptr && !nowPlanned->ended && !nowPlanned->next
-	    && nowPlanned->kind != frame.history->playing()) {
+	// The Arc's next change: the next Section to start, a Drop, or the line where the piece stops. A Build shorter than
+	// a phrase starts partway into its phrase: until it is heard, it is next.
+	const SectionKind heard =
+	    frame.history->sectionHeard() || !nowIsPlanned ? frame.history->playing() : nowPlanned->startKind;
+	if (nowIsPlanned && nowPlanned->kind != heard) {
 		const int32_t ticks = stepTick(now * frame.phraseSteps + nowPlanned->kindFrom) - frame.clock;
 		if (ticks > 0) {
 			char when[12];
@@ -352,15 +364,26 @@ void composeArcPage(const ArcMapInput& in, const ArcMapState& state, ArcPage& ou
 	}
 	for (int32_t phrase = now + 1; frame.plan->at(phrase) != nullptr; phrase++) {
 		const ArcPhrase& planned = *frame.plan->at(phrase);
-		const char* what = planned.ended             ? nullptr
-		                   : planned.drop            ? "DROP"
-		                   : planned.kind != playing ? sectionName(planned.kind)
-		                                             : "";
-		if (what != nullptr && what[0] == '\0') {
+		// On the phrase's line: the piece stops, a Drop lands or another Section starts. Then partway in: a short
+		// Build, which may follow one that started on the line (a split box).
+		const char* what = nullptr;
+		int32_t from = 0;
+		if (planned.ended) {
+			what = nullptr;
+		}
+		else if (planned.drop) {
+			what = "DROP";
+		}
+		else if (planned.startKind != playing) {
+			what = sectionName(planned.startKind);
+		}
+		else if (planned.kind != playing) {
+			what = sectionName(planned.kind);
+			from = planned.kindFrom;
+		}
+		else {
 			continue;
 		}
-		// A Drop lands on the phrase's line and the piece stops on it; another Section can start partway in.
-		const int32_t from = what != nullptr && !planned.drop ? planned.kindFrom : 0;
 		char when[12];
 		countdown(stepTick(phrase * frame.phraseSteps + from) - frame.clock, true, when);
 		Text next(out.next);

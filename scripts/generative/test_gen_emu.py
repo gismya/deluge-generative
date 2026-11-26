@@ -151,46 +151,6 @@ class Pin(unittest.TestCase):
             self.assertEqual(gen_emu.read_pin(path), self.PIN)
 
 
-# The capture firmware's CaptureRecipe (generative/firmware/current_recipe.cpp), written out here so a change to
-# gen_emu's packing has to agree with it.
-RECIPE_LAYOUT = "<8s32sIIi4bbbbx64s"
-RECIPE_FIELDS = (
-    "magic",
-    "genre",
-    "entropy",
-    "seed",
-    "tempo",
-    "m0",
-    "m1",
-    "m2",
-    "m3",
-    "key",
-    "scale",
-    "swing",
-    "variants",
-)
-
-
-def recipe_bytes(genre, entropy, seed, tempo, macros, key, scale, swing, variants=b""):
-    return struct.pack(
-        RECIPE_LAYOUT,
-        b"GENCAP2\0",
-        genre,
-        entropy,
-        seed,
-        tempo,
-        *macros,
-        key,
-        scale,
-        swing,
-        variants,
-    )
-
-
-def unpack_recipe(blob):
-    return dict(zip(RECIPE_FIELDS, struct.unpack(RECIPE_LAYOUT, blob)))
-
-
 def test_port_line_length():
     """kLineLength in test_port.cpp, the longest inject line with its terminator, as the firmware computes it."""
     src = os.path.join(gen_emu.REPO, "src", "deluge")
@@ -336,9 +296,9 @@ class CaptureRecipeLines(unittest.TestCase):
 
 
 class CaptureVariants(unittest.TestCase):
-    """--variant captures keep the GENERATIVE_CAPTURE route: S7 has no variant lines (#548)."""
+    """--variant sends one "next recipe variant <set> <name>" line per flag over the test port (#548)."""
 
-    def test_variants_go_into_the_header_and_the_render_check_and_the_name(self):
+    def test_variants_go_into_the_lines_and_the_render_check_and_the_name(self):
         args = gen_emu.parser().parse_args(
             [
                 "capture",
@@ -351,18 +311,14 @@ class CaptureVariants(unittest.TestCase):
             ]
         )
         self.assertEqual(
-            gen_emu.capture_recipe(args),
-            recipe_bytes(
-                b"dub",
-                0,
-                1,
-                0,
-                (-1, -1, -1, -1),
-                -1,
-                -1,
-                -128,
-                b"skank=plain,drums=rockers",
-            ),
+            gen_emu.recipe_lines(args),
+            [
+                "next recipe genre dub",
+                "next recipe entropy 0",
+                "next recipe seed 1",
+                "next recipe variant skank plain",
+                "next recipe variant drums rockers",
+            ],
         )
         cmd = gen_emu.render_command("/r", args, "/tmp/o", 4)
         self.assertEqual(
@@ -379,165 +335,68 @@ class CaptureVariants(unittest.TestCase):
                 gen_emu.parser().parse_args(["capture", "--variant", bad])
         good = gen_emu.parser().parse_args(["capture", "--variant", "accents=332"])
         self.assertEqual(good.variant, ["accents=332"])
-        long = gen_emu.parser().parse_args(
-            ["capture"] + ["--variant", "abcdefgh=ijklmnop"] * 4
+        # No 64-byte header cap: all five Psytrance sets (or eight sets) each get their own line.
+        many = gen_emu.parser().parse_args(
+            ["capture", "--genre", "psytrance-classic"]
+            + ["--variant", "abcdefgh=ijklmnop"] * 8
         )
-        with self.assertRaises(SystemExit):
-            gen_emu.capture_recipe(long)
-
-    def test_the_header_holds_each_override_given(self):
-        args = gen_emu.parser().parse_args(
-            ["capture", "--genre", "techno-acid", "--seed", "7", "--energy", "40", "--key", "C#",
-             "--scale", "phrygian", "--tempo", "131.5", "--swing", "-10", "--variant", "a=b"]
-        )  # fmt: skip
-        fields = unpack_recipe(gen_emu.capture_recipe(args))
+        lines = gen_emu.recipe_lines(many)
         self.assertEqual(
-            (fields["genre"].rstrip(b"\0"), fields["seed"], fields["tempo"], fields["m0"], fields["key"]),
-            (b"techno-acid", 7, 13150, 40, 1),
-        )  # fmt: skip
-        self.assertEqual(
-            (fields["scale"], fields["swing"], fields["variants"].rstrip(b"\0")),
-            (3, -10, b"a=b"),
+            lines.count("next recipe variant abcdefgh ijklmnop"),
+            8,
         )
-
-    def test_unknown_genre_scale_or_key_is_refused(self):
-        for argv in (["--genre", "polka"], ["--scale", "blues"], ["--key", "H"]):
-            with self.assertRaises(SystemExit):
-                gen_emu.capture_recipe(
-                    gen_emu.parser().parse_args(["capture", "--variant", "a=b", *argv])
-                )
-
-
-def fake_elf(symbol=b"generative_capture_recipe", data=None, addr=0x20020000, before=8):
-    """A little-endian ELF32 with a .data section (at `addr`, file offset 0x100) holding `before` bytes of 0xAA, then
-    `symbol`: `data` (default: the capture firmware's unpatched CaptureRecipe), then 4 bytes of 0xBB."""
-    if data is None:
-        data = recipe_bytes(b"", 0, 1, 0, (-1, -1, -1, -1), -1, -1, -128)
-    section = b"\xaa" * before + data + b"\xbb" * 4
-    strtab = b"\0other\0" + symbol + b"\0"
-    shstrtab = b"\0.data\0.symtab\0.strtab\0.shstrtab\0"
-    symtab = bytes(16) + struct.pack("<IIIBBH", 1, addr, 4, 0x11, 0, 1)
-    symtab += struct.pack("<IIIBBH", 7, addr + before, len(data), 0x11, 0, 1)
-    body = bytearray(0x100) + section
-    offsets = {}
-    for name, blob in (("symtab", symtab), ("strtab", strtab), ("shstrtab", shstrtab)):
-        offsets[name] = len(body)
-        body += blob
-    shoff = len(body)
-    sections = [
-        bytes(40),
-        struct.pack("<10I", 1, 1, 3, addr, 0x100, len(section), 0, 0, 8, 0),
-        struct.pack("<10I", 7, 2, 0, 0, offsets["symtab"], len(symtab), 3, 1, 4, 16),
-        struct.pack("<10I", 15, 3, 0, 0, offsets["strtab"], len(strtab), 0, 0, 1, 0),
-        struct.pack(
-            "<10I", 23, 3, 0, 0, offsets["shstrtab"], len(shstrtab), 0, 0, 1, 0
-        ),
-    ]
-    body += b"".join(sections)
-    header = b"\x7fELF\x01\x01\x01" + bytes(9)
-    header += struct.pack(
-        "<HHIIIIIHHHHHH", 2, 40, 1, 0, 0, shoff, 0, 52, 32, 0, 40, len(sections), 4
-    )
-    body[: len(header)] = header
-    return bytes(body)
+        limit = test_port_line_length()
+        for line in lines:
+            self.assertLess(len(line), limit)
 
 
 class BuildCapture(unittest.TestCase):
-    def build(self, cache=None, variant=False):
+    def build(self, cache=None, with_variant_flag=False):
+        """With with_variant_flag=True, pins that --variant builds in the same --build-dir (no -variants dir)."""
         tmp = os.path.join(self.enterContext(tempfile.TemporaryDirectory()), "b")
-        build = tmp + "-variants" if variant else tmp
-        os.makedirs(build)
+        os.makedirs(tmp)
         if cache is not None:
-            touch(os.path.join(build, "CMakeCache.txt"), cache.encode())
+            touch(os.path.join(tmp, "CMakeCache.txt"), cache.encode())
         argv = ["capture", "--build-dir", tmp] + (
-            ["--variant", "a=b"] if variant else []
+            ["--variant", "a=b"] if with_variant_flag else []
         )
         args = gen_emu.parser().parse_args(argv)
         with mock.patch.object(gen_emu, "dbt") as dbt:
             elf = gen_emu.build_capture(args)
-        self.assertEqual(elf, os.path.join(build, "Release", "deluge.elf"))
+        self.assertEqual(elf, os.path.join(tmp, "Release", "deluge.elf"))
         return [c.args[0].split()[:2] for c in dbt.call_args_list], dbt.call_args_list[
             0
         ].args[0]
 
     def test_a_new_build_dir_is_configured_as_a_test_port_build(self):
-        calls, first = self.build()
-        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
-        self.assertIn("-DENABLE_SYSEX_TEST:BOOL=ON", first)
-        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=OFF", first)
+        for with_variant_flag in (False, True):
+            with self.subTest(with_variant_flag=with_variant_flag):
+                calls, first = self.build(with_variant_flag=with_variant_flag)
+                self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+                self.assertIn("-DENABLE_SYSEX_TEST:BOOL=ON", first)
+                self.assertIn("-UGENERATIVE_CAPTURE", first)
+                self.assertNotIn("-variants", first)
 
     def test_a_test_port_build_dir_only_builds(self):
-        calls, _ = self.build("FOO:BOOL=OFF\nENABLE_SYSEX_TEST:BOOL=ON\n")
-        self.assertEqual(calls, [["cmake", "--build"]])
+        for with_variant_flag in (False, True):
+            with self.subTest(with_variant_flag=with_variant_flag):
+                calls, _ = self.build(
+                    "FOO:BOOL=OFF\nENABLE_SYSEX_TEST:BOOL=ON\n",
+                    with_variant_flag=with_variant_flag,
+                )
+                self.assertEqual(calls, [["cmake", "--build"]])
 
     def test_a_build_dir_from_before_the_test_port_is_configured_again(self):
         for cache in (
             "GENERATIVE_CAPTURE_DIR:PATH=/x/generated\n",  # the Recipe compiled in (before #401)
-            "GENERATIVE_CAPTURE:BOOL=ON\n",  # the Recipe patched into the ELF (before #523)
-            "ENABLE_SYSEX_TEST:BOOL=ON\nGENERATIVE_CAPTURE:BOOL=ON\n",  # both: it would play the patched one
+            "GENERATIVE_CAPTURE:BOOL=ON\n",  # the Recipe patched into the ELF (before #523/#548)
+            "ENABLE_SYSEX_TEST:BOOL=ON\nGENERATIVE_CAPTURE:BOOL=ON\n",
         ):
             with self.subTest(cache=cache):
                 calls, first = self.build(cache)
                 self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
+                self.assertIn("-UGENERATIVE_CAPTURE", first)
                 self.assertIn("-UGENERATIVE_CAPTURE_DIR", first)
-
-    def test_a_variant_capture_builds_generative_capture_beside_the_build_dir(self):
-        calls, first = self.build(variant=True)
-        self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
-        self.assertIn("-DGENERATIVE_CAPTURE:BOOL=ON", first)
-        self.assertIn("-DENABLE_SYSEX_TEST:BOOL=OFF", first)
-        self.assertIn("-variants", first)
-        calls, _ = self.build("GENERATIVE_CAPTURE:BOOL=ON\n", variant=True)
-        self.assertEqual(calls, [["cmake", "--build"]])
-        for cache in (
-            "ENABLE_SYSEX_TEST:BOOL=ON\n",
-            "ENABLE_SYSEX_TEST:BOOL=ON\nGENERATIVE_CAPTURE:BOOL=ON\n",
-        ):
-            with self.subTest(cache=cache):
-                calls, _ = self.build(cache, variant=True)
-                self.assertEqual(calls, [["cmake", "-B"], ["cmake", "--build"]])
-
-
-class PatchedElf(unittest.TestCase):
-    def setUp(self):
-        self.tmp = self.enterContext(tempfile.TemporaryDirectory())
-        self.src = os.path.join(self.tmp, "deluge.elf")
-        self.dst = os.path.join(self.tmp, "capture.elf")
-        self.recipe = gen_emu.capture_recipe(
-            gen_emu.parser().parse_args(
-                ["capture", "--seed", "9", "--variant", "skank=plain"]
-            )
-        )
-
-    def patch(self, elf):
-        touch(self.src, elf)
-        gen_emu.write_capture_elf(self.src, self.dst, self.recipe)
-
-    def test_the_copy_holds_the_recipe_and_only_the_recipe_changes(self):
-        elf = fake_elf()
-        self.patch(elf)
-        with open(self.dst, "rb") as fh:
-            patched = fh.read()
-        start = 0x100 + 8
-        self.assertEqual(patched[start : start + len(self.recipe)], self.recipe)
-        self.assertEqual(patched[:start], elf[:start])
-        self.assertEqual(
-            patched[start + len(self.recipe) :], elf[start + len(self.recipe) :]
-        )
-        with open(self.src, "rb") as fh:
-            self.assertEqual(fh.read(), elf)  # the build's ELF stays as built
-
-    def test_an_elf_without_the_recipe_is_refused(self):
-        # a Release or test-port build: no capture build, so no Recipe to patch
-        for elf in (fake_elf(symbol=b"something_else"), fake_elf(data=b"NOTMAGIC" + bytes(52)),
-                    fake_elf(data=self.recipe[:-4])):  # fmt: skip
-            with self.subTest(elf=elf[0x100:0x110]), self.assertRaises(SystemExit):
-                self.patch(elf)
-            self.assertFalse(os.path.exists(self.dst))
-
-    def test_a_file_that_isnt_an_elf_is_refused(self):
-        with self.assertRaises(SystemExit):
-            self.patch(b"not an elf at all" * 10)
 
 
 class FakeEmu:
@@ -1171,8 +1030,6 @@ class BootFiles(unittest.TestCase):
                 ("done.wav", b"RIFF"),  # whole: written before the dump was left
                 (f"live-pid{live}-boot1.s32", b"x"),
                 ("live.wav", b""),
-                (f"dead-pid{DEAD_PID}.elf", b"x"),
-                (f"live-pid{live}.elf", b"x"),
             ):
                 touch(os.path.join(tmp, name), data)
             with mock.patch.object(gen_emu, "log"):
@@ -1180,8 +1037,7 @@ class BootFiles(unittest.TestCase):
             left = sorted(os.listdir(tmp))
         self.assertEqual(
             left,
-            [f"dead-pid{DEAD_PID}-boot1.log", "done.wav", f"live-pid{live}-boot1.s32", f"live-pid{live}.elf",
-             "live.wav"],
+            [f"dead-pid{DEAD_PID}-boot1.log", "done.wav", f"live-pid{live}-boot1.s32", "live.wav"],
         )  # fmt: skip
 
 
@@ -1562,13 +1418,8 @@ class CaptureOne(unittest.TestCase):
                 touch(os.path.join(out, gen_emu.boot_name(tag, n) + ".log"))
             return mock.Mock(t=0)
 
-        def write_elf(src, dst, recipe):
-            self.patched = (src, dst, recipe)
-            touch(dst, recipe)
-
         with (
             mock.patch.object(gen_emu, "boot", side_effect=boot),
-            mock.patch.object(gen_emu, "write_capture_elf", side_effect=write_elf),
             mock.patch.object(
                 gen_emu,
                 "send_recipe",
@@ -1592,29 +1443,18 @@ class CaptureOne(unittest.TestCase):
 
     def test_it_boots_the_build_with_the_test_port_and_sends_its_recipe(self):
         parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
-        _, wav, _, _ = self.run_one(
-            bars_pcm([0.3] * 4), (parts, STEP_S), ["--seed", "5"]
-        )
-        self.assertEqual(self.booted, ("fw.elf", gen_emu.capture_tag(wav), True))
-        args = gen_emu.parser().parse_args(["capture", "--seed", "5"])
-        self.assertEqual(self.sent, [gen_emu.recipe_lines(args)])
-        self.assertEqual(self.taken, 1)
-
-    def test_a_variant_capture_boots_its_patched_elf_without_the_test_port(self):
-        # S7 has no variant lines (#548): the GENCAP2 Recipe is patched into <out>/<tag>.elf, deleted after
-        parts = [Part(*(Note(s * STEP, s * STEP + 6) for s in range(64)))]
-        argv = ["--seed", "5", "--variant", "build=long"]
-        tmp, wav, fails, _ = self.run_one(bars_pcm([0.3] * 4), (parts, STEP_S), argv)
-        self.assertEqual(fails, [])
-        tag = gen_emu.capture_tag(wav)
-        patched = os.path.join(tmp, tag + ".elf")
-        args = gen_emu.parser().parse_args(["capture", *argv])
-        self.assertEqual(
-            self.patched, ("fw.elf", patched, gen_emu.capture_recipe(args))
-        )
-        self.assertEqual(self.booted, (patched, tag, False))
-        self.assertEqual((self.sent, self.taken), ([], 0))
-        self.assertEqual(os.listdir(tmp), [os.path.basename(wav)])
+        for argv in (
+            ["--seed", "5"],
+            ["--seed", "5", "--variant", "build=long"],
+        ):
+            with self.subTest(argv=argv):
+                _, wav, _, _ = self.run_one(bars_pcm([0.3] * 4), (parts, STEP_S), argv)
+                self.assertEqual(
+                    self.booted, ("fw.elf", gen_emu.capture_tag(wav), True)
+                )
+                args = gen_emu.parser().parse_args(["capture", *argv])
+                self.assertEqual(self.sent, [gen_emu.recipe_lines(args)])
+                self.assertEqual(self.taken, 1)
 
     def test_a_bad_capture_keeps_its_logs(self):
         parts = [Part(Note(0, 6))]
@@ -1638,7 +1478,6 @@ class CaptureOne(unittest.TestCase):
         self.assertIn("WARNING silent from 0.0 s to 2.0 s", lines)
 
     def test_a_capture_that_raises_removes_its_claimed_wav(self):
-        # and a --variant capture its patched ELF
         for variant in ([], ["--variant", "build=long"]):
             with self.subTest(variant=variant):
                 tmp = self.enterContext(tempfile.TemporaryDirectory())
@@ -1648,15 +1487,9 @@ class CaptureOne(unittest.TestCase):
                     mock.patch.object(
                         gen_emu, "boot", side_effect=RuntimeError("no boot")
                     ),
-                    mock.patch.object(
-                        gen_emu,
-                        "write_capture_elf",
-                        side_effect=lambda src, dst, recipe: touch(dst, recipe),
-                    ) as write,
                     self.assertRaises(RuntimeError),
                 ):
                     gen_emu.capture_one(args, "fw.elf", [], None)
-                self.assertEqual(write.call_count, 1 if variant else 0)
                 self.assertEqual(os.listdir(out), [])
 
 

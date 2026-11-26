@@ -63,7 +63,7 @@ def render_all(job_list, scratch, session, base_render=None):
     base = base_render or os.path.join(bins, "base")
     if not os.path.exists(base):
         base = _jobs.gen_emu.theory_review.find_render()
-    tempos = recipe.check(job_list, base)
+    tempos = recipe.check(job_list, base, scratch)
     captures = _jobs.merge(job_list)
     renders = {}
     for c in captures:

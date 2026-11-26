@@ -117,7 +117,8 @@ constexpr bool songFile(Kind kind) {
 }
 
 /// The fields of a "next recipe" line (Entry::index of a NextRecipe entry). A Macro's field is kNextMacro plus the
-/// Macro. A NextRecipeSound entry's index is the part, or kMaxParts plus the lane.
+/// Macro; a Variant's is kNextVariant plus the set index, its amount `(genreIndex << 8) | variant`. A NextRecipeSound
+/// entry's index is the part, or kMaxParts plus the lane.
 enum NextField : uint8_t {
 	kNextClear,
 	kNextGenre,
@@ -127,7 +128,8 @@ enum NextField : uint8_t {
 	kNextKey,
 	kNextScale,
 	kNextSwing,
-	kNextMacro
+	kNextMacro,
+	kNextVariant = kNextMacro + deluge::generative::kNumMacros
 };
 constexpr int32_t kPitchClasses = 12; ///< A "next recipe key" is one of them, 0 = C
 
@@ -161,6 +163,37 @@ uint32_t queueTail = 0;
 
 uint32_t queueDepth() {
 	return queueTail - queueHead;
+}
+
+/// Seam S7's Recipe and seed for the next roll, while nextRecipeArmed. Zero-filled at boot: the first field set clears
+/// it to its defaults.
+PLACE_SDRAM_BSS deluge::generative::NextRecipe nextRecipeValue;
+bool nextRecipeArmed = false;
+
+/// The genre a "next recipe variant" line resolves against: the last queued "next recipe genre" (unless cleared by a
+/// later "next recipe clear" or "reset recipe"), else the armed one, else the Current Recipe's genre. nullptr when no
+/// genre is known.
+const deluge::generative::Genre* nextRecipeGenre() {
+	using namespace deluge::generative;
+	bool cleared = false;
+	for (uint32_t i = queueTail; i != queueHead;) {
+		const Entry& e = queue[--i % kQueueSize];
+		if (e.kind == Kind::ResetRecipe) {
+			return nullptr;
+		}
+		if (e.kind == Kind::NextRecipe && e.index == kNextClear) {
+			cleared = true;
+		}
+		else if (!cleared && e.kind == Kind::NextRecipe && e.index == kNextGenre) {
+			return allGenres()[e.amount];
+		}
+	}
+	if (!cleared && nextRecipeArmed && nextRecipeValue.overrides.genre != nullptr) {
+		return findGenre(nextRecipeValue.overrides.genre);
+	}
+	const auto& current = firmware::currentRecipe;
+	// findGenre() maps a test copy (hold delay_setups) back to its canonical entry in allGenres().
+	return current.exists && current.recipe.genre != nullptr ? findGenre(current.recipe.genre->name) : nullptr;
 }
 
 double resumeAt = 0;                ///< getSystemTime() at which a "wait" entry ends
@@ -507,6 +540,17 @@ bool parseNextRecipe(char* rest, Entry* entry, const char** path) {
 	         && parseInt(t.token[2], 0, kMacroPoints, &points)) {
 		*entry = {Kind::NextRecipe, static_cast<uint8_t>(kNextMacro + value), points};
 	}
+	else if (t.count == 3 && strcmp(field, "variant") == 0) {
+		const Genre* genre = nextRecipeGenre();
+		const int32_t set = genre != nullptr ? findVariantSet(*genre, t.token[1]) : -1;
+		const int32_t variant = set >= 0 ? findVariant(genre->variantSets[set], t.token[2]) : -1;
+		if (variant < 0) {
+			return false;
+		}
+		const auto genres = allGenres();
+		const int32_t genreIndex = static_cast<int32_t>(std::ranges::find(genres, genre) - genres.begin());
+		*entry = {Kind::NextRecipe, static_cast<uint8_t>(kNextVariant + set), (genreIndex << 8) | variant};
+	}
 	else {
 		struct Number {
 			const char* name;
@@ -615,7 +659,8 @@ bool buttonFromName(const char* name, uint8_t* value) {
 ///   next recipe <field> <value> seam S7: sets one field of the Recipe and seed the next roll takes, see
 ///                               setNextRecipe(): genre <name>, seed <n>, entropy <n> (0 to 2^32-1), macro <0-3>
 ///                               <points 0-50>, tempo <hundredths of a BPM>, key <0-11>, scale <a Scale, 0-11>,
-///                               swing <-49-49>; part <0-5> <path> and lane <0-14> <path> (the rest of the line)
+///                               swing <-49-49>, variant <set> <name> (of the genre set above or the Current Recipe);
+///                               part <0-5> <path> and lane <0-14> <path> (the rest of the line)
 ///   next recipe clear           forgets the fields set
 /// For a "load song", "load synth|kit" or "next recipe part|lane" line, *path points at its path inside `line`; for
 /// "save song" and "check recipe", at the name.
@@ -1120,11 +1165,6 @@ void feedMidi(uint8_t status, int32_t data) {
 	                               (data >> 8) & 0x7F, nullptr);
 }
 
-/// Seam S7's Recipe and seed for the next roll, while nextRecipeArmed. Zero-filled at boot: the first field set clears
-/// it to its defaults.
-PLACE_SDRAM_BSS deluge::generative::NextRecipe nextRecipeValue;
-bool nextRecipeArmed = false;
-
 deluge::generative::NextRecipe& armNextRecipe() {
 	if (!nextRecipeArmed) {
 		nextRecipeValue.clear();
@@ -1144,9 +1184,14 @@ void setNextRecipe(uint8_t field, int32_t value) {
 	NextRecipe& next = armNextRecipe();
 	RecipeOverrides& overrides = next.overrides;
 	switch (field) {
-	case kNextGenre:
-		overrides.genre = allGenres()[value]->name;
+	case kNextGenre: {
+		const Genre* genre = allGenres()[value];
+		if (next.variantGenre != genre) {
+			next.forgetVariants();
+		}
+		overrides.genre = genre->name;
 		break;
+	}
 	case kNextSeed:
 		overrides.seed = static_cast<uint32_t>(value);
 		next.seedSet = true;
@@ -1168,7 +1213,13 @@ void setNextRecipe(uint8_t field, int32_t value) {
 		overrides.swing = static_cast<int8_t>(value);
 		break;
 	default:
-		overrides.macroPoints[field - kNextMacro] = static_cast<int8_t>(value);
+		if (field >= kNextVariant) {
+			overrides.variant[field - kNextVariant] = static_cast<int8_t>(value & 0xFF);
+			next.variantGenre = allGenres()[value >> 8];
+		}
+		else {
+			overrides.macroPoints[field - kNextMacro] = static_cast<int8_t>(value);
+		}
 	}
 }
 

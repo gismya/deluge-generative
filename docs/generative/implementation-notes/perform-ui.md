@@ -47,6 +47,15 @@ otherwise.
   at once. `ArcPlanner::begin()` copies everything the loop reads (macros, biases, the landing steps), so the piece
   can step on or be freed between slices. Read a new per-frame cost with `perform_audio_margin.txt` (`gen_audio`,
   `gen_audio_ui_timer`).
+- The ARC page's split box (#545): `ArcPhrase::startKind` is the Section on the phrase's first step (the plan sets it
+  at the phrase's first planned step, `PhraseHistory` from the Section heard last and a Section event on the line),
+  `kind` the one on its last. Now's box takes its start from what was heard and its end from the plan, so a short
+  Build still to come splits it. `ArcPhrase` stays 10 bytes (a `static_assert`): `kindFrom` is a byte, which
+  `phraseFitsPlan()` (16-bar phrases at most) keeps true. The split box draws two 7 px tags, as spec §13.5 allows no
+  5 px text, so every ARC box is 21 px tall and NEXT sits under them in rows 40-46. Trap (R1): in the lookahead before
+  tick 0 (a start on an external clock, every transition's handover) step 0 is decided and the history's phrase-0
+  slot is open with the Section from before the start; `known()` and NEXT read the plan until
+  `PhraseHistory::sectionHeard()`.
 - The OLED is a page model too (`generative/perform/oled_page.h`): `composeOled()` takes the status line's, the
   peeks' and the pages' input and returns an `OledScreen` of text and numbers, which `renderOLED()` draws. The view
   fills the input, applies the blink phase to the ARC page's queued boxes and redraws on a change. The words on it
