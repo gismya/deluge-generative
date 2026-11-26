@@ -67,18 +67,6 @@ if(ENABLE_SYSEX_TEST)
     target_compile_definitions(deluge PUBLIC ENABLE_SYSEX_TEST=1)
 endif(ENABLE_SYSEX_TEST)
 
-# The older delugemu capture build: the Current Recipe and its seed come from the CaptureRecipe in current_recipe.cpp
-# instead of the timer. On generative, gen_emu.py capture uses the test-port build and seam S7's "next recipe" lines
-# (#523); M5's --variant captures (m5-variants) still patch CaptureRecipe into a copy of the ELF, until S7 carries
-# variant sets. Never set for a release.
-option(GENERATIVE_CAPTURE "A delugemu capture build: the Recipe comes from a patched CaptureRecipe" OFF)
-if(GENERATIVE_CAPTURE)
-    message(STATUS "Generative capture build: Recipe from the ELF's generative_capture_recipe")
-    set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/generative/firmware/current_recipe.cpp
-        TARGET_DIRECTORY deluge PROPERTIES
-        COMPILE_DEFINITIONS GENERATIVE_CAPTURE=1)
-endif(GENERATIVE_CAPTURE)
-
 if(ENABLE_MATRIX_DEBUG)
     message(STATUS "Extra pad matrix debug enabled for deluge")
     target_compile_definitions(deluge PUBLIC ENABLE_MATRIX_DEBUG=1)

@@ -1,0 +1,103 @@
+# Seam S7 variant line (#548, spec §21.3, ADR 0008): "next recipe variant <set> <name>" fixes a variant set's pick
+# (and narrows its allowed variants to that one alone) for the next roll only. Enters Perform on ROOTS DUB with skank
+# fixed to plain and drums fixed to rockers: VARIANTS ▸ shows PLAIN, ROCKERS and the unmentioned sets on Random. Then a
+# Regenerate rolls fresh (every set back on all allowed, no gen_next_recipe taken), a second Regenerate takes a new
+# "next recipe variant" without repeating the genre (using the Current Recipe's), and "next recipe clear" forgets
+# variant picks too.
+# covers: src/deluge/io/midi/test_port.* src/deluge/generative/core/recipe_overrides.h
+# covers: src/deluge/generative/core/variants.* src/deluge/generative/core/genres/dub.cpp
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/current_recipe.*
+# covers: src/deluge/generative/firmware/transitions.* src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/perform/transition_lifecycle.h src/deluge/generative/perform/regenerate_page.*
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/menu_item/generative/regenerate_page.*
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp
+start_state
+next recipe genre dub
+next recipe entropy 0
+next recipe seed 5
+next recipe variant skank plain
+next recipe variant drums rockers
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_next_recipe taken since=mark
+expect event gen_perform_entered dub since=mark
+
+# ---- VARIANTS ▸ in Perform: skank=PLAIN, drums=ROCKERS, unmentioned sets on Random ----
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_menu open sets=5
+expect event gen_variants_row SKANK PLAIN
+expect event gen_variants_row DRUMS ROCKERS
+expect event gen_variants_row BREAK Random
+expect event gen_variants_row MIX Random
+expect event gen_variants_row BASS Random
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+
+# ---- Next Regenerate rolls fresh: every set back on all allowed, no gen_next_recipe taken ----
+mark now
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
+expect no_event gen_next_recipe since=mark within=2
+expect event gen_transition phase=idle within=30
+
+# ---- Regenerate with "next recipe variant" (no genre line: resolves against Current Recipe's Dub) ----
+next recipe variant skank plain
+mark now
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event /^gen_pending_variants skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
+expect event gen_next_recipe taken within=5
+expect event gen_transition phase=idle within=30
+
+# ---- "next recipe clear" clears variant picks too: Regenerate rolls fresh ----
+next recipe variant skank plain
+next recipe variant drums steppers
+next recipe clear
+mark now
+include perform_transition_menu.txt
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect ui=sound_editor
+expect event gen_regen_page open title=Regenerate style=0
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_confirm regenerate style=0 result=0
+expect event /^gen_pending_variants skank=(sevenths|plain):3 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/ within=20
+expect no_event gen_next_recipe since=mark within=2
+expect event gen_transition phase=idle within=30
+
+include perform_leave.txt
