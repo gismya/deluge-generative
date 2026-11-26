@@ -13,6 +13,7 @@
 # picks the piece plays moved on step N.
 # For figures: --events 'gen_variants|gen_variants_press|gen_variants_landed|gen_section'.
 # covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/variants.*
+# covers: src/deluge/io/midi/test_port.*
 # covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/menu_item/generative/regenerate_page.*
 # covers: src/deluge/generative/perform/regenerate_page.* src/deluge/generative/firmware/perform_adapter.cpp
 # covers: src/deluge/generative/core/generator_steering.cpp

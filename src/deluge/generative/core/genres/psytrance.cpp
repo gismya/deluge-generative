@@ -22,6 +22,7 @@
 
 #include "generative/core/capacity.h"
 #include "generative/core/genre.h"
+#include "generative/core/genres/lane_edits.h"
 
 #include <array>
 #include <initializer_list>
@@ -497,39 +498,19 @@ constexpr Pattern kLeadRide[] = {
     {"..8.5.8.5.8.5.8.", "....g...g...g...", 1},
 };
 // clang-format on
-// As many entries as each lane's own pool, in the same tiers, so a live switch or a Drop change keeps a frozen pick.
-static_assert(std::size(kEveryOpenHat) == std::size(kOpenHat) && std::size(kRideClosedHat) == std::size(kClosedHat)
-              && std::size(kLeadRide) == std::size(kRide));
+// As many entries as each lane's own pool, each as long and in the same tier, so a live switch or a Drop change keeps
+// a frozen pick.
+static_assert(sameShape(kEveryOpenHat, kOpenHat) && sameShape(kRideClosedHat, kClosedHat)
+              && sameShape(kLeadRide, kRide));
 
 using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
 
-/// Psytrance's drum lanes with `edit` applied to a copy.
-template <typename Edit>
-constexpr DrumLanes drumLanesWith(Edit edit) {
-	DrumLanes lanes{};
-	for (size_t l = 0; l < lanes.size(); l++) {
-		lanes[l] = kDrumLanes[l];
-	}
-	edit(lanes);
-	return lanes;
-}
-
-/// Lane `lane` of `lanes`.
-constexpr LaneSpec& laneOf(DrumLanes& lanes, Lane lane) {
-	for (LaneSpec& spec : lanes) {
-		if (spec.lane == lane) {
-			return spec;
-		}
-	}
-	throw "Psytrance's Drums have no such lane";
-}
-
 /// OPEN: the open hat on every &, where it replaces the closed hat.
 constexpr DrumLanes kOpenLanes =
-    drumLanesWith([](DrumLanes& lanes) { laneOf(lanes, Lane::OpenHat).pool = kEveryOpenHat; });
+    lanesWith(kDrumLanes, [](DrumLanes& lanes) { laneOf(lanes, Lane::OpenHat).pool = kEveryOpenHat; });
 /// RIDE: the ride on the &s at home (ungated), the closed hat down to ghosts under it, no open hat. The open hat's
 /// pool is empty: an empty lane reads no pick, so a switch from or to it keeps every frozen pick (#531's rule).
-constexpr DrumLanes kRideLanes = drumLanesWith([](DrumLanes& lanes) {
+constexpr DrumLanes kRideLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
 	laneOf(lanes, Lane::ClosedHat).pool = kRideClosedHat;
 	laneOf(lanes, Lane::OpenHat).pool = {};
 	LaneSpec& ride = laneOf(lanes, Lane::Ride);
