@@ -2,8 +2,12 @@
 
 A runner that mangles a job's arguments (ambient rules 1 cut `--key D#` to `--key D`) captures the wrong piece, and
 `gen_emu.py check` passes it, since it renders the same wrong arguments. This renders one bar of each job's Recipe
-with generator_render (30 ms) and compares the THEORY track's `recipe` and `key` lines with the job's own flags.
+with generator_render (30 ms) and compares the THEORY track's `recipe` and `key` lines with the job's own flags. A
+variant's job renders with that variant's harness (<scratch>/bin/<variant>, as `variants prove` keeps it) where there
+is one, so a job may name a set that only the variant's diff adds (variants-2's `--variant drums=deep`).
 """
+
+import os
 
 import theory_review
 
@@ -72,12 +76,21 @@ def harness_piece(job, render):
     return gen_emu.render_piece(render, job.recipe, 1)
 
 
-def check(job_list, render):
-    """{job name: tempo} for these Jobs, from the harness render. Raises RecipeMismatch listing every Job whose render
-    plays something it didn't ask for."""
+def render_for(job, render, scratch=None):
+    """The generator_render that checks `job`: its variant's <scratch>/bin/<variant> if there is one, else `render`."""
+    if scratch and job.variant != "base":
+        own = os.path.join(scratch, "bin", job.variant)
+        if os.path.exists(own):
+            return own
+    return render
+
+
+def check(job_list, render, scratch=None):
+    """{job name: tempo} for these Jobs, from the harness render (render_for()). Raises RecipeMismatch listing every
+    Job whose render plays something it didn't ask for."""
     tempos, bad = {}, []
     for job in job_list:
-        piece = harness_piece(job, render)
+        piece = harness_piece(job, render_for(job, render, scratch))
         for line in mismatches(job, piece):
             bad.append(f"{job.name} (line {job.line}: {job.args}): {line}")
         tempos[job.name] = float(piece.recipe["tempo"])
