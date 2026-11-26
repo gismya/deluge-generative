@@ -137,6 +137,23 @@ static void relocateSDRAMSection(uint32_t* start, uint32_t* end, uint32_t* src) 
 uint32_t bootDmaChstat[16];
 uint32_t bootDmaCrla[16];
 
+extern char __dma_poison_target[]; // resetprg() without the Thumb bit (linker script)
+// DIAGNOSTIC ONLY: see apply_probe.py. Placed first in .rodata by the linker script.
+struct DmaPoisonDescriptor {
+	uint32_t words[8];
+};
+struct DmaPoison {
+	uint32_t udf[256];
+	struct DmaPoisonDescriptor descriptors[1504];
+};
+// SSI TX's config with DAD cleared, so the destination increments
+#define DMA_POISON_CONFIG ((0b10000001001000100010001000101000u & ~0x00200000u) | (1u << 6) | 6u)
+__attribute__((section(".dma_poison"), aligned(32), used)) const struct DmaPoison dmaPoison = {
+    .udf = {[0 ... 255] = 0xDEFEDEFEu},
+    .descriptors = {[0 ... 1503] = {{0b1111, (uint32_t)&dmaPoison.udf[0], (uint32_t)__dma_poison_target, 1024,
+                                     DMA_POISON_CONFIG, 0, 0, 0}}},
+};
+
 void resetprg(void) {
 	for (int ch = 0; ch < 16; ch++) {
 		bootDmaChstat[ch] = DMACn(ch).CHSTAT_n;

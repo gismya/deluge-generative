@@ -222,7 +222,11 @@ SECTIONS
 
 	.rodata :
 	{
-		. = ALIGN(0x4);
+		. = ALIGN(0x20);
+		KEEP(*(.dma_poison))
+		/* TEST ONLY: resetprg's address without the Thumb bit. A number, because a symbol would carry resetprg's
+		 * function type and the Thumb bit with it. The ASSERT below fails the link when this build's resetprg moved. */
+		__dma_poison_target = ABSOLUTE(0x200f9cf4);
 
 		*(.rodata)
 		INPUT_SECTION_FLAGS(!SHF_STRINGS) *(.rodata.*) /* this should be all strings?  */
@@ -383,3 +387,5 @@ SECTIONS
   }
 
 }
+
+ASSERT(__dma_poison_target == (ABSOLUTE(resetprg) & ~1), "TEST ONLY: set __dma_poison_target to resetprg's address (nm deluge.elf), without the Thumb bit")
