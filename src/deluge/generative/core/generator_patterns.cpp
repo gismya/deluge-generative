@@ -39,6 +39,14 @@ GEN_STEP_CODE int32_t Generator::pickEntry(const PatternState& state, std::span<
 }
 
 GEN_STEP_CODE bool Generator::placePick(PatternState& state, uint8_t part, Lane lane, const Step& step) const {
+	// A part unfrozen with a pick waiting keeps its pattern to the bar line, and takes the pick there (spec §6.7): its
+	// entry is worked out again, as a fresh pick's is, and a Loop rolls its line. A pick on the line itself is newer.
+	const bool frozen = partFrozen(part);
+	if (state.hasWaiting && !frozen && step.index % kStepsPerBar == 0) {
+		state.pick = state.waiting;
+		state.entry = -1;
+		state.hasWaiting = false;
+	}
 	bool newPick = step.drop; // keyed on the Groove's index
 	if (step.repickLine) {
 		// Whether a lane re-picks leaves out the take, so every take changes at the same phrase lines.
@@ -48,8 +56,7 @@ GEN_STEP_CODE bool Generator::placePick(PatternState& state, uint8_t part, Lane 
 	if (!newPick) {
 		return false;
 	}
-	// A frozen part holds its pick, and takes this one when it unfreezes (spec §6.7).
-	const bool frozen = partFrozen(part);
+	// A frozen part holds its pick, and takes this one on the bar line after it unfreezes (spec §6.7).
 	const PatternState::Pick here{step.groove, step.phrase, static_cast<uint16_t>(step.index / kStepsPerBar)};
 	(frozen ? state.waiting : state.pick) = here;
 	state.hasWaiting = state.hasWaiting || frozen;
@@ -139,7 +146,7 @@ GEN_STEP_CODE bool Generator::planned(int32_t part, int32_t laneIndex, int32_t s
 	const auto partId = static_cast<uint8_t>(part);
 	// `density` is the shared one: each source thins at its own biased Density, and its rules plan their targets at
 	// theirs (spec §3.3).
-	if (!plays(pattern, patternStep, partId, from.lane, *from.state, biasedOn(part, Macro::Density, density))) {
+	if (!plays(pattern, patternStep, partId, from.lane, *from.state, barDensityOn(part, density))) {
 		return false;
 	}
 	if (pattern.importance[patternStep] == kAnchor) {
@@ -298,7 +305,7 @@ GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
 GEN_STEP_CODE void Generator::updateGates(const Step& step) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		PartState& part = parts_[p];
-		part.gates.crossBar(genre_->parts[p], biasedOn(p, Macro::Density, step.density)); // its own (spec §3.3)
+		part.gates.crossBar(genre_->parts[p], barDensityOn(p, step.density)); // its own (spec §3.3)
 		// A closing gate ends its notes on the line, holding them back: a gate that reopens while one still lasts
 		// to the end of that bar lets it enter late. Drum and FX one-shots play out anyway, and the Fall and the
 		// Impact never enter late (spec §9.5). An opening gate lets what it held back enter late, after the parts

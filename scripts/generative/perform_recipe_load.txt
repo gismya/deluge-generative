@@ -74,7 +74,7 @@ expect event gen_recipe_load at=LOAD MISSING.XML within=5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=5 within=5
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=6 within=5
 expect event gen_recipe_load stopped result=0 working=1
 expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
 expect event gen_recipe_load replaced sounds=2 within=5
@@ -93,7 +93,7 @@ expect event gen_recipe_load at=LOAD OK.XML within=5
 button LOAD down
 wait 50
 button LOAD up
-expect event gen_recipe_load chose name=LOAD OK genre=techno-acid version=5 within=5
+expect event gen_recipe_load chose name=LOAD OK genre=techno-acid version=6 within=5
 expect event /^gen_transition_preload done error=0 parts=\d+/ within=30
 expect no_event gen_recipe_load replaced within=2
 check recipe *
@@ -127,7 +127,7 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_recipe_load chose name=LOAD OLDER genre=techno-acid version=1 within=5
-expect event gen_recipe_load version older file=1 genre=5
+expect event gen_recipe_load version older file=1 genre=6
 expect ui=sound_editor
 expect event gen_regen_page open
 button SELECT_ENC down

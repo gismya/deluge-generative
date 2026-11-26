@@ -30,7 +30,7 @@ expect event gen_recipe_load at=LOAD MISSING.XML qwerty=0 within=5
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=5 within=5
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=6 within=5
 expect event gen_recipe_roll load done error=0 within=30
 expect event gen_recipe_load replaced sounds=2
 expect event gen_compose_recipe loaded genre=techno-acid tempo=12345 swing=0 key=2 scale=1 macros=10,40,20,30
@@ -64,7 +64,7 @@ hold preload
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=5 within=5
+expect event gen_recipe_load chose name=LOAD MISSING genre=techno-acid version=6 within=5
 expect event gen_recipe_roll load held within=10
 expect ui=generative_modal
 button BACK down

@@ -1385,8 +1385,8 @@ constexpr int32_t nextOnset(const Pattern& pattern, int32_t step) {
 /// Whether a Loop part's plain notes, lasting its gate, each end by the time the pattern's next onset starts, before
 /// thinning: from the note's latest start to that onset's earliest, the pattern's end counting as an onset, since
 /// the next pick starts there (#221). So notes longer than a step (a sub bass's) play one at a time and end by the
-/// pattern's end; only a pick thaw() adopts mid-pattern can start under one. A part that may ratchet fails: its hits
-/// fall within a step.
+/// pattern's end; only a pick an unfrozen part adopts on a bar line inside a longer pattern can start under one. A part
+/// that may ratchet fails: its hits fall within a step.
 constexpr bool longLoopNotesFit(const PartSpec& part) {
 	if (mayRatchet(part.expression.ornaments)) {
 		return false;

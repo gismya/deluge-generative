@@ -1059,7 +1059,7 @@
             </tr>
             <tr>
               <td><strong>Density</strong> (<code>D</code>)</td>
-              <td>How many notes and layers play: thins or fills pattern steps by importance and opens/closes part and drum-lane Density gates.</td>
+              <td>How many notes and layers play: thins or fills pattern steps by importance and opens/closes part and drum-lane Density gates. Which notes play changes on bar lines, so parts come and go on the bar.</td>
               <td>Stripped back to core anchors; gated parts rest</td>
               <td>Full patterns; extra percussion and gated leads enter</td>
             </tr>
@@ -1978,7 +1978,7 @@
       <!-- 7.7 FREEZE, FILLS, DROP-OUTS, PUNCH-INS -->
       <h3 id="perform-live-tools">Freeze, Fills, Drop-outs &amp; Punch-ins</h3>
       <ul>
-        <li><strong>Freeze (<kbd>CROSS-SCREEN</kbd> or CLIP Pad 1):</strong> Locks the focused part so it repeats its current phrase and stops mutating. Macros, mutes, Break rules, and sound Drift still act on top. Unfreezing jumps seamlessly back to the live timeline.</li>
+        <li><strong>Freeze (<kbd>CROSS-SCREEN</kbd> or CLIP Pad 1):</strong> Locks the focused part so it repeats its current phrase and stops mutating. Macros, mutes, Break rules, and sound Drift still act on top. Unfreezing jumps seamlessly back to the live timeline; if the part would have changed pattern while frozen, it finishes the bar first and switches on the next bar line.</li>
         <li><strong>Fills:</strong> The Generator automatically plays fills at phrase ends (more often at higher Motion). Hold <kbd>SYNC-SCALING</kbd> or any of the 12 <code>FILL</code> pads on <kbd>KEYBOARD</kbd> to play the genre's signature held fill immediately (hold <kbd>SHIFT</kbd> too for a fresh random fill pick). Across a phrase line, a held fill pauses for the first step (one 16th) so phrase downbeats stay clear, then carries on from the next step. Ambient has no fills.</li>
         <li><a class="gloss-link" href="#gloss-dropout"><strong>Drop-outs</strong></a><strong>:</strong> Built into Roots Dub, Dub Techno, House, Classic Psytrance, and Ambient. During a Groove, specific parts or drum lanes drop silent for 1–16 bars—often throwing their last hit into reverb and delay—while notes already sounding ring out cleanly. Higher Motion makes drop-outs happen more often.</li>
         <li><a class="gloss-link" href="#gloss-punchin"><strong>Punch-ins</strong></a> <strong>(<kbd>KEYBOARD</kbd> page):</strong> Immediate performance effects on columns 9–10 (Drums lane mutes) and columns 15–16 (<code>HAT ROLL</code> 32nds, <code>SNARE ROLL</code> 16ths, <code>FLAM</code> on backbeats, <code>DOUBLE KICK</code>, and <code>PUMP</code> sidechain ducking under the kick). All follow the <strong>0.3 s rule</strong>: tap (&lt; 0.3 s) to latch on, hold (≥ 0.3 s) for momentary effect that springs back on release. Pressing and releasing a latched pad turns it off regardless of how long you hold it, and latched punch-ins stay on across a stop (unlike mutes, solos, and freezes). Note that <code>FLAM</code> is often silent in Techno at default macros because Techno has no clap and only sparse rim/snare hits.</li>
