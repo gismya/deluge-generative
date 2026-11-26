@@ -100,6 +100,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	driftTowards_ = 0;
 	driftLastMotion_ = 0;
 	std::fill(std::begin(lastSpaceMacro_), std::end(lastSpaceMacro_), int16_t{0});
+	barDensity_ = 0; // step 0's bar line latches it again
+	std::fill(std::begin(barDensityBias_), std::end(barDensityBias_), int16_t{0});
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {

@@ -220,7 +220,8 @@ GEN_STEP_CODE void Generator::countHalves(int32_t part, int32_t laneIndex, const
 		if (rule.kind != RuleKind::Respond) {
 			continue;
 		}
-		// The target's planned onsets in each half of this bar, at the Density now, with its pick of this step.
+		// The target's planned onsets in each half of this bar, at the bar's latched Density, with its pick of this
+		// step.
 		int32_t counts[2] = {};
 		for (int32_t s = 0; s < kStepsPerBar; s++) {
 			counts[s / kHalfBarSteps] += targetPlanned(rule.target, bar + s, 0, step.sharedDensity) ? 1 : 0;

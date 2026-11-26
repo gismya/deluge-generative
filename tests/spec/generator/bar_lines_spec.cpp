@@ -2,7 +2,7 @@
 // bar line latches the effective Density and each part's Density bias, so neither the Arc's ramps (Intro, Build, a
 // Drop's decay, Outro) nor a live Density turn or Part bias starts or stops a hit mid-bar. A part unfrozen mid-bar
 // keeps its pattern to the bar line. What may still start or stop off a bar line is not Density's: fills, the Build
-// roll and the Gap, Throws, pickups and late entries (none of them a planned onset), and a pattern's own first or last
+// roll and the Gap, Throws and pickups (none of them a planned onset), and a pattern's own first or last
 // hit, a jitter split within an importance tier among them.
 
 #include "harness.h"
@@ -12,6 +12,7 @@
 
 #include "cppspec.hpp"
 
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -152,7 +153,7 @@ describe bar_lines("Bar lines", $ {
 			std::vector<std::pair<int32_t, Command>> midBar;
 			std::vector<std::pair<int32_t, Command>> onLines;
 			for (int32_t bar = 1; bar < 12; bar++) {
-				const int32_t points = bar % 2 == 0 ? 20 : -20;
+				const int32_t points = std::array{20, 0, -20}[bar % 3]; // 0 clears the bias mid-bar
 				for (uint8_t part : {uint8_t{0}, uint8_t{1}}) {
 					midBar.emplace_back(bar * kStepsPerBar + 3 + bar % 12, densityBias(part, points));
 					onLines.emplace_back((bar + 1) * kStepsPerBar, densityBias(part, points));

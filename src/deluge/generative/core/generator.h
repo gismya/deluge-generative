@@ -404,13 +404,6 @@ public:
 	[[nodiscard]] int32_t biasedOn(int32_t part, Macro macro, int32_t shared) const {
 		return partBiased(shared, recipe_.bias.of(part, macro));
 	}
-	/// `shared`, a Density every part shares, as part `part`'s notes read it: moved by its Density bias as the last
-	/// bar line latched it (latchDensity()). The sound controls read the live bias through biasedOn().
-	[[nodiscard]] int32_t barDensityOn(int32_t part, int32_t shared) const {
-		return partBiased(shared, barDensityBias_[part]);
-	}
-	/// On a bar line: latches the effective Density and each part's Density bias for the bar's notes (spec §5.6).
-	void latchDensity();
 	/// The chord playing on the last decided step, in steps from the tonic (spec §7.4): `voiced_`, which
 	/// voiceChordAt() voices on each bar line, and as a piece starts, from the walk's root at the Extension level the
 	/// Recipe's Complexity gives then, within the genre's floor and ceiling (the Arc never moves Complexity). Its root
@@ -562,6 +555,13 @@ private:
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
+	/// `shared`, a Density every part shares, as part `part`'s notes read it: moved by its Density bias as the last
+	/// bar line latched it (latchDensity()). The sound controls read the live bias through biasedOn().
+	[[nodiscard]] int32_t barDensityOn(int32_t part, int32_t shared) const {
+		return partBiased(shared, barDensityBias_[part]);
+	}
+	/// On a bar line: latches the effective Density and each part's Density bias for the bar's notes (spec §5.6).
+	void latchDensity();
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
 	void sectionRules(Step& step);
