@@ -213,6 +213,10 @@ constexpr int32_t kNumSoundControls = 6;
 /// A control's offset from home runs from -kControlFull to kControlFull: percent of its range on that side, so
 /// kControlFull reaches the end of each target's range (spec §11.2). The core clamps to it.
 constexpr int32_t kControlFull = 100;
+/// Extra Brightness darkening below -kControlFull during a handover overlap's filter close (spec §5.6, #542): the
+/// driver maps -kControlFull..-kControlFull - kCloseControlExtra down to a deep filter / FM-modulator close, unscaled
+/// by a preset's Brightness range override so the close stays clearly audible on every sound.
+constexpr int32_t kCloseControlExtra = 100;
 
 /// How far a preset's sound controls move (spec §11.1): for each control, a percent of its default ranges (spec
 /// §11.2), 0 to kMaxRangePercent. kDefaultPercent keeps the defaults, 0 keeps the control from moving the preset at

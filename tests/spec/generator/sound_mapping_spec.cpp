@@ -217,9 +217,9 @@ describe sound_mapping("The sound-control mapping", $ {
 	});
 
 	context("the most params one set of controls can move", _ {
-		it("is FM's, from the table: modulators 2, Decay 3, feedbacks 4, Space 2, Wobble 5 plus its cables", _ {
-			expect(maxParamsPerSet(0)).to_equal(16);
-			expect(maxParamsPerSet(32)).to_equal(48);
+		it("is FM's, from the table: modulators 2, deep-close EQ 2, Decay 3, feedbacks 4, Space 2, Wobble 5 plus its cables", _ {
+			expect(maxParamsPerSet(0)).to_equal(18);
+			expect(maxParamsPerSet(32)).to_equal(50);
 		});
 	});
 
@@ -261,6 +261,79 @@ describe sound_mapping("The sound-control mapping", $ {
 		});
 		it("is a cable's new amount itself at ×0, where no home plays anything else", _ {
 			expect(homeFor(cables, 1 << 20, -kControlFull)).to_equal(1 << 20);
+		});
+	});
+
+	context("a handover overlap's deep Brightness close past -kControlFull (spec §5.6, #542)", _ {
+		const TargetRange lpf{Target::LpfFrequency, -8, 8, Needs::LpfInUse};
+		const TargetRange mod1{Target::Modulator1Level, -6, 6, Needs::Modulator1InUse};
+		const TargetRange mod2{Target::Modulator2Level, -6, 6, Needs::Modulator2InUse};
+		const TargetRange wave{Target::WaveIndex, -5, 5};
+		const TargetRange pw{Target::PulseWidth, -6, 6};
+		const TargetRange morph{Target::LpfMorph, 0, 15, Needs::LpfInUse};
+		const TargetRange decay{Target::Env1Release, -6, 6};
+		const TargetRange cables{Target::LfoCables, -50, 50};
+		constexpr int32_t kDeep = -(kControlFull + kCloseControlExtra);
+
+		it("extends Subtractive LPF smoothly from -low at -100 to -20 menu units at -200, even on a 50%-scaled preset", _ {
+			const TargetRange halfLpf = scaledRange(lpf, 50); // -4..4 (e.g. kHalfBrightness)
+			expect(targetValue(lpf, menu(42), -kControlFull)).to_equal(menu(34));
+			expect(targetValue(lpf, menu(42), -150)).to_equal(menu(28));
+			expect(targetValue(lpf, menu(42), kDeep)).to_equal(menu(22));
+			expect(targetValue(halfLpf, menu(42), -kControlFull)).to_equal(menu(38));
+			expect(targetValue(halfLpf, menu(42), -150)).to_equal(menu(30));
+			expect(targetValue(halfLpf, menu(42), kDeep)).to_equal(menu(22));
+			expect(targetValue(lpf, menu(15), kDeep)).to_equal(INT32_MIN); // clamps at 0
+		});
+
+		it("extends FM modulators to -30 menu units, deep-close EQ shelf to -12 (0 in normal range) and wave index / pulse width to -12", _ {
+			const TargetRange halfMod = scaledRange(mod1, 50); // -3..3
+			const TargetRange treble{Target::Treble, 0, 0};
+			const TargetRange trebleFreq{Target::TrebleFreq, 0, 0};
+			expect(targetValue(mod1, menu(35), kDeep)).to_equal(menu(5));
+			expect(targetValue(mod2, menu(35), kDeep)).to_equal(menu(5));
+			expect(targetValue(halfMod, menu(35), -kControlFull)).to_equal(menu(32));
+			expect(targetValue(halfMod, menu(35), kDeep)).to_equal(menu(5));
+			expect(targetValue(treble, menu(25), -kControlFull)).to_equal(menu(25));
+			expect(targetValue(treble, menu(25), kControlFull)).to_equal(menu(25));
+			expect(targetValue(treble, menu(25), kDeep)).to_equal(menu(13));
+			expect(targetValue(trebleFreq, menu(25), -kControlFull)).to_equal(menu(25));
+			expect(targetValue(trebleFreq, menu(25), kDeep)).to_equal(menu(13));
+			expect(targetValue(wave, menu(25), kDeep)).to_equal(menu(13));
+			expect(targetValue(pw, menu(25), kDeep)).to_equal(menu(13));
+		});
+
+		it("leaves disabled (0%), positive-only, non-Brightness and cable targets within their normal bounds", _ {
+			expect(targetValue(scaledRange(lpf, 0), menu(30), kDeep)).to_equal(menu(30));
+			expect(targetValue(morph, menu(10), kDeep)).to_equal(menu(10));
+			expect(targetValue(decay, menu(25), kDeep)).to_equal(menu(19)); // stays at -6
+			expect(targetValue(cables, 1 << 28, kDeep)).to_equal(1);       // stays at ×0
+		});
+
+		it("leaves the treble shelf to Brightness's extra lane alone in Compose, so it gets no automation without a close (spec §15.6)", _ {
+			for (const TargetRange& range : controlTargets(SoundControl::Brightness, Engine::Fm)) {
+				expect(onExtraLane(SoundControl::Brightness, range.target, false)).to_equal(isDeepCloseOnly(range.target));
+			}
+			expect(onExtraLane(SoundControl::Brightness, Target::Treble, false)).to_be_true();
+			expect(onExtraLane(SoundControl::Brightness, Target::TrebleFreq, true)).to_be_true();
+			expect(onExtraLane(SoundControl::Brightness, Target::Modulator1Level, false)).to_be_false();
+			expect(onExtraLane(SoundControl::Brightness, Target::LpfFrequency, false)).to_be_false();
+			// Space's extra lane is the Throw's lift: a delay setup's feedback, and nothing else.
+			expect(onExtraLane(SoundControl::Space, Target::DelayFeedback, true)).to_be_true();
+			expect(onExtraLane(SoundControl::Space, Target::DelayFeedback, false)).to_be_false();
+			expect(onExtraLane(SoundControl::Space, Target::ReverbSend, true)).to_be_false();
+			expect(onExtraLane(SoundControl::Decay, Target::Env1Release, true)).to_be_false();
+		});
+
+		it("round-trips a player edit's home across the deep-close range", _ {
+			const TargetRange halfLpf = scaledRange(lpf, 50);
+			const TargetRange halfMod = scaledRange(mod1, 50);
+			for (const int32_t offset : {kDeep, -175, -150, -125, -kControlFull}) {
+				for (const TargetRange& range : {lpf, halfLpf, mod1, halfMod}) {
+					const int32_t value = menu(12);
+					expect(targetValue(range, homeFor(range, value, offset), offset)).to_equal(value);
+				}
+			}
 		});
 	});
 

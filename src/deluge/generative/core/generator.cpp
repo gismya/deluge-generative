@@ -70,6 +70,7 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	filled_ = false;
 	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
 	dropOut_ = {};
+	overlap_ = {};
 	sirenSounding_ = false;
 	hasSiren_ = genreHasSiren(*genre_);
 	for (PartState& part : parts_) {
@@ -427,6 +428,11 @@ GEN_STEP_CODE void Generator::decideLanded(SteeringLog* log) {
 	dropOutRules(step);
 	fillRules(step);
 	updateSilent(step);
+	if (arc_.stepInBar() == 0 && !arc_.sectionStartsHere()) {
+		// Off a Section line, after the overlap is known: a part leaving through one keeps its notes past its gate
+		// (spec §5.6). updateGates() cuts on a Section line, where no overlap carries on.
+		cutClosedGates(step);
+	}
 
 	// Parts in the genre's roster order, which is role order unless the genre says otherwise (spec §5.5).
 	uint8_t avoidedParts = 0;

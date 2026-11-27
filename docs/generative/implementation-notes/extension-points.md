@@ -120,3 +120,19 @@ otherwise.
   `yieldEighths_` (read by `plays()`). The Arc plan asks the same `yieldOn()` (`ArcPlanner::advance()`). A new mode
   adds to `YieldMode` and those two readers. `LoopSpec::jumpSteps` is applied in `rollLineStep()` after the draws, so
   a mask never moves a keyed draw; Rotate Answers still move the line a beat.
+- **Handover overlap (#542).** `OverlapState` (`core/generator.h`, code in `generator_sections.cpp`) runs in a third
+  pass of `updateSilent()`: the Arc's own `silent_` and yields are worked out with the overlap suspended, then
+  `advance()` detects a handover on the natural mask and draws, then the overlap clears the leaving part's bits. Trap:
+  any order where the yield reads the overlapping part as playing makes the pair flip-flop every bar (the prototype
+  hit it). `ArcPlanner::advance()` steps its own copy on the same natural mask, so the plan matches. `begin()` takes
+  the Arc's waiting move, so a length never runs past a Section line the Arc already knows of; a force landing later
+  ends it on its line. The close is Brightness past -kControlFull (`kCloseControlExtra`), carried in the Control
+  event's velocity byte (`Event::closeExtra()`), so a lane's stored value is `int16_t` from the event to the clip
+  builder and `SoundControls::Set::offset`; read a Control event's value with `controlOffset()`, never `offset`
+  alone. The reach past -100 is per target in `perform/sound_mapping.cpp` (`closeMenuUnits()`), tuned by capture:
+  too deep, and the leaving part goes silent before its overlap ends. In Compose a target that moves only past -100
+  (FM's treble shelf) must ride Brightness's extra lane (`Automated::extra`, `perform::onExtraLane()`), not the
+  Brightness lane: there it would get a home node at every Brightness node, automation that never moves (spec
+  §15.6). Trap: anything that reads `gateOpen()` before `updateSilent()` sees last step's overlap. Off a Section
+  line the gate's note cut (`cutClosedGates()`) runs after `updateSilent()`; on one it stays in `updateGates()`,
+  before `cutSectionLine()`, where no overlap carries on and `gateOpen()` ignores `overlap_`.

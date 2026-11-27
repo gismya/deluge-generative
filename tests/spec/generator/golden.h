@@ -84,7 +84,8 @@ inline std::string whatOf(const Event& e) {
 		return std::string(render::kPitchNames[e.keyRoot() % 12]) + " "
 		       + render::kScaleNames[static_cast<int32_t>(e.scale)];
 	case EventKind::Control: {
-		const std::string offset = (e.offset > 0 ? "+" : "") + std::to_string(e.offset);
+		const int32_t value = e.controlOffset();
+		const std::string offset = (value > 0 ? "+" : "") + std::to_string(value);
 		return std::string(kit ? key + " " : "") + render::kControlNames[static_cast<int32_t>(e.control)] + " " + offset
 		       + (e.throwDelay() > 0 ? " delay " + std::to_string(e.throwDelay()) : "") + (e.snap ? " snap" : "");
 	}

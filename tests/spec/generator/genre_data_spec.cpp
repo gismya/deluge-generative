@@ -783,6 +783,23 @@ describe genre_data("Every built-in genre", $ {
 		expect(valid({.part = 6, .inDrops = YieldMode::Rest}, kNone, false)).to_be_false(); // past the roster
 		expect(valid(kToLead, {.part = 2, .inDrops = YieldMode::Rest}, false)).to_be_false(); // to a yielding part
 		expect(valid(kToLead, kNone, true)).to_be_false();                               // a Kit part
+		// Handover overlap parameters (#542): chance 0–1000, and when above 0 a non-empty table of positive bars/weights.
+		static constexpr WeightedBars kZeroBars[] = {{0, 1}};
+		static constexpr WeightedBars kZeroWeight[] = {{1, 0}};
+		static constexpr WeightedBars kOneBar[] = {{1, 1}};
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 0, .overlapBars = {}}, kNone, false))
+		    .to_be_true();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 1000, .overlapBars = kOneBar}, kNone, false))
+		    .to_be_true();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = -1}, kNone, false)).to_be_false();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 1001}, kNone, false)).to_be_false();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 333, .overlapBars = {}}, kNone, false))
+		    .to_be_false();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 333, .overlapBars = kZeroBars}, kNone, false))
+		    .to_be_false();
+		expect(valid({.part = 1, .inDrops = YieldMode::Rest, .overlapChance = 333, .overlapBars = kZeroWeight}, kNone,
+		             false))
+		    .to_be_false();
 	});
 
 	it("keeps every pitched anchor a MIDI note two octaves either way (registersShiftValid(), spec §7.3)", _ {

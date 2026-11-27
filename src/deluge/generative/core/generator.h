@@ -132,6 +132,9 @@ struct ControlSet {
 	bool delaySetup = false;
 	/// The delay Throw's level as last sent on Space, in percent (Event::throwDelay()): 0 until a Throw lifts it.
 	uint8_t sentThrowDelay = 0;
+	/// The handover close's depth below -kControlFull as last sent on Brightness (Event::closeExtra()): 0 outside a
+	/// handover's filter close (spec §5.6).
+	uint8_t sentClose = 0;
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
@@ -197,6 +200,35 @@ private:
 	                PartsAndLanes& outMask, DrawKey& outKey);
 	void pick(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting,
 	          const DrawKey& key);
+};
+
+/// Handover overlap state (spec §5.6, #542): when the stage passes on a Groove bar line between a yielding part and
+/// the part it yields to, the leaving part plays on under the incoming one for 1–2 bars while its filter closes, then
+/// holds closed for a beat while its tail fades before snapping back. Generator::updateSilent() and ArcPlanner both
+/// step it on the natural (pre-overlap) silence mask so the override never feeds back into the Arc's own state.
+struct OverlapState {
+	int32_t start = 0;        ///< Step where the active overlap began.
+	int32_t end = 0;          ///< Step where the active overlap ends (exclusive).
+	int32_t holdUntil = 0;    ///< Step until which the closed filter holds for the tail (exclusive).
+	int16_t density = 0;      ///< Shared Density of the bar before the handover, so a leaving part plays its hits.
+	int16_t prevDensity = 0;  ///< Last bar's shared Density.
+	int8_t part = -1;         ///< Currently overlapping part, or -1 for none.
+	int8_t holdingPart = -1;  ///< Part whose filter is closing or holding closed, or -1 for none.
+	int8_t reopenedPart = -1; ///< Part whose filter hold ended on this step (snap Brightness back), or -1.
+	uint8_t wasOn = 0;        ///< Bit p: part p of a yielding pair sounded naturally on the previous bar.
+
+	/// Advances to `stepIndex` on `arc` with the natural (pre-overlap) `naturalSilent` mask: ends an overlap or a hold
+	/// that is done, and on a bar line detects a handover and draws whether it overlaps. True when a draw hit: the
+	/// caller then calls begin() with the Arc's waiting move, so the overlap's length never crosses a Section line.
+	bool advance(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
+	             uint8_t naturalSilent);
+	/// Starts the overlap advance() drew, with the longest drawn length that ends before the next Section line.
+	void begin(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting);
+
+private:
+	DrawKey key_;          ///< The hit draw's key, for its length draw.
+	int8_t yielding_ = -1; ///< The yielding part of the pair whose handover drew an overlap.
+	int8_t leaving_ = -1;  ///< The part leaving the stage in it.
 };
 
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
@@ -678,8 +710,10 @@ private:
 	/// The delay Throw's level Space carries on `set` (Event::throwDelay()), in percent: the Throw's level where the
 	/// set has a delay setup, else 0 (spec §11.4).
 	[[nodiscard]] uint8_t throwDelayOf(const ControlSet& set) const;
-	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or, for Space, if the delay
-	/// Throw's level did (throwDelayOf()), keeping both as sent.
+	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or if its extra did, keeping
+	/// both as sent: for Space the delay Throw's level (throwDelayOf(), `sentThrowDelay`), for Brightness how far
+	/// `target` is below -kControlFull at a handover's close (Event::closeExtra(), `sentClose`), the offset itself
+	/// clamped to -kControlFull.
 	void sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick, bool snap);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
 	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
@@ -900,9 +934,13 @@ private:
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) sound: its gate and the lane's are open.
 	[[nodiscard]] bool gateOpen(int32_t part, Lane lane) const;
-	/// At a bar line, before the parts: moves every gate with its hysteresis. A closing gate ends its sounding notes
-	/// on the line; an opening one lets the notes it held back enter late.
+	/// At a bar line, before the parts: moves every gate with its hysteresis, and on a Section line cuts what the
+	/// closing gates end (cutClosedGates()). Elsewhere the cut waits for updateSilent(), so a part leaving through a
+	/// handover overlap keeps its notes (spec §5.6).
 	void updateGates(const Step& step);
+	/// A closing gate ends its sounding notes on the line, holding back those that may enter late; an opening one lets
+	/// them enter late after the parts.
+	void cutClosedGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
 	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
 	/// A Sustain that holds across Section lines keeps its notes ending on the line uncut, for decideSustain() to hold
@@ -1074,6 +1112,8 @@ private:
 	int32_t closeWashFrom_ = kNever;
 	/// The drop-out state (spec §8.8): plays on [from, to), next may start from after. Performance state, lost on stop.
 	DropOutState dropOut_;
+	/// Handover overlap state (spec §5.6, #542): the leaving part playing on while its filter closes.
+	OverlapState overlap_;
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
@@ -1136,6 +1176,8 @@ private:
 	MuteSolo mutes_;
 	Gates gates_[kMaxParts] = {};
 	DropOutState dropOut_;
+	OverlapState overlap_;
+	int32_t barDensity_ = 0;
 	int32_t energySum_[ArcPlan::kMaxPhrases] = {};
 	int32_t steps_[ArcPlan::kMaxPhrases] = {};
 	ArcPlan plan_;

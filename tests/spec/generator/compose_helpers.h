@@ -22,7 +22,7 @@ struct RecordingWriter final : SongWriter {
 	const Recipe* recipe = nullptr;
 	std::vector<Note> notes;
 	std::vector<std::pair<Automated, Node>> nodes;
-	std::vector<std::pair<Automated, int8_t>> bases;
+	std::vector<std::pair<Automated, int16_t>> bases;
 	int32_t endTick = -1;
 	uint32_t soundingParts = 0;
 	int32_t calls = 0;
@@ -42,7 +42,7 @@ struct RecordingWriter final : SongWriter {
 		lateNodes += n.tick < cutAt[a.part] ? 1 : 0;
 		calls++;
 	}
-	void base(const Automated& a, int8_t value) override {
+	void base(const Automated& a, int16_t value) override {
 		bases.push_back({a, value});
 		calls++;
 	}
@@ -177,7 +177,7 @@ inline std::vector<Note> notesBefore(std::vector<Note> notes, int32_t cutTick) {
 
 using LaneKey = std::tuple<uint8_t, Lane, SoundControl, bool>;
 inline LaneKey keyOf(const Automated& a) {
-	return {a.part, a.lane, a.control, a.throwDelay};
+	return {a.part, a.lane, a.control, a.extra};
 }
 
 /// The value each automation lane has on each step line before `cut`, as Perform plays its Control events: a snap
@@ -196,9 +196,12 @@ inline std::map<LaneKey, std::vector<int32_t>> performCurves(const std::vector<E
 		if (e.kind != EventKind::Control || e.tick >= stepTick(cut)) {
 			continue;
 		}
-		apply({e.part, e.lane, e.control, false}, e.offset, e);
+		apply({e.part, e.lane, e.control, false}, e.controlOffset(), e);
 		if (e.control == SoundControl::Space) {
 			apply({e.part, e.lane, e.control, true}, e.throwDelay(), e);
+		}
+		if (e.control == SoundControl::Brightness) {
+			apply({e.part, e.lane, e.control, true}, e.closeExtra(), e);
 		}
 	}
 	return out;

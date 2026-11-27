@@ -32,6 +32,8 @@ namespace {
 enum FillField : int32_t { kFillWhether, kFillWhich };
 /// Fields of a drop-out's draw: whether one starts on the next bar line, and which entry.
 enum DropOutField : int32_t { kDropOutWhether, kDropOutWhich };
+/// Fields of a handover overlap's draw: whether a handover overlaps, and its length in bars.
+enum OverlapField : int32_t { kOverlapWhether, kOverlapLength };
 
 } // namespace
 
@@ -323,7 +325,108 @@ bool Generator::barBeforeAutoFill() const {
 	return arc_.stepInBar() == 0 && arc_.barInPhrase() == fillBar - 1;
 }
 
+GEN_STEP_CODE bool OverlapState::advance(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
+                                         int32_t sharedDensity, uint8_t naturalSilent) {
+	reopenedPart = -1;
+	const bool sectionStart = arc.sectionStartsHere();
+	// End an active overlap when its bars finish, at any Section line (never cross one), or if the leaving part
+	// becomes naturally audible again (e.g. a live Density turn or drop-out end).
+	if (part >= 0 && (stepIndex >= end || sectionStart || (naturalSilent & partBit(part)) == 0)) {
+		if (sectionStart || (naturalSilent & partBit(part)) == 0) {
+			if (holdingPart >= 0) {
+				reopenedPart = holdingPart;
+				holdingPart = -1;
+			}
+		}
+		part = -1;
+	}
+	// Hold the leaving part's filter closed for a beat after its overlap ends so its release tail stays dark, then
+	// snap back; clear immediately on a Section line or if the part becomes naturally audible again.
+	if (holdingPart >= 0 && part != holdingPart) {
+		if (stepIndex >= holdUntil || sectionStart || (naturalSilent & partBit(holdingPart)) == 0) {
+			reopenedPart = holdingPart;
+			holdingPart = -1;
+		}
+	}
+	if (arc.stepInBar() != 0) {
+		return false;
+	}
+	bool drawHit = false;
+	uint8_t now = 0;
+	for (int32_t p = 0; p < partCount(genre); p++) {
+		const YieldSpec& yield = genre.parts[p].yield;
+		const int32_t target = yield.part;
+		if (target < 0) {
+			continue;
+		}
+		const uint8_t a = partBit(p);
+		const uint8_t b = partBit(target);
+		now |= static_cast<uint8_t>(~naturalSilent & (a | b));
+		// Handovers only inside a Groove where the pair actually takes turns (YieldMode::Rest), never on a Section
+		// line, and only when no overlap is already running. When the pair plays together (None or Eighths, e.g.
+		// Psytrance's dropboth/eighths), coincidental drop-out alignments don't trigger handover overlaps.
+		const YieldMode grooveMode = arc.inDrop() ? yield.inDrops : yield.outside;
+		if (drawHit || part >= 0 || arc.section() != SectionKind::Groove || sectionStart
+		    || grooveMode != YieldMode::Rest || yield.overlapChance <= 0 || yield.overlapBars.empty()) {
+			continue;
+		}
+		const bool aOn = (naturalSilent & a) == 0;
+		const bool bOn = (naturalSilent & b) == 0;
+		const bool aWas = (wasOn & a) != 0;
+		const bool bWas = (wasOn & b) != 0;
+		int32_t leaving = -1;
+		if (aWas && !bWas && bOn && !aOn) {
+			leaving = p;
+		}
+		else if (bWas && !aWas && aOn && !bOn) {
+			leaving = target;
+		}
+		if (leaving < 0) {
+			continue;
+		}
+		const DrawKey key = onPhrase(partKey(seed, static_cast<uint8_t>(p), Lane::None, 0, Purpose::HandoverOverlap),
+		                             arc.occurrence(), static_cast<uint16_t>(arc.phraseInSection()),
+		                             fieldWord(static_cast<uint32_t>(arc.barInPhrase()), kOverlapWhether));
+		if (drawChance(key, yield.overlapChance)) {
+			yielding_ = static_cast<int8_t>(p);
+			leaving_ = static_cast<int8_t>(leaving);
+			key_ = key;
+			drawHit = true;
+		}
+	}
+	if (drawHit) {
+		density = prevDensity; // snapshot the bar before the handover before prevDensity updates below
+	}
+	wasOn = now;
+	prevDensity = static_cast<int16_t>(sharedDensity);
+	return drawHit;
+}
+
+GEN_STEP_CODE void OverlapState::begin(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion,
+                                       const Arc::Move& waiting) {
+	const std::span<const WeightedBars> bars = genre.parts[yielding_].yield.overlapBars;
+	const int32_t leavingPart = leaving_;
+	const Arc::Ahead ahead = arc.ahead(motion, waiting);
+	const int32_t room = ahead.start;
+	const int32_t picked = drawWeightedIf(withField(key_, kOverlapLength), bars,
+	                                      [room](const WeightedBars& e) { return e.bars * kStepsPerBar <= room; });
+	if (picked < 0) {
+		return; // no overlap length fits before the next Section line
+	}
+	if (holdingPart >= 0 && holdingPart != leavingPart) {
+		reopenedPart = holdingPart;
+	}
+	part = static_cast<int8_t>(leavingPart);
+	start = stepIndex;
+	end = stepIndex + bars[picked].bars * kStepsPerBar;
+	holdingPart = part;
+	holdUntil = end + kStepsPerBeat;
+}
+
 GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane) const {
+	if (part == overlap_.part) {
+		return step.gap || step.cut.has(part, lane);
+	}
 	if (step.gap || step.cut.has(part, lane) || step.dropOut.has(part, lane) || (yieldRest_ & partBit(part)) != 0) {
 		return true;
 	}
@@ -331,6 +434,10 @@ GEN_STEP_CODE bool Generator::silenced(const Step& step, int32_t part, Lane lane
 }
 
 void Generator::updateSilent(const Step& step) {
+	// Work out the Arc's natural silence and yields first, with any active overlap suspended so it never feeds back
+	// into yieldOn() (otherwise a yielding pair flip-flops every bar, #542).
+	const int8_t active = overlap_.part;
+	overlap_.part = -1;
 	silent_ = 0;
 	yieldRest_ = 0;
 	yieldEighths_ = 0;
@@ -351,6 +458,16 @@ void Generator::updateSilent(const Step& step) {
 		else if (mode == YieldMode::Eighths) {
 			yieldEighths_ |= partBit(p);
 		}
+	}
+	overlap_.part = active;
+	if (overlap_.advance(*genre_, seed_, arc_, step.index, step.sharedDensity, silent_)) {
+		overlap_.begin(*genre_, arc_, step.index, step.motion, waitingMove());
+	}
+	if (overlap_.part >= 0) {
+		const auto clear = static_cast<uint8_t>(~partBit(overlap_.part));
+		silent_ &= clear;
+		yieldRest_ &= clear;
+		yieldEighths_ &= clear;
 	}
 }
 int32_t Generator::fxNoteTicks(const LaneSpec& lane, const Step& step) const {

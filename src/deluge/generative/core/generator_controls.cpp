@@ -259,17 +259,26 @@ GEN_STEP_CODE uint8_t Generator::throwDelayOf(const ControlSet& set) const {
 GEN_STEP_CODE void Generator::sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick,
                                           bool snap) {
 	const auto c = static_cast<int32_t>(control);
-	// Space carries the delay Throw's level too, which can move while Space stays at its clamp.
+	// Space carries the delay Throw's level too, which can move while Space stays at its clamp; Brightness carries
+	// extra close depth below -kControlFull during a handover overlap's filter close.
 	const bool space = control == SoundControl::Space;
-	const uint8_t throwDelay = space ? throwDelayOf(set) : 0;
-	if (target == set.sent[c] && (!space || throwDelay == set.sentThrowDelay)) {
+	const bool brightness = control == SoundControl::Brightness;
+	const int8_t base = static_cast<int8_t>(std::clamp<int32_t>(target, -kControlFull, kControlFull));
+	const uint8_t extra = space        ? throwDelayOf(set)
+	                      : brightness ? static_cast<uint8_t>(std::max<int32_t>(-kControlFull - target, 0))
+	                                   : 0;
+	const uint8_t prevExtra = space ? set.sentThrowDelay : brightness ? set.sentClose : 0;
+	if (base == set.sent[c] && extra == prevExtra) {
 		return;
 	}
-	set.sent[c] = static_cast<int8_t>(target);
+	set.sent[c] = base;
 	if (space) {
-		set.sentThrowDelay = throwDelay;
+		set.sentThrowDelay = extra;
 	}
-	push(Event::controlChange(tick, set.part, set.lane, control, set.sent[c], snap, throwDelay));
+	else if (brightness) {
+		set.sentClose = extra;
+	}
+	push(Event::controlChange(tick, set.part, set.lane, control, base, snap, extra));
 }
 
 GEN_STEP_CODE int32_t Generator::gestureLayer(const ControlSet& set, SoundControl control, int32_t closeWash,
@@ -503,9 +512,30 @@ GEN_STEP_CODE void Generator::updateControls(const Step& step) {
 			// macro layer: that moves the kit-wide controls.
 			const int32_t sum = (takesMacroLayer(set.kind) ? macro[c] : 0)
 			                    + (gesturing ? gestureLayer(set, control, closeWash, rise) : 0) + drift[c];
-			const int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
-			// The piece's first step jumps there, as does a Reset; a Throw jumps on its hit and back on the next.
-			const bool snap = step.index == 0 || reset || (spaceSnaps && control == SoundControl::Space);
+			int32_t target = std::clamp<int32_t>(sum, -kControlFull, kControlFull);
+			bool snap = step.index == 0 || reset || (spaceSnaps && control == SoundControl::Space);
+			// Handover overlap (spec §5.6, #542): the leaving part's Brightness eases out (1 - (1 - t)^2) to a deep
+			// close -(kControlFull + kCloseControlExtra), holds closed for a beat while its tail fades, then snaps
+			// back when the hold ends or the part plays again.
+			if (control == SoundControl::Brightness) {
+				if (overlap_.holdingPart == set.part) {
+					constexpr int32_t kClosed = -(kControlFull + kCloseControlExtra);
+					if (overlap_.part == set.part) {
+						const int32_t of = overlap_.end - overlap_.start;
+						const int32_t done = step.index - overlap_.start + 1;
+						const int32_t t = done * 1000 / of;
+						const int32_t u = 1000 - t;
+						const int32_t easeOut = 1000 - u * u / 1000;
+						target = target + (kClosed - target) * easeOut / 1000;
+					}
+					else {
+						target = kClosed;
+					}
+				}
+				else if (overlap_.reopenedPart == set.part) {
+					snap = true;
+				}
+			}
 			sendControl(set, control, target, step.tick, snap);
 		}
 	}

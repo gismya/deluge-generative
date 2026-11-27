@@ -246,7 +246,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	// keeping their homes and offsets.
 	struct Kept {
 		Lane lane;
-		int8_t offset[kNumSoundControls];
+		int16_t offset[kNumSoundControls];
 		uint8_t throwDelay;
 		int8_t restSpace;
 	};
@@ -287,11 +287,15 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
 				const auto control = static_cast<SoundControl>(c);
-				const uint8_t throwDelay = control == SoundControl::Space ? old[o].throwDelay : 0;
-				if (old[o].offset[c] != 0 || throwDelay != 0) {
-					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, old[o].offset[c],
-					                           true, throwDelay),
-					      0);
+				const int32_t offset = old[o].offset[c];
+				const uint8_t extra = control == SoundControl::Space
+				                          ? old[o].throwDelay
+				                          : static_cast<uint8_t>(std::max<int32_t>(-kControlFull - offset, 0));
+				const auto base = static_cast<int8_t>(std::max<int32_t>(offset, -kControlFull));
+				if (offset != 0 || extra != 0) {
+					apply(
+					    Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, base, true, extra),
+					    0);
 				}
 			}
 			sets_[i].restSpace = old[o].restSpace; // after apply(), which sets it only at level 0
@@ -435,6 +439,12 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		break;
 	case Target::Modulator2Level:
 		patched(params::LOCAL_MODULATOR_1_VOLUME);
+		break;
+	case Target::Treble:
+		unpatched(params::UNPATCHED_TREBLE);
+		break;
+	case Target::TrebleFreq:
+		unpatched(params::UNPATCHED_TREBLE_FREQ);
 		break;
 	case Target::ModulatorFeedback:
 		if (uses(set, Needs::Modulator1InUse)) {
@@ -639,15 +649,15 @@ SoundControls::Set* SoundControls::setOf(uint8_t part, Lane lane) {
 }
 
 template <typename Found>
-void SoundControls::forEachComposed(Set& set, SoundControl control, bool throwDelay, int32_t offset, Found found) {
-	const auto c = static_cast<int32_t>(throwDelay ? SoundControl::Space : control);
+void SoundControls::forEachComposed(Set& set, SoundControl control, bool extra, int32_t offset, Found found) {
+	const auto c = static_cast<int32_t>(control);
 	for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 		const Bound& bound = bound_[b];
-		// A delay setup's feedback follows the Throw's lift lane alone. Space moves it ±4 at most, and only where the
-		// preset already uses its delay (spec §11.2); its share stays at home there, so two lanes never write one
-		// param.
-		const bool lifted = set.throwDepth > 0 && bound.range.target == Target::DelayFeedback;
-		if (lifted != throwDelay) {
+		// Each param has one lane (perform::onExtraLane()). A delay setup's feedback follows the Throw's lift lane
+		// alone: Space moves it ±4 at most, and only where the preset already uses its delay (spec §11.2), so its share
+		// stays at home there. FM's treble shelf follows Brightness's close lane alone: the Brightness lane leaves it
+		// at home above -kControlFull, so it would only write home nodes (spec §15.6).
+		if (perform::onExtraLane(control, bound.range.target, set.throwDepth > 0) != extra) {
 			continue;
 		}
 		const int32_t slot = slotOf(set, bound);
@@ -655,31 +665,34 @@ void SoundControls::forEachComposed(Set& set, SoundControl control, bool throwDe
 		if (param == nullptr) {
 			continue;
 		}
-		const int32_t value = throwDelay ? perform::throwDelayValue(bound.range, bound.home, 0, set.throwDepth, offset)
-		                                 : perform::targetValue(bound.range, bound.home, offset);
+		// An extra lane's offset is its percent: the Throw's lift, or how far a handover's close is past -kControlFull.
+		const int32_t value = !extra ? perform::targetValue(bound.range, bound.home, offset)
+		                      : control == SoundControl::Space
+		                          ? perform::throwDelayValue(bound.range, bound.home, 0, set.throwDepth, offset)
+		                          : perform::targetValue(bound.range, bound.home, -kControlFull - offset);
 		if (!found(bound, *param, slot, value)) {
 			return;
 		}
 	}
 }
 
-bool SoundControls::writeNode(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t tick,
-                              int32_t offset, bool interpolated) {
+bool SoundControls::writeNode(uint8_t part, Lane lane, SoundControl control, bool extra, int32_t tick, int32_t offset,
+                              bool interpolated) {
 	Set* set = setOf(part, lane);
 	if (set == nullptr) {
 		return true; // nothing loaded there to move
 	}
 	// And the fallback Riser's row, which plays the lane's notes in some Builds (spec §9.5).
 	std::optional<Set> mirror = mirrored(*set, mirror_);
-	return writeNodeOn(*set, control, throwDelay, tick, offset, interpolated)
-	       && (!mirror || writeNodeOn(*mirror, control, throwDelay, tick, offset, interpolated));
+	return writeNodeOn(*set, control, extra, tick, offset, interpolated)
+	       && (!mirror || writeNodeOn(*mirror, control, extra, tick, offset, interpolated));
 }
 
-bool SoundControls::writeNodeOn(Set& set, SoundControl control, bool throwDelay, int32_t tick, int32_t offset,
+bool SoundControls::writeNodeOn(Set& set, SoundControl control, bool extra, int32_t tick, int32_t offset,
                                 bool interpolated) {
 	bool written = true;
 	forEachComposed(
-	    set, control, throwDelay, offset, [&](const Bound& bound, AutoParam& param, int32_t slot, int32_t value) {
+	    set, control, extra, offset, [&](const Bound& bound, AutoParam& param, int32_t slot, int32_t value) {
 		    if (param.setNodeAtPos(tick, value, interpolated) < 0) {
 			    written = false;
 			    return false;
@@ -699,7 +712,7 @@ void SoundControls::mirrorEdit(const Set& edited, const Bound& bound, int32_t va
 	}
 }
 
-void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t offset) {
+void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, bool extra, int32_t offset) {
 	Set* set = setOf(part, lane);
 	if (set == nullptr) {
 		return;
@@ -708,9 +721,9 @@ void SoundControls::writeBase(uint8_t part, Lane lane, SoundControl control, boo
 		param.setCurrentValueBasicForSetup(value);
 		return true;
 	};
-	forEachComposed(*set, control, throwDelay, offset, base);
+	forEachComposed(*set, control, extra, offset, base);
 	if (std::optional<Set> mirror = mirrored(*set, mirror_)) { // the fallback Riser's row (spec §9.5)
-		forEachComposed(*mirror, control, throwDelay, offset, base);
+		forEachComposed(*mirror, control, extra, offset, base);
 	}
 }
 
@@ -731,7 +744,8 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 			continue;
 		}
 		const auto c = static_cast<int32_t>(event.control);
-		set.offset[c] = event.offset;
+		const int32_t offset = event.controlOffset();
+		set.offset[c] = static_cast<int16_t>(offset);
 		// Where the set has a delay setup, a Throw lifts its delay feedback (spec §11.4).
 		const bool space = event.control == SoundControl::Space;
 #if ENABLE_SYSEX_TEST
@@ -745,7 +759,7 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
-			const int32_t value = valueOf(set, bound, event.offset);
+			const int32_t value = valueOf(set, bound, offset);
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
@@ -774,7 +788,7 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		if (const std::optional<Set> on = mirrored(set, mirror)) {
 			// The fallback Riser's row moves as its lane's (spec §9.5).
 			for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
-				const int32_t value = valueOf(set, params[b], event.offset);
+				const int32_t value = valueOf(set, params[b], offset);
 				if (event.snap) {
 					snap(*on, params[b], value);
 				}
@@ -867,6 +881,9 @@ ModelStackWithAutoParam* SoundControls::leadParam(const Roster& roster, const Ge
 	}
 	std::optional<Bound> lead;
 	forEachTarget(set, roster.parts[part].rangesOf(set.lane), control, [&](const TargetRange& range) {
+		if (perform::isDeepCloseOnly(range.target)) {
+			return true; // it moves only at a handover's close: the fader shows what Brightness moves (spec §11.1)
+		}
 		expand(set, range, [&](Collection collection, uint8_t param, PatchSource source) {
 			Bound bound;
 			bound.collection = collection;

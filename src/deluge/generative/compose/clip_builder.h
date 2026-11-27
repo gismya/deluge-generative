@@ -47,22 +47,25 @@ struct Note {
 };
 
 /// What one automation lane moves (spec §15.6): a sound control on a part (Lane::None: a synth part, or a Kit's
-/// kit-wide set) or on a Drums or FX lane's row, or, with `throwDelay`, the delay Throw's feedback lift on that set
-/// (Event::throwDelay(), spec §11.4), which rides on the Space events. The firmware maps each to the params of the
-/// engine it lands on (spec §11.2): FM Brightness becomes the modulator 1 and 2 volumes.
+/// kit-wide set) or on a Drums or FX lane's row, or, with `extra`, the control's extra lane on that set: on Space the
+/// delay Throw's feedback lift (Event::throwDelay(), spec §11.4), on Brightness a handover's close past -kControlFull
+/// (Event::closeExtra(), spec §11.2), each riding on its control's events. The firmware maps each to the params of the
+/// engine it lands on (spec §11.2): FM Brightness becomes the modulator 1 and 2 volumes, and its extra lane the treble
+/// shelf (perform::onExtraLane()), so a set no handover closes gets no treble automation.
 struct Automated {
 	uint8_t part = 0;
 	Lane lane = Lane::None;
 	SoundControl control = SoundControl::Brightness;
-	bool throwDelay = false;
+	bool extra = false;
 	constexpr bool operator==(const Automated&) const = default;
 };
 
-/// One automation node, in the control's own units: the offset from home, -kControlFull..kControlFull, or for a
-/// throwDelay lane the lift in percent, 0–100.
+/// One automation node, in the control's own units: the offset from home (-kControlFull..kControlFull, or down to
+/// -(kControlFull + kCloseControlExtra) for a handover's deep Brightness close), or for an extra lane its percent,
+/// 0–100: Space's delay lift, Brightness's close past -kControlFull.
 struct Node {
 	int32_t tick = 0;
-	int8_t value = 0;
+	int16_t value = 0;
 	/// The firmware's ParamNode flag: the value moves in a straight line from the lane's previous node to this one.
 	/// Otherwise it holds the previous node's value and jumps here.
 	bool interpolated = false;
@@ -94,7 +97,7 @@ public:
 	/// The stored value of each automation lane the stream touched, as an offset from home: the macro layer at the
 	/// Recipe's centre for a lane that moves, its one value for a lane that doesn't (spec §15.6). A control the stream
 	/// never touched stays at home.
-	virtual void base(const Automated& automated, int8_t value) = 0;
+	virtual void base(const Automated& automated, int16_t value) = 0;
 	/// The song ends at `tick`, the end of the Outro: each clip is that long, from the Intro's start (spec §15.2,
 	/// §15.3). `soundingParts` has bit p set when part p played a note; a part that never sounds gets no clip and no
 	/// track. A Drums or FX clip gets a row for every lane its part has, silent ones too.
@@ -156,8 +159,9 @@ public:
 	/// How far the line through the kept points may stray from them: bar ends on a curve this straight merge into one
 	/// node, and a ramp that bends more within a bar keeps enough of its step lines to follow it (spec §15.6). (tuning)
 	static constexpr int32_t kNodeTolerance = 2;
-	/// One automation lane per control and set, and one more per set for the Throw's delay lift on Space.
-	static constexpr int32_t kTracksPerSet = kNumSoundControls + 1;
+	/// One automation lane per control and set, and two more per set: the Throw's delay lift on Space and a handover's
+	/// close past -kControlFull on Brightness (Automated::extra).
+	static constexpr int32_t kTracksPerSet = kNumSoundControls + 2;
 	static constexpr int32_t kMaxTracks = kMaxControlSets * kTracksPerSet;
 
 	void begin(SongWriter& writer);
@@ -284,7 +288,7 @@ private:
 	/// A point on a lane's curve.
 	struct Point {
 		int32_t tick = 0;
-		int8_t value = 0;
+		int16_t value = 0;
 	};
 	/// A line's slope, value per tick: num / den, den above 0.
 	struct Slope {
@@ -298,7 +302,7 @@ private:
 		Automated id;
 		bool started = false; ///< It has had a value away from home.
 		bool moved = false;   ///< It has written a node: it moves.
-		int8_t value = 0;     ///< The value the curve has reached at `endTick`.
+		int16_t value = 0;    ///< The value the curve has reached at `endTick`.
 		int32_t endTick = 0;  ///< Where the played curve ends so far.
 		int32_t origin = 0;   ///< Where its song starts: 0, or a split's line (spec §17.5).
 		// The thinning, first a bar at a time: the bar's points (ramp ends, and a ramp's start after a hold under a
@@ -308,7 +312,7 @@ private:
 		Point from;
 		struct BarPoint {
 			uint8_t step; ///< Steps from barStart, 1 to kStepsPerBar.
-			int8_t value;
+			int16_t value;
 		};
 		BarPoint bar[kStepsPerBar];
 		// Then a cone: from the anchor, the last node written, a straight line to `last` passes within the tolerance of
@@ -320,7 +324,7 @@ private:
 		Slope hi;
 
 		/// A new value on the curve: a jump at `tick` (snap) or a ramp reaching it a step after `tick`.
-		void move(SongWriter& writer, int32_t tick, int8_t value, bool snap);
+		void move(SongWriter& writer, int32_t tick, int16_t value, bool snap);
 		/// The song ends at `tick`: the last node is written, a tick before it at the latest.
 		void finish(SongWriter& writer, int32_t tick);
 		/// A node at `p`, the cone's new anchor.
@@ -343,10 +347,10 @@ private:
 	void control(const Event& event);
 	/// The lane `id` on the set of `part` and `lane`, started if `value` leaves home; nullptr if it stays home or its
 	/// set finds no room.
-	Track* track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int8_t value);
+	Track* track(uint8_t part, Lane lane, SoundControl control, bool extra, int16_t value);
 
 	/// Set slots from 1 by part and lane (Lane::None last); 0 for none yet. A set's lanes are tracks_[(slot - 1) *
-	/// kTracksPerSet], one per control, then the delay lift.
+	/// kTracksPerSet], one per control, then the delay lift, then the close past -kControlFull.
 	static constexpr int32_t kLaneSlots = kNumLanes + 1;
 	struct Counts {
 		int32_t sets = 0;
