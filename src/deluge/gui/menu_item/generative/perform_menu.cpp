@@ -545,20 +545,21 @@ PLACE_SDRAM_BSS ScaleItem scaleItem{l10n::String::STRING_FOR_SCALE};
 PLACE_SDRAM_BSS GlideItem glideItem{l10n::String::STRING_FOR_GLIDE};
 PLACE_SDRAM_BSS BrowserPreviewItem browserPreviewItem{l10n::String::STRING_FOR_BROWSER_PREVIEW};
 
-static_assert(deluge::generative::kMaxParts == 6, "one TakeItem per part slot below");
-PLACE_SDRAM_BSS TakeItem takeItems[deluge::generative::kMaxParts] = {TakeItem{0}, TakeItem{1}, TakeItem{2},
-                                                                     TakeItem{3}, TakeItem{4}, TakeItem{5}};
+static_assert(deluge::generative::kMaxParts == 7, "one TakeItem per part slot below");
+PLACE_SDRAM_BSS TakeItem takeItems[deluge::generative::kMaxParts] = {TakeItem{0}, TakeItem{1}, TakeItem{2}, TakeItem{3},
+                                                                     TakeItem{4}, TakeItem{5}, TakeItem{6}};
 PLACE_SDRAM_BSS SeedTakesSubmenu seedTakesMenu{
     l10n::String::STRING_FOR_SEED_AND_TAKES,
-    {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5]},
+    {&takeItems[0], &takeItems[1], &takeItems[2], &takeItems[3], &takeItems[4], &takeItems[5], &takeItems[6]},
 };
 
-static_assert(deluge::generative::kMaxParts == 6, "one OctaveItem per part slot below");
-PLACE_SDRAM_BSS OctaveItem octaveItems[deluge::generative::kMaxParts] = {OctaveItem{0}, OctaveItem{1}, OctaveItem{2},
-                                                                         OctaveItem{3}, OctaveItem{4}, OctaveItem{5}};
+static_assert(deluge::generative::kMaxParts == 7, "one OctaveItem per part slot below");
+PLACE_SDRAM_BSS OctaveItem octaveItems[deluge::generative::kMaxParts] = {
+    OctaveItem{0}, OctaveItem{1}, OctaveItem{2}, OctaveItem{3}, OctaveItem{4}, OctaveItem{5}, OctaveItem{6}};
 PLACE_SDRAM_BSS Submenu octavesMenu{
     l10n::String::STRING_FOR_OCTAVES,
-    {&octaveItems[0], &octaveItems[1], &octaveItems[2], &octaveItems[3], &octaveItems[4], &octaveItems[5]},
+    {&octaveItems[0], &octaveItems[1], &octaveItems[2], &octaveItems[3], &octaveItems[4], &octaveItems[5],
+     &octaveItems[6]},
 };
 
 void SeedTakesSubmenu::beginSession(MenuItem* navigatedBackwardFrom) {

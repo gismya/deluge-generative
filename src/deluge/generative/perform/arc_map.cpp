@@ -23,6 +23,8 @@
 
 namespace deluge::generative::perform {
 
+static_assert(kMaxParts <= ArcMap::kSectionRow, "every part has a row above the Section row");
+
 namespace {
 
 /// A frame's input and state as the map's rules read them.
@@ -242,10 +244,13 @@ void composeArcMap(const ArcMapInput& in, const ArcMapState& state, ArcMap& out)
 		ArcMapCell& section = out.cell[ArcMap::kSectionRow][column];
 		section = {.look = ArcMapCell::Look::Section, .when = when, .kind = info.kind, .drop = info.drop};
 		section.blink = landsIn(frame, phrase, -1);
-		out.cell[ArcMap::kEnergyRow][column] = {.look = ArcMapCell::Look::Energy,
-		                                        .when = when,
-		                                        .kind = info.kind,
-		                                        .energy = static_cast<int8_t>(info.energy / kMacroUnitsPerPoint)};
+		// Row 7 shows Energy when the roster has 6 parts or fewer, and the 7th part when it has 7 (spec §13.5).
+		if (frame.parts <= ArcMap::kEnergyRow) {
+			out.cell[ArcMap::kEnergyRow][column] = {.look = ArcMapCell::Look::Energy,
+			                                        .when = when,
+			                                        .kind = info.kind,
+			                                        .energy = static_cast<int8_t>(info.energy / kMacroUnitsPerPoint)};
+		}
 
 		for (int32_t p = 0; p < std::min<int32_t>(frame.parts, kMaxParts); p++) {
 			ArcMapCell& cell = out.cell[p][column];
@@ -298,6 +303,9 @@ void describeArcMapPart(const ArcMap& map, int32_t row, char (&out)[ArcMap::kCol
 			break;
 		case ArcMapCell::Look::Focus:
 			out[c] = 'f';
+			break;
+		case ArcMapCell::Look::Energy:
+			out[c] = 'e';
 			break;
 		default:
 			out[c] = '.';

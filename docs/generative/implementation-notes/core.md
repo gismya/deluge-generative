@@ -31,7 +31,8 @@ otherwise.
   (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
   bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
   `PerformDriver`'s size also moves `PerformAdapter::sink_`, and with it the roster copy's mod-8 `static_assert` in
-  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back.
+  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back (#555's
+  `kMaxParts = 7` grew `PhraseHistory` by 20 B and moved `lastSwungTick_` back after `sink_`).
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
 - The steering log (`core/steering_log.*`, spec §17.2) holds pieces in one buffer: a `PieceInfo`, header records
@@ -52,7 +53,8 @@ otherwise.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
-- Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's), and
+- Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's plus a
+  seventh single-note Lead), and
   `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/capacity.h`,
   `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
   `rosterFits()` (`core/capacity.h`) holds a genre's roster to it: each built-in genre `static_assert`s it through

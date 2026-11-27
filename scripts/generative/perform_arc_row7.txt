@@ -1,0 +1,95 @@
+# Perform's SONG page Arc map row 7 rule (#555, spec §13.5): row 7 shows effective Energy when the roster has 6 parts
+# or fewer, and the 7th part when it has 7. No shipped genre has 7 parts yet (Goa, #458, adds the first), so this
+# verifies a 6-part genre (Detroit techno): rows 1–6 (0–5) are parts, row 7 (index 6, y 1) is Energy (`e`) and does not
+# focus a part on press, and row 8 (index 7, y 0) is the Section row. The 7-part row 7 case is covered in the harness
+# (`arc_map_spec`, `sidebar_spec`, `roster_room_spec`).
+# covers: src/deluge/gui/views/perform_view.cpp src/deluge/gui/views/perform_view.h
+# covers: src/deluge/gui/views/perform_view_internal.h src/deluge/gui/views/perform_view_song.cpp
+# covers: src/deluge/gui/views/perform_view_knobs.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/generative/perform/arc_map.* src/deluge/generative/perform/sidebar.*
+# covers: src/deluge/generative/perform/phrase_history.* src/deluge/generative/core/types.h
+# covers: src/deluge/generative/core/genres/techno.cpp src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/gui/context_menu/generative.cpp src/deluge/gui/menu_item/generative/genre_rows.*
+start_state
+expect playing=false
+# SHIFT+SONG from the clip goes to Song view, then SHIFT+SONG in Song view opens GENERATIVE
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=session
+expect ui_mode=0
+
+# Open GENERATIVE → PERFORM → PERFORM FROM → GENRE ▸ → TECHNO ▸ → DETROIT (6 parts)
+button SHIFT down
+wait 100
+button SESSION_VIEW down
+wait 100
+button SESSION_VIEW up
+wait 100
+button SHIFT up
+expect ui=context_menu
+expect root_ui=session
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=sound_editor
+encoder 3 5
+encoder 3 -1
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=TECHNO
+button 4 3 down
+wait 50
+button 4 3 up
+wait 300
+pick genre techno-detroit
+expect event gen_genre_pick techno-detroit row=DETROIT
+button 4 3 down
+wait 50
+button 4 3 up
+expect ui=context_menu
+include perform_confirm.txt
+
+# ---- SHIFT+PLAY: Groove from bar 1. Six parts on rows 0–5, Energy (`e`) on row 6 (spec row 7), Section on row 7 ----
+mark
+button SHIFT down
+wait 50
+button PLAY down
+wait 50
+button PLAY up
+wait 50
+button SHIFT up
+expect playing=true
+expect event gen_arcplan first=0 since=mark within=5
+expect event gen_arcmap s=...GGGG since=mark
+expect event gen_arcrow 0 ...np since=mark within=5
+expect event gen_arcrow 6 ...eeeeeeeeeeeee since=mark within=5
+expect event /^gen_sidebar mute=[ad]{6} / since=mark within=5
+
+# ---- Row 6 (spec row 7, y 1) is Energy on a 6-part genre: pressing it does not focus a part ----
+mark now
+pad 9 1 down
+wait 100
+pad 9 1 up
+expect no_event gen_focus since=mark within=1
+
+# ---- Row 5 (spec row 6, y 2) is the 6th part (FX): pressing it focuses part 5 ----
+pad 9 2 down
+expect event gen_focus part=5 locked=-1 within=5
+pad 9 2 up
+expect event gen_focus part=-1 locked=-1 within=5
+
+# ---- Stop and leave cleanly ----
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt
+expect event gen_perform_left within=10
