@@ -1396,7 +1396,13 @@ void AudioFileManager::removeReasonFromCluster(Cluster& cluster, char const* err
 			// Tell its Cluster to forget it exists
 			cluster.sample->clusters.getElement(cluster.clusterIndex)->cluster = NULL;
 
+#if DELUGE_HOST
+			// Cluster::create allocates via GeneralMemoryAllocator::allocStealable + placement new.
+			// On the host (which leaves out operators.cpp), plain delete goes to the system allocator.
+			cluster.destroy(); // It contains nothing, so completely recycle it
+#else
 			delete &cluster; // It contains nothing, so completely recycle it
+#endif
 		}
 
 		else {
