@@ -84,7 +84,16 @@ ModControllableAudio::ModControllableAudio() {
 
 ModControllableAudio::~ModControllableAudio() {
 	// delay.discardBuffers(); // No! The DelayBuffers will themselves destruct and do this
+#if DELUGE_HOST
+	// grainFX is allocated via GeneralMemoryAllocator::allocMaxSpeed + placement new (enableGrain).
+	// On the host (which leaves out operators.cpp), plain delete goes to the system allocator.
+	if (grainFX != nullptr) {
+		grainFX->~GranularProcessor();
+		delugeDealloc(grainFX);
+	}
+#else
 	delete grainFX;
+#endif
 }
 
 void ModControllableAudio::cloneFrom(ModControllableAudio* other) {
