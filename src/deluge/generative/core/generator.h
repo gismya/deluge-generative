@@ -199,6 +199,41 @@ private:
 	          const DrawKey& key);
 };
 
+/// Handover overlap state (spec §5.6, #542): when the stage passes on a Groove bar line between a yielding part and
+/// the part it yields to, the leaving part plays on under the incoming one for 1–2 bars while its filter closes, then
+/// holds closed for a beat while its tail fades before snapping back. Generator::updateSilent() and ArcPlanner both
+/// step it on the natural (pre-overlap) silence mask so the override never feeds back into the Arc's own state.
+struct OverlapState {
+	int32_t start = 0;        ///< Step where the active overlap began.
+	int32_t end = 0;          ///< Step where the active overlap ends (exclusive).
+	int32_t holdUntil = 0;    ///< Step until which the closed filter holds for the tail (exclusive).
+	int16_t density = 0;      ///< Shared Density of the bar before the handover, so a leaving part plays its hits.
+	int16_t prevDensity = 0;  ///< Last bar's shared Density.
+	int8_t part = -1;         ///< Currently overlapping part, or -1 for none.
+	int8_t holdingPart = -1;  ///< Part whose filter is closing or holding closed, or -1 for none.
+	int8_t reopenedPart = -1; ///< Part whose filter hold ended on this step (snap Brightness back), or -1.
+	uint8_t wasOn = 0;        ///< Bit p: part p of a yielding pair sounded naturally on the previous bar.
+
+	/// Advances to `stepIndex` on `arc` using the natural (pre-overlap) `naturalSilent` mask. `waiting()` is called
+	/// only when a handover draw succeeds and needs the next Section start ahead so the overlap never crosses one.
+	template <typename Waiting>
+	GEN_STEP_CODE void step(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
+	                        int32_t motion, uint8_t naturalSilent, Waiting waiting) {
+		int32_t yieldingPart = -1;
+		int32_t leavingPart = -1;
+		DrawKey key;
+		if (advanceOrDraw(genre, seed, arc, stepIndex, sharedDensity, naturalSilent, yieldingPart, leavingPart, key)) {
+			beginOverlap(genre, arc, stepIndex, motion, waiting(), yieldingPart, leavingPart, key);
+		}
+	}
+
+private:
+	bool advanceOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
+	                   uint8_t naturalSilent, int32_t& outYielding, int32_t& outLeaving, DrawKey& outKey);
+	void beginOverlap(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting,
+	                  int32_t yieldingPart, int32_t leavingPart, const DrawKey& key);
+};
+
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
 template <typename Test>
 constexpr bool anyLane(const PartSpec& spec, Test test) {
@@ -1074,6 +1109,10 @@ private:
 	int32_t closeWashFrom_ = kNever;
 	/// The drop-out state (spec §8.8): plays on [from, to), next may start from after. Performance state, lost on stop.
 	DropOutState dropOut_;
+	/// Handover overlap state (spec §5.6, #542): the leaving part playing on while its filter closes.
+	OverlapState overlap_;
+	/// Each part's extra Brightness close depth last sent (Event::closeExtra()): 0 outside a handover close.
+	uint8_t sentClose_[kMaxParts] = {};
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;
@@ -1136,6 +1175,8 @@ private:
 	MuteSolo mutes_;
 	Gates gates_[kMaxParts] = {};
 	DropOutState dropOut_;
+	OverlapState overlap_;
+	int32_t barDensity_ = 0;
 	int32_t energySum_[ArcPlan::kMaxPhrases] = {};
 	int32_t steps_[ArcPlan::kMaxPhrases] = {};
 	ArcPlan plan_;

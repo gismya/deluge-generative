@@ -48,6 +48,8 @@ enum class Target : uint8_t {
 	PulseWidth, ///< each oscillator
 	Modulator1Level,
 	Modulator2Level,
+	Treble,     ///< post-voice EQ treble shelf: deep Brightness close only on FM (below -kControlFull, spec §5.6)
+	TrebleFreq, ///< post-voice EQ treble frequency: pairs with Treble on FM deep close
 	ModulatorFeedback, ///< each modulator in use
 	CarrierFeedback,   ///< both carriers
 	/// Kept out of every table: the stock folder cuts the level as it switches in (spec §11.2). Kept for a future
@@ -120,6 +122,10 @@ inline constexpr TargetRange kSubtractiveDrive[] = {
 inline constexpr TargetRange kFmBrightness[] = {
     {Target::Modulator1Level, -6, 6, Needs::Modulator1InUse},
     {Target::Modulator2Level, -6, 6, Needs::Modulator2InUse},
+    // Post-voice EQ shelf: 0..0 keeps normal sweeps unchanged, while a handover's deep close (below -kControlFull)
+    // sweeps it into a 1-pole LPF so FM presets with clipping or low modulator levels still close audibly (#542).
+    {Target::Treble, 0, 0},
+    {Target::TrebleFreq, 0, 0},
 };
 inline constexpr TargetRange kFmDrive[] = {
     {Target::ModulatorFeedback, 0, 8},
@@ -178,13 +184,18 @@ constexpr std::span<const TargetRange> controlTargets(SoundControl control, Engi
 	return mapping::kTable[static_cast<int32_t>(engine)][static_cast<int32_t>(control)];
 }
 
-/// Whether every range in the table moves its target, as it must at every percent but 0 (spec §11.1), and still fits a
-/// TargetRange at a palette entry's widest.
+/// Whether `target` moves only during a handover's deep Brightness close (below -kControlFull, spec §5.6).
+constexpr bool isDeepCloseOnly(Target target) {
+	return target == Target::Treble || target == Target::TrebleFreq;
+}
+
+/// Whether every range in the table moves its target, as it must at every percent but 0 (spec §11.1) unless it is a
+/// deep-close-only target, and still fits a TargetRange at a palette entry's widest.
 constexpr bool rangesScaleWithinBounds() {
 	for (const auto& engine : mapping::kTable) {
 		for (std::span<const TargetRange> targets : engine) {
 			for (const TargetRange& range : targets) {
-				if ((range.low == 0 && range.high == 0)
+				if ((range.low == 0 && range.high == 0 && !isDeepCloseOnly(range.target))
 				    || range.low * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent < INT8_MIN
 				    || range.high * ControlRanges::kMaxRangePercent / ControlRanges::kDefaultPercent > INT8_MAX) {
 					return false;
@@ -309,10 +320,12 @@ constexpr int32_t menuUnits(int32_t value) {
 /// A patch cable's amount runs from -kCableAmountFull to kCableAmountFull.
 constexpr int32_t kCableAmountFull = 1 << 30;
 
-/// The value `range`'s target takes `offset` control units (-kControlFull..kControlFull) from `home`, clamped to the
-/// param's own range: home plus the share of `low` or `high` the offset reaches, or for cables home scaled by the share
-/// of its range the offset reaches, never below ×0, and never 0 from a home that isn't (the firmware deletes a cable
-/// set to 0: ×0 gives ±1).
+/// The value `range`'s target takes `offset` control units (-kControlFull..kControlFull, or down to -(kControlFull +
+/// kCloseControlExtra) for a handover's deep Brightness close, spec §5.6) from `home`, clamped to the param's own
+/// range: home plus the share of `low` or `high` the offset reaches (extending below -kControlFull toward each
+/// Brightness target's deep-close reach, ignoring range scaling as long as `low` moves), or for cables home scaled by
+/// the share of its range the offset reaches, never below ×0, and never 0 from a home that isn't (the firmware deletes
+/// a cable set to 0: ×0 gives ±1).
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset);
 
 /// The most delay feedback a Throw lifts to, in menu units (spec §11.4): each repeat's gain is the menu value / 25, so

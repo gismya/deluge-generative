@@ -1060,10 +1060,11 @@ describe psytrance("Psytrance", $ {
 			expect(introEarly * 3).to_be_less_than(introLate);
 		});
 
-		it("yields the Arp to the Lead: both in a Drop and 8ths elsewhere as written, turns rests it, eighths keeps its 8ths, never in a Build", _ {
+		it("yields the Arp to the Lead: both in a Drop and 8ths elsewhere as written, turns rests it (with occasional 1-2 bar handover overlaps), eighths keeps its 8ths, never in a Build", _ {
 			struct Seen {
 				int32_t leadBars = 0;      ///< Bars outside Builds where the Lead plays
 				int32_t arpWithLead = 0;   ///< ... and the Arp too
+				int32_t maxOverlapRun = 0; ///< Longest contiguous run of simultaneous Arp+Lead bars
 				int32_t oddWithLead = 0;   ///< ... the Arp on an e or an a
 				int32_t oddDropLead = 0;   ///< ... in a Drop
 				int32_t oddOutsideLead = 0; ///< ... outside one
@@ -1075,16 +1076,22 @@ describe psytrance("Psytrance", $ {
 					// The Lead in every Groove (lead=grooves), so the yield meets it outside Drops too.
 					Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {arplead, "lead=grooves"});
 					recipe.macros.set(Macro::Density, macroPoints(30)); // the e's and a's in reach outside Drops
+					int32_t run = 0;
 					for (const BarParts& bar : barParts(walk(recipe, seed, 160 * kStepsPerBar))) {
 						if (bar.section == SectionKind::Build) {
 							out.oddBuild += anyOdd(bar.arp) ? 1 : 0;
+							run = 0;
 							continue;
 						}
 						if (bar.lead.empty()) {
+							run = 0;
 							continue;
 						}
 						out.leadBars++;
-						out.arpWithLead += bar.arp.empty() ? 0 : 1;
+						const bool bothOn = !bar.arp.empty();
+						out.arpWithLead += bothOn ? 1 : 0;
+						run = bothOn ? run + 1 : 0;
+						out.maxOverlapRun = std::max(out.maxOverlapRun, run);
 						out.oddWithLead += anyOdd(bar.arp) ? 1 : 0;
 						(bar.inDrop ? out.oddDropLead : out.oddOutsideLead) += anyOdd(bar.arp) ? 1 : 0;
 					}
@@ -1097,9 +1104,10 @@ describe psytrance("Psytrance", $ {
 			expect(both.leadBars).to_be_greater_than(30);
 			expect(both.oddDropLead).to_be_greater_than(3);
 			expect(both.oddOutsideLead).to_equal(0);
-			// A Lead bar's Arp notes all come before the Lead enters or after it leaves: a gate opens on a bar line.
+			// In turns, the Arp rests under the Lead except during brief 1-2 bar Groove handover overlaps (#542).
 			expect(turns.leadBars).to_be_greater_than(30);
-			expect(turns.arpWithLead).to_equal(0);
+			expect(turns.maxOverlapRun).to_be_less_than(3);
+			expect(turns.arpWithLead * 5).to_be_less_than(turns.leadBars);
 			expect(eighths.arpWithLead).to_be_greater_than(30);
 			expect(eighths.oddWithLead).to_equal(0);
 			// The Builds' 16ths fill in whatever the yield.
@@ -1108,20 +1116,34 @@ describe psytrance("Psytrance", $ {
 			expect(eighths.oddBuild).to_equal(both.oddBuild);
 		});
 
-		it("dims the Arp's MUTE while it rests for the Lead, and the Arc plan shows it", _ {
+		it("dims the Arp's MUTE while it rests for the Lead, and the Arc plan shows it (handover overlaps included)", _ {
 			int32_t resting = 0;
+			int32_t overlapBars = 0;
 			for (uint32_t seed = 1; seed <= 6; seed++) {
 				Recipe recipe = withVariants(asWritten(newRecipe(psyGenre, seed)), {"arplead=turns", "lead=grooves"});
 				StepwisePiece<> piece({.recipe = recipe, .seed = seed, .skipIntro = true});
 				ArcPlan plan;
 				piece.generator.planArc(plan);
+				int32_t run = 0;
 				for (int32_t phrase = 0; phrase < ArcPlan::kMaxPhrases; phrase++) {
 					for (int32_t bar = 0; bar < 16; bar++) {
 						piece.decideBefore(phrase * kPhraseSteps + bar * kStepsPerBar + 1);
 						const Generator& g = piece.generator;
 						if (g.arc().section() != SectionKind::Build && !g.partSilenced(kLeadPart)) {
-							expect(g.partSilenced(kArpPart)).to_be_true();
-							resting++;
+							if (g.partSilenced(kArpPart)) {
+								resting++;
+								run = 0;
+							}
+							else {
+								// Brief 1-2 bar handover overlap inside a Groove (#542), never in a Break.
+								expect(g.arc().section() == SectionKind::Groove).to_be_true();
+								run++;
+								expect(run).to_be_less_than(3);
+								overlapBars++;
+							}
+						}
+						else {
+							run = 0;
 						}
 					}
 					piece.decideBefore((phrase + 1) * kPhraseSteps + 1);
@@ -1131,6 +1153,7 @@ describe psytrance("Psytrance", $ {
 				}
 			}
 			expect(resting).to_be_greater_than(50);
+			expect(overlapBars).to_be_greater_than(0);
 		});
 
 		it("brings the Lead in on Drops as written, every Groove with grooves, and from the Intro's last third with intro, "

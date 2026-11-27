@@ -70,6 +70,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	filled_ = false;
 	// A stop clears a drop-out playing or waiting: the next Start begins with none (spec §8.8).
 	dropOut_ = {};
+	overlap_ = {};
+	std::fill(std::begin(sentClose_), std::end(sentClose_), uint8_t{0});
 	sirenSounding_ = false;
 	hasSiren_ = genreHasSiren(*genre_);
 	for (PartState& part : parts_) {

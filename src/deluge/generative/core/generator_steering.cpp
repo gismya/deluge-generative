@@ -651,6 +651,8 @@ void ArcPlanner::begin(const Generator& piece) {
 		gates_[p] = piece.parts_[p].gates;
 	}
 	dropOut_ = piece.dropOut_;
+	overlap_ = piece.overlap_;
+	barDensity_ = piece.barDensity_;
 	std::fill_n(energySum_, ArcPlan::kMaxPhrases, 0);
 	std::fill_n(steps_, ArcPlan::kMaxPhrases, 0);
 
@@ -753,9 +755,10 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 		arc_.enterStep(genre, seed_, step, centre_);
 		const int32_t energy = effectiveOn(genre, arc_, centre_, Macro::Energy);
 		if (arc_.stepInBar() == 0) {
-			const int32_t density = effectiveOn(genre, arc_, centre_, Macro::Density);
+			barDensity_ = effectiveOn(genre, arc_, centre_, Macro::Density);
 			for (int32_t p = 0; p < parts; p++) {
-				gates_[p].crossBar(genre.parts[p], partBiased(density, bias_.of(p, Macro::Density))); // updateGates()
+				gates_[p].crossBar(genre.parts[p],
+				                   partBiased(barDensity_, bias_.of(p, Macro::Density))); // updateGates()
 			}
 		}
 		const Keeps keeps = genre.arc.keepsIn(arc_.section());
@@ -766,12 +769,20 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 		for (int32_t p = 0; p < parts; p++) {
 			plays |= lets(p, keeps, dropOut, roll) ? partBit(p) : 0;
 		}
-		// A part resting for the one it yields to doesn't sound (Generator::updateSilent(), spec §5.6).
-		uint8_t sounds = 0;
+		// A part resting for the one it yields to doesn't sound (Generator::updateSilent(), spec §5.6), unless it
+		// plays on through a handover overlap.
+		uint8_t naturalSilent = 0;
 		for (int32_t p = 0; p < parts; p++) {
 			const YieldSpec& yield = genre.parts[p].yield;
 			const bool rests = yieldOn(yield, arc_, plays) == YieldMode::Rest;
-			sounds |= (plays & partBit(p)) != 0 && !rests && mutes_.audible(p) ? partBit(p) : 0;
+			naturalSilent |= (plays & partBit(p)) != 0 && !rests ? 0 : partBit(p);
+		}
+		overlap_.step(genre, seed_, arc_, step, barDensity_, centre_[Macro::Motion], naturalSilent,
+		              [&] { return waitingMove(step); });
+		uint8_t sounds = 0;
+		for (int32_t p = 0; p < parts; p++) {
+			const bool active = (naturalSilent & partBit(p)) == 0 || overlap_.part == p;
+			sounds |= active && mutes_.audible(p) ? partBit(p) : 0;
 		}
 		addStep(phrase, arc_, sounds, energy);
 		// The piece stops on the line where the Outro ends, unless a force lands on the step after (spec §13.2), as

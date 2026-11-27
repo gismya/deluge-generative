@@ -67,6 +67,8 @@ enum class Purpose : uint8_t {
 	               ///< Never keyed on the take
 	LoopTie,       ///< position: the step, held (a frozen part replays its phrase). Whether a Loop note on the pitch
 	               ///< the part still sounds ties into it (LoopSpec::tieChance)
+	HandoverOverlap, ///< position: Groove occurrence, phrase in the Groove, bar in the phrase and field (whether,
+	                 ///< length). Part: the yielding part. Never keyed on the take
 };
 
 /// The part word of draws that belong to no part: the Arc's, the Phrase accent's, fills' and the chord walk's.

@@ -190,7 +190,7 @@ private:
 		Sound* sound = nullptr;                ///< nullptr for a Kit's affect-entire params.
 		ParamManager* paramManager = nullptr;
 		uint16_t first[kNumSoundControls + 1] = {}; ///< Each control's params: bound_[first[c]] up to first[c + 1].
-		int8_t offset[kNumSoundControls] = {};      ///< Each control's offset as last applied: home (0) at the start.
+		int16_t offset[kNumSoundControls] = {};     ///< Each control's offset as last applied: home (0) at the start.
 		/// The part's Throw depth in menu units where the set has a delay setup (spec §10.6, §11.4), else 0: its delay
 		/// feedback is then among Space's params even with a home of 0, and a Throw lifts it.
 		uint8_t throwDepth = 0;

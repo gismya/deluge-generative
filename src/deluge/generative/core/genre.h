@@ -497,14 +497,29 @@ struct GestureSpec {
 /// How a part makes room for another while that one plays (spec §5.6, #497): it rests, or keeps only its 8ths.
 enum class YieldMode : uint8_t { None, Rest, Eighths };
 
+struct WeightedBars {
+	uint8_t bars = 8;
+	uint8_t weight = 1;
+};
+
+/// Default handover overlap lengths (spec §5.6, #542): 1 or 2 bars, weighted 1:2 (2 bars twice as often).
+inline constexpr WeightedBars kDefaultOverlapBars[] = {{1, 1}, {2, 2}};
+/// Default per-mille chance that a Groove handover between a yielding pair overlaps (about one handover in three).
+inline constexpr int16_t kDefaultOverlapChance = 333;
+
 /// A part yielding to another (spec §5.6, #497; Psytrance's Arp under its Lead). It holds on each step where `part`
 /// sounds by the Arc's rules (its gate open, kept by the Section, no drop-out; mutes never count), never in a Build:
 /// `inDrops` in a Groove that started on a Drop, `outside` everywhere else. A patterned pitched part only, yielding
 /// to another part (yieldValid()). part -1: it never yields (every genre before #497).
+/// When the stage passes between this part and `part` on a Groove bar line (not a Section line), `overlapChance`
+/// per-mille of handovers keep the leaving part playing under the incoming one for a length drawn from `overlapBars`
+/// (never crossing a Section line) while its filter closes (#542).
 struct YieldSpec {
 	int8_t part = -1;
 	YieldMode inDrops = YieldMode::None;
 	YieldMode outside = YieldMode::None;
+	int16_t overlapChance = kDefaultOverlapChance;
+	std::span<const WeightedBars> overlapBars = kDefaultOverlapBars;
 };
 
 /// A part's drift (spec §11.5).
@@ -608,11 +623,6 @@ struct HarmonySpec {
 struct Range {
 	uint8_t low = 1;
 	uint8_t high = 1;
-};
-
-struct WeightedBars {
-	uint8_t bars = 8;
-	uint8_t weight = 1;
 };
 
 /// Value for a Density offset a genre leaves unset: it then uses its Energy offset (spec §9.4).
@@ -1553,6 +1563,17 @@ constexpr bool yieldValid(const Genre& genre) {
 		if (!modes || yield.part >= parts || &genre.parts[yield.part] == &part || !part.lanes.empty()
 		    || part.pool.empty() || genre.parts[yield.part].yield.part >= 0) {
 			return false;
+		}
+		if (yield.overlapChance < 0 || yield.overlapChance > 1000) {
+			return false;
+		}
+		if (yield.overlapChance > 0 && yield.overlapBars.empty()) {
+			return false;
+		}
+		for (const WeightedBars& entry : yield.overlapBars) {
+			if (entry.bars == 0 || entry.weight == 0) {
+				return false;
+			}
 		}
 	}
 	return true;

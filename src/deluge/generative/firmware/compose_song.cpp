@@ -253,7 +253,7 @@ void ComposeSong::node(const compose::Automated& automated, const compose::Node&
 	nodes_++;
 }
 
-void ComposeSong::base(const compose::Automated& automated, int8_t value) {
+void ComposeSong::base(const compose::Automated& automated, int16_t value) {
 	soundControls.writeBase(automated.part, automated.lane, automated.control, automated.throwDelay, value);
 }
 

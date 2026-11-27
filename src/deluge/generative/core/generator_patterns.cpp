@@ -95,6 +95,10 @@ GEN_STEP_CODE bool Generator::plays(const Pattern& pattern, int32_t patternStep,
 	if (importance == kAnchor) {
 		return true;
 	}
+	// A part playing on through a handover overlap keeps at least the Density of the bar before it left (spec §5.6).
+	if (part == overlap_.part) {
+		density = std::max<int32_t>(density, barDensityOn(part, overlap_.density));
+	}
 	// A part yielding by its 8ths leaves out the e's and the a's (spec §5.6).
 	if ((yieldEighths_ & partBit(part)) != 0 && (patternStep & 1) != 0) {
 		return false;
@@ -295,6 +299,9 @@ GEN_STEP_CODE void Gates::crossBar(const PartSpec& spec, int32_t density) {
 }
 
 GEN_STEP_CODE bool Generator::gateOpen(int32_t part, Lane lane) const {
+	if (part == overlap_.part) {
+		return true; // a leaving part plays on through its handover overlap even when its gate closed (spec §5.6)
+	}
 	const Gates& gates = parts_[part].gates;
 	if (!gates.open) {
 		return false;

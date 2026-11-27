@@ -92,18 +92,19 @@ void ClipBuilder::noteOff(const Event& event) {
 }
 
 void ClipBuilder::control(const Event& event) {
-	if (Track* lane = track(event.part, event.lane, event.control, false, event.offset)) {
-		lane->move(*writer_, event.tick, event.offset, event.snap);
+	const auto offset = static_cast<int16_t>(event.controlOffset());
+	if (Track* lane = track(event.part, event.lane, event.control, false, offset)) {
+		lane->move(*writer_, event.tick, offset, event.snap);
 	}
 	if (event.control == SoundControl::Space) {
-		const auto lift = static_cast<int8_t>(event.throwDelay());
+		const auto lift = static_cast<int16_t>(event.throwDelay());
 		if (Track* lane = track(event.part, event.lane, event.control, true, lift)) {
 			lane->move(*writer_, event.tick, lift, event.snap);
 		}
 	}
 }
 
-ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int8_t value) {
+ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int16_t value) {
 	uint8_t& slot = setSlot_[part][lane == Lane::None ? kNumLanes : static_cast<int32_t>(lane)];
 	if (slot == 0) {
 		if (value == 0) {
@@ -133,7 +134,7 @@ ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl con
 	return &track;
 }
 
-void ClipBuilder::Track::move(SongWriter& writer, int32_t tick, int8_t to, bool snap) {
+void ClipBuilder::Track::move(SongWriter& writer, int32_t tick, int16_t to, bool snap) {
 	if (to == value) {
 		return; // a Space event whose other lane moved
 	}

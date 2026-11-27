@@ -246,7 +246,7 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 	// keeping their homes and offsets.
 	struct Kept {
 		Lane lane;
-		int8_t offset[kNumSoundControls];
+		int16_t offset[kNumSoundControls];
 		uint8_t throwDelay;
 		int8_t restSpace;
 	};
@@ -287,11 +287,15 @@ void SoundControls::rebindPart(const Roster& roster, const Genre& genre, int32_t
 			}
 			for (int32_t c = 0; c < kNumSoundControls; c++) {
 				const auto control = static_cast<SoundControl>(c);
-				const uint8_t throwDelay = control == SoundControl::Space ? old[o].throwDelay : 0;
-				if (old[o].offset[c] != 0 || throwDelay != 0) {
-					apply(Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, old[o].offset[c],
-					                           true, throwDelay),
-					      0);
+				const int32_t offset = old[o].offset[c];
+				const uint8_t extra = control == SoundControl::Space
+				                          ? old[o].throwDelay
+				                          : static_cast<uint8_t>(std::max<int32_t>(-kControlFull - offset, 0));
+				const auto base = static_cast<int8_t>(std::max<int32_t>(offset, -kControlFull));
+				if (offset != 0 || extra != 0) {
+					apply(
+					    Event::controlChange(0, static_cast<uint8_t>(part), sets_[i].lane, control, base, true, extra),
+					    0);
 				}
 			}
 			sets_[i].restSpace = old[o].restSpace; // after apply(), which sets it only at level 0
@@ -435,6 +439,12 @@ void SoundControls::expand(const Set& set, const TargetRange& range, Found found
 		break;
 	case Target::Modulator2Level:
 		patched(params::LOCAL_MODULATOR_1_VOLUME);
+		break;
+	case Target::Treble:
+		unpatched(params::UNPATCHED_TREBLE);
+		break;
+	case Target::TrebleFreq:
+		unpatched(params::UNPATCHED_TREBLE_FREQ);
 		break;
 	case Target::ModulatorFeedback:
 		if (uses(set, Needs::Modulator1InUse)) {
@@ -731,7 +741,8 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 			continue;
 		}
 		const auto c = static_cast<int32_t>(event.control);
-		set.offset[c] = event.offset;
+		const int32_t offset = event.controlOffset();
+		set.offset[c] = static_cast<int16_t>(offset);
 		// Where the set has a delay setup, a Throw lifts its delay feedback (spec §11.4).
 		const bool space = event.control == SoundControl::Space;
 #if ENABLE_SYSEX_TEST
@@ -745,7 +756,7 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		}
 		for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
 			const Bound& bound = params[b];
-			const int32_t value = valueOf(set, bound, event.offset);
+			const int32_t value = valueOf(set, bound, offset);
 #if ENABLE_SYSEX_TEST
 			if (throwMoved && bound.range.target == Target::DelayFeedback) {
 				// The feedback it lifts to, in menu units; rest= what the other layers alone give (where level 0 lands,
@@ -774,7 +785,7 @@ void SoundControls::applyIn(Set* sets, int32_t count, const Bound* params, const
 		if (const std::optional<Set> on = mirrored(set, mirror)) {
 			// The fallback Riser's row moves as its lane's (spec §9.5).
 			for (int32_t b = set.first[c]; b < set.first[c + 1]; b++) {
-				const int32_t value = valueOf(set, params[b], event.offset);
+				const int32_t value = valueOf(set, params[b], offset);
 				if (event.snap) {
 					snap(*on, params[b], value);
 				}

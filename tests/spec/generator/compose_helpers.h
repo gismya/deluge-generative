@@ -22,7 +22,7 @@ struct RecordingWriter final : SongWriter {
 	const Recipe* recipe = nullptr;
 	std::vector<Note> notes;
 	std::vector<std::pair<Automated, Node>> nodes;
-	std::vector<std::pair<Automated, int8_t>> bases;
+	std::vector<std::pair<Automated, int16_t>> bases;
 	int32_t endTick = -1;
 	uint32_t soundingParts = 0;
 	int32_t calls = 0;
@@ -42,7 +42,7 @@ struct RecordingWriter final : SongWriter {
 		lateNodes += n.tick < cutAt[a.part] ? 1 : 0;
 		calls++;
 	}
-	void base(const Automated& a, int8_t value) override {
+	void base(const Automated& a, int16_t value) override {
 		bases.push_back({a, value});
 		calls++;
 	}
@@ -196,7 +196,7 @@ inline std::map<LaneKey, std::vector<int32_t>> performCurves(const std::vector<E
 		if (e.kind != EventKind::Control || e.tick >= stepTick(cut)) {
 			continue;
 		}
-		apply({e.part, e.lane, e.control, false}, e.offset, e);
+		apply({e.part, e.lane, e.control, false}, e.controlOffset(), e);
 		if (e.control == SoundControl::Space) {
 			apply({e.part, e.lane, e.control, true}, e.throwDelay(), e);
 		}

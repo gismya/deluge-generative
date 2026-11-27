@@ -68,7 +68,7 @@ public:
 	void begin(const Recipe& recipe) override;
 	void note(const compose::Note& note) override;
 	void node(const compose::Automated& automated, const compose::Node& node) override;
-	void base(const compose::Automated& automated, int8_t value) override;
+	void base(const compose::Automated& automated, int16_t value) override;
 	/// Every clip ends at `tick`; parts that never sounded are freed, and each clip left gets one arranger instance
 	/// from where it starts (spec §15.2). A pitched clip with a note outside the song's scale leaves scale mode (spec
 	/// §17.6).

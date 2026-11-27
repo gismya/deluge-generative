@@ -22,12 +22,43 @@ namespace deluge::generative::perform {
 
 namespace {
 
-/// The share of `range`'s end on the offset's side, in param units: low is 0 or below, high 0 or above. Worked out
-/// with no 64-bit division (the Cortex-A9 divides in software, for every param a step moves): the offset makes
-/// hundredths of a menu unit, and kParamUnitsPerMenuUnit is 858993 * 100 + 45.
+/// Deep-close reach below home in menu units at -(kControlFull + kCloseControlExtra) (spec §5.6, §11.2): a handover
+/// overlap closes Brightness past -kControlFull so the leaving part's filter or FM modulators close audibly even on a
+/// preset whose normal Brightness range is scaled down (e.g. kHalfBrightness). 0 for targets that don't close further.
+constexpr int32_t closeMenuUnits(Target target) {
+	switch (target) {
+	case Target::LpfFrequency:
+		return 32;
+	case Target::Modulator1Level:
+	case Target::Modulator2Level:
+		return 30;
+	case Target::Treble:
+	case Target::TrebleFreq:
+		return 25;
+	case Target::WaveIndex:
+	case Target::PulseWidth:
+		return 12;
+	default:
+		return 0;
+	}
+}
+
+/// The share of `range`'s end on the offset's side, in param units: low is 0 or below, high 0 or above. Below
+/// -kControlFull (a handover's deep Brightness close, spec §5.6), a moving negative target (or a deep-close-only EQ
+/// target) extends linearly from `low` to -max(-low, closeMenuUnits(target)) at -(kControlFull + kCloseControlExtra).
+/// Worked out with no 64-bit division (the Cortex-A9 divides in software, for every param a step moves): the offset
+/// makes hundredths of a menu unit, and kParamUnitsPerMenuUnit is 858993 * 100 + 45.
 int64_t share(const TargetRange& range, int32_t offset) {
-	static_assert(kControlFull == 100 && kParamUnitsPerMenuUnit == 858993 * 100 + 45);
-	const int32_t menuHundredths = offset < 0 ? -range.low * offset : range.high * offset;
+	static_assert(kControlFull == 100 && kCloseControlExtra == 100 && kParamUnitsPerMenuUnit == 858993 * 100 + 45);
+	int32_t menuHundredths = 0;
+	if (offset < -kControlFull && (range.low < 0 || isDeepCloseOnly(range.target))) {
+		const int32_t extra = -offset - kControlFull;
+		const int32_t deep = std::max<int32_t>(-range.low, closeMenuUnits(range.target));
+		menuHundredths = range.low * kControlFull - (deep + range.low) * extra;
+	}
+	else {
+		menuHundredths = offset < 0 ? -range.low * offset : range.high * offset;
+	}
 	return int64_t{menuHundredths} * 858993 + menuHundredths * 45 / 100;
 }
 
@@ -46,8 +77,8 @@ int32_t cableScale(const TargetRange& range, int32_t offset) {
 } // namespace
 
 int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
-	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {
+		offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 		const int64_t scaled = int64_t{home} * cableScale(range, offset) / kCableHomePercent;
 		if (scaled == 0 && home != 0) {
 			// The firmware deletes a cable whose amount is set to 0, so ×0 leaves it one step from 0.
@@ -55,6 +86,7 @@ int32_t targetValue(const TargetRange& range, int32_t home, int32_t offset) {
 		}
 		return static_cast<int32_t>(std::clamp<int64_t>(scaled, -kCableAmountFull, kCableAmountFull));
 	}
+	offset = std::clamp<int32_t>(offset, -(kControlFull + kCloseControlExtra), kControlFull);
 	return static_cast<int32_t>(std::clamp<int64_t>(home + share(range, offset), INT32_MIN, INT32_MAX));
 }
 
@@ -74,8 +106,8 @@ int32_t throwDelayValue(const TargetRange& range, int32_t home, int32_t offset, 
 }
 
 int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
-	offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 	if (range.target == Target::LfoCables) {
+		offset = std::clamp<int32_t>(offset, -kControlFull, kControlFull);
 		const int32_t scale = cableScale(range, offset);
 		if (scale == 0) {
 			return value;
@@ -83,6 +115,7 @@ int32_t homeFor(const TargetRange& range, int32_t value, int32_t offset) {
 		const int64_t home = int64_t{value} * kCableHomePercent / scale;
 		return static_cast<int32_t>(std::clamp<int64_t>(home, -kCableAmountFull, kCableAmountFull));
 	}
+	offset = std::clamp<int32_t>(offset, -(kControlFull + kCloseControlExtra), kControlFull);
 	return static_cast<int32_t>(std::clamp<int64_t>(value - share(range, offset), INT32_MIN, INT32_MAX));
 }
 

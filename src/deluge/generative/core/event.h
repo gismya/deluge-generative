@@ -41,7 +41,8 @@ struct Event {
 	/// Sound: the driver's token for the sound it preloaded (soundToken()).
 	uint8_t pitch = 0;
 	/// NoteOn: 1–127. Control: on Space, the delay Throw's level in percent where the set has a delay setup, else 0
-	/// (throwDelay(), spec §11.4).
+	/// (throwDelay(), spec §11.4); on Brightness, extra filter-close depth below -kControlFull during a handover
+	/// overlap, 0..kCloseControlExtra (closeExtra(), spec §5.6).
 	uint8_t velocity = 0;
 	bool muted : 1 = false;    ///< NoteOn: a muted or soloed-out part's note stays in the stream, flagged (spec §12.5).
 	bool ornament : 1 = false; ///< NoteOn: an Ornament hit, dropped first on overflow (spec §2.7).
@@ -135,7 +136,15 @@ struct Event {
 	[[nodiscard]] constexpr bool pumps() const { return velocity != 0; }
 	/// Control, on Space: how far the delay Throw lifts delay feedback, in percent of its spike (spec §11.4): 100 while
 	/// it holds, falling to 0 over its beat. 0 where no Throw plays, and on a set with no delay setup.
-	[[nodiscard]] constexpr uint8_t throwDelay() const { return velocity; }
+	[[nodiscard]] constexpr uint8_t throwDelay() const { return control == SoundControl::Space ? velocity : 0; }
+	/// Control, on Brightness: extra filter-close depth below -kControlFull during a handover overlap (spec §5.6):
+	/// 0..kCloseControlExtra, 0 everywhere else.
+	[[nodiscard]] constexpr uint8_t closeExtra() const { return control == SoundControl::Brightness ? velocity : 0; }
+	/// Control: the full offset from home, -kControlFull..kControlFull, or down to -(kControlFull + kCloseControlExtra)
+	/// for Brightness during a handover filter close.
+	[[nodiscard]] constexpr int32_t controlOffset() const {
+		return static_cast<int32_t>(offset) - static_cast<int32_t>(closeExtra());
+	}
 
 	/// A note event's key within its part: its lane, or a pitched part's pitch. A part's notes are all laned or all
 	/// pitched, so within one part the key alone tells two keys apart.

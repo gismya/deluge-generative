@@ -224,20 +224,21 @@ int32_t mostDriftNodesInABar(const Genre& genre, int32_t motion) {
 	Built built(performed.events, kBars * kBarTicks);
 	// Where a ramp starts after the lane held still a bar or more: that node is the hold's end, not drift's.
 	std::set<std::pair<LaneKey, int32_t>> holdEnds;
-	std::map<LaneKey, std::pair<int32_t, int8_t>> moved; // where each lane's last change ended, and its value
+	std::map<LaneKey, std::pair<int32_t, int16_t>> moved; // where each lane's last change ended, and its value
 	for (const Event& e : performed.events) {
 		if (e.kind != EventKind::Control) {
 			continue;
 		}
 		const LaneKey key = keyOf({e.part, e.lane, e.control, false});
 		auto [last, added] = moved.try_emplace(key, 0, 0);
-		if (last->second.second == e.offset) {
+		const auto offset = static_cast<int16_t>(e.controlOffset());
+		if (last->second.second == offset) {
 			continue;
 		}
 		if (!e.snap && e.tick - last->second.first >= kBarTicks) {
 			holdEnds.insert({key, e.tick});
 		}
-		last->second = {e.snap ? e.tick : e.tick + kTicksPerStep, e.offset};
+		last->second = {e.snap ? e.tick : e.tick + kTicksPerStep, offset};
 	}
 	// A node on a bar line ends that bar. A Throw that always plays (Dub's Siren release) snaps: its bar and the next,
 	// where it falls, are a gesture's, not drift's.
