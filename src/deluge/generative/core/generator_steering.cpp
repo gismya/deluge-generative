@@ -777,8 +777,9 @@ bool ArcPlanner::advance(int32_t maxSteps) {
 			const bool rests = yieldOn(yield, arc_, plays) == YieldMode::Rest;
 			naturalSilent |= (plays & partBit(p)) != 0 && !rests ? 0 : partBit(p);
 		}
-		overlap_.step(genre, seed_, arc_, step, barDensity_, centre_[Macro::Motion], naturalSilent,
-		              [&] { return waitingMove(step); });
+		if (overlap_.advance(genre, seed_, arc_, step, barDensity_, naturalSilent)) {
+			overlap_.begin(genre, arc_, step, centre_[Macro::Motion], waitingMove(step));
+		}
 		uint8_t sounds = 0;
 		for (int32_t p = 0; p < parts; p++) {
 			const bool active = (naturalSilent & partBit(p)) == 0 || overlap_.part == p;

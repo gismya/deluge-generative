@@ -132,6 +132,9 @@ struct ControlSet {
 	bool delaySetup = false;
 	/// The delay Throw's level as last sent on Space, in percent (Event::throwDelay()): 0 until a Throw lifts it.
 	uint8_t sentThrowDelay = 0;
+	/// The handover close's depth below -kControlFull as last sent on Brightness (Event::closeExtra()): 0 outside a
+	/// handover's filter close (spec §5.6).
+	uint8_t sentClose = 0;
 	static constexpr uint16_t kNoWalk = UINT16_MAX;
 };
 
@@ -214,24 +217,18 @@ struct OverlapState {
 	int8_t reopenedPart = -1; ///< Part whose filter hold ended on this step (snap Brightness back), or -1.
 	uint8_t wasOn = 0;        ///< Bit p: part p of a yielding pair sounded naturally on the previous bar.
 
-	/// Advances to `stepIndex` on `arc` using the natural (pre-overlap) `naturalSilent` mask. `waiting()` is called
-	/// only when a handover draw succeeds and needs the next Section start ahead so the overlap never crosses one.
-	template <typename Waiting>
-	GEN_STEP_CODE void step(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
-	                        int32_t motion, uint8_t naturalSilent, Waiting waiting) {
-		int32_t yieldingPart = -1;
-		int32_t leavingPart = -1;
-		DrawKey key;
-		if (advanceOrDraw(genre, seed, arc, stepIndex, sharedDensity, naturalSilent, yieldingPart, leavingPart, key)) {
-			beginOverlap(genre, arc, stepIndex, motion, waiting(), yieldingPart, leavingPart, key);
-		}
-	}
+	/// Advances to `stepIndex` on `arc` with the natural (pre-overlap) `naturalSilent` mask: ends an overlap or a hold
+	/// that is done, and on a bar line detects a handover and draws whether it overlaps. True when a draw hit: the
+	/// caller then calls begin() with the Arc's waiting move, so the overlap's length never crosses a Section line.
+	bool advance(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
+	             uint8_t naturalSilent);
+	/// Starts the overlap advance() drew, with the longest drawn length that ends before the next Section line.
+	void begin(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting);
 
 private:
-	bool advanceOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex, int32_t sharedDensity,
-	                   uint8_t naturalSilent, int32_t& outYielding, int32_t& outLeaving, DrawKey& outKey);
-	void beginOverlap(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion, const Arc::Move& waiting,
-	                  int32_t yieldingPart, int32_t leavingPart, const DrawKey& key);
+	DrawKey key_;          ///< The hit draw's key, for its length draw.
+	int8_t yielding_ = -1; ///< The yielding part of the pair whose handover drew an overlap.
+	int8_t leaving_ = -1;  ///< The part leaving the stage in it.
 };
 
 /// Whether any of `spec`'s lanes passes `test`, called with the lane's index and its Lane.
@@ -1111,8 +1108,6 @@ private:
 	DropOutState dropOut_;
 	/// Handover overlap state (spec §5.6, #542): the leaving part playing on while its filter closes.
 	OverlapState overlap_;
-	/// Each part's extra Brightness close depth last sent (Event::closeExtra()): 0 outside a handover close.
-	uint8_t sentClose_[kMaxParts] = {};
 	/// Drift's walk (spec §11.5): the seeded point it last passed, and how far it is towards the next, in Motion units
 	/// out of kDriftPointSteps × Motion 25. Motion moves it each step; takes and freeze never touch it.
 	uint32_t driftPoint_ = 0;

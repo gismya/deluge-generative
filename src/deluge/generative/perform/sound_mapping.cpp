@@ -25,16 +25,19 @@ namespace {
 /// Deep-close reach below home in menu units at -(kControlFull + kCloseControlExtra) (spec §5.6, §11.2): a handover
 /// overlap closes Brightness past -kControlFull so the leaving part's filter or FM modulators close audibly even on a
 /// preset whose normal Brightness range is scaled down (e.g. kHalfBrightness). 0 for targets that don't close further.
+/// Tuning (#542, delugemu captures of Psytrance's Leads and Arps): the LPF at 32 and the treble shelf at 25 closed a
+/// leaving part to silence before its overlap ended; 20 and 12 take 15–30 dB off its top while its level holds within
+/// a few dB until the last beat.
 constexpr int32_t closeMenuUnits(Target target) {
 	switch (target) {
 	case Target::LpfFrequency:
-		return 32;
+		return 20;
 	case Target::Modulator1Level:
 	case Target::Modulator2Level:
 		return 30;
 	case Target::Treble:
 	case Target::TrebleFreq:
-		return 25;
+		return 12;
 	case Target::WaveIndex:
 	case Target::PulseWidth:
 		return 12;

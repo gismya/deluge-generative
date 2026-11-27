@@ -325,9 +325,8 @@ bool Generator::barBeforeAutoFill() const {
 	return arc_.stepInBar() == 0 && arc_.barInPhrase() == fillBar - 1;
 }
 
-GEN_STEP_CODE bool OverlapState::advanceOrDraw(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
-                                               int32_t sharedDensity, uint8_t naturalSilent, int32_t& outYielding,
-                                               int32_t& outLeaving, DrawKey& outKey) {
+GEN_STEP_CODE bool OverlapState::advance(const Genre& genre, uint32_t seed, const Arc& arc, int32_t stepIndex,
+                                         int32_t sharedDensity, uint8_t naturalSilent) {
 	reopenedPart = -1;
 	const bool sectionStart = arc.sectionStartsHere();
 	// End an active overlap when its bars finish, at any Section line (never cross one), or if the leaving part
@@ -389,9 +388,9 @@ GEN_STEP_CODE bool OverlapState::advanceOrDraw(const Genre& genre, uint32_t seed
 		                             arc.occurrence(), static_cast<uint16_t>(arc.phraseInSection()),
 		                             fieldWord(static_cast<uint32_t>(arc.barInPhrase()), kOverlapWhether));
 		if (drawChance(key, yield.overlapChance)) {
-			outYielding = p;
-			outLeaving = leaving;
-			outKey = key;
+			yielding_ = static_cast<int8_t>(p);
+			leaving_ = static_cast<int8_t>(leaving);
+			key_ = key;
 			drawHit = true;
 		}
 	}
@@ -403,13 +402,13 @@ GEN_STEP_CODE bool OverlapState::advanceOrDraw(const Genre& genre, uint32_t seed
 	return drawHit;
 }
 
-GEN_STEP_CODE void OverlapState::beginOverlap(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion,
-                                              const Arc::Move& waiting, int32_t yieldingPart, int32_t leavingPart,
-                                              const DrawKey& key) {
-	const std::span<const WeightedBars> bars = genre.parts[yieldingPart].yield.overlapBars;
+GEN_STEP_CODE void OverlapState::begin(const Genre& genre, const Arc& arc, int32_t stepIndex, int32_t motion,
+                                       const Arc::Move& waiting) {
+	const std::span<const WeightedBars> bars = genre.parts[yielding_].yield.overlapBars;
+	const int32_t leavingPart = leaving_;
 	const Arc::Ahead ahead = arc.ahead(motion, waiting);
 	const int32_t room = ahead.start;
-	const int32_t picked = drawWeightedIf(withField(key, kOverlapLength), bars,
+	const int32_t picked = drawWeightedIf(withField(key_, kOverlapLength), bars,
 	                                      [room](const WeightedBars& e) { return e.bars * kStepsPerBar <= room; });
 	if (picked < 0) {
 		return; // no overlap length fits before the next Section line
@@ -461,8 +460,9 @@ void Generator::updateSilent(const Step& step) {
 		}
 	}
 	overlap_.part = active;
-	overlap_.step(*genre_, seed_, arc_, step.index, step.sharedDensity, step.motion, silent_,
-	              [this] GEN_STEP_CODE { return waitingMove(); });
+	if (overlap_.advance(*genre_, seed_, arc_, step.index, step.sharedDensity, silent_)) {
+		overlap_.begin(*genre_, arc_, step.index, step.motion, waitingMove());
+	}
 	if (overlap_.part >= 0) {
 		const auto clear = static_cast<uint8_t>(~partBit(overlap_.part));
 		silent_ &= clear;

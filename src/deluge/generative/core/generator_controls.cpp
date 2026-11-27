@@ -267,7 +267,7 @@ GEN_STEP_CODE void Generator::sendControl(ControlSet& set, SoundControl control,
 	const uint8_t extra = space        ? throwDelayOf(set)
 	                      : brightness ? static_cast<uint8_t>(std::max<int32_t>(-kControlFull - target, 0))
 	                                   : 0;
-	const uint8_t prevExtra = space ? set.sentThrowDelay : brightness ? sentClose_[set.part] : 0;
+	const uint8_t prevExtra = space ? set.sentThrowDelay : brightness ? set.sentClose : 0;
 	if (base == set.sent[c] && extra == prevExtra) {
 		return;
 	}
@@ -276,7 +276,7 @@ GEN_STEP_CODE void Generator::sendControl(ControlSet& set, SoundControl control,
 		set.sentThrowDelay = extra;
 	}
 	else if (brightness) {
-		sentClose_[set.part] = extra;
+		set.sentClose = extra;
 	}
 	push(Event::controlChange(tick, set.part, set.lane, control, base, snap, extra));
 }

@@ -275,18 +275,18 @@ describe sound_mapping("The sound-control mapping", $ {
 		const TargetRange cables{Target::LfoCables, -50, 50};
 		constexpr int32_t kDeep = -(kControlFull + kCloseControlExtra);
 
-		it("extends Subtractive LPF smoothly from -low at -100 to -32 menu units at -200, even on a 50%-scaled preset", _ {
+		it("extends Subtractive LPF smoothly from -low at -100 to -20 menu units at -200, even on a 50%-scaled preset", _ {
 			const TargetRange halfLpf = scaledRange(lpf, 50); // -4..4 (e.g. kHalfBrightness)
 			expect(targetValue(lpf, menu(42), -kControlFull)).to_equal(menu(34));
-			expect(targetValue(lpf, menu(42), -150)).to_equal(menu(22));
-			expect(targetValue(lpf, menu(42), kDeep)).to_equal(menu(10));
+			expect(targetValue(lpf, menu(42), -150)).to_equal(menu(28));
+			expect(targetValue(lpf, menu(42), kDeep)).to_equal(menu(22));
 			expect(targetValue(halfLpf, menu(42), -kControlFull)).to_equal(menu(38));
-			expect(targetValue(halfLpf, menu(42), -150)).to_equal(menu(24));
-			expect(targetValue(halfLpf, menu(42), kDeep)).to_equal(menu(10));
-			expect(targetValue(lpf, menu(20), kDeep)).to_equal(INT32_MIN); // clamps at 0
+			expect(targetValue(halfLpf, menu(42), -150)).to_equal(menu(30));
+			expect(targetValue(halfLpf, menu(42), kDeep)).to_equal(menu(22));
+			expect(targetValue(lpf, menu(15), kDeep)).to_equal(INT32_MIN); // clamps at 0
 		});
 
-		it("extends FM modulators to -30 menu units, deep-close EQ shelf to -25 (0 in normal range) and wave index / pulse width to -12", _ {
+		it("extends FM modulators to -30 menu units, deep-close EQ shelf to -12 (0 in normal range) and wave index / pulse width to -12", _ {
 			const TargetRange halfMod = scaledRange(mod1, 50); // -3..3
 			const TargetRange treble{Target::Treble, 0, 0};
 			const TargetRange trebleFreq{Target::TrebleFreq, 0, 0};
@@ -296,9 +296,9 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(targetValue(halfMod, menu(35), kDeep)).to_equal(menu(5));
 			expect(targetValue(treble, menu(25), -kControlFull)).to_equal(menu(25));
 			expect(targetValue(treble, menu(25), kControlFull)).to_equal(menu(25));
-			expect(targetValue(treble, menu(25), kDeep)).to_equal(menu(0));
+			expect(targetValue(treble, menu(25), kDeep)).to_equal(menu(13));
 			expect(targetValue(trebleFreq, menu(25), -kControlFull)).to_equal(menu(25));
-			expect(targetValue(trebleFreq, menu(25), kDeep)).to_equal(menu(0));
+			expect(targetValue(trebleFreq, menu(25), kDeep)).to_equal(menu(13));
 			expect(targetValue(wave, menu(25), kDeep)).to_equal(menu(13));
 			expect(targetValue(pw, menu(25), kDeep)).to_equal(menu(13));
 		});

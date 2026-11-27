@@ -152,3 +152,9 @@ the slice's PR. The PR's test plan lists the review's run and its findings. The 
 - A power difference between a Bass+Drums and a Bass-alone capture misreads the kick's share once the bass is the
   louder: phase and the bass's ducking move the sum by more than a faded kick's remainder. Capture the Drums alone
   for the kick's level per 16th (#497).
+- **A preset's level can differ by a few dB between captures with identical streams** (#542): 166 Harpsichord
+  Cyborg (Psytrance's Arp) is FM with 2 unison voices at 0 detune and its carrier's phase free-running
+  (`retrigPhase -1`), so the two copies' phase offset, fixed for a voice's life, sets its level anywhere from
+  cancelling to +6 dB. Any change that shifts the engine's timing (a code change, a mute) moves it: the same Intro
+  measured -23.5 to -26.9 dBFS across five captures. Compare a part's level between captures only against bars where
+  the streams are the same, and look for such a preset before blaming the change (barlines round 1's "level step").
