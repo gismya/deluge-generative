@@ -46,7 +46,8 @@ constexpr int32_t kEndPadY = rowFromY(deluge::generative::perform::kSidebarEndRo
 
 constexpr uint32_t kEndHoldSamples = kSampleRate * 6 / 10;
 
-/// Row 7, Energy against the centre: green at it (within this many points), blue below, orange above.
+/// Row 7 (when the roster has 6 parts or fewer), Energy against the centre: green at it (within this many points),
+/// blue below, orange above.
 constexpr int32_t kEnergyAtCentre = 2;
 
 constexpr RGB kEnergyAt = RGB(0, 120, 40);
@@ -344,13 +345,17 @@ void PerformView::refreshArcMap() {
 			strcpy(shownSections, text);
 			TEST_EVENT("gen_arcmap %s", text);
 		}
+		static_assert(deluge::generative::kMaxParts == ArcMap::kSectionRow, "shownParts holds rows 0..kEnergyRow");
 		const int32_t parts = genre != nullptr ? deluge::generative::partCount(*genre) : 0;
-		for (int32_t p = 0; p < parts; p++) {
+		for (int32_t r = 0; r < ArcMap::kSectionRow; r++) {
+			if (r >= parts && !(genre != nullptr && r == ArcMap::kEnergyRow)) {
+				continue;
+			}
 			char row[ArcMap::kColumns + 1];
-			describeArcMapPart(map, p, row);
-			if (strcmp(row, shownParts[p]) != 0) {
-				strcpy(shownParts[p], row);
-				TEST_EVENT("gen_arcrow %ld %s", static_cast<long>(p), row);
+			describeArcMapPart(map, r, row);
+			if (strcmp(row, shownParts[r]) != 0) {
+				strcpy(shownParts[r], row);
+				TEST_EVENT("gen_arcrow %ld %s", static_cast<long>(r), row);
 			}
 		}
 	}

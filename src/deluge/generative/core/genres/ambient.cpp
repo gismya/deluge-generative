@@ -160,7 +160,8 @@ constexpr MotifSpec kBellsMotif{
     .gateTicks = kTicksPerBar,
 };
 
-/// Drums, Bass, Pad, Drone, Lead and FX: the largest roster's six parts, a second Pad sized as Chords (rosterFits()).
+/// Drums, Bass, Pad, Drone, Lead and FX: six of the largest roster's seven parts, a second Pad sized as Chords
+/// (rosterFits()).
 constexpr PartSpec kParts[] = {
     {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kNoGestures},
     {
@@ -357,7 +358,7 @@ constexpr VariantSet kVariantSets[] = {
 constexpr Genre kAmbient{
     .name = "ambient",
     .oledName = "AMBIENT",
-    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 5, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 60, .tempoHighBpm = 90, .scales = kScales},
     .phraseBars = 8,
     .parts = kParts,

@@ -254,8 +254,38 @@ describe sidebar("The sidebar", $ {
 		expect(sidebar.cell[kSidebarHoldRow][kSidebarSectionColumn].look).to_equal(Look::Hold);
 	});
 
-	// Cells set by hand: no genre has six parts yet. This checks only that the longest text fits its buffer.
-	it("fits the longest text in its buffer: six parts, each with a waiting press, and End queued and lit", _ {
+	it("uses MUTE row 7 for a 7th part and reports all 7 parts in gen_sidebar", _ {
+		static const PartSpec kParts[kMaxParts] = {
+		    genres::technoDetroit.parts[0], genres::technoDetroit.parts[1], genres::technoDetroit.parts[2],
+		    genres::technoDetroit.parts[3], genres::technoDetroit.parts[4], genres::technoAcid.parts[1],
+		    genres::technoDetroit.parts[5],
+		};
+		static const Genre kSeven = [] {
+			Genre genre = genres::technoDetroit;
+			genre.name = "sidebar-seven";
+			genre.parts = kParts;
+			genre.variantSets = {};
+			return genre;
+		}();
+		Recipe recipe = acidRecipe();
+		recipe.genre = &kSeven;
+		StepwisePiece<> piece({.recipe = recipe, .seed = 3, .skipIntro = true});
+		piece.decideBefore(4);
+		piece.pushAndDecide(mute(6, true));
+		SidebarInput in;
+		in.piece = piece.driver.playing();
+		in.parts = partCount(kSeven);
+		Sidebar composed;
+		composeSidebar(in, composed);
+		expect(composed.cell[6][kSidebarMuteColumn].look).to_equal(Look::Muted);
+		expect(composed.cell[7][kSidebarMuteColumn].look).to_equal(Look::Off);
+		char text[kSidebarTextChars + 1];
+		describeSidebar(composed, text);
+		expect(std::string(text).substr(0, 12)).to_equal(std::string("mute=aaaadam"));
+	});
+
+	// Cells set by hand: no shipped genre has seven parts yet. This checks only that the longest text fits its buffer.
+	it("fits the longest text in its buffer: seven parts, each with a waiting press, and End queued and lit", _ {
 		Sidebar sidebar;
 		for (int32_t row = 0; row < kMaxParts; row++) {
 			sidebar.cell[row][kSidebarMuteColumn] = {.look = Look::Dim, .blink = true};
@@ -263,7 +293,7 @@ describe sidebar("The sidebar", $ {
 		sidebar.cell[kSidebarEndRow][kSidebarSectionColumn] = {.look = Look::Section, .bright = true, .blink = true};
 		char text[kSidebarTextChars + 1];
 		describeSidebar(sidebar, text);
-		expect(std::string(text)).to_equal(std::string("mute=d*d*d*d*d*d* force=- hold=0 end=q+"));
+		expect(std::string(text)).to_equal(std::string("mute=d*d*d*d*d*d*d* force=- hold=0 end=q+"));
 	});
 });
 

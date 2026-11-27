@@ -100,6 +100,8 @@ void Generator::begin(const Recipe& recipe, uint32_t seed, const Takes& takes, S
 	driftTowards_ = 0;
 	driftLastMotion_ = 0;
 	std::fill(std::begin(lastSpaceMacro_), std::end(lastSpaceMacro_), int16_t{0});
+	barDensity_ = 0; // step 0's bar line latches it again
+	std::fill(std::begin(barDensityBias_), std::end(barDensityBias_), int16_t{0});
 	// A part's tables hold what the event buffer counts for its role, so a fuller one evicts (spec §2.7).
 	int32_t slots[kMaxParts] = {};
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
@@ -266,6 +268,13 @@ GEN_STEP_CODE int32_t Generator::effectiveMacro(Macro macro) const {
 	return effectiveOn(*genre_, arc_, recipe_.macros, macro);
 }
 
+GEN_STEP_CODE void Generator::latchDensity() {
+	barDensity_ = static_cast<int16_t>(effectiveMacro(Macro::Density));
+	for (int32_t p = 0; p < kMaxParts; p++) {
+		barDensityBias_[p] = static_cast<int16_t>(recipe_.bias.of(p, Macro::Density));
+	}
+}
+
 GEN_STEP_ENTRY void Generator::decideNextStep(SteeringQueue& queue, SteeringLog* log) {
 	const int32_t n = nextStep_;
 	if (stoppedDeciding()) {
@@ -391,7 +400,10 @@ GEN_STEP_CODE void Generator::decideLanded(SteeringLog* log) {
 		voiceChordAt(walkChord(n));
 	}
 	step.energy = effectiveMacro(Macro::Energy);
-	step.density = effectiveMacro(Macro::Density);
+	if (arc_.stepInBar() == 0) {
+		latchDensity(); // the Arc's ramp and a live turn reach the notes on bar lines (spec §5.6)
+	}
+	step.density = barDensity_;
 	step.sharedDensity = step.density;
 	step.complexity = recipe_.macros[Macro::Complexity];
 	step.motion = recipe_.macros[Macro::Motion];
@@ -421,7 +433,8 @@ GEN_STEP_CODE void Generator::decideLanded(SteeringLog* log) {
 	for (int32_t p = 0; p < partCount(*genre_); p++) {
 		// Each part at its own Part bias (spec §3.3); the shared step above stays the Arc's, the fills' and the
 		// sound controls' drift.
-		avoidedParts |= decidePart(p, recipe_.bias.any(p) ? partStep(p, step) : step) ? partBit(p) : 0;
+		const bool biased = recipe_.bias.any(p) || barDensityBias_[p] != 0;
+		avoidedParts |= decidePart(p, biased ? partStep(p, step) : step) ? partBit(p) : 0;
 	}
 	if (arc_.stepInBar() == 0) {
 		lateEntries(step, avoidedParts);
@@ -480,7 +493,7 @@ void Generator::skipTo(int32_t step) {
 GEN_STEP_CODE Generator::Step Generator::partStep(int32_t partIndex, const Step& step) const {
 	Step own = step;
 	own.energy = biasedOn(partIndex, Macro::Energy, step.energy);
-	own.density = biasedOn(partIndex, Macro::Density, step.density);
+	own.density = barDensityOn(partIndex, step.density);
 	own.complexity = biasedOn(partIndex, Macro::Complexity, step.complexity);
 	own.motion = biasedOn(partIndex, Macro::Motion, step.motion);
 	return own;

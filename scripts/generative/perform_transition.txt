@@ -310,7 +310,9 @@ release sound_committed
 expect event gen_sound_preload done part=0 within=10
 expect event gen_sound_cancel part=0 transition_done
 expect event gen_outputs_freed within=30
-expect event gen_transition start style=0 within=90
+# Up to 1 Acid phrase (15.4 s) waiting for the Build plus a 32-bar build=long (61.4 s at 125 BPM) = 76.8 s real time
+# (#561), plus host-load margin under delugemu.
+expect event gen_transition start style=0 within=240
 expect event gen_transition phase=idle within=40
 expect no_event gen_sound_swap since=mark within=1
 

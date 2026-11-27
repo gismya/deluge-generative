@@ -552,7 +552,7 @@ constexpr VariantSet kVariantSets[] = {
 constexpr Genre kDub{
     .name = "dub",
     .oledName = "ROOTS DUB", // never read as DUB TECHNO
-    .version = 10,           // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 11,           // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 70, .tempoHighBpm = 80, .scales = kScales, .swingLow = 5, .swingHigh = 15},
     .phraseBars = 8,
     .parts = kParts,

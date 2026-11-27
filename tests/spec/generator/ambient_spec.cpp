@@ -269,7 +269,7 @@ describe ambient("Ambient", $ {
 		expect(std::string(ambientGenre.name)).to_equal(std::string("ambient"));
 		expect(std::string(ambientGenre.oledName)).to_equal(std::string("AMBIENT"));
 		expect(ambientGenre.parent == nullptr).to_be_true();
-		expect(ambientGenre.version).to_equal(4);
+		expect(ambientGenre.version).to_equal(5);
 		expect(findGenre("ambient") == &ambientGenre).to_be_true();
 		expect(partCount(ambientGenre)).to_equal(6);
 		const std::vector<std::tuple<Role, Flavour, std::string>> roster = {

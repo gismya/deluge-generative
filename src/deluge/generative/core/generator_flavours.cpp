@@ -169,21 +169,6 @@ GEN_STEP_CODE int32_t Generator::heldStep(int32_t partIndex, int32_t step) const
 	return partFrozen(partIndex) ? parts_[partIndex].frozenPhraseStart + step % genre_->phraseSteps() : step;
 }
 
-void Generator::thaw(int32_t partIndex) {
-	PartState& part = parts_[partIndex];
-	for (PatternState& state : part.lanes) {
-		if (state.hasWaiting) {
-			// It jumps to where its counters are now: that pick's pattern, and a Loop's line rolled fresh with it.
-			state.pick = state.waiting;
-			state.entry = -1;
-			state.hasWaiting = false;
-			// The bar's Answer was drawn from the old pick. An Answer starts only on a bar line, so the rest of the bar
-			// plays the new line's call.
-			part.answer = AnswerKind::None;
-		}
-	}
-}
-
 GEN_STEP_CODE void Generator::updateAnswer(int32_t partIndex, const Step& step) {
 	const PartSpec& spec = genre_->parts[partIndex];
 	PartState& part = parts_[partIndex];

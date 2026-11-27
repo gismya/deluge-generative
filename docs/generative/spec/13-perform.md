@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 | Action | Grain |
 |---|---|
-| Macros | next undecided step ([§3.4](03-recipe.md#34-steering-grain)) |
+| Macros | next undecided step; which hits Density plays, next bar ([§3.4](03-recipe.md#34-steering-grain)) |
 | Tempo, swing | glide from now |
 | Key, scale | next phrase line, or an Arc Drop if one lands first ([§9.7](09-arc.md#97-transitions)) |
 | Genre, Regenerate, Recipe LOAD | transition ([§9.7](09-arc.md#97-transitions)) |
@@ -42,7 +42,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Part octave shift | next bar |
 | Sound re-roll; back to previous sound | preload, then next phrase line |
 | Pattern re-roll (new take); step back or forward through takes | next phrase line |
-| Freeze / unfreeze | next undecided step |
+| Freeze / unfreeze | next undecided step; a pick that waited, next bar ([§6.7](06-randomness.md#67-freeze)) |
 | Fill | while held |
 | Capture mark | now |
 | Sound-control home edits | now, logged at the next undecided step |
@@ -59,8 +59,8 @@ Stock habits come first: a control does what its printed label or stock behaviou
 **Grid pages.** SONG, CLIP and KEYBOARD switch the grid page, and their LEDs show which is on. KEYBOARD on the KEYBOARD page flips to stock Performance view and back, with KEYBOARD's LED blinking there. The sidebar is the same on every page.
 
 - **SONG, the Arc map.** One column per phrase. Column 4 is now; columns to its left have played and columns to its right are the Arc's plan.
-  - Rows 1–6, parts: bright = sounded, the now column flashes live, dim = planned to sound. A part sounded in a phrase when a note of it rang there: one started in it, or one held on over its line, as a Drone or Pad holds its voicing. A muted note doesn't count. Any note counts at every step it sounds, so a long gate held a few ticks over a line lights the part in the next phrase too, even where the plan showed it silent. Holding a part's row focuses it. "Planned to sound" means the Arc lets the part play on some step of the phrase (its Density gate is open and Break or Build keeps or a drop-out don't stop it, or the Build roll plays one of its lanes) and it is audible there (not muted or soloed out). It leaves out the cut and the Gap, which the MUTE pad's dim counts: neither covers a whole phrase (a genre's data check holds each shorter than its phrase). In a planned column, a part muted there shows faint red. The now column flashes a part that played a note in the previous 16th or in this one so far, so a flash can span two 16ths. It is sampled once a 16th, so the flash redraws the pads at most once per 16th.
-  - Row 7: effective Energy against the Recipe centre, averaged over the phrase. Blue below, green at (less than 2 points from it), orange above.
+  - Rows 1–6 (and row 7 on a 7-part roster), parts: bright = sounded, the now column flashes live, dim = planned to sound. A part sounded in a phrase when a note of it rang there: one started in it, or one held on over its line, as a Drone or Pad holds its voicing. A muted note doesn't count. Any note counts at every step it sounds, so a long gate held a few ticks over a line lights the part in the next phrase too, even where the plan showed it silent. Holding a part's row focuses it. "Planned to sound" means the Arc lets the part play on some step of the phrase (its Density gate is open and Break or Build keeps or a drop-out don't stop it, or the Build roll plays one of its lanes) and it is audible there (not muted or soloed out). It leaves out the cut and the Gap, which the MUTE pad's dim counts: neither covers a whole phrase (a genre's data check holds each shorter than its phrase). In a planned column, a part muted there shows faint red. The now column flashes a part that played a note in the previous 16th or in this one so far, so a flash can span two 16ths. It is sampled once a 16th, so the flash redraws the pads at most once per 16th.
+  - Row 7: effective Energy against the Recipe centre, averaged over the phrase, when the roster has 6 parts or fewer (blue below, green at—less than 2 points from it—orange above); on a 7-part roster, the 7th part instead.
   - Row 8: the Section of each phrase, the one playing its last step, so a Build shorter than a phrase shows in the phrase it ends.
   - A queued action blinks in the column where it lands: a mute, solo, take or sound on its part's row, a force, End or key change on row 8. The plan redraws to show its result. Columns after the line where the Outro ends are dark.
   - Turning X scrolls, back over the last 15 phrases the history keeps and ahead to the end of the 16-phrase plan. Tapping X returns to now; a turn or a solo while X is down isn't a tap.
@@ -85,7 +85,7 @@ Stock habits come first: a control does what its printed label or stock behaviou
 
 **Sidebar**, the same on every page:
 
-- **MUTE/LAUNCH, rows 1–6:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out. While any part is soloed, only soloed parts sound, muted or not; a muted part's mute takes effect again when the last solo goes, and its pad stays red meanwhile. "Silenced by the Arc" means its Density gate is closed or section rules (Break keeps, the cut, the Gap) or a drop-out stop all its notes. A lane the Build roll plays counts as sounding whatever its Density gate, since the roll ignores gates (§8.3): a part whose only sounding lane is rolling isn't dim. A Rest, a Replace pair or a mute doesn't dim a pad.
+- **MUTE/LAUNCH, rows 1–7:** part mute at the next bar; SHIFT = at the next undecided step. X held + MUTE pad = solo, as stock. Colours are stock: green active, red muted, blue solo, dim = silenced by the Arc or soloed out. While any part is soloed, only soloed parts sound, muted or not; a muted part's mute takes effect again when the last solo goes, and its pad stays red meanwhile. "Silenced by the Arc" means its Density gate is closed or section rules (Break keeps, the cut, the Gap) or a drop-out stop all its notes. A lane the Build roll plays counts as sounding whatever its Density gate, since the roll ignores gates (§8.3): a part whose only sounding lane is rolling isn't dim. A Rest, a Replace pair or a mute doesn't dim a pad.
 - **AUDITION/SECTION:** rows 1–3 force Groove, Break or Build (again cancels). Row 5 holds the Arc. Row 8 is End: hold 0.6 s to arm (the pad brightens while held); a tap cancels. Both only with Perform on top: under an overlay (a menu, the sound editor, the preset browser) a hold doesn't arm End and a tap doesn't cancel it. Each force pad and End show their Section's colour, bright while it plays; the hold pad is white while held.
 - The sidebar does nothing while stopped: mutes, solos, holds and forces are performance state, and a start is fresh.
 

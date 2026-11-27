@@ -508,8 +508,8 @@ describe variant_sets("Variant sets", $ {
 	});
 
 	context("the Capture header (spec §17.2)", _ {
-		it("carries the Recipe's picks and allowed variants through a stored piece, at format 3", _ {
-			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(3));
+		it("carries the Recipe's picks and allowed variants through a stored piece, at format 4", _ {
+			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(4));
 			StoredLog stored;
 			PieceStart start;
 			start.recipe = newRecipe(genres::dub, 11);

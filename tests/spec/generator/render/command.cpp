@@ -46,7 +46,7 @@ const char* const kUsage =
     "BAR's first step (bar 0 at PLAY), as gen_emu.py capture holds the End pad from that bar line. Either warns if "
     "End\n"
     "was never armed in --bars, and the WAV's hour limit then counts the bars it played. --mute PART (a sidebar row, 1 "
-    "to the genre's part count, at most 6: the part order, as gen_emu.py "
+    "to the genre's part count, at most 7: the part order, as gen_emu.py "
     "capture --mute; "
     "repeatable)\n"
     "leaves that part out of the WAV from step 0, as a Perform mute does: the Generator plays as without it, and the\n"

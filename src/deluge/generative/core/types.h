@@ -81,8 +81,8 @@ constexpr int32_t decisionTick(int32_t step) {
 
 // ---- Parts and roles (spec §5.1) ----
 
-/// Hard limit on a genre's roster. The fixed state block and the six MUTE pads both assume it.
-constexpr int32_t kMaxParts = 6;
+/// Hard limit on a genre's roster. The fixed state block and the MUTE pads both assume it.
+constexpr int32_t kMaxParts = 7;
 
 /// The musical job a part does. Declared in the order Generator code uses for "earlier" (spec §5.5).
 enum class Role : uint8_t { Drums, Bass, Chords, Pad, Lead, FX };
@@ -165,10 +165,11 @@ constexpr int32_t onsetNotes(Role role) {
 		return maxLanes(role);
 	}
 }
-/// The roster the Generator block is sized for (spec §2.7): the largest any genre lists, Detroit techno's and House's
-/// (spec §4.5). The event buffer, the sounding-note pool and the control sets are counted from it part by part, and
-/// genre_data_spec holds every genre's roster to what it gives.
-constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, Role::Chords, Role::Lead, Role::FX};
+/// The roster the Generator block is sized for (spec §2.7): Detroit techno's and House's six parts plus a seventh
+/// single-note Lead (spec §4.5). The event buffer, the sounding-note pool and the control sets are counted from it
+/// part by part, and genre_data_spec holds every genre's roster to what it gives.
+constexpr Role kLargestRoster[kMaxParts] = {Role::Drums, Role::Bass, Role::Pad, Role::Chords,
+                                            Role::Lead,  Role::Lead, Role::FX};
 
 constexpr bool isFxLane(Lane lane) {
 	return lane != Lane::None && static_cast<int32_t>(lane) >= kNumDrumLanes;
