@@ -55,8 +55,8 @@ otherwise.
   `ControlRanges` stores each percent as its difference from 100, so zeroed SDRAM BSS holds the defaults.
   `ControlRanges::with()` is `consteval` (a built-in table's percent out of 0–200 doesn't compile); runtime code calls
   `set()`. Test builds report a set with ranges of its own as `gen_controls ranges part=1 lane=-1 BRI=-16..16 ... DRI=0`
-  (each control's first param's range, 0 if it binds none). An event line is 120 bytes with its timestamp, so keep it
-  short: a param count or lane names overflowed it.
+  (each control's first param's range, 0 if it binds none). An event line is `kEventLength` (192) bytes with its
+  timestamp (`io/midi/test_port.cpp`), so keep it short: a param count or lane names overflowed it at 120.
 - A cable set to exactly 0 is deleted by `PatchCableSet::notifyParamModifiedInSomeWay`, so Wobble's ×0 leaves ±1.
 - A sound-control target whose stock stage switches on at "> 0" can step the level the moment a "+"-only control
   (Drive, Thin) leaves home. `LOCAL_FOLD` did (#516): `voice.cpp` runs `foldBufferPolyApproximation` from any fold
@@ -118,7 +118,7 @@ otherwise.
   fallback to it plays at 0 too. An oscillator's own transpose (`Source::transpose`) is left alone, so a preset that
   puts its octave on every oscillator still sounds off: `osc_octaves.py` flags those in the palettes. Test builds
   report `gen_sound_transpose PART LANE saved= played=` (LANE `-` for a synth part) apart from `gen_sound`, which is
-  near the 120-byte event line already; `perform_transpose.txt` checks it.
+  near the event line's `kEventLength` (192 bytes) already; `perform_transpose.txt` checks it.
 - Trap (#332): `gen_mem ... internal=` in the hundreds of millions or billions means something wrote into the
   internal heap's free-space records, not that memory grew, and the next allocation hangs (often a preload's, so the
   test port stops answering). In the Release and test-port links `emptySpacesMemoryInternal` sits right after
