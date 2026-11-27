@@ -141,7 +141,7 @@ ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl con
 
 void ClipBuilder::Track::move(SongWriter& writer, int32_t tick, int16_t to, bool snap) {
 	if (to == value) {
-		return; // a Space event whose other lane moved
+		return; // an event whose other lane moved (Space, or Brightness and its close lane)
 	}
 	if (!moved) {
 		if (tick == origin && snap) {
