@@ -333,5 +333,9 @@ otherwise.
   every genre's longest within 120; an eighth set may need short names or a longer line.
 - Trap: events due on one tick may leave the event buffer in another order when a lane's notes around them change
   (Techno's running hats under a roll punch-in): a spec comparing "everything else" across two runs sorts each tick.
+- Trap: the Arc plan counts a part as sounding in a Section when it is kept and gated in, not by its pool, so a
+  variant that thins a lane a Break keeps until nothing in it reaches the Break's Density fails `arc_plan_spec`'s
+  "agrees with the notes" (Psytrance's `ride` closed hat, all ghosts under the hats' Lock). Give such a pool an anchor:
+  rules never remove one (variants-2 build).
 - Trap: a pitched part's Register span counts from its tonic, which sits within 6 semitones of the anchor, not from
   the anchor: Psytrance's Lead (anchor A5, +12) tops out at C7 in C, where its tonic is C6 (#497).

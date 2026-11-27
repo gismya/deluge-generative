@@ -1,0 +1,133 @@
+# Psytrance's variants-2 HATS set (#133, spec §3.6, §4.5) over the sysex test port: Perform entered on CLASSIC
+# PSYTRANCE with hats pinned to ride by seam S7's "next recipe variant" line. VARIANTS ▸ shows its six sets, HATS on
+# RIDE; BREAK isn't live (AT REGEN). HATS' multi-select then ticks OPEN and unticks RIDE, which queues for the next Drop,
+# and a forced Build lands it there: the instance applies its genre copy again with the open hats (gen_variants_landed
+# drop=1). The Drop change's own 300‰ draw (no ticks queued) is drop_changes_spec's; the harness proves each hat sound
+# plays only in the hat lanes (psytrance_spec).
+# Runs on a Deluge (deluge_probe.py session) or in delugemu (test_port_emu.py). Start as after boot: transport stopped,
+# the current clip a synth or kit clip.
+#
+# gen_variants_menu open sets=N, then gen_variants_row <SET> <shows> per set. gen_variants_press set=<name>
+# allowed=<mask> outcome=<0 accepted>: a tick turned, queued; gen_variants set=<name> allowed=<mask> shows=<text>: the
+# row's ticks after it. gen_variants_landed step=N drop=<1 on a Drop's first step> <set>=<variant>:<allowed> ...: the
+# picks the piece plays moved on step N.
+# For figures: --events 'gen_variants|gen_variants_press|gen_variants_landed|gen_section'.
+# covers: src/deluge/generative/core/genres/psytrance.cpp src/deluge/generative/core/variants.*
+# covers: src/deluge/io/midi/test_port.*
+# covers: src/deluge/gui/menu_item/generative/perform_menu.* src/deluge/gui/menu_item/generative/regenerate_page.*
+# covers: src/deluge/generative/perform/regenerate_page.* src/deluge/generative/firmware/perform_adapter.cpp
+# covers: src/deluge/generative/core/generator_steering.cpp
+# covers: src/deluge/generative/core/genres/dub.cpp src/deluge/generative/core/genres/techno.cpp
+# covers: src/deluge/generative/core/types.h src/deluge/generative/firmware/entry_leave.cpp
+# covers: src/deluge/generative/firmware/output_sink.cpp src/deluge/generative/perform/oled_page.cpp
+# covers: src/deluge/generative/perform/oled_page.h src/deluge/generative/perform/queue_text.cpp
+# covers: src/deluge/generative/perform/queue_text.h src/deluge/generative/perform/text.cpp
+# covers: src/deluge/generative/perform/text.h src/deluge/gui/context_menu/generative.cpp
+# covers: src/deluge/gui/l10n/english.json src/deluge/gui/l10n/g_english.cpp src/deluge/gui/views/perform_view.cpp
+# covers: src/deluge/gui/views/perform_view_clip.cpp src/deluge/gui/views/perform_view_screen.cpp
+# covers: src/deluge/gui/views/perform_view_song.cpp
+start_state
+next recipe genre psytrance-classic
+next recipe entropy 0
+next recipe seed 3
+next recipe variant hats ride
+include perform_open.txt
+mark
+include perform_confirm.txt
+expect event gen_next_recipe taken since=mark
+expect event gen_perform_entered psytrance-classic since=mark
+button PLAY down
+wait 50
+button PLAY up
+expect playing=true
+expect event gen_section INTRO 0
+
+# ---- VARIANTS ▸: Psytrance's six sets, HATS on its pin ----
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 200
+expect event gen_variants_menu open sets=6
+expect event gen_variants_row FIGURE Random
+expect event gen_variants_row BREAK Random
+expect event gen_variants_row ARP+LEAD Random
+expect event gen_variants_row LEAD Random
+expect event gen_variants_row ACCENTS Random
+expect event gen_variants_row HATS RIDE
+# BREAK, the second row, isn't live: it waits for a Regenerate
+encoder 3 -10
+encoder 3 1
+mark now
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_live set=break at_regen since=mark within=5
+
+# ---- HATS' multi-select, from the top (a list remembers its row) on CLOSED: tick OPEN, untick RIDE ----
+encoder 3 4
+mark now
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+wait 100
+encoder 3 -5
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_press set=hats allowed=6 outcome=0 since=mark
+expect event gen_variants set=hats allowed=6 shows=2 of 3
+encoder 3 1
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_press set=hats allowed=2 outcome=0
+expect event gen_variants set=hats allowed=2 shows=OPEN
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 200
+expect event /^gen_status .*\|>VAR/ since=mark within=5
+# No Drop yet: it waits
+expect no_event gen_variants_landed within=2
+
+# ---- A forced Build: the ticks land on its Drop, which plays OPEN, the one ticked ----
+mark now
+pad 17 5 down
+wait 50
+pad 17 5 up
+expect event gen_press force BUILD
+expect event gen_section BUILD within=40
+expect event gen_section GROOVE within=60
+expect event /^gen_variants_landed step=\d+ drop=1 figure=(sequence|walk|shuffle|triad):15 break=(arp|lead|leadnohat):7 arplead=(dropboth|turns|eighths):7 lead=(drops|grooves|intro):7 accents=(anywhere|332|offbeat):7 hats=open:2$/ since=mark within=5
+# The row shows the tick
+include perform_transition_menu.txt
+encoder 3 2
+button SELECT_ENC down
+wait 50
+button SELECT_ENC up
+expect event gen_variants_row HATS OPEN
+button BACK down
+wait 50
+button BACK up
+wait 100
+button BACK down
+wait 50
+button BACK up
+wait 100
+
+button PLAY down
+wait 50
+button PLAY up
+expect playing=false
+include perform_leave.txt
