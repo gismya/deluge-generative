@@ -613,7 +613,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 9; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 10; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),
