@@ -54,8 +54,6 @@ constexpr int32_t kBass = 4;
 constexpr int32_t kOneDrop = 0;
 constexpr int32_t kRockers = 1;
 constexpr int32_t kSteppers = 2;
-/// Psytrance's hats set (variants-2).
-constexpr int32_t kPsyHats = 5;
 
 /// Dub's default Recipe with its sets fixed by `fixes` (`set=name`).
 Recipe dubWith(std::initializer_list<const char*> fixes, uint32_t entropy = 0) {
@@ -146,6 +144,11 @@ Genre dubWithSets(std::span<const VariantSet> sets) {
 	Genre genre = genres::dub;
 	genre.variantSets = sets;
 	return genre;
+}
+
+/// Psytrance's hats set (variants-2), by name.
+int32_t psyHats() {
+	return findVariantSet(genres::psytranceClassic, "hats");
 }
 
 } // namespace
@@ -270,7 +273,7 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			int32_t changes = 0;
 			for (uint32_t seed = 1; seed <= 24; seed++) {
 				Recipe every = withVariants(newRecipe(genres::psytranceClassic, 0), {"hats=closed"});
-				every.variants.allowed[kPsyHats] = 0b111;
+				every.variants.allowed[psyHats()] = 0b111;
 				const Stepped run = stepThrough(every, seed, 200 * kStepsPerBar);
 				drops += static_cast<int32_t>(run.drops.size());
 				VariantPicks before = every.variants;
@@ -278,7 +281,7 @@ describe drop_changes("Drop changes and live variant switches", $ {
 					const VariantPicks& now = run.picks[step];
 					for (size_t s = 0; s < genres::psytranceClassic.variantSets.size(); s++) {
 						if (now.pick[s] != before.pick[s]) {
-							expect(static_cast<int32_t>(s)).to_equal(kPsyHats);
+							expect(static_cast<int32_t>(s)).to_equal(psyHats());
 							expect(std::ranges::count(run.drops, static_cast<int32_t>(step))).to_equal(1);
 							changes++;
 						}
@@ -304,14 +307,14 @@ describe drop_changes("Drop changes and live variant switches", $ {
 			for (uint32_t seed = 1; seed <= 60 && !found; seed++) {
 				const Recipe closed = withVariants(newRecipe(genres::psytranceClassic, 0), {"hats=closed"});
 				Recipe recipe = closed;
-				recipe.variants.allowed[kPsyHats] = 0b011; // closed or open
+				recipe.variants.allowed[psyHats()] = 0b011; // closed or open
 				const Stepped run = stepThrough(recipe, seed, 160 * kStepsPerBar);
-				if (run.drops.empty() || run.picks[run.drops[0]].pick[kPsyHats] != 1) {
+				if (run.drops.empty() || run.picks[run.drops[0]].pick[psyHats()] != 1) {
 					continue;
 				}
 				found = true;
 				const int32_t drop = run.drops[0];
-				expect(static_cast<int32_t>(run.picks[drop - 1].pick[kPsyHats])).to_equal(0);
+				expect(static_cast<int32_t>(run.picks[drop - 1].pick[psyHats()])).to_equal(0);
 				const Stepped stayed = stepThrough(closed, seed, 160 * kStepsPerBar);
 				expect(openHats(run, 0, drop)).to_equal(openHats(stayed, 0, drop));
 				// Every & (4 a bar) against one every other bar.
