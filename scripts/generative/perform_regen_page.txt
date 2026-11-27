@@ -123,7 +123,9 @@ button SELECT_ENC up
 expect event gen_confirm dub style=0 result=0
 expect event gen_transition_preload done error=0 within=20
 expect event /^gen_pending_variants skank=plain:2 drums=(onedrop|rockers|steppers):7 break=(seven|fifteen):3 mix=(version|tubby|light):7 bass=(bursts|rolling|heavy):7$/
-expect event gen_transition start style=0 within=60
+# Up to 1 Acid phrase (15.4 s) waiting for the Build plus a 32-bar build=long gliding 125 -> 70 BPM (81.0 s) = 96.3 s
+# real time (#561), plus host-load margin under delugemu.
+expect event gen_transition start style=0 within=270
 # Dub's echo can ring on in the outgoing Outputs until their phrase cap (perform_transition.txt says why)
 expect event gen_transition phase=idle within=60
 
