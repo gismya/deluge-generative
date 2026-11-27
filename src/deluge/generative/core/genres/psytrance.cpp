@@ -22,7 +22,9 @@
 
 #include "generative/core/capacity.h"
 #include "generative/core/genre.h"
+#include "generative/core/genres/lane_edits.h"
 
+#include <array>
 #include <initializer_list>
 #include <iterator>
 
@@ -226,6 +228,7 @@ constexpr LoopSpec kSeqLoop{
     .gateTicks = 18,
 };
 
+constexpr int32_t kDrumsPart = 0;
 constexpr int32_t kBassPart = 1;
 constexpr int32_t kDronePart = 2;
 constexpr int32_t kLeadPart = 3;
@@ -469,12 +472,78 @@ constexpr Variant kAccentVariants[] = {
      .apply = [](ResolvedGenre& resolved) { resolved.parts[kArpPart].loop.jumpSteps = steps({2, 6, 10, 14}); }},
 };
 
+// The variants-2 round's HATS set (#133). The owner marked each variant "often", "sometimes" or "rarely", weighted
+// 3, 2 and 1.
+
+// clang-format off
+/// OPEN: an open hat on every &, so it replaces the closed hat there (spec §5.7). The open hat pool's 2 entries, tiers
+/// and lengths.
+constexpr Pattern kEveryOpenHat[] = {
+    {"..7...7...7...7...7...7...7...7.", "................................", 0, 2},
+    {"..7...7...7...7...7...7...6...7.", "................................", 1},
+};
+/// RIDE: the closed hat down to ghosted e's and a's under the ride, which the Lock mostly carves away, and an anchored
+/// ghost on the a of 4, so a Break that keeps only the closed hat still has its pulse. The closed hat pool's 5 entries
+/// and tiers.
+constexpr Pattern kRideClosedHat[] = {
+    {".5.5.5.5.5.5.5.X", ".g.g.g.g.g.g.g.g", 0, 2},
+    {".5...5...5...5.X", ".g...g...g...g.g", 0},
+    {".5.5.5.5.5.5.5.X", ".g.g.g.g.g.g.g.g", 1},
+    {"...5...5...5...X", "...g...g...g...g", 1},
+    {".5.6.5.6.5.6.5.X", ".g.g.g.g.g.g.g.g", 2},
+};
+/// RIDE: the ride on every &, a ghost between as Complexity rises. The ride pool's 2 entries and tiers.
+constexpr Pattern kLeadRide[] = {
+    {"..8...8...8...8.", "................", 0},
+    {"..8.5.8.5.8.5.8.", "....g...g...g...", 1},
+};
+// clang-format on
+// As many entries as each lane's own pool, each as long and in the same tier, so a live switch or a Drop change keeps
+// a frozen pick.
+static_assert(sameShape(kEveryOpenHat, kOpenHat) && sameShape(kRideClosedHat, kClosedHat)
+              && sameShape(kLeadRide, kRide));
+
+using DrumLanes = std::array<LaneSpec, std::size(kDrumLanes)>;
+
+/// OPEN: the open hat on every &, where it replaces the closed hat.
+constexpr DrumLanes kOpenLanes =
+    lanesWith(kDrumLanes, [](DrumLanes& lanes) { laneOf(lanes, Lane::OpenHat).pool = kEveryOpenHat; });
+/// RIDE: the ride on the &s at home (ungated), the closed hat down to ghosts under it, no open hat. The open hat's
+/// pool is empty: an empty lane reads no pick, so a switch from or to it keeps every frozen pick (#531's rule).
+constexpr DrumLanes kRideLanes = lanesWith(kDrumLanes, [](DrumLanes& lanes) {
+	laneOf(lanes, Lane::ClosedHat).pool = kRideClosedHat;
+	laneOf(lanes, Lane::OpenHat).pool = {};
+	LaneSpec& ride = laneOf(lanes, Lane::Ride);
+	ride.pool = kLeadRide;
+	ride.densityGate = 0;
+});
+
+/// variants-2 HATS, the hi-hat sound: closed (the genre as written), open (the open hat on every &) or ride (a ride in
+/// the closed hat's place), 3:3:1. Live, and at each Drop a 300‰ chance of another: it swaps only the Drums' lanes.
+constexpr Variant kHatVariants[] = {
+    {.name = "closed", .oledName = "CLOSED", .weight = 3},
+    {.name = "open",
+     .oledName = "OPEN",
+     .weight = 3,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kOpenLanes; }},
+    {.name = "ride",
+     .oledName = "RIDE",
+     .weight = 1,
+     .apply = [](ResolvedGenre& resolved) { resolved.parts[kDrumsPart].lanes = kRideLanes; }},
+};
+
 constexpr VariantSet kVariantSets[] = {
     {.name = "figure", .oledName = "FIGURE", .variants = kFigureVariants, .live = true},
     {.name = "break", .oledName = "BREAK", .variants = kBreakVariants},
     {.name = "arplead", .oledName = "ARP+LEAD", .variants = kArpLeadVariants, .live = true},
     {.name = "lead", .oledName = "LEAD", .variants = kLeadVariants},
     {.name = "accents", .oledName = "ACCENTS", .variants = kAccentVariants, .live = true},
+    {.name = "hats",
+     .oledName = "HATS",
+     .variants = kHatVariants,
+     .live = true,
+     .changeAt = ChangeAt::Drop,
+     .changeChance = 300},
 };
 
 /// The parent: never played, so it carries no version (spec §4.4). Its name is the group's in the GENRE menu and the
@@ -544,7 +613,7 @@ constexpr Genre kPsytranceClassic = [] {
 	genre.name = "psytrance-classic";
 	genre.oledName = "CLASSIC PSY";
 	genre.shortName = "CLASSIC";
-	genre.version = 9; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+	genre.version = 10; // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
 	return genre;
 }();
 static_assert(genreValid(kPsytranceClassic),

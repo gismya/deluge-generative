@@ -1,7 +1,7 @@
 # psytrance-classic's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre psytrance-classic version 9
+genre psytrance-classic version 10
 recipe entropy 0: G minor, 138.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 BASS, 2 DRONE, 3 LEAD, 4 ARP, 5 FX
 fingerprint baa70092701ac179, 2106351 events, 0 lost (60 pieces with random macros, scales, keys and seeds)

@@ -120,11 +120,14 @@ encoder 3 2
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_variants_menu open sets=4
+expect event gen_variants_menu open sets=7
 expect event gen_variants_row LOOPS Random
 expect event gen_variants_row BUILD Random
 expect event gen_variants_row BASS Random
 expect event gen_variants_row CHORDS Random
+expect event gen_variants_row DRUMS Random
+expect event gen_variants_row STAB Random
+expect event gen_variants_row BREAK Random
 button BACK down
 wait 50
 button BACK up
