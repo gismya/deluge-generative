@@ -344,7 +344,7 @@ def protocol_checks(port, check):
         "next recipe tempo 5",  # below kMinTempo
         "next recipe genre nosuch",
         "next recipe variant build full",  # no genre set yet
-        "next recipe part 6 SYNTHS/A.XML",  # past the last part
+        "next recipe part 7 SYNTHS/A.XML",  # past the last part
         "next recipe lane 0 " + "A" * 128,  # longer than a sound pick holds
     ):
         try:

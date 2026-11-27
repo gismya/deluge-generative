@@ -144,7 +144,7 @@ describe genre_data("Every built-in genre", $ {
 		}
 	});
 
-	it("has 1–6 parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
+	it("has 1–kMaxParts parts, lanes in the fixed lane order, and a pool for every patterned part and Drums lane", _ {
 		for (const Genre* genre : allGenres()) {
 			expect(genre->parts.size()).to_be_between(size_t{1}, size_t{kMaxParts});
 			int32_t drumsParts = 0;
@@ -261,19 +261,19 @@ describe genre_data("Every built-in genre", $ {
 		const PartSpec pads[] = {{.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad},
 		                         {.role = Role::Pad}, {.role = Role::Pad}, {.role = Role::Pad}};
 		expect(rosterFits(Genre{.name = "pads", .parts = pads})).to_be_false();
-		const PartSpec largest[] = {{.role = Role::Drums}, {.role = Role::Bass},
-		                            {.role = Role::Pad},   {.role = Role::Chords},
-		                            {.role = Role::Lead},  {.role = Role::FX}};
+		const PartSpec largest[] = {{.role = Role::Drums}, {.role = Role::Bass},  {.role = Role::Pad},
+		                            {.role = Role::Chords}, {.role = Role::Lead}, {.role = Role::Lead},
+		                            {.role = Role::FX}};
 		expect(rosterFits(Genre{.name = "largest", .parts = largest})).to_be_true();
 	});
 
 	it("rejects a roster past kMaxParts, whose parts past it would never play (rosterFits())", _ {
-		const PartSpec six[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
-		                        {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
-		expect(rosterFits(Genre{.name = "six", .parts = six})).to_be_true();
 		const PartSpec seven[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
 		                          {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
-		expect(rosterFits(Genre{.name = "seven", .parts = seven})).to_be_false();
+		expect(rosterFits(Genre{.name = "seven", .parts = seven})).to_be_true();
+		const PartSpec eight[] = {{.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass},
+		                          {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}, {.role = Role::Bass}};
+		expect(rosterFits(Genre{.name = "eight", .parts = eight})).to_be_false();
 	});
 
 	it("holds every genre to genreValid(), which fails when one of its rules does", _ {

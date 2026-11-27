@@ -30,6 +30,7 @@
 #include "generative/core/recipe.h"
 #include "generative/core/steering.h"
 #include "generative/core/types.h"
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -115,8 +116,8 @@ int32_t encodeCommand(const Command& command, uint32_t delta, uint8_t* out);
 struct PieceInfo {
 	static constexpr uint32_t kMagic = 0x474C4F47; ///< "GOLG"
 	/// Goes up whenever the image's layout or a record's encoding changes: an image of another format can't be read.
-	/// 3: the Recipe in `start` holds its variant picks (spec §3.6).
-	static constexpr uint16_t kFormat = 3;
+	/// 4: kMaxParts raised from 6 to 7 (PieceStart's [kMaxParts] arrays and lane pick slots moved).
+	static constexpr uint16_t kFormat = 4;
 	uint32_t magic = kMagic;
 	uint16_t format = kFormat;
 	uint8_t genre = 0;         ///< In an image: start.recipe.genre's index in allGenres() (the pointer isn't stored).
@@ -430,6 +431,8 @@ private:
 		uint32_t seq = 0;      ///< Set order.
 	};
 	static_assert(std::is_trivially_copyable_v<PieceInfo>, "an image's info is stored and read back as bytes");
+	static_assert(offsetof(PieceInfo, magic) == 0 && offsetof(PieceInfo, format) == 4,
+	              "magic and format stay at fixed offsets so readImage() rejects older formats cleanly");
 	[[nodiscard]] Slot& newest() const { return slots_[newest_]; }
 	/// Writes `length` bytes of a record stamped `step` from `data`, or cuts the piece at that step.
 	bool write(int32_t step, const uint8_t* data, int32_t length);

@@ -295,9 +295,9 @@ describe render_command("Rough render command", $ {
 	});
 
 	it("refuses a --mute past the genre's parts before it renders", _ {
-		expect(parse({"--mute", "7"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
-		expect(parse({"--mute", "0"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
-		expect(parse({"--mute", "x"}).error).to_equal(std::string("--mute takes a part, 1 to 6"));
+		expect(parse({"--mute", "8"}).error).to_equal(std::string("--mute takes a part, 1 to 7"));
+		expect(parse({"--mute", "0"}).error).to_equal(std::string("--mute takes a part, 1 to 7"));
+		expect(parse({"--mute", "x"}).error).to_equal(std::string("--mute takes a part, 1 to 7"));
 		// A genre with fewer parts than the sidebar has rows: its own count, whichever order the flags come in.
 		const Genre* small = nullptr;
 		for (const Genre* genre : allGenres()) {

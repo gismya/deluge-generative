@@ -160,7 +160,8 @@ constexpr MotifSpec kBellsMotif{
     .gateTicks = kTicksPerBar,
 };
 
-/// Drums, Bass, Pad, Drone, Lead and FX: the largest roster's six parts, a second Pad sized as Chords (rosterFits()).
+/// Drums, Bass, Pad, Drone, Lead and FX: six of the largest roster's seven parts, a second Pad sized as Chords
+/// (rosterFits()).
 constexpr PartSpec kParts[] = {
     {.role = Role::Drums, .name = "DRUMS", .lanes = kDrumLanes, .gestures = kNoGestures},
     {

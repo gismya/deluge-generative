@@ -382,11 +382,11 @@ struct TransitionPiece : StepwisePiece<TransitionSink> {
 	      lifecycle(*this, sounds, pendingOf(incoming != nullptr ? incoming : genre)) {
 		wire(*genre, incoming);
 	}
-	/// A piece of `playing` from its first Groove at seed 3, whose transition changes to `pending`: each Recipe at its
+	/// A piece of `playing` from its first Groove at `seed`, whose transition changes to `pending`: each Recipe at its
 	/// own genre, tempo, swing and key. For a genre change between two genres' own Recipes.
-	TransitionPiece(const Recipe& playing, const Recipe& pending)
-	    : StepwisePiece(Start{.recipe = playing, .seed = 3, .skipIntro = true}), sounds(driver, queue, currentRecipe),
-	      lifecycle(*this, sounds, pending) {
+	TransitionPiece(const Recipe& playing, const Recipe& pending, uint32_t seed = 3)
+	    : StepwisePiece(Start{.recipe = playing, .seed = seed, .skipIntro = true}),
+	      sounds(driver, queue, currentRecipe), lifecycle(*this, sounds, pending) {
 		wire(*playing.genre, pending.genre != playing.genre ? pending.genre : nullptr);
 	}
 

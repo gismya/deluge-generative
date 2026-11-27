@@ -34,7 +34,8 @@ expect event gen_regen_page open
 button SELECT_ENC down
 wait 50
 button SELECT_ENC up
-expect event gen_transition start style=0 within=60
+# Preload plus up to 1 Acid phrase (15.4 s) and a 32-bar build=long (61.4 s at 125 BPM) = ~77 s on the Deluge (#561).
+expect event gen_transition start style=0 within=120
 sleep 16
 
 # FADE

@@ -116,15 +116,76 @@ describe roster_room("Room in the Generator block", $ {
 		expect(maxSounding(Role::FX)).to_equal(4);
 	});
 
-	it("sizes the sounding-note pool and the event buffer for Detroit techno's roster", _ {
-		// Drums 11 + Bass 2 + Pad 8 + Stab 8 + Motif 2 + FX 4.
-		expect(SoundingNotes::kTotal).to_equal(35);
+	it("sizes the sounding-note pool and the event buffer for the largest 7-part roster", _ {
+		// Drums 11 + Bass 2 + Pad 8 + Stab 8 + Lead 2 + Lead 2 + FX 4.
+		expect(SoundingNotes::kTotal).to_equal(37);
 		// Per part on a bar line: each source's 4 hits, a note-off for each inside the step, a note-off for each note
-		// sounding and a re-strike for each: Drums 11·10, FX 4·10, Pad and Stab 4·8 + 8·2, Bass and Motif 1·8 + 2·2,
-		// plus a Section, a KeyScale, a Pump and 6 Sound events: 279. Off a bar line, no re-strikes: 244. Control
-		// events: 108.
-		expect(kEventBufferSize).to_equal(279 + 244 + 108);
-		expect(kMaxControlSets).to_equal(20);
+		// sounding and a re-strike for each: Drums 11·10, FX 4·10, Pad and Stab 4·8 + 8·2, Bass and two Leads
+		// 1·8 + 2·2 each, plus a Section, a KeyScale, a Pump and 7 Sound events: 292. Off a bar line, no re-strikes:
+		// 255. Control events: 114.
+		expect(kEventBufferSize).to_equal(292 + 255 + 114);
+		expect(kMaxControlSets).to_equal(21);
+	});
+
+	it("runs a 7-part test roster that fits rosterFits(), sounds the 7th part, and never overflows", _ {
+		// Detroit techno's 6 parts plus a 7th single-note Lead (Acid's Loop, promoted to Lead role) before FX.
+		static const PartSpec kAcidLead = [] {
+			PartSpec p = genres::technoAcid.parts[1];
+			p.role = Role::Lead;
+			p.name = "ACID2";
+			p.densityGate = 0;
+			return p;
+		}();
+		static const PartSpec kSevenParts[] = {
+		    genres::technoDetroit.parts[0], // Drums
+		    genres::technoDetroit.parts[1], // Bass
+		    genres::technoDetroit.parts[2], // Pad (Strings)
+		    genres::technoDetroit.parts[3], // Chords (Stab)
+		    genres::technoDetroit.parts[4], // Lead (Motif)
+		    kAcidLead,                      // 2nd Lead (Loop)
+		    genres::technoDetroit.parts[5], // FX (part 6, the 7th part)
+		};
+		static const Genre kSevenGenre = [] {
+			Genre genre = genres::technoDetroit;
+			genre.name = "seven-part-test";
+			genre.parts = kSevenParts;
+			genre.variantSets = {};
+			return genre;
+		}();
+		expect(partCount(kSevenGenre)).to_equal(7);
+		expect(rosterFits(kSevenGenre)).to_be_true();
+		expect(genreValid(kSevenGenre)).to_be_true();
+
+		int32_t part5Notes = 0;
+		int32_t part6Notes = 0;
+		for (uint32_t seed : {1U, 2U, 3U, 4U}) {
+			Run run;
+			run.recipe = newRecipe(kSevenGenre, seed);
+			run.recipe.macros.set(Macro::Complexity, macroPoints(50));
+			run.recipe.macros.set(Macro::Density, macroPoints(50));
+			run.recipe.macros.set(Macro::Motion, macroPoints(40));
+			run.seed = seed;
+			Result result = play(run, 8 * (2 + 8 + 2 + 2 + 2));
+			expect(result.droppedEvents).to_equal(0U);
+			expect(result.evictedNotes).to_equal(0U);
+			std::map<NoteKey, int32_t> open;
+			for (const Event& e : result.events) {
+				const NoteKey key{e.part, e.lane, e.pitch};
+				if (e.kind == EventKind::NoteOn) {
+					open[key]++;
+					part5Notes += e.part == 5 ? 1 : 0;
+					part6Notes += e.part == 6 ? 1 : 0;
+				}
+				else if (e.kind == EventKind::NoteOff) {
+					open[key]--;
+				}
+			}
+			for (const auto& [key, count] : open) {
+				expect(count).to_equal(0);
+			}
+		}
+		expect(part5Notes).to_be_greater_than(100);
+		expect(part6Notes).to_be_greater_than(0);
 	});
 
 	it("never overflows the event buffer or a sounding-note table with a 4-note Pad and Stab", _ {

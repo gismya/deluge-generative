@@ -69,7 +69,9 @@ expect event gen_transition_preload done error=0 parts=5 within=20
 expect event gen_sound_level PAD volume=50 lower since=mark
 expect event gen_transition phase=queued
 expect event gen_transition phase=committed within=60
-expect event gen_transition start style=0 within=60
+# Acid's BUILD variant set includes long (16 or 32 bars, #531): a 32-bar Build gliding 125 -> 122 BPM takes up to
+# 62.2 s in real time (#561), and up to ~3x that in host seconds under delugemu load.
+expect event gen_transition start style=0 within=180
 expect event gen_transition phase=retiring
 expect event gen_focus part=-1 locked=-1 new_roster
 # Acid's 4 Outputs retire after their tails: in one batch, or 3 and then the Drone once its release ends; total= counts

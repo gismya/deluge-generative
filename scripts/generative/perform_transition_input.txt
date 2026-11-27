@@ -96,7 +96,8 @@ button SELECT_ENC down
 wait 50
 button SELECT_ENC up
 expect event gen_transition phase=queued within=15
-expect event gen_transition start style=0 within=60
+# Up to 1 Acid phrase (15.4 s) plus a 32-bar build=long (61.4 s at 125 BPM) = 76.8 s on the Deluge (#561).
+expect event gen_transition start style=0 within=120
 # gen_h16 reports every 4 bars from the new roster's step 0: the first window holds the Drop. culled= names the last
 # culled voice's part (- with none; outgoing, other for a Sound outside both rosters, freed once its part's Output
 # is freed)

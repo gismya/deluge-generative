@@ -1056,7 +1056,16 @@ describe steering_log("The steering log", $ {
 
 	context("settings log (spec §17.2)", _ {
 		it("round-trips SetSetting, SettingPath (0x85) and settings header blocks (0x92), there since format 2", _ {
-			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(3)); // 3: the Recipe's variant picks
+			expect(PieceInfo::kFormat).to_equal(static_cast<uint16_t>(4)); // 4: kMaxParts 6 -> 7
+			expect(kDroppedReserve).to_equal(49);
+			// An older format-3 image is refused cleanly by readImage(), never misread.
+			{
+				std::vector<uint8_t> oldImage(sizeof(PieceInfo), 0);
+				PieceInfo oldInfo{};
+				oldInfo.format = 3;
+				std::memcpy(oldImage.data(), &oldInfo, sizeof oldInfo);
+				expect(SteeringLog::readImage(oldImage.data(), static_cast<int32_t>(oldImage.size()))).to_be_false();
+			}
 			Buffer b(4096);
 			b.log.beginPiece(startOf(1));
 			// Build a 0x92 settings header block with 2 scalars and 1 path.
