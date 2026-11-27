@@ -130,4 +130,9 @@ otherwise.
   event's velocity byte (`Event::closeExtra()`), so a lane's stored value is `int16_t` from the event to the clip
   builder and `SoundControls::Set::offset`; read a Control event's value with `controlOffset()`, never `offset`
   alone. The reach past -100 is per target in `perform/sound_mapping.cpp` (`closeMenuUnits()`), tuned by capture:
-  too deep, and the leaving part goes silent before its overlap ends.
+  too deep, and the leaving part goes silent before its overlap ends. In Compose a target that moves only past -100
+  (FM's treble shelf) must ride Brightness's extra lane (`Automated::extra`, `perform::onExtraLane()`), not the
+  Brightness lane: there it would get a home node at every Brightness node, automation that never moves (spec
+  §15.6). Trap: anything that reads `gateOpen()` before `updateSilent()` sees last step's overlap. Off a Section
+  line the gate's note cut (`cutClosedGates()`) runs after `updateSilent()`; on one it stays in `updateGates()`,
+  before `cutSectionLine()`, where no overlap carries on and `gateOpen()` ignores `overlap_`.

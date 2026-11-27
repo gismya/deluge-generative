@@ -47,20 +47,22 @@ struct Note {
 };
 
 /// What one automation lane moves (spec §15.6): a sound control on a part (Lane::None: a synth part, or a Kit's
-/// kit-wide set) or on a Drums or FX lane's row, or, with `throwDelay`, the delay Throw's feedback lift on that set
-/// (Event::throwDelay(), spec §11.4), which rides on the Space events. The firmware maps each to the params of the
-/// engine it lands on (spec §11.2): FM Brightness becomes the modulator 1 and 2 volumes.
+/// kit-wide set) or on a Drums or FX lane's row, or, with `extra`, the control's extra lane on that set: on Space the
+/// delay Throw's feedback lift (Event::throwDelay(), spec §11.4), on Brightness a handover's close past -kControlFull
+/// (Event::closeExtra(), spec §11.2), each riding on its control's events. The firmware maps each to the params of the
+/// engine it lands on (spec §11.2): FM Brightness becomes the modulator 1 and 2 volumes, and its extra lane the treble
+/// shelf (perform::onExtraLane()), so a set no handover closes gets no treble automation.
 struct Automated {
 	uint8_t part = 0;
 	Lane lane = Lane::None;
 	SoundControl control = SoundControl::Brightness;
-	bool throwDelay = false;
+	bool extra = false;
 	constexpr bool operator==(const Automated&) const = default;
 };
 
 /// One automation node, in the control's own units: the offset from home (-kControlFull..kControlFull, or down to
-/// -(kControlFull + kCloseControlExtra) for a handover's deep Brightness close), or for a throwDelay lane the lift in
-/// percent, 0–100.
+/// -(kControlFull + kCloseControlExtra) for a handover's deep Brightness close), or for an extra lane its percent,
+/// 0–100: Space's delay lift, Brightness's close past -kControlFull.
 struct Node {
 	int32_t tick = 0;
 	int16_t value = 0;
@@ -157,8 +159,9 @@ public:
 	/// How far the line through the kept points may stray from them: bar ends on a curve this straight merge into one
 	/// node, and a ramp that bends more within a bar keeps enough of its step lines to follow it (spec §15.6). (tuning)
 	static constexpr int32_t kNodeTolerance = 2;
-	/// One automation lane per control and set, and one more per set for the Throw's delay lift on Space.
-	static constexpr int32_t kTracksPerSet = kNumSoundControls + 1;
+	/// One automation lane per control and set, and two more per set: the Throw's delay lift on Space and a handover's
+	/// close past -kControlFull on Brightness (Automated::extra).
+	static constexpr int32_t kTracksPerSet = kNumSoundControls + 2;
 	static constexpr int32_t kMaxTracks = kMaxControlSets * kTracksPerSet;
 
 	void begin(SongWriter& writer);
@@ -344,10 +347,10 @@ private:
 	void control(const Event& event);
 	/// The lane `id` on the set of `part` and `lane`, started if `value` leaves home; nullptr if it stays home or its
 	/// set finds no room.
-	Track* track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int16_t value);
+	Track* track(uint8_t part, Lane lane, SoundControl control, bool extra, int16_t value);
 
 	/// Set slots from 1 by part and lane (Lane::None last); 0 for none yet. A set's lanes are tracks_[(slot - 1) *
-	/// kTracksPerSet], one per control, then the delay lift.
+	/// kTracksPerSet], one per control, then the delay lift, then the close past -kControlFull.
 	static constexpr int32_t kLaneSlots = kNumLanes + 1;
 	struct Counts {
 		int32_t sets = 0;

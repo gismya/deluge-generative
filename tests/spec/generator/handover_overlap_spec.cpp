@@ -7,6 +7,7 @@
 #include "core_walk.h"
 #include "generative/compose/compose_driver.h"
 #include "harness.h"
+#include "stream_helpers.h"
 
 #include "cppspec.hpp"
 
@@ -42,14 +43,15 @@ struct TestGenre {
 	PartSpec parts[3];
 	Genre genre;
 
-	explicit TestGenre(YieldSpec yield, int16_t dropOutChance = 1000, uint8_t leadGate = 0, uint8_t groovePhrases = 4) {
+	explicit TestGenre(YieldSpec yield, int16_t dropOutChance = 1000, uint8_t leadGate = 0, uint8_t groovePhrases = 4,
+	                   std::span<const Pattern> leadPool = kEveryEighth, uint16_t leadNoteTicks = 16) {
 		parts[kDrumsPart] = {.role = Role::Drums, .flavour = Flavour::None, .name = "DRUMS", .lanes = kKickOnly};
 		parts[kLeadPart] = {.role = Role::Lead,
 		                    .flavour = Flavour::Loop,
 		                    .name = "LEAD",
-		                    .pool = kEveryEighth,
+		                    .pool = leadPool,
 		                    .densityGate = static_cast<int16_t>(macroPoints(leadGate)),
-		                    .loop = {.degrees = kRootOnly}};
+		                    .loop = {.degrees = kRootOnly, .gateTicks = leadNoteTicks}};
 		parts[kArpPart] = {.role = Role::Lead,
 		                   .flavour = Flavour::Loop,
 		                   .name = "ARP",
@@ -286,41 +288,126 @@ describe handover_overlap("Handover overlap between a yielding pair (spec §5.6,
 		expect(stats.onSectionLine).to_equal(0);
 		expect(stats.crossedSection).to_equal(0);
 
-		// Force a Break mid-Groove on a bar line where an overlap is running: overlap ends on the Break's first bar
-		// and Brightness snaps back.
-		Recipe recipe = newRecipe(g.genre, 1);
-		recipe.macros.set(Macro::Motion, macroPoints(25));
-		// Find the first 2-bar overlap bar in an unsteered run.
-		const Walked base = walk(recipe, 1, 64 * kStepsPerBar, {}, true);
-		const std::vector<BarActivity> act = activityOf(base);
-		int32_t overlapBar = -1;
-		for (int32_t b = 1; b < 62; b++) {
-			if (act[static_cast<size_t>(b)].section == SectionKind::Groove && act[static_cast<size_t>(b)].lead
-			    && act[static_cast<size_t>(b)].arp && act[static_cast<size_t>(b + 1)].lead
-			    && act[static_cast<size_t>(b + 1)].arp) {
-				overlapBar = b;
-				break;
+		// A force queued once an overlap runs lands on the next phrase line, inside it: the overlap ends on that line,
+		// the leaving Lead (not kept in the Break) plays no more and its Brightness snaps back there. Here the Lead
+		// leaves by its gate (as the gate-close test below), for good, and an overlap of 12 bars spans the phrase line
+		// after the handover.
+		static constexpr WeightedBars kTwelve[] = {{12, 1}};
+		const TestGenre gated({.part = kLeadPart,
+		                       .inDrops = YieldMode::Rest,
+		                       .outside = YieldMode::Rest,
+		                       .overlapChance = 1000,
+		                       .overlapBars = kTwelve},
+		                      0, 31, 3);
+		int32_t forced = 0;
+		for (uint32_t seed = 1; seed <= 6; seed++) {
+			Recipe recipe = newRecipe(gated.genre, seed);
+			recipe.macros.set(Macro::Density, macroPoints(25));
+			recipe.macros.set(Macro::Motion, macroPoints(25));
+			const std::vector<BarActivity> act = activityOf(walk(recipe, seed, 96 * kStepsPerBar, {}, false));
+			int32_t start = -1;
+			for (int32_t b = 1; b + 1 < 96 && start < 0; b++) {
+				const BarActivity& before = act[static_cast<size_t>(b - 1)];
+				const BarActivity& first = act[static_cast<size_t>(b)];
+				if (first.section == SectionKind::Groove && !first.sectionStart && before.lead && !before.arp
+				    && first.lead && first.arp) {
+					start = b;
+				}
+			}
+			if (start < 0) {
+				continue;
+			}
+			const int32_t lineBar = (start / gated.genre.phraseBars + 1) * gated.genre.phraseBars;
+			if (lineBar >= start + 12 || !act[static_cast<size_t>(lineBar - 1)].lead
+			    || !act[static_cast<size_t>(lineBar - 1)].arp) {
+				continue; // the overlap must still run on the bar before the line
+			}
+			forced++;
+			Run run{.recipe = recipe, .seed = seed};
+			run.steer = steerAt(
+			    {{start * kStepsPerBar + 2, {CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0}}});
+			const Result steered = play(run, 96);
+			const int32_t line = stepTick(lineBar * kStepsPerBar);
+			bool breakOnLine = false;
+			bool snapped = false;
+			int32_t leadAfter = 0;
+			for (const Event& e : steered.events) {
+				breakOnLine =
+				    breakOnLine || (e.kind == EventKind::Section && e.section == SectionKind::Break && e.tick == line);
+				if (e.part != kLeadPart || e.tick < line || e.tick >= line + 8 * kBarTicks) {
+					continue;
+				}
+				leadAfter += e.kind == EventKind::NoteOn ? 1 : 0;
+				snapped = snapped
+				          || (e.kind == EventKind::Control && e.control == SoundControl::Brightness && e.tick == line
+				              && e.snap && e.controlOffset() >= -kControlFull);
+			}
+			expect(breakOnLine).to_be_true();
+			expect(leadAfter).to_equal(0);
+			expect(snapped).to_be_true();
+		}
+		expect(forced).to_be_greater_than(0);
+	});
+
+	it("keeps a leaving part's notes past its closing gate through the overlap, and cuts them where it ends", _ {
+		// The Lead plays one note a bar, on its last 16th, a step and 6 ticks long (a Loop note's longest), so it lasts
+		// over the bar line, and leaves by its gate (as the gate-close test above). The note entering the overlap's
+		// first bar plays on; the gate cuts the one entering the bar after the overlap on its line (spec §5.6).
+		static constexpr Pattern kLastSixteenth[] = {{"...............X", "................", 0}};
+		static constexpr WeightedBars kTwoOnly[] = {{2, 1}};
+		const TestGenre g({.part = kLeadPart,
+		                   .inDrops = YieldMode::Rest,
+		                   .outside = YieldMode::Rest,
+		                   .overlapChance = 1000,
+		                   .overlapBars = kTwoOnly},
+		                  0, 31, 3, kLastSixteenth, 30);
+		int32_t kept = 0;
+		int32_t cut = 0;
+		for (uint32_t seed = 1; seed <= 8; seed++) {
+			Recipe recipe = newRecipe(g.genre, seed);
+			recipe.macros.set(Macro::Density, macroPoints(25));
+			recipe.macros.set(Macro::Motion, macroPoints(25));
+			const Result res = play({.recipe = recipe, .seed = seed}, 96);
+			std::map<int32_t, int32_t> leadOffAfterOn; // note-on tick -> its note-off tick
+			std::map<int32_t, int32_t> arpBars;        // bar -> Arp note-ons
+			std::map<uint8_t, int32_t> open;
+			for (const Event& e : res.events) {
+				if (e.kind == EventKind::NoteOn && e.part == kArpPart) {
+					arpBars[e.tick / kBarTicks]++;
+				}
+				if (e.part != kLeadPart) {
+					continue;
+				}
+				if (e.kind == EventKind::NoteOn) {
+					open[e.pitch] = e.tick;
+				}
+				else if (e.kind == EventKind::NoteOff && open.contains(e.pitch)) {
+					leadOffAfterOn[open[e.pitch]] = e.tick;
+					open.erase(e.pitch);
+				}
+			}
+			auto leadOnIn = [&](int32_t bar) {
+				const auto found = leadOffAfterOn.lower_bound(bar * kBarTicks);
+				return found != leadOffAfterOn.end() && found->first < (bar + 1) * kBarTicks ? found : leadOffAfterOn.end();
+			};
+			for (int32_t b = 2; b + 2 < 96; b++) {
+				// A handover overlap: the Lead's notes in b-1, b and b+1 with the Arp only from b, none from the Lead in
+				// b+2 (its 2 bars are over), and the notes entering b and b+2 both start a bar before.
+				const auto before = leadOnIn(b - 1);
+				const auto last = leadOnIn(b + 1);
+				if (arpBars.contains(b - 1) || !arpBars.contains(b) || before == leadOffAfterOn.end()
+				    || leadOnIn(b) == leadOffAfterOn.end() || last == leadOffAfterOn.end()
+				    || leadOnIn(b + 2) != leadOffAfterOn.end()) {
+					continue;
+				}
+				kept += before->second > b * kBarTicks ? 1 : 0;
+				expect(before->second).to_be_greater_than(b * kBarTicks);
+				cut += last->second == (b + 2) * kBarTicks ? 1 : 0;
+				expect(last->second).to_equal((b + 2) * kBarTicks);
 			}
 		}
-		expect(overlapBar).to_be_greater_than(0);
-		// Force Break right after the overlap starts so the Break lands on overlapBar + 1 (or the next phrase line).
-		Run run{.recipe = recipe, .seed = 1, .skipIntro = true};
-		run.steer = steerAt({{overlapBar * kStepsPerBar + 2, {CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0}}});
-		const Result steered = play(run, 64);
-		// No note on the leaving part in the Break's first bar, and Brightness snaps back on the Section line.
-		int32_t breakTick = -1;
-		for (const Event& e : steered.events) {
-			if (e.kind == EventKind::Section && e.section == SectionKind::Break && e.tick > stepTick(overlapBar * kStepsPerBar)) {
-				breakTick = e.tick;
-				break;
-			}
-		}
-		expect(breakTick).to_be_greater_than(stepTick(overlapBar * kStepsPerBar));
-		for (const Event& e : steered.events) {
-			if (e.kind == EventKind::NoteOn && e.part == kLeadPart && e.tick >= breakTick && e.tick < breakTick + 8 * kStepsPerBar * kTicksPerStep) {
-				expect(false).to_be_true(); // Lead must not leak into Break
-			}
-		}
+		expect(kept).to_be_greater_than(0);
+		expect(cut).to_equal(kept);
 	});
 
 	it("eases Brightness deeply closed to -200, holds 1 beat, snaps back, and leaves volume and velocities untouched", _ {
@@ -427,6 +514,16 @@ describe handover_overlap("Handover overlap between a yielding pair (spec §5.6,
 			}
 		}
 		expect(sawDeepClose).to_be_true();
+		// The close past -kControlFull has its own lane, Brightness's extra one (the firmware's treble shelf follows it
+		// alone, perform::onExtraLane()), in percent past -kControlFull.
+		int32_t closeNodes = 0;
+		for (const auto& [id, node] : writer.nodes) {
+			if (id.control == SoundControl::Brightness && id.extra) {
+				closeNodes++;
+				expect(node.value >= 0 && node.value <= kCloseControlExtra).to_be_true();
+			}
+		}
+		expect(closeNodes).to_be_greater_than(0);
 
 		// ArcPlan matches PhraseHistory over 8 phrases.
 		StepwisePiece<> piece({.recipe = recipe, .seed = 3, .skipIntro = true});
@@ -437,6 +534,28 @@ describe handover_overlap("Handover overlap between a yielding pair (spec §5.6,
 			ArcPhrase heard;
 			expect(piece.driver.history().at(phrase, heard)).to_be_true();
 			expect(plan.at(phrase)->sounds).to_equal(heard.sounds);
+		}
+	});
+
+	it("gives no lane to the close past -kControlFull where no handover overlaps (spec §15.6)", _ {
+		// Psytrance as written (dropboth): the pair plays together, so nothing overlaps, and no Brightness extra lane
+		// starts: the firmware's treble shelf, which only that lane writes, gets no automation.
+		for (uint32_t seed = 1; seed <= 3; seed++) {
+			const Recipe recipe = withFirstVariants(newRecipe(genres::psytranceClassic, seed));
+			Generator gen;
+			ComposeDriver driver;
+			RecordingWriter writer;
+			driver.begin(gen, recipe, seed, {}, 160 * kStepsPerBar, writer, false);
+			while (!driver.run(256)) {
+			}
+			int32_t closeLanes = 0;
+			for (const auto& [id, node] : writer.nodes) {
+				closeLanes += id.control == SoundControl::Brightness && id.extra ? 1 : 0;
+			}
+			for (const auto& [id, value] : writer.bases) {
+				closeLanes += id.control == SoundControl::Brightness && id.extra ? 1 : 0;
+			}
+			expect(closeLanes).to_equal(0);
 		}
 	});
 });

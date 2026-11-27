@@ -94,10 +94,12 @@ struct Event {
 		return e;
 	}
 
+	/// `extra` rides in the velocity byte: on Space the delay Throw's level (throwDelay()), on Brightness a handover's
+	/// close past -kControlFull (closeExtra()); 0 on the other controls.
 	static constexpr Event controlChange(int32_t tick, uint8_t part, Lane lane, SoundControl control, int8_t offset,
-	                                     bool snap, uint8_t throwDelay = 0) {
+	                                     bool snap, uint8_t extra = 0) {
 		Event e;
-		e.velocity = throwDelay;
+		e.velocity = extra;
 		e.tick = tick;
 		e.kind = EventKind::Control;
 		e.part = part;

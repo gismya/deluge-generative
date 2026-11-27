@@ -710,8 +710,10 @@ private:
 	/// The delay Throw's level Space carries on `set` (Event::throwDelay()), in percent: the Throw's level where the
 	/// set has a delay setup, else 0 (spec §11.4).
 	[[nodiscard]] uint8_t throwDelayOf(const ControlSet& set) const;
-	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or, for Space, if the delay
-	/// Throw's level did (throwDelayOf()), keeping both as sent.
+	/// Sends `set`'s `control` at `target` on `tick` if it moved since it was last sent, or if its extra did, keeping
+	/// both as sent: for Space the delay Throw's level (throwDelayOf(), `sentThrowDelay`), for Brightness how far
+	/// `target` is below -kControlFull at a handover's close (Event::closeExtra(), `sentClose`), the offset itself
+	/// clamped to -kControlFull.
 	void sendControl(ControlSet& set, SoundControl control, int32_t target, int32_t tick, bool snap);
 	/// Whether `set`'s notes stop at a Throw's line: a Break that doesn't keep them, or a Gap.
 	[[nodiscard]] bool silencedAt(const ControlSet& set, const ThrowLine& line) const;
@@ -932,9 +934,13 @@ private:
 
 	/// Whether a part's notes on `lane` (Lane::None for a pitched part) sound: its gate and the lane's are open.
 	[[nodiscard]] bool gateOpen(int32_t part, Lane lane) const;
-	/// At a bar line, before the parts: moves every gate with its hysteresis. A closing gate ends its sounding notes
-	/// on the line; an opening one lets the notes it held back enter late.
+	/// At a bar line, before the parts: moves every gate with its hysteresis, and on a Section line cuts what the
+	/// closing gates end (cutClosedGates()). Elsewhere the cut waits for updateSilent(), so a part leaving through a
+	/// handover overlap keeps its notes (spec §5.6).
 	void updateGates(const Step& step);
+	/// A closing gate ends its sounding notes on the line, holding back those that may enter late; an opening one lets
+	/// them enter late after the parts.
+	void cutClosedGates(const Step& step);
 	/// At a Section line, before the parts: every sounding note ends on the line, and is held back to be re-struck by
 	/// late entry (spec §12.5). FX notes aren't held: their tails ring out, and FX notes a gate held back are dropped.
 	/// A Sustain that holds across Section lines keeps its notes ending on the line uncut, for decideSustain() to hold

@@ -363,8 +363,8 @@ void ComposeDriver::tempoReaches(int32_t tick) {
 }
 
 int8_t ComposeDriver::centreOf(const Automated& automated) const {
-	if (automated.throwDelay) {
-		return 0; // the Throw lifts feedback from its home
+	if (automated.extra) {
+		return 0; // an extra lane (the Throw's lift, a handover's close) moves from its home
 	}
 	return static_cast<int8_t>(generator_->centreLayer(automated.part, automated.lane, automated.control));
 }

@@ -177,7 +177,7 @@ inline std::vector<Note> notesBefore(std::vector<Note> notes, int32_t cutTick) {
 
 using LaneKey = std::tuple<uint8_t, Lane, SoundControl, bool>;
 inline LaneKey keyOf(const Automated& a) {
-	return {a.part, a.lane, a.control, a.throwDelay};
+	return {a.part, a.lane, a.control, a.extra};
 }
 
 /// The value each automation lane has on each step line before `cut`, as Perform plays its Control events: a snap
@@ -199,6 +199,9 @@ inline std::map<LaneKey, std::vector<int32_t>> performCurves(const std::vector<E
 		apply({e.part, e.lane, e.control, false}, e.controlOffset(), e);
 		if (e.control == SoundControl::Space) {
 			apply({e.part, e.lane, e.control, true}, e.throwDelay(), e);
+		}
+		if (e.control == SoundControl::Brightness) {
+			apply({e.part, e.lane, e.control, true}, e.closeExtra(), e);
 		}
 	}
 	return out;

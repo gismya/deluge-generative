@@ -310,6 +310,21 @@ describe sound_mapping("The sound-control mapping", $ {
 			expect(targetValue(cables, 1 << 28, kDeep)).to_equal(1);       // stays at ×0
 		});
 
+		it("leaves the treble shelf to Brightness's extra lane alone in Compose, so it gets no automation without a close (spec §15.6)", _ {
+			for (const TargetRange& range : controlTargets(SoundControl::Brightness, Engine::Fm)) {
+				expect(onExtraLane(SoundControl::Brightness, range.target, false)).to_equal(isDeepCloseOnly(range.target));
+			}
+			expect(onExtraLane(SoundControl::Brightness, Target::Treble, false)).to_be_true();
+			expect(onExtraLane(SoundControl::Brightness, Target::TrebleFreq, true)).to_be_true();
+			expect(onExtraLane(SoundControl::Brightness, Target::Modulator1Level, false)).to_be_false();
+			expect(onExtraLane(SoundControl::Brightness, Target::LpfFrequency, false)).to_be_false();
+			// Space's extra lane is the Throw's lift: a delay setup's feedback, and nothing else.
+			expect(onExtraLane(SoundControl::Space, Target::DelayFeedback, true)).to_be_true();
+			expect(onExtraLane(SoundControl::Space, Target::DelayFeedback, false)).to_be_false();
+			expect(onExtraLane(SoundControl::Space, Target::ReverbSend, true)).to_be_false();
+			expect(onExtraLane(SoundControl::Decay, Target::Env1Release, true)).to_be_false();
+		});
+
 		it("round-trips a player edit's home across the deep-close range", _ {
 			const TargetRange halfLpf = scaledRange(lpf, 50);
 			const TargetRange halfMod = scaledRange(mod1, 50);

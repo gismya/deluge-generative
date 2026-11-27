@@ -245,8 +245,8 @@ void ComposeSong::node(const compose::Automated& automated, const compose::Node&
 	}
 	// The part's lanes end at each cut (ClipBuilder::cutPart()), so a node is for the clip it is bound to now.
 	const int32_t tick = std::max<int32_t>(node.tick - startOf(automated.part), 0);
-	if (!soundControls.writeNode(automated.part, automated.lane, automated.control, automated.throwDelay, tick,
-	                             node.value, node.interpolated)) {
+	if (!soundControls.writeNode(automated.part, automated.lane, automated.control, automated.extra, tick, node.value,
+	                             node.interpolated)) {
 		fail(Error::INSUFFICIENT_RAM);
 		return;
 	}
@@ -254,7 +254,7 @@ void ComposeSong::node(const compose::Automated& automated, const compose::Node&
 }
 
 void ComposeSong::base(const compose::Automated& automated, int16_t value) {
-	soundControls.writeBase(automated.part, automated.lane, automated.control, automated.throwDelay, value);
+	soundControls.writeBase(automated.part, automated.lane, automated.control, automated.extra, value);
 }
 
 int32_t ComposeSong::sampleMicros(const Event& noteOn) {

@@ -463,7 +463,7 @@ describe compose_driver("The Compose driver", $ {
 						continue; // a lane that doesn't move stores its one value
 					}
 					const bool row = id.lane != Lane::None && genre->parts[id.part].role == Role::Drums;
-					if (id.throwDelay || row) {
+					if (id.extra || row) {
 						expect(value).to_equal(0);
 						continue;
 					}

@@ -144,13 +144,14 @@ public:
 
 	/// Writes a node at `tick` on each param `control` moves on `part`'s set for `lane`, at the value `offset` plays
 	/// there (interpolated from the previous node or a jump), and flags each param automated, which setNodeAtPos()
-	/// doesn't. With `throwDelay` the node is the delay Throw's lift on that set, `offset` its percent: it goes only on
-	/// a delay setup's feedback, which then follows the lift alone, with Space's share in it at home (a Space lane
-	/// skips that param). False if a node found no memory.
-	bool writeNode(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t tick, int32_t offset,
+	/// doesn't. With `extra` the node is the control's extra lane on that set, `offset` its percent: Space's goes only
+	/// on a delay setup's feedback, which then follows the Throw's lift alone, with Space's share in it at home;
+	/// Brightness's only on FM's treble shelf, at a handover's close past -kControlFull. Each param has one lane
+	/// (perform::onExtraLane()). False if a node found no memory.
+	bool writeNode(uint8_t part, Lane lane, SoundControl control, bool extra, int32_t tick, int32_t offset,
 	               bool interpolated);
 	/// Sets the stored value of each param writeNode() would write to the value `offset` plays.
-	void writeBase(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int32_t offset);
+	void writeBase(uint8_t part, Lane lane, SoundControl control, bool extra, int32_t offset);
 	/// After writeBase(): each bound Sound works its levels out again from its params, as a load does (a setup write
 	/// doesn't tell its patcher).
 	void repatch();
@@ -206,7 +207,7 @@ private:
 	/// Binds every set of `part` after the ones bound already, with homes read from its Output now.
 	void bindPart(const Roster& roster, const Genre& genre, int32_t part);
 	/// writeNode() on one set.
-	bool writeNodeOn(Set& set, SoundControl control, bool throwDelay, int32_t tick, int32_t offset, bool interpolated);
+	bool writeNodeOn(Set& set, SoundControl control, bool extra, int32_t tick, int32_t offset, bool interpolated);
 	/// A player edit of `bound` on `edited`, to `value`, copied to the fallback Riser row when it mirrors `edited`
 	/// (spec §9.5).
 	void mirrorEdit(const Set& edited, const Bound& bound, int32_t value);
@@ -272,10 +273,10 @@ private:
 
 	/// The set for `part`'s events on `lane`, or nullptr if it moves nothing.
 	Set* setOf(uint8_t part, Lane lane);
-	/// Compose: hands each param writeNode() writes for (`set`, `control`, `throwDelay`) to `found(bound, param, slot)`
-	/// with its value at `offset`.
+	/// Compose: hands each param writeNode() writes for (`set`, `control`, `extra`) to `found(bound, param, slot)` with
+	/// its value at `offset`.
 	template <typename Found>
-	void forEachComposed(Set& set, SoundControl control, bool throwDelay, int32_t offset, Found found);
+	void forEachComposed(Set& set, SoundControl control, bool extra, int32_t offset, Found found);
 	/// The value `bound` plays at `offset` on `set`: its control's share from home, or for a delay setup's feedback the
 	/// Throw's lift on top (perform::throwDelayValue(), at the set's throwDelay).
 	static int32_t valueOf(const Set& set, const Bound& bound, int32_t offset);

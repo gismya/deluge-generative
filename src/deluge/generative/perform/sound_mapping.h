@@ -189,6 +189,17 @@ constexpr bool isDeepCloseOnly(Target target) {
 	return target == Target::Treble || target == Target::TrebleFreq;
 }
 
+/// Compose (spec §15.6): whether a param of `target` bound to `control` is written by the control's extra lane
+/// (Automated::extra) rather than its own: on Space a delay setup's feedback, which follows the Throw's lift
+/// (`delaySetup`: the set has one and its part a Throw depth), on Brightness the deep-close-only targets, which follow
+/// a handover's close past -kControlFull. Each param has one lane, so one that never leaves home gets no automation.
+constexpr bool onExtraLane(SoundControl control, Target target, bool delaySetup) {
+	if (control == SoundControl::Space) {
+		return delaySetup && target == Target::DelayFeedback;
+	}
+	return control == SoundControl::Brightness && isDeepCloseOnly(target);
+}
+
 /// Whether every range in the table moves its target, as it must at every percent but 0 (spec §11.1) unless it is a
 /// deep-close-only target, and still fits a TargetRange at a palette entry's widest.
 constexpr bool rangesScaleWithinBounds() {

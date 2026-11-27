@@ -96,15 +96,18 @@ void ClipBuilder::control(const Event& event) {
 	if (Track* lane = track(event.part, event.lane, event.control, false, offset)) {
 		lane->move(*writer_, event.tick, offset, event.snap);
 	}
-	if (event.control == SoundControl::Space) {
-		const auto lift = static_cast<int16_t>(event.throwDelay());
-		if (Track* lane = track(event.part, event.lane, event.control, true, lift)) {
-			lane->move(*writer_, event.tick, lift, event.snap);
+	// The control's extra lane: Space's delay lift, Brightness's close past -kControlFull. It starts only once it
+	// leaves 0, so a set no Throw lifts or no handover closes gets none (spec §15.6).
+	if (event.control == SoundControl::Space || event.control == SoundControl::Brightness) {
+		const auto extra =
+		    static_cast<int16_t>(event.control == SoundControl::Space ? event.throwDelay() : event.closeExtra());
+		if (Track* lane = track(event.part, event.lane, event.control, true, extra)) {
+			lane->move(*writer_, event.tick, extra, event.snap);
 		}
 	}
 }
 
-ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl control, bool throwDelay, int16_t value) {
+ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl control, bool extra, int16_t value) {
 	uint8_t& slot = setSlot_[part][lane == Lane::None ? kNumLanes : static_cast<int32_t>(lane)];
 	if (slot == 0) {
 		if (value == 0) {
@@ -119,14 +122,16 @@ ClipBuilder::Track* ClipBuilder::track(uint8_t part, Lane lane, SoundControl con
 			tracks_[(slot - 1) * kTracksPerSet + i] = Track{};
 		}
 	}
-	Track& track =
-	    tracks_[(slot - 1) * kTracksPerSet + (throwDelay ? kNumSoundControls : static_cast<int32_t>(control))];
+	const int32_t index = !extra                           ? static_cast<int32_t>(control)
+	                      : control == SoundControl::Space ? kNumSoundControls
+	                                                       : kNumSoundControls + 1;
+	Track& track = tracks_[(slot - 1) * kTracksPerSet + index];
 	if (!track.started) {
 		if (value == 0) {
 			return nullptr;
 		}
 		track.started = true;
-		track.id = {part, lane, control, throwDelay};
+		track.id = {part, lane, control, extra};
 		// A lane that first leaves home after a split or a cut on its part starts there, not at the piece's start.
 		track.origin = partStart_[part];
 		track.endTick = partStart_[part];
