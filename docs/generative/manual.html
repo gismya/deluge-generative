@@ -847,7 +847,7 @@
     <!-- 3. GENRES -->
     <section id="genres">
       <h2>3. Genres &amp; Subgenres</h2>
-      <p>A <strong>genre</strong> is a built-in style definition. It sets the parts (4 to 6 instruments), tempo range, scales, swing, rhythm patterns, chord habits, Arc rules, and sound palette. You cannot edit a genre itself, though you can steer any Recipe it produces.</p>
+      <p>A <strong>genre</strong> is a built-in style definition. It sets the parts (4 to 7 instruments), tempo range, scales, swing, rhythm patterns, chord habits, Arc rules, and sound palette. You cannot edit a genre itself, though you can steer any Recipe it produces.</p>
       <p>Some genres are grouped into <strong>subgenres</strong> under a parent menu row (such as <code>TECHNO ▸</code>). Moving between two subgenres—say from Acid Techno to Detroit Techno—is a full genre change with a transition.</p>
 
       <div class="table-wrap">
@@ -1060,7 +1060,7 @@
             </tr>
             <tr>
               <td><strong>Density</strong> (<code>D</code>)</td>
-              <td>How many notes and layers play: thins or fills pattern steps by importance and opens/closes part and drum-lane Density gates.</td>
+              <td>How many notes and layers play: thins or fills pattern steps by importance and opens/closes part and drum-lane Density gates. Which notes play changes on bar lines, so parts come and go on the bar.</td>
               <td>Stripped back to core anchors; gated parts rest</td>
               <td>Full patterns; extra percussion and gated leads enter</td>
             </tr>
@@ -1417,12 +1417,12 @@
             <text x="461" y="9">Drop phrase</text>
           </g>
         </svg>
-        <figcaption><strong>SONG page (Arc map):</strong> Each column is one phrase. <strong>Column 4</strong> is now (white pad = focused part; active parts flash live). Columns 1–3 show played history; columns 5–16 show the Arc plan ahead. Turn <kbd>X</kbd> to scroll history/plan, tap <kbd>X</kbd> to jump back to now. Hold any part row (rows 1–6) to focus it, or double-tap to lock focus. Queued actions blink in the column where they land.</figcaption>
+        <figcaption><strong>SONG page (Arc map):</strong> Each column is one phrase. <strong>Column 4</strong> is now (white pad = focused part; active parts flash live). Columns 1–3 show played history; columns 5–16 show the Arc plan ahead. Turn <kbd>X</kbd> to scroll history/plan, tap <kbd>X</kbd> to jump back to now. Hold any part row (rows 1–6, or row 7 on a 7-part genre; otherwise row 7 shows Energy against the centre) to focus it, or double-tap to lock focus. Queued actions blink in the column where they land.</figcaption>
       </figure>
 
       <p><strong>Sidebar rules (same on every grid page):</strong></p>
       <ul>
-        <li><strong>MUTE/LAUNCH (rows 1–6):</strong> Tap to mute/unmute a part at the next bar line (hold <kbd>SHIFT</kbd> for immediate mute at the next step). Hold <kbd>X</kbd> + tap a MUTE pad to <strong>solo</strong>. Green = active, red = muted, blue = solo, dim = silenced by the Arc (gate closed, Break, drop-out, or soloed out).</li>
+        <li><strong>MUTE/LAUNCH (rows 1–7):</strong> Tap to mute/unmute a part at the next bar line (hold <kbd>SHIFT</kbd> for immediate mute at the next step). Hold <kbd>X</kbd> + tap a MUTE pad to <strong>solo</strong>. Green = active, red = muted, blue = solo, dim = silenced by the Arc (gate closed, Break, drop-out, or soloed out).</li>
         <li><strong>AUDITION/SECTION (rows 1–3):</strong> Force <strong>Groove</strong> (row 1, green), <strong>Break</strong> (row 2, blue), or <strong>Build</strong> (row 3, orange). Starts at the next phrase line (a short Build starts early enough to end on a phrase line). Tap again to cancel while queued.</li>
         <li><strong>AUDITION/SECTION row 5:</strong> <strong>Hold</strong> the current Section (white while held). A Build always finishes to its Drop and then holds the Groove.</li>
         <li><strong>AUDITION/SECTION row 8:</strong> <strong>End</strong> (purple). Hold for <strong>0.6 s</strong> to queue the Outro; tap to cancel while queued. Disabled while a menu, browser, or sound editor is open on top.</li>
@@ -1980,7 +1980,7 @@
       <!-- 7.7 FREEZE, FILLS, DROP-OUTS, PUNCH-INS -->
       <h3 id="perform-live-tools">Freeze, Fills, Drop-outs &amp; Punch-ins</h3>
       <ul>
-        <li><strong>Freeze (<kbd>CROSS-SCREEN</kbd> or CLIP Pad 1):</strong> Locks the focused part so it repeats its current phrase and stops mutating. Macros, mutes, Break rules, and sound Drift still act on top. Unfreezing jumps seamlessly back to the live timeline.</li>
+        <li><strong>Freeze (<kbd>CROSS-SCREEN</kbd> or CLIP Pad 1):</strong> Locks the focused part so it repeats its current phrase and stops mutating. Macros, mutes, Break rules, and sound Drift still act on top. Unfreezing jumps seamlessly back to the live timeline; if the part would have changed pattern while frozen, it finishes the bar first and switches on the next bar line.</li>
         <li><strong>Fills:</strong> The Generator automatically plays fills at phrase ends (more often at higher Motion). Hold <kbd>SYNC-SCALING</kbd> or any of the 12 <code>FILL</code> pads on <kbd>KEYBOARD</kbd> to play the genre's signature held fill immediately (hold <kbd>SHIFT</kbd> too for a fresh random fill pick). Across a phrase line, a held fill pauses for the first step (one 16th) so phrase downbeats stay clear, then carries on from the next step. Ambient has no fills.</li>
         <li><a class="gloss-link" href="#gloss-dropout"><strong>Drop-outs</strong></a><strong>:</strong> Built into Roots Dub, Dub Techno, House, Classic Psytrance, and Ambient. During a Groove, specific parts or drum lanes drop silent for 1–16 bars—often throwing their last hit into reverb and delay—while notes already sounding ring out cleanly. Higher Motion makes drop-outs happen more often.</li>
         <li><a class="gloss-link" href="#gloss-punchin"><strong>Punch-ins</strong></a> <strong>(<kbd>KEYBOARD</kbd> page):</strong> Immediate performance effects on columns 9–10 (Drums lane mutes) and columns 15–16 (<code>HAT ROLL</code> 32nds, <code>SNARE ROLL</code> 16ths, <code>FLAM</code> on backbeats, <code>DOUBLE KICK</code>, and <code>PUMP</code> sidechain ducking under the kick). All follow the <strong>0.3 s rule</strong>: tap (&lt; 0.3 s) to latch on, hold (≥ 0.3 s) for momentary effect that springs back on release. Pressing and releasing a latched pad turns it off regardless of how long you hold it, and latched punch-ins stay on across a stop (unlike mutes, solos, and freezes). Note that <code>FLAM</code> is often silent in Techno at default macros because Techno has no clap and only sparse rim/snare hits.</li>

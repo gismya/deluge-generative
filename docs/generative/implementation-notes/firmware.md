@@ -158,7 +158,7 @@ otherwise.
 - `cardLog` lives in `.sdram_bss` (its three `FIL`s are 1.7 KB): zeroed at boot, never constant-initialised, so every
   member must read right as zero until `enter()` resets it (`taskAdded_`, not a `-1` task id).
 - A piece's file is its image: `PieceInfo` (the genre as its index in `allGenres()` and its version, the pointer
-  can't be stored; `kFormat = 2` since #448 part 3 added `kSettingPathTag = 0x85` and `kSettingsTag = 0x92`), header
+  can't be stored; `kFormat = 4` since #555 raised `kMaxParts` from 6 to 7, after #448 part 3's `2` and #493's `3`), header
   records, records. The task rewrites the info at each flush with `bytes` = what reached the card, always a step's end,
   which `readImage()` trusts after a power-off; past it the last step may be torn. `CardLog::enter()` holds back
   `kAdoptReserve` (4) slots when adopting marked files so a full folder still leaves room to log the new set.

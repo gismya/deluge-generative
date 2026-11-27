@@ -583,9 +583,10 @@ describe loop_lines("Loop lines", $ {
 		}
 	});
 
-	it("keep a frozen part's pick through re-picks, and take the latest on unfreeze", _ {
-		// Every phrase line re-picks. The Drums and the Bass freeze in bar 1 and unfreeze partway through bar 7, or on
-		// the phrase line at bar 8, where the line's own re-pick lands on top of the one that waited.
+	it("keep a frozen part's pick through re-picks, and take the latest on the bar line after the unfreeze", _ {
+		// Every phrase line re-picks. The Drums and the Bass freeze in bar 1 and unfreeze partway through bar 7, where
+		// they keep the held pattern to the bar line, or on the phrase line at bar 8, where the line's own re-pick
+		// lands on top of the one that waited.
 		constexpr int32_t kBars = 12;
 		for (int32_t kThaw : {7 * kStepsPerBar + 5, 8 * kStepsPerBar})
 		for (uint32_t seed = 1; seed <= 10; seed++) {
@@ -616,7 +617,11 @@ describe loop_lines("Loop lines", $ {
 			}
 			expect(changed).to_be_true(); // while the unfrozen run moved on
 
-			// From the thaw on, the picks the unfrozen run has, and the Bass's line rolled fresh with its pick.
+			// Up to the bar line, the held pattern (spec §6.7): the bar's onsets are the held bar's.
+			for (int32_t part : {0, 1}) {
+				expect(onsets(b, part, 7) == onsets(b, part, 1)).to_be_true();
+			}
+			// From the bar line on, the picks the unfrozen run has, and the Bass's line rolled fresh with its pick.
 			auto from = [](const Result& result, int32_t step) {
 				std::vector<Event> out;
 				for (const Event& e : only(result.events, EventKind::NoteOn)) {
@@ -626,7 +631,7 @@ describe loop_lines("Loop lines", $ {
 				}
 				return out;
 			};
-			expect(from(b, kThaw) == from(a, kThaw)).to_be_true();
+			expect(from(b, 8 * kStepsPerBar) == from(a, 8 * kStepsPerBar)).to_be_true();
 		}
 	});
 

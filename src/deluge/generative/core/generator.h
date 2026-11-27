@@ -70,10 +70,11 @@ struct PatternState {
 		uint16_t phrase = 0; ///< The phrase within that Groove.
 		uint16_t bar = 0;    ///< The bar it began on, counted from the piece's start (modulo 2^16): Answers key on it.
 	};
-	int8_t entry = -1;       ///< Index into the pool, -1 before the first pick and after a thaw takes a waiting one.
+	int8_t entry =
+	    -1; ///< Index into the pool, -1 before the first pick and after an unfrozen part takes a waiting one.
 	bool hasWaiting = false; ///< A Drop or re-pick came while the part was frozen (spec §6.7).
 	Pick pick;               ///< The pick playing.
-	Pick waiting;            ///< With hasWaiting: the pick it takes on unfreeze.
+	Pick waiting;            ///< With hasWaiting: the pick it takes on the bar line after an unfreeze.
 };
 
 /// `key` positioned on a pick: its Groove in word 0, its phrase in word 1's top half and its pool entry in word 2's
@@ -468,12 +469,17 @@ public:
 	/// the Gap doesn't stop it. Its MUTE pad shows dim (spec §13.5).
 	[[nodiscard]] bool partSilenced(int32_t part) const { return (silent_ & partBit(part)) != 0; }
 #ifdef GENERATOR_TEST_SEAMS
-	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and effective Density,
-	/// so a spec can read what interplay rules read there through testTargetPlanned().
+	/// Harness only (spec §21.2): called on each decided step after its parts, with its index and the Density its
+	/// notes read (the bar line's, spec §5.6), so a spec can read what interplay rules read there through
+	/// testTargetPlanned().
 	static inline void (*testDecided_)(const Generator& generator, int32_t step, int32_t density) = nullptr;
 	/// Harness only: whether `target` has a planned onset on `step` at `density`, as an interplay rule reads it.
 	[[nodiscard]] bool testTargetPlanned(const RuleTarget& target, int32_t step, int32_t density) const {
 		return targetPlanned(target, step, 0, density);
+	}
+	/// Harness only: the pool entry part `part` plays, or its lane `laneIndex`'s; -1 before its first pick.
+	[[nodiscard]] int32_t testEntry(int32_t part, int32_t laneIndex) const {
+		return parts_[part].lanes[laneIndex < 0 ? 0 : laneIndex].entry;
 	}
 #endif
 
@@ -549,6 +555,13 @@ private:
 	};
 	/// start() and startIncoming(): resets everything, with the Arc entering `first` (a Drop's Groove with `onDrop`).
 	void begin(const Recipe& recipe, uint32_t seed, const Takes& takes, SectionKind first, bool onDrop);
+	/// `shared`, a Density every part shares, as part `part`'s notes read it: moved by its Density bias as the last
+	/// bar line latched it (latchDensity()). The sound controls read the live bias through biasedOn().
+	[[nodiscard]] int32_t barDensityOn(int32_t part, int32_t shared) const {
+		return partBiased(shared, barDensityBias_[part]);
+	}
+	/// On a bar line: latches the effective Density and each part's Density bias for the bar's notes (spec §5.6).
+	void latchDensity();
 	/// Works out the section rules for `step` (keeps, cut, Gap, roll, Phrase accent), and ends the pitched notes the
 	/// Gap or the cut stops where they start.
 	void sectionRules(Step& step);
@@ -910,8 +923,6 @@ private:
 	[[nodiscard]] Key key() const { return {recipe_.keyRoot, recipe_.scale}; }
 	/// The step a part's draws key on: `step`, or while the part is frozen, the same step of the phrase it froze in.
 	[[nodiscard]] int32_t heldStep(int32_t partIndex, int32_t step) const;
-	/// Unfreezes a part: each of its patterns takes the pick that came while it was frozen, if one did.
-	void thaw(int32_t partIndex);
 	/// At a bar line: whether the bar plays an Answer, and which, from the live Complexity (spec §5.2).
 	void updateAnswer(int32_t partIndex, const Step& step);
 	/// What a Loop step plays: its line step's pitch content, or the Answer's read-time transform of the line.
@@ -977,6 +988,10 @@ private:
 	static_assert(kMacroFull <= INT16_MAX, "driftLastMotion_ holds a Motion in 16 bits");
 	static_assert(kMacroLayerRows * INT16_MAX * kMacroFull / kMacroLayerSpan * kMacroLayerDepth / 1000 <= INT16_MAX,
 	              "lastSpaceMacro_ holds the macro layer in 16 bits");
+	/// Density as the notes read it, latched on each bar line (latchDensity()): the shared effective Density and each
+	/// part's Density bias then, so neither the Arc's ramp nor a live turn starts or stops a hit mid-bar (spec §5.6).
+	int16_t barDensity_ = 0;
+	int16_t barDensityBias_[kMaxParts] = {};
 	const Genre* genre_ = nullptr; ///< Constant data, or *resolved_: never owned.
 	ResolvedGenre* resolved_ = nullptr;
 

@@ -360,10 +360,10 @@ private:
 	/// instruction grows the step's code (see implementation-notes/core.md).
 	Steering steering_;
 	perform::PerformDriver driver_;
-	/// Before sink_, where it puts the roster an odd 4 bytes from Transitions' incoming one (the static_assert in
-	/// incomingStarts()): the driver's size moves that.
-	int32_t lastSwungTick_ = 0;
 	OutputSink sink_;
+	/// After sink_, where sink_.roster stays an odd 4 bytes from Transitions' incoming one (the static_assert in
+	/// incomingStarts()): the driver's size moves that (PhraseHistory grew by 20 B when kMaxParts rose to 7).
+	int32_t lastSwungTick_ = 0;
 	/// The song's tick magnitude at the last tick: an external clock can change it (spec §12.3).
 	int32_t magnitude_ = 0;
 	int32_t positionTick_ = 0;

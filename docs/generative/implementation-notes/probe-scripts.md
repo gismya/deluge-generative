@@ -18,6 +18,10 @@ otherwise.
   before that Section's event, so an h16 expected after a Section event is the next one, 4 bars later
   (`perform_genre_change_dub.txt`, `_ambient.txt`: `within=40` at 70 BPM). A `since=mark` there would take the
   previous Section's report instead.
+- Trap (#561): Techno's `BUILD` variant set (`#531`) includes `long` (16 or 32 bars, 1 in 24 runs draws 32 bars), so an
+  unpinned DROP (`style=0`) out of any Techno subgenre can legitimately play a 32-bar Build: 58.4–62.2 s real time into
+  Melodic techno (125→122 BPM), up to 81.0 s into Roots Dub (125→70 BPM), plus up to a phrase (15.4 s) waiting for the
+  Build to start. Size `within=` on unpinned Techno DROP transitions for 32 bars (and ~3× under delugemu load).
 - A fast gold turn (`encoder 4 N fast`) takes no time, so presses a slow turn used to space out can land in a
   double-tap window (`perform_homes.txt` waits 400 ms before pressing DRUMS again). Its 4-step edits don't always
   act as 4 one-step ones: stock deletes a mod cable inside the one-step edit that reaches 0, not after fast turns.

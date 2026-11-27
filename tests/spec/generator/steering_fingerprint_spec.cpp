@@ -74,16 +74,16 @@ struct Pinned {
 
 /// Each signed-off genre's steered fingerprint; a retune copies the printed value here (spec §21.2).
 const Pinned kPinned[] = {
-    {&genres::technoAcid, 0x650d70516f3a92b7ULL, 76223},
-    {&genres::technoDub, 0x1138b48161167ffcULL, 95566},
-    {&genres::technoMelodic, 0xef5f7658034c7711ULL, 87623},
-    {&genres::technoDetroit, 0x2bfae2340291f5abULL, 103237},
+    {&genres::technoAcid, 0x1a578b6ec8242dadULL, 76248},
+    {&genres::technoDub, 0xc4c735d6ca8ef898ULL, 95590},
+    {&genres::technoMelodic, 0x8e6e5ea4ee0644b4ULL, 87653},
+    {&genres::technoDetroit, 0x9b1f8668477f3494ULL, 103275},
     // Dub's held entry is its Snare and Tom Swap, and it has no Rest.
-    {&genres::dub, 0xd875be1a6d1e427aULL, 107341, {0, kPieces}},
+    {&genres::dub, 0xbb2126f4603e449cULL, 107419, {0, kPieces}},
     // Ambient has no fills, so FILL holds nothing.
-    {&genres::ambient, 0x891e6393c330e75bULL, 64643, {0, 0}},
+    {&genres::ambient, 0x533ee09029678769ULL, 64649, {0, 0}},
     // Psytrance's held entry is its 2-beat Rest on Kick and Bass, and it has no Swap.
-    {&genres::psytranceClassic, 0x80431cb5c79fff2fULL, 111242, {kPieces, 0}},
+    {&genres::psytranceClassic, 0xb8f682dc5b394ba9ULL, 111294, {kPieces, 0}},
 };
 
 std::string hex(uint64_t value) {

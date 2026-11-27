@@ -18,7 +18,7 @@
 - **`ERROR: TERM` on the OLED.** An uncaught C++ exception reached `std::terminate`, which freezes the device. It's
   usually `operator new` throwing `BAD_ALLOC` once general memory is full, so a test that fills memory can freeze the
   next screen that allocates. Decode the pads as for any crash: the stack hints name the allocation site.
-- **A hang near the end of `loadfw`.** Builds from before the #55 fix (no `io/midi/sysex_load_progress.h`) write their
+- **A hang near the end of `loadfw`.** Builds from before the #55 fix (no clamp on `pad` in `Debug::loadPacketReceived()`) write their
   progress bar past `PadLEDs::image`, and the running build can crash. If the running build is one of those, check
   with `arm-none-eabi-nm -n` which symbol follows `PadLEDs::image` in it. If it's live state such as `numUIsOpen`,
   have the user power cycle before the next load.

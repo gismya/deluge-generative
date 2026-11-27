@@ -31,7 +31,8 @@ otherwise.
   (`adds #24`), and an offset past the short form needs a longer instruction (`addw`), which grows the step by 4
   bytes. The `static_assert`s in `PerformAdapter::swapIn()` and `PerformSteering::enter()` hold it.
   `PerformDriver`'s size also moves `PerformAdapter::sink_`, and with it the roster copy's mod-8 `static_assert` in
-  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back.
+  `incomingStarts()`: #143's `log_` pointer flipped it, and moving `lastSwungTick_` ahead of `sink_` put it back (#555's
+  `kMaxParts = 7` grew `PhraseHistory` by 20 B and moved `lastSwungTick_` back after `sink_`).
 - `Purpose` (`core/draw.h`) and `CommandKind` (`core/steering.h`) are append-only: a purpose's value is part of every
   draw key, and logs store command kinds.
 - The steering log (`core/steering_log.*`, spec §17.2) holds pieces in one buffer: a `PieceInfo`, header records
@@ -52,7 +53,8 @@ otherwise.
 - Bar- and phrase-quantised commands wait in `PendingList` (`core/steering.h`); a `static_assert` in
   `core/generator.h` keeps its capacity above every slot kind. `Generator::stepsToLine()` is the one line rule: both
   `landPending()` and `landsAt()` (QUEUE's countdowns) use it.
-- Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's), and
+- Capacity is sized by construction from one roster table, `kLargestRoster` (`core/types.h`, Detroit techno's plus a
+  seventh single-note Lead), and
   `onsetNotes(role)`: `stepEventsOf()`, `kEventBufferSize` and `kMaxControlEventsPerStep` in `core/capacity.h`,
   `kMaxControlSets` in `core/genre.h`, `SoundingNotes::kTotal`, and `static_assert(sizeof(Generator) <= 16 * 1024)`.
   `rosterFits()` (`core/capacity.h`) holds a genre's roster to it: each built-in genre `static_assert`s it through
@@ -134,8 +136,9 @@ otherwise.
 - Tier picks share one rule (`core/tiers.h`): `bandTier`, `playingTier`, `drawInTier`. Pattern picks and Answers both
   use it; Motif and Arp tiers should too.
 - Freeze (§6.7) holds a part's picks in `updatePick`: a Drop or re-pick while frozen waits in the lane's
-  `PatternState::waiting`, and `Generator::thaw()` adopts it by setting `entry = -1`, so the next decision re-picks
-  it (and a Loop rolls its line). A freeze replays the phrase of the last decided step: on a phrase line, the phrase
+  `PatternState::waiting`, and `placePick()` adopts it on the first bar line after the unfreeze (#451; until then
+  `hasWaiting` stays set on an unfrozen part and the held pattern plays on) by setting `entry = -1`, so that decision
+  re-picks it (and a Loop rolls its line). A fill-only lane adopts there too: `decideKit()` calls `placePick()` for it. A freeze replays the phrase of the last decided step: on a phrase line, the phrase
   just heard, since that line's pick waits. A draw keyed on an absolute step must go through `heldStep()` so a frozen
   part replays its phrase (Answers and Fresh Velocity spread do).
 - A Loop's Answer is drawn at each bar line (`updateAnswer`) and stored in `PartState::answer`, so a Complexity turn
@@ -248,11 +251,15 @@ otherwise.
 - Part bias (§3.3, #303): `Recipe::bias` (`PartBiases`), the curve `partBiased()` / its inverse `biasFor()` in
   `core/part_bias.h` (swap the curve there only: `biasFor()` searches whatever monotonic curve it is), and
   `Generator::biasedOn(part, macro, shared)`. A part decides on its own copy of the step (`partStep()`, only when
-  `recipe_.bias.any(p)`); the shared step stays what the Arc, fills, accents and drift read. `Step::sharedDensity` is
+  `recipe_.bias.any(p)` or its latched Density bias is set, below); the shared step stays what the Arc, fills, accents and drift read. `Step::sharedDensity` is
   the unbiased Density: `planned()` takes the shared one and biases it for whichever part it asks about, so every
   caller passes `step.sharedDensity`, never a part's `step.density` (an interplay target plans at its own bias). A new
   per-part macro read goes through `biasedOn()`; a new shared one reads `recipe_.macros` or the shared step. The
   macro layer is per part (`macroLayer(control, part)`, -1 for the shared one), and so is `lastSpaceMacro_`.
+  Density for the notes is the exception (#451, spec §8.1): `latchDensity()` latches it on each bar line
+  (`barDensity_`, `barDensityBias_`), so a read that decides whether a note plays takes `step.density` or
+  `step.sharedDensity` and biases it with `barDensityOn()`, never `biasedOn(part, Macro::Density, ...)` or
+  `effectiveMacro(Macro::Density)`: those are live, which the sound controls' macro layer wants.
 - Punch-ins (§8.9, #301): `PunchIns` (`core/punch_ins.h`) in `Generator::punch_`, set by `SetPunch` in `apply()`.
   Their effects act at output, after the plan: a LaneMute in `noteOn()`'s muted flag, the rolls in `decideKit()` after
   the Replace pairs (`punchRoll()`), Flam and Double kick in `express()` after `ornamentFor()` (`punchOrnament()`),

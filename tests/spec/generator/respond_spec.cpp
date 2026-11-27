@@ -345,26 +345,31 @@ describe respond("The Respond rule", $ {
 		expect(total.quieter).to_be_greater_than(0);
 	});
 
-	it("holds a half-bar's count when Density moves in the middle of it", _ {
+	it("counts a bar's halves at the Density its bar line latched, so a turn mid-bar waits for the next", _ {
 		constexpr int32_t kBars = 12;
-		int32_t moved = 0;
 		for (uint32_t seed = 1; seed <= 4; seed++) {
-			// Density turns on the 4th and 12th steps of bars, from the top to the middle and back.
+			// Density turns on the 4th and 12th steps of bars, from the top to the middle and back, and the same turns
+			// on the bar lines after them.
 			std::vector<std::pair<int32_t, Command>> turns;
+			std::vector<std::pair<int32_t, Command>> onLines;
 			for (int32_t bar = 1; bar < kBars; bar++) {
 				turns.emplace_back(bar * kStepsPerBar + (bar % 2 == 0 ? 3 : 11), density(bar % 4 < 2 ? 30 : 50));
+				onLines.emplace_back((bar + 1) * kStepsPerBar, density(bar % 4 < 2 ? 30 : 50));
 			}
 			Run free = respondRun(OverMoving<false>::genre, seed, 50);
 			free.steer = steerAt(turns);
 			Run ruled = respondRun(OverMoving<>::genre, seed, 50);
 			ruled.steer = steerAt(turns);
+			Run lined = respondRun(OverMoving<>::genre, seed, 50);
+			lined.steer = steerAt(onLines);
 			const std::set<int32_t> lead = freeLead(free, kBars);
 			Halves halves;
-			play(ruled, kBars);
+			const Result result = play(ruled, kBars);
 			expect(unfollowed(halves, lead, kBars * kStepsPerBar).empty()).to_be_true();
-			moved += halves.moved;
+			expect(halves.moved).to_equal(0);
+			expect(only(result.events, EventKind::NoteOn) == only(play(lined, kBars).events, EventKind::NoteOn))
+			    .to_be_true();
 		}
-		expect(moved).to_be_greater_than(0); // a count taken later would have differed
 	});
 
 	it("drops a keyed share below full strength, more at a higher strength or, with sensitivity, a higher Complexity", _ {

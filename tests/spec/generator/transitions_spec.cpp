@@ -63,6 +63,40 @@ describe transitions("Transitions", $ {
 		expect(t.startsInGroove(true)).to_be_true();
 	});
 
+	it("plays Techno's 32-bar long-variant Build to its Drop and starts the incoming roster (#561)", _ {
+		// Acid techno's BUILD set (#531) has `long` (16 or 32 bars); seed 0 draws 32 bars (512 steps). Gliding from
+		// 125 to Melodic's 122 BPM takes 62.2 s real time, past a 60 s probe timeout while still legitimately
+		// Committed.
+		Recipe playing = acidRecipe();
+		playing.tempo = 12500;
+		const int32_t buildSet = findVariantSet(genres::technoAcid, "build");
+		const int32_t longPick = findVariant(genres::technoAcid.variantSets[buildSet], "long");
+		playing.variants.pick[buildSet] = static_cast<uint8_t>(longPick);
+		playing.variants.allowed[buildSet] = static_cast<uint8_t>(1U << longPick);
+		Recipe pending = acidRecipe();
+		pending.genre = &genres::technoMelodic;
+		pending.tempo = 12200;
+
+		Transition t(playing, pending, 0);
+		t.confirmAt(3, TransitionStyle::BuildIntoDrop);
+		// Build lands on bar 8 (phrase 1): Committed through all 32 bars, starting on bar 40.
+		t.runBars(9);
+		expect(t.lifecycle.phase() == perform::TransitionPhase::Committed).to_be_true();
+		expect(t.sink.starts).to_equal(0);
+		t.runBars(30); // bar 39: 31 bars into the 32-bar Build, still Committed
+		expect(t.lifecycle.phase() == perform::TransitionPhase::Committed).to_be_true();
+		expect(t.sink.starts).to_equal(0);
+		t.runBars(2); // crosses bar 40: Drop lands and Melodic starts
+		expect(t.sink.starts).to_equal(1);
+		expect(t.lifecycle.phase() == perform::TransitionPhase::Retiring).to_be_true();
+		const Played build = t.sink.last(false, EventKind::Section);
+		expect(build.event.section == SectionKind::Build).to_be_true();
+		expect(t.sink.startAt - build.at).to_equal(stepTick(32 * kStepsPerBar));
+		expect(t.startsInGroove(true)).to_be_true();
+		expect(t.lifecycle.current().recipe().genre == &genres::technoMelodic).to_be_true();
+		expect(t.sink.tempos.back().second).to_equal(12200);
+	});
+
 	it("ends every outgoing note by the start step and drains the outgoing instance", _ {
 		Transition t;
 		t.confirmAt(3, TransitionStyle::BuildIntoDrop);

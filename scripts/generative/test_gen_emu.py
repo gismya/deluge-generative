@@ -426,7 +426,10 @@ class CaptureMutes(unittest.TestCase):
         )
 
     def test_mute_takes_the_sidebars_rows(self):
-        for part in ("0", "7"):
+        self.assertEqual(
+            gen_emu.parser().parse_args(["capture", "--mute", "7"]).mute, [7]
+        )
+        for part in ("0", "8"):
             with self.subTest(part=part), self.assertRaises(SystemExit):
                 gen_emu.parser().parse_args(["capture", "--mute", part])
 

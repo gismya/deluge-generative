@@ -189,6 +189,71 @@ describe arc_map("Arc map", $ {
 		expect(map.cell[kEnergyRow][column(0)].look).to_equal(ArcMapCell::Look::Energy);
 		expect(map.cell[kEnergyRow][column(0)].energy).to_equal(0); // Groove: at the centre
 		expect(map.cell[kEnergyRow][column(1)].energy < -1).to_be_true();
+		expect(piece.part(kEnergyRow).substr(0, 5)).to_equal(std::string{"..eee"});
+	});
+
+	it("shows Energy on row 7 for a 6-part genre (Detroit techno), and the 7th part for a 7-part roster", _ {
+		// 6-part genre: rows 0..5 are parts, row 6 (spec row 7) is Energy, row 7 (spec row 8) is Section.
+		Recipe sixRecipe = newRecipe(genres::technoDetroit, 1);
+		sixRecipe.variants = {};
+		Piece six(sixRecipe);
+		six.decideBefore(kPhraseSteps + 20);
+		ArcMap sixMap = six.map();
+		expect(sixMap.cell[5][column(0)].look == ArcMapCell::Look::Part
+		       || sixMap.cell[5][column(0)].look == ArcMapCell::Look::Off)
+		    .to_be_true();
+		expect(sixMap.cell[kEnergyRow][column(0)].look).to_equal(ArcMapCell::Look::Energy);
+		expect(sixMap.cell[kEnergyRow][column(1)].look).to_equal(ArcMapCell::Look::Energy);
+		expect(sixMap.cell[kSectionRow][column(0)].look).to_equal(ArcMapCell::Look::Section);
+		expect(six.part(kEnergyRow).substr(0, 5)).to_equal(std::string{"..eee"});
+
+		// 7-part roster: row 6 (spec row 7) shows the 7th part (never Energy), and row 7 stays Section.
+		static const PartSpec kLead7 = [] {
+			PartSpec p = genres::technoAcid.parts[1];
+			p.role = Role::Lead;
+			p.name = "ACID7";
+			p.densityGate = 0;
+			return p;
+		}();
+		static const PartSpec kSevenParts[kMaxParts] = {
+		    genres::technoDetroit.parts[0], genres::technoDetroit.parts[1], genres::technoDetroit.parts[2],
+		    genres::technoDetroit.parts[3], genres::technoDetroit.parts[4], genres::technoDetroit.parts[5],
+		    kLead7, // part 6 (row 7): plays in Groove, kept out in Break
+		};
+		static const Genre kSevenGenre = [] {
+			Genre genre = genres::technoDetroit;
+			genre.name = "arc-seven";
+			genre.parts = kSevenParts;
+			genre.variantSets = {};
+			return genre;
+		}();
+		Recipe sevenRecipe = newRecipe(kSevenGenre, 1);
+		sevenRecipe.variants = {};
+		Piece seven(sevenRecipe);
+		// Silent trap check: PhraseHistory::lastNote(6) must start at INT32_MIN, not 0.
+		expect(seven.driver.history().lastNote(6)).to_equal(INT32_MIN);
+		seven.decideBefore(kPhraseSteps + 20);
+		seven.pushAndDecide({CommandKind::ForceSection, static_cast<uint8_t>(SectionKind::Break), 0});
+		ArcMap sevenMap = seven.map();
+		expect(sevenMap.cell[kEnergyRow][column(-1)].look).to_equal(ArcMapCell::Look::Part);
+		expect(sevenMap.cell[kEnergyRow][column(-1)].part).to_equal(6);
+		expect(sevenMap.cell[kEnergyRow][column(0)].look).to_equal(ArcMapCell::Look::Part);
+		// Break does not keep part 6: cell must be Off, never Energy!
+		expect(sevenMap.cell[kEnergyRow][column(1)].look).to_equal(ArcMapCell::Look::Off);
+		expect(sevenMap.cell[kSectionRow][column(0)].look).to_equal(ArcMapCell::Look::Section);
+		expect(seven.part(kEnergyRow).substr(0, 5)).to_equal(std::string{"..hn."});
+		// Focus on part 6 shows Look::Focus on row 6.
+		seven.focus = 6;
+		expect(seven.map().cell[kEnergyRow][column(0)].look).to_equal(ArcMapCell::Look::Focus);
+		expect(seven.part(kEnergyRow).substr(0, 5)).to_equal(std::string{"..hf."});
+		// Muting part 6 blinks row 6 where it lands and shows Muted ahead (after cancelling Break).
+		seven.focus = -1;
+		seven.pushAndDecide({CommandKind::CancelNewest});
+		seven.pushAndDecide({CommandKind::SetMute, 6, kPress});
+		ArcMap mutedMap = seven.map();
+		expect(mutedMap.cell[kEnergyRow][column(0)].blink).to_be_true();
+		expect(mutedMap.cell[kEnergyRow][column(1)].look).to_equal(ArcMapCell::Look::Muted);
+		expect(seven.part(kEnergyRow).substr(0, 5)).to_equal(std::string{"..hnm"});
 	});
 
 	it("blinks a queued force in the Section row of the column where it lands, and the plan shows its result", _ {
