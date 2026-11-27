@@ -30,7 +30,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 
 | Action | Grain |
 |---|---|
-| Macros | next undecided step ([§3.4](03-recipe.md#34-steering-grain)) |
+| Macros | next undecided step; which hits Density plays, next bar ([§3.4](03-recipe.md#34-steering-grain)) |
 | Tempo, swing | glide from now |
 | Key, scale | next phrase line, or an Arc Drop if one lands first ([§9.7](09-arc.md#97-transitions)) |
 | Genre, Regenerate, Recipe LOAD | transition ([§9.7](09-arc.md#97-transitions)) |
@@ -42,7 +42,7 @@ Part of the [Generative mode spec](../spec.md). Section numbers are shared acros
 | Part octave shift | next bar |
 | Sound re-roll; back to previous sound | preload, then next phrase line |
 | Pattern re-roll (new take); step back or forward through takes | next phrase line |
-| Freeze / unfreeze | next undecided step |
+| Freeze / unfreeze | next undecided step; a pick that waited, next bar ([§6.7](06-randomness.md#67-freeze)) |
 | Fill | while held |
 | Capture mark | now |
 | Sound-control home edits | now, logged at the next undecided step |

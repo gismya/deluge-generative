@@ -358,7 +358,7 @@ constexpr VariantSet kVariantSets[] = {
 constexpr Genre kAmbient{
     .name = "ambient",
     .oledName = "AMBIENT",
-    .version = 4, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
+    .version = 5, // a retune that changes its event stream raises it by one (spec 4.4, 21.2)
     .facts = {.tempoLowBpm = 60, .tempoHighBpm = 90, .scales = kScales},
     .phraseBars = 8,
     .parts = kParts,

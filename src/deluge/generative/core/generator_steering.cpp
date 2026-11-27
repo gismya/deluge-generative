@@ -222,9 +222,6 @@ GEN_STEP_CODE bool Generator::apply(const Command& command) {
 			const int32_t last = nextStep_ > 0 ? nextStep_ - 1 : 0;
 			parts_[command.target].frozenPhraseStart = last - last % genre_->phraseSteps();
 		}
-		else if (!freeze && partFrozen(command.target)) {
-			thaw(command.target);
-		}
 		const uint8_t bit = partBit(command.target);
 		frozen_ = freeze ? frozen_ | bit : frozen_ & ~bit;
 		return true;

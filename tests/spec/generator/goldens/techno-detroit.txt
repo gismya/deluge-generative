@@ -1,10 +1,10 @@
 # techno-detroit's golden (spec 21.2): its default Recipe, seed 1, 16 bars from SHIFT+PLAY.
 # Regenerate with ./dbt test --generator --update-goldens. A change here bumps the genre's version.
 format 1
-genre techno-detroit version 6
+genre techno-detroit version 7
 recipe entropy 0: G minor, 125.00 BPM, swing 0, energy 25, density 25, complexity 25, motion 25
 parts 0 DRUMS, 1 BASS, 2 STRINGS, 3 STAB, 4 MOTIF, 5 FX
-fingerprint 1cdd6f6f7e3b5a18, 2007431 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
+fingerprint ade754dd1ed73a0f, 2006354 events, 0 lost (60 pieces with random macros, scales, keys and seeds)
 
       0  1.1.1     SECTION  GROOVE 1
       0  1.1.1     KEY      G minor
